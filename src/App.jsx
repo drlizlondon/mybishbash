@@ -1262,8 +1262,6 @@ function Onboarding({ onCreate }) {
     goToSlide(activeSlide - 1);
   }
 
-  const slide = slides[activeSlide];
-
   return (
     <div className="overlay-screen onboarding-screen">
       <div className="onboarding-shell">
@@ -1280,22 +1278,29 @@ function Onboarding({ onCreate }) {
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <article className="onboarding-feature-card" key={slide.id}>
-            <span className="feature-mini-heart" aria-hidden="true">
-              <HeartGlyph />
-            </span>
-            <h2>{slide.message}</h2>
-            <p className="feature-support">{slide.support}</p>
-            <div className="feature-scene" aria-hidden="true">
-              <span className="feature-star feature-star-one" />
-              <span className="feature-star feature-star-two" />
-              <span className="feature-star feature-star-three" />
-              <span className="feature-sun" />
-              <span className="feature-horizon" />
-              <span className="feature-reflection" />
-              <span className="feature-stone" />
-            </div>
-          </article>
+          <div
+            className="onboarding-track"
+            style={{ transform: `translateX(-${activeSlide * 100}%)` }}
+          >
+            {slides.map((slide) => (
+              <article className="onboarding-feature-card" key={slide.id}>
+                <span className="feature-mini-heart" aria-hidden="true">
+                  <HeartGlyph />
+                </span>
+                <h2>{slide.message}</h2>
+                <p className="feature-support">{slide.support}</p>
+                <div className="feature-scene" aria-hidden="true">
+                  <span className="feature-star feature-star-one" />
+                  <span className="feature-star feature-star-two" />
+                  <span className="feature-star feature-star-three" />
+                  <span className="feature-sun" />
+                  <span className="feature-horizon" />
+                  <span className="feature-reflection" />
+                  <span className="feature-stone" />
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
 
         <div className="onboarding-pagination">

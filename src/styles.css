@@ -883,6 +883,7 @@ textarea {
 }
 
 .onboarding-feature-card {
+  flex: 0 0 100%;
   min-height: 416px;
   border-radius: 34px;
   padding: 24px 20px 24px;
@@ -903,6 +904,11 @@ textarea {
 
 .onboarding-carousel {
   overflow: hidden;
+}
+
+.onboarding-track {
+  display: flex;
+  transition: transform 320ms ease;
 }
 
 .onboarding-feature-card .eyebrow {
