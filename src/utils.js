@@ -5,7 +5,7 @@ const THIRTY_MINUTES = 30 * 60 * 1000;
 export const THEMES = [
   "Minimal",
   "Pop Art",
-  "Paper Cut",
+  "Soft Bloom",
   "Rainbow",
   "Starry Sky",
 ];
@@ -15,7 +15,7 @@ export const PACKS = [
     id: "encouraging-bible-verses",
     title: "Bible Verse",
     description: "Gentle scripture-based BishBashes for the day.",
-    theme: "Paper Cut",
+    theme: "Soft Bloom",
     icon: "book",
     entries: [
       {
@@ -73,7 +73,7 @@ export const PACKS = [
     id: "extraordinary-lives",
     title: "Extraordinary Lives",
     description: "Real lives, real sources, small moments that widen the day.",
-    theme: "Paper Cut",
+    theme: "Soft Bloom",
     icon: "star",
     entries: [
       {
@@ -144,7 +144,7 @@ export const PACKS = [
     title: "Last Words & Final Reflections",
     description: "Carefully sourced final statements and closing thoughts.",
     entries: [],
-    theme: "Paper Cut",
+    theme: "Soft Bloom",
     comingSoon: true,
   },
   {
@@ -206,7 +206,7 @@ export const PACKS = [
     title: "The Weight of Time",
     description: "Historically grounded reminders of scale, age, and passing.",
     entries: [],
-    theme: "Paper Cut",
+    theme: "Soft Bloom",
     comingSoon: true,
   },
   {
@@ -249,7 +249,7 @@ export const PACKS = [
     title: "Motherhood Through Time",
     description: "Sourced glimpses of care, strain, love, and endurance.",
     entries: [],
-    theme: "Paper Cut",
+    theme: "Soft Bloom",
     comingSoon: true,
   },
 ];
@@ -447,6 +447,7 @@ export function formatTimeRemaining(ms) {
 }
 
 export function getThemeClass(theme) {
+  if (theme === "Paper Cut") return "soft-bloom";
   return theme.toLowerCase().replace(/\s+/g, "-");
 }
 

@@ -25,6 +25,11 @@ import {
   normalizeCards,
 } from "./utils";
 
+function resolveTheme(theme) {
+  if (theme === "Paper Cut") return "Soft Bloom";
+  return THEMES.includes(theme) ? theme : THEMES[0];
+}
+
 function pickRandomHomeCardForDisplay(currentCards, timezone) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const singles = normalized
@@ -62,8 +67,11 @@ function pickRandomHomeCardForDisplay(currentCards, timezone) {
 function buildInitialState() {
   const profile = loadProfile();
   const setupComplete = loadSetupComplete();
-  const mood = loadMood();
-  const cards = normalizeCards(loadCards(), new Date(), profile.timezone);
+  const mood = resolveTheme(loadMood());
+  const cards = normalizeCards(loadCards(), new Date(), profile.timezone).map((card) => ({
+    ...card,
+    theme: resolveTheme(card.theme),
+  }));
 
   if (!setupComplete) {
     return {
@@ -781,7 +789,7 @@ function App() {
 
 function Composer({ initialCard, onClose, onSave }) {
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
-  const [theme, setTheme] = useState(initialCard?.theme ?? THEMES[0]);
+  const [theme, setTheme] = useState(resolveTheme(initialCard?.theme));
   const [icon, setIcon] = useState(initialCard?.icon ?? "heart");
   const [frequency, setFrequency] = useState(initialCard?.frequency ?? "once_daily");
   const [timingWindows, setTimingWindows] = useState(initialCard?.timingWindows ?? ["morning", "day", "evening"]);
@@ -808,7 +816,7 @@ function Composer({ initialCard, onClose, onSave }) {
           </button>
         </div>
         <label className="field">
-          <span>What positive action do you want future-you nudged toward?</span>
+          <span>What does future-you need nudging towards?</span>
           <textarea
             value={promptText}
             onChange={(event) => {
@@ -840,12 +848,23 @@ function Composer({ initialCard, onClose, onSave }) {
           </div>
         </div>
         <div className={`composer-preview theme-${getThemeClass(theme)}`}>
-          <p className="eyebrow">Preview</p>
-          <div className="composer-preview-tile">
-            <CardIcon icon={icon} />
+          <p className="eyebrow">{getGreeting(new Date())}</p>
+          <span className="composer-mini-heart" aria-hidden="true">
+            <HeartGlyph />
+          </span>
+          <div className="composer-preview-copy">
+            <h3>{promptText.trim() || "Have you stretched today?"}</h3>
+            <p>a gentle nudge from your future self</p>
           </div>
-          <h3>{promptText.trim() || "Have you stretched today?"}</h3>
-          <p>{theme}</p>
+          <div className="composer-preview-scene" aria-hidden="true">
+            <div className="composer-preview-tile">
+              <CardIcon icon={icon} />
+            </div>
+            <span className="composer-sparkle composer-sparkle-one" />
+            <span className="composer-sparkle composer-sparkle-two" />
+            <span className="composer-sun" />
+            <span className="composer-horizon" />
+          </div>
         </div>
         <div className="field">
           <span>Choose an icon</span>
@@ -1198,28 +1217,15 @@ function Onboarding({ onCreate }) {
   return (
     <div className="overlay-screen onboarding-screen">
       <div className="onboarding-shell">
-        <div className="onboarding-topbar" aria-hidden="true">
-          <span className="mock-time">9:41</span>
-          <div className="mock-status">
-            <span className="status-signal" />
-            <span className="status-wifi" />
-            <span className="status-battery" />
-          </div>
-        </div>
-
         <header className="onboarding-brand">
           <span className="onboarding-heart" aria-hidden="true">
             <HeartGlyph />
           </span>
-          <button type="button" className="onboarding-plus" aria-label="Create BishBash">
-            +
-          </button>
           <h1>BishBash</h1>
           <p>private little messages from your earlier self</p>
         </header>
 
         <article className="onboarding-feature-card">
-          <p className="eyebrow">Good morning</p>
           <span className="feature-mini-heart" aria-hidden="true">
             <HeartGlyph />
           </span>
