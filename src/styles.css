@@ -897,6 +897,12 @@ textarea {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  touch-action: pan-y;
+  animation: rise-in 260ms ease both;
+}
+
+.onboarding-carousel {
+  overflow: hidden;
 }
 
 .onboarding-feature-card .eyebrow {
@@ -911,20 +917,20 @@ textarea {
 
 .onboarding-feature-card h2 {
   margin: 0;
-  max-width: 7ch;
+  max-width: 8.3ch;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(2.45rem, 10vw, 3.55rem);
-  line-height: 1.02;
+  font-size: clamp(2.2rem, 9.5vw, 3.15rem);
+  line-height: 1.04;
   font-weight: 500;
   letter-spacing: -0.05em;
   color: rgba(47, 42, 40, 0.98);
 }
 
 .feature-support {
-  margin: 24px 0 0;
-  max-width: 8.5ch;
+  margin: 22px 0 0;
+  max-width: 12.5ch;
   font-size: 0.95rem;
-  line-height: 1.25;
+  line-height: 1.32;
   color: rgba(79, 71, 67, 0.74);
 }
 
@@ -1025,14 +1031,16 @@ textarea {
   gap: 8px;
 }
 
-.onboarding-pagination .pagination-dot {
+.pagination-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
+  border: 0;
+  padding: 0;
   background: rgba(233, 120, 93, 0.18);
 }
 
-.onboarding-pagination .pagination-dot.active {
+.pagination-dot.active {
   background: var(--coral);
 }
 

@@ -1214,6 +1214,56 @@ function Overlay({ overlay, card, timezone, onClose, onAction, onPackReaction })
 }
 
 function Onboarding({ onCreate }) {
+  const slides = [
+    {
+      id: "future-self",
+      message: "Your earlier self left a quiet note for right now.",
+      support: "BishBash lets a clearer version of you cut through the noise.",
+    },
+    {
+      id: "tiny-actions",
+      message: "Small caring actions are easier to hear than big promises.",
+      support: "Drink water. Stretch. Read your Bible. Tiny nudges still count.",
+    },
+    {
+      id: "one-at-a-time",
+      message: "One gentle interruption. One moment of attention.",
+      support: "Every time BishBash opens, it shows one soft message instead of a pile.",
+    },
+    {
+      id: "private-ritual",
+      message: "Private, local, and just for future-you.",
+      support: "No accounts. No cloud. Just your own little ritual waiting when you need it.",
+    },
+  ];
+  const [activeSlide, setActiveSlide] = useState(0);
+  const touchStartX = useRef(null);
+
+  function goToSlide(index) {
+    const total = slides.length;
+    setActiveSlide((index + total) % total);
+  }
+
+  function handleTouchStart(event) {
+    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+  }
+
+  function handleTouchEnd(event) {
+    if (touchStartX.current == null) return;
+    const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
+    const delta = endX - touchStartX.current;
+    touchStartX.current = null;
+
+    if (Math.abs(delta) < 36) return;
+    if (delta < 0) {
+      goToSlide(activeSlide + 1);
+      return;
+    }
+    goToSlide(activeSlide - 1);
+  }
+
+  const slide = slides[activeSlide];
+
   return (
     <div className="overlay-screen onboarding-screen">
       <div className="onboarding-shell">
@@ -1225,34 +1275,40 @@ function Onboarding({ onCreate }) {
           <p>private little messages from your earlier self</p>
         </header>
 
-        <article className="onboarding-feature-card">
-          <span className="feature-mini-heart" aria-hidden="true">
-            <HeartGlyph />
-          </span>
-          <h2>
-            You&apos;ve got this.
-            <br />
-            One small step
-            <br />
-            at a time.
-          </h2>
-          <p className="feature-support">a gentle nudge from your future self</p>
-          <div className="feature-scene" aria-hidden="true">
-            <span className="feature-star feature-star-one" />
-            <span className="feature-star feature-star-two" />
-            <span className="feature-star feature-star-three" />
-            <span className="feature-sun" />
-            <span className="feature-horizon" />
-            <span className="feature-reflection" />
-            <span className="feature-stone" />
-          </div>
-        </article>
+        <div
+          className="onboarding-carousel"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <article className="onboarding-feature-card" key={slide.id}>
+            <span className="feature-mini-heart" aria-hidden="true">
+              <HeartGlyph />
+            </span>
+            <h2>{slide.message}</h2>
+            <p className="feature-support">{slide.support}</p>
+            <div className="feature-scene" aria-hidden="true">
+              <span className="feature-star feature-star-one" />
+              <span className="feature-star feature-star-two" />
+              <span className="feature-star feature-star-three" />
+              <span className="feature-sun" />
+              <span className="feature-horizon" />
+              <span className="feature-reflection" />
+              <span className="feature-stone" />
+            </div>
+          </article>
+        </div>
 
-        <div className="onboarding-pagination" aria-hidden="true">
-          <span className="pagination-dot active" />
-          <span className="pagination-dot" />
-          <span className="pagination-dot" />
-          <span className="pagination-dot" />
+        <div className="onboarding-pagination">
+          {slides.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`pagination-dot ${index === activeSlide ? "active" : ""}`}
+              aria-label={`Show onboarding card ${index + 1}`}
+              aria-pressed={index === activeSlide}
+              onClick={() => goToSlide(index)}
+            />
+          ))}
         </div>
 
         <div className="onboarding-actions">

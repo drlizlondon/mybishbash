@@ -20,6 +20,8 @@ export function registerServiceWorker() {
       return;
     }
 
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register("/bishbash/service-worker.js", { scope: "/bishbash/" })
+      .catch(() => {});
   });
 }
