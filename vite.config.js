@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  base: "/BishBash/",
+  base: "/bishbash/",
   plugins: [react()],
   build: {
     rollupOptions: {
