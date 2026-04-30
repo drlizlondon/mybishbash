@@ -341,7 +341,11 @@ export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   if (card.paused) return false;
   if (card.doneDate === todayKey || card.statusToday === "doneToday") return false;
-  if (card.lastShownAt && new Date(card.lastShownAt).getTime() + THIRTY_MINUTES > date.getTime()) {
+  if (
+    !card.sourcePackId &&
+    card.lastShownAt &&
+    new Date(card.lastShownAt).getTime() + THIRTY_MINUTES > date.getTime()
+  ) {
     return false;
   }
   if (card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
@@ -411,6 +415,32 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
   }
 
   return { badge: "ready", detail: "may appear today" };
+}
+
+export function getHomeSortRank(card) {
+  const windows = card.timingWindows ?? ["morning", "day", "evening"];
+  const hasMorning = windows.includes("morning");
+  const hasDay = windows.includes("day");
+  const hasEvening = windows.includes("evening");
+  const hasNight = windows.includes("night");
+
+  if (card.frequency === "multi_daily" && hasMorning && hasEvening && !hasNight) {
+    return 0;
+  }
+
+  if (card.frequency === "once_daily" && hasMorning && !hasDay && !hasEvening) {
+    return 1;
+  }
+
+  if (card.frequency === "once_daily" && hasDay && !hasMorning && !hasEvening) {
+    return 2;
+  }
+
+  if (card.frequency === "once_daily" && hasEvening && !hasMorning && !hasDay) {
+    return 3;
+  }
+
+  return 4;
 }
 
 export function applyCardAction(card, action, date = new Date(), timeZone) {

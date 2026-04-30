@@ -19,6 +19,7 @@ import {
   buildCardsFromPack,
   createId,
   getGreeting,
+  getHomeSortRank,
   getStatusMeta,
   getThemeClass,
   isEligible,
@@ -119,6 +120,11 @@ function buildInitialState() {
 
 function getHomeCardTitle(card) {
   return card.dashboardTitle ?? card.promptText?.trim() ?? "";
+}
+
+function getPackRepresentative(cards, packId) {
+  const packCards = cards.filter((card) => card.sourcePackId === packId);
+  return packCards.find((card) => !card.paused) ?? packCards[0] ?? null;
 }
 
 function App() {
@@ -291,7 +297,8 @@ function App() {
     if (packCards.length === 0) return;
 
     const eligiblePackCards = packCards.filter((card) => isEligible(card, new Date(), profile.timezone));
-    const source = eligiblePackCards.length > 0 ? eligiblePackCards : packCards;
+    if (eligiblePackCards.length === 0) return;
+    const source = eligiblePackCards;
     const selected = source[Math.floor(Math.random() * source.length)];
     openSpecificReveal(selected.id);
   }
@@ -331,11 +338,6 @@ function App() {
         current.map((card) =>
           card.id === activeCard.id ? { ...card, paused: true } : card,
         ),
-      );
-    } else {
-      const updatedCard = applyCardAction(activeCard, "done", new Date(), profile.timezone);
-      updateCards((current) =>
-        current.map((card) => (card.id === updatedCard.id ? updatedCard : card)),
       );
     }
 
@@ -501,7 +503,7 @@ function App() {
   );
 
   const editingPackCard = useMemo(
-    () => cards.find((card) => card.sourcePackId === editingPackId) ?? null,
+    () => (editingPackId ? getPackRepresentative(cards, editingPackId) : null),
     [cards, editingPackId],
   );
 
@@ -515,10 +517,12 @@ function App() {
     cards.forEach((card) => {
       if (card.sourcePackId) {
         if (!grouped.has(card.sourcePackId)) {
+          const representative = getPackRepresentative(cards, card.sourcePackId);
+          if (!representative) return;
           grouped.set(card.sourcePackId, {
             type: "pack",
             id: card.sourcePackId,
-            representative: card,
+            representative,
           });
         }
         return;
@@ -531,7 +535,16 @@ function App() {
       });
     });
 
-    return Array.from(grouped.values());
+    return Array.from(grouped.values()).sort((left, right) => {
+      const leftRank = getHomeSortRank(left.representative);
+      const rightRank = getHomeSortRank(right.representative);
+
+      if (leftRank !== rightRank) return leftRank - rightRank;
+
+      const leftCreated = new Date(left.representative.createdAt ?? 0).getTime();
+      const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
+      return rightCreated - leftCreated;
+    });
   }, [cards]);
   const eligibleHomeCount = useMemo(() => {
     let count = 0;

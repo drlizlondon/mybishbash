@@ -48,7 +48,7 @@ textarea {
 .app-shell {
   position: relative;
   min-height: 100vh;
-  padding: calc(env(safe-area-inset-top) + 14px) 24px calc(env(safe-area-inset-bottom) + 168px);
+  padding: calc(env(safe-area-inset-top) + 14px) 24px calc(env(safe-area-inset-bottom) + 236px);
   overflow-x: hidden;
   width: 100%;
 }
@@ -199,7 +199,7 @@ textarea {
   display: grid;
   gap: 28px;
   max-width: 100%;
-  padding-bottom: 72px;
+  padding-bottom: 148px;
 }
 
 .section-heading {
@@ -229,6 +229,7 @@ textarea {
 .card-stack {
   display: grid;
   gap: 16px;
+  padding-bottom: 140px;
 }
 
 .library-card {
@@ -252,7 +253,7 @@ textarea {
 }
 
 .library-card.menu-open {
-  z-index: 24;
+  z-index: 120;
 }
 
 .tile {
@@ -304,7 +305,7 @@ textarea {
 
 .menu-wrap {
   position: relative;
-  z-index: 30;
+  z-index: 140;
 }
 
 .menu-trigger,
@@ -323,8 +324,8 @@ textarea {
 
 .menu {
   position: absolute;
-  top: 32px;
-  right: 0;
+  right: -2px;
+  bottom: calc(100% - 10px);
   display: grid;
   gap: 6px;
   min-width: 122px;
@@ -332,7 +333,7 @@ textarea {
   border-radius: 18px;
   background: rgba(255, 250, 247, 0.96);
   box-shadow: 0 12px 24px rgba(47, 42, 40, 0.12);
-  z-index: 40;
+  z-index: 160;
 }
 
 .menu button {
@@ -1225,7 +1226,7 @@ textarea {
   left: 20px;
   right: 20px;
   bottom: calc(env(safe-area-inset-bottom) + 14px);
-  z-index: 6;
+  z-index: 20;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
