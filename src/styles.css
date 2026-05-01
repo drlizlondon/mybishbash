@@ -48,7 +48,7 @@ textarea {
 .app-shell {
   position: relative;
   min-height: 100vh;
-  padding: calc(env(safe-area-inset-top) + 14px) 24px calc(env(safe-area-inset-bottom) + 236px);
+  padding: calc(env(safe-area-inset-top) + 14px) 24px calc(env(safe-area-inset-bottom) + 264px);
   overflow-x: hidden;
   width: 100%;
 }
@@ -732,6 +732,47 @@ textarea {
   color: white;
   border: 0;
   box-shadow: 0 10px 20px rgba(233, 120, 93, 0.18);
+}
+
+.interception-screen {
+  justify-content: center;
+  gap: 22px;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 36px);
+}
+
+.interception-carousel {
+  width: 100%;
+  overflow: hidden;
+}
+
+.interception-card {
+  min-height: 470px;
+  padding: 36px 26px;
+}
+
+.interception-card h2 {
+  font-size: clamp(2.2rem, 10vw, 3.2rem);
+  line-height: 1.02;
+}
+
+.interception-actions {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 12px;
+  align-self: center;
+}
+
+.manual-open-copy {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.manual-open-copy a {
+  color: var(--coral);
+  text-decoration: none;
 }
 
 .completion,
@@ -1421,11 +1462,11 @@ textarea {
   align-items: center;
   padding: 8px 8px 6px;
   border-radius: 30px;
-  background: rgba(255, 249, 246, 0.9);
+  background: rgba(251, 247, 243, 0.94);
   box-shadow:
-    0 24px 52px rgba(143, 102, 86, 0.12),
+    0 24px 52px rgba(143, 102, 86, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(24px);
 }
 
 .continue-safari-button {
@@ -1783,10 +1824,5 @@ textarea {
     right: auto;
     width: min(680px, calc(100% - 48px));
     transform: translateX(-50%);
-  }
-
-  .continue-safari-button {
-    right: max(24px, calc(50vw - 360px));
-    bottom: calc(env(safe-area-inset-bottom) + 98px);
   }
 }

@@ -7,38 +7,49 @@ const HOME_SCREEN_SELECTED_KEY = "bishbash.home-screen-selected.v1";
 const CARD_PACKS_KEY = "bishbash.card-packs.v1";
 
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
+  bishbash: {
+    id: "bishbash",
+    name: "BishBash",
+    installPath: "/bishbash/install/bishbash/",
+    launchPath: "/home",
+    iconSrc: "/bishbash/icons/apple-touch-icon.png",
+    realAppLabel: "",
+    appUrl: "",
+    manualUrl: "",
+    interruptionPackId: "",
+  },
   safari: {
     id: "safari",
     name: "Safari",
-    installPath: "/bishbash/safari/",
+    installPath: "/bishbash/install/safari/",
+    launchPath: "/intercept/safari",
     iconSrc: "/bishbash/icons/apple-touch-icon.png",
     realAppLabel: "Safari",
     appUrl: "",
-    fallbackUrl: "https://www.google.com",
-    cardMode: "normal",
-    selectedPackId: "",
+    manualUrl: "https://www.google.com",
+    interruptionPackId: "",
   },
   youtube: {
     id: "youtube",
     name: "YouTube",
-    installPath: "/bishbash/youtube/",
+    installPath: "/bishbash/install/youtube/",
+    launchPath: "/intercept/youtube",
     iconSrc: "/bishbash/icons/youtube-cover.png",
     realAppLabel: "YouTube",
     appUrl: "youtube://",
-    fallbackUrl: "https://www.youtube.com",
-    cardMode: "normal",
-    selectedPackId: "",
+    manualUrl: "https://www.youtube.com",
+    interruptionPackId: "",
   },
   instagram: {
     id: "instagram",
     name: "Instagram",
-    installPath: "/bishbash/instagram/",
+    installPath: "/bishbash/install/instagram/",
+    launchPath: "/intercept/instagram",
     iconSrc: "/bishbash/icons/instagram-cover.jpg",
     realAppLabel: "Instagram",
     appUrl: "instagram://app",
-    fallbackUrl: "https://www.instagram.com",
-    cardMode: "normal",
-    selectedPackId: "",
+    manualUrl: "https://www.instagram.com",
+    interruptionPackId: "",
   },
 };
 
@@ -121,7 +132,7 @@ export function saveHomeScreenVersions(value) {
 
 export function loadSelectedHomeScreenVersion() {
   const selected = window.localStorage.getItem(HOME_SCREEN_SELECTED_KEY);
-  return selected && DEFAULT_HOME_SCREEN_VERSIONS[selected] ? selected : "safari";
+  return selected && DEFAULT_HOME_SCREEN_VERSIONS[selected] ? selected : "bishbash";
 }
 
 export function saveSelectedHomeScreenVersion(value) {

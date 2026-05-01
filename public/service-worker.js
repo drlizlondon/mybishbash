@@ -1,4 +1,4 @@
-const CACHE_NAME = "bishbash-cache-v2";
+const CACHE_NAME = "bishbash-cache-v3";
 const APP_SHELL = [
   "/bishbash/",
   "/bishbash/index.html",
@@ -29,6 +29,20 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
   if (event.request.mode === "navigate") {
+    const url = new URL(event.request.url);
+    const appRoute =
+      url.pathname === "/bishbash/home" ||
+      url.pathname === "/bishbash/library" ||
+      url.pathname === "/bishbash/mood" ||
+      url.pathname === "/bishbash/settings" ||
+      url.pathname.startsWith("/bishbash/card/") ||
+      url.pathname.startsWith("/bishbash/intercept/");
+
+    if (appRoute) {
+      event.respondWith(caches.match("/bishbash/index.html"));
+      return;
+    }
+
     event.respondWith(
       fetch(event.request).catch(() => caches.match("/bishbash/index.html")),
     );

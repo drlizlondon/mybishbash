@@ -1,31 +1,44 @@
 (function () {
   const defaults = {
+    bishbash: {
+      id: "bishbash",
+      name: "BishBash",
+      iconSrc: "/bishbash/icons/apple-touch-icon.png",
+      manifestHref: "/bishbash/manifest.webmanifest",
+      realAppLabel: "",
+      appUrl: "",
+      manualUrl: "",
+      launchPath: "/home",
+    },
     safari: {
       id: "safari",
       name: "Safari",
       iconSrc: "/bishbash/icons/apple-touch-icon.png",
-      manifestHref: "/bishbash/safari/manifest.webmanifest",
+      manifestHref: "/bishbash/manifest.webmanifest",
       realAppLabel: "Safari",
       appUrl: "",
-      fallbackUrl: "https://www.google.com",
+      manualUrl: "https://www.google.com",
+      launchPath: "/intercept/safari",
     },
     youtube: {
       id: "youtube",
       name: "YouTube",
       iconSrc: "/bishbash/icons/youtube-cover.png",
-      manifestHref: "/bishbash/youtube/manifest.webmanifest",
+      manifestHref: "/bishbash/manifest.webmanifest",
       realAppLabel: "YouTube",
       appUrl: "youtube://",
-      fallbackUrl: "https://www.youtube.com",
+      manualUrl: "https://www.youtube.com",
+      launchPath: "/intercept/youtube",
     },
     instagram: {
       id: "instagram",
       name: "Instagram",
       iconSrc: "/bishbash/icons/instagram-cover.jpg",
-      manifestHref: "/bishbash/instagram/manifest.webmanifest",
+      manifestHref: "/bishbash/manifest.webmanifest",
       realAppLabel: "Instagram",
       appUrl: "instagram://app",
-      fallbackUrl: "https://www.instagram.com",
+      manualUrl: "https://www.instagram.com",
+      launchPath: "/intercept/instagram",
     },
   };
 
@@ -56,8 +69,8 @@
     const manifest = {
       name: version.name,
       short_name: version.name,
-      id: `https://drlizlondon.github.io/bishbash/${versionId}/`,
-      start_url: `https://drlizlondon.github.io/bishbash/?disguise=${versionId}`,
+      id: `https://drlizlondon.github.io/bishbash${version.launchPath}`,
+      start_url: `https://drlizlondon.github.io/bishbash${version.launchPath}`,
       scope: "https://drlizlondon.github.io/bishbash/",
       display: "standalone",
       background_color: "#F7F2EE",
@@ -86,6 +99,11 @@
 
   const realAppButton = document.querySelector("[data-real-app-button]");
   if (realAppButton) {
+    if (!version.realAppLabel) {
+      realAppButton.hidden = true;
+      return;
+    }
+
     realAppButton.querySelector("span").textContent = version.realAppLabel;
     realAppButton.setAttribute("aria-label", `Open ${version.realAppLabel}`);
     realAppButton.addEventListener("click", () => {
@@ -101,21 +119,7 @@
         window.open(target, "_blank", "noopener,noreferrer");
         return;
       }
-
-      let didHide = false;
-      const handleVisibility = () => {
-        if (document.visibilityState === "hidden") didHide = true;
-      };
-
-      document.addEventListener("visibilitychange", handleVisibility, true);
       window.location.href = version.appUrl;
-
-      window.setTimeout(() => {
-        document.removeEventListener("visibilitychange", handleVisibility, true);
-        if (!didHide && document.visibilityState === "visible") {
-          window.location.href = version.fallbackUrl;
-        }
-      }, 1000);
     });
   }
 })();
