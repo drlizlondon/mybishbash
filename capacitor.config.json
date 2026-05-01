@@ -1,0 +1,15 @@
+{
+  "appId": "com.drlizlondon.bishbash",
+  "appName": "BishBash",
+  "webDir": "dist",
+  "server": {
+    "url": "https://drlizlondon.github.io/bishbash/",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "never"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

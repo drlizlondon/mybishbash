@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BishBash</string>
+    <string name="title_activity_main">BishBash</string>
+    <string name="package_name">com.drlizlondon.bishbash</string>
+    <string name="custom_url_scheme">com.drlizlondon.bishbash</string>
+</resources>

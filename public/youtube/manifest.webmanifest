@@ -1,0 +1,16 @@
+{
+  "name": "YouTube",
+  "short_name": "YouTube",
+  "start_url": "https://drlizlondon.github.io/bishbash/?disguise=youtube",
+  "display": "standalone",
+  "background_color": "#F7F2EE",
+  "theme_color": "#F7F2EE",
+  "scope": "https://drlizlondon.github.io/bishbash/",
+  "icons": [
+    {
+      "src": "/bishbash/icons/youtube-cover.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

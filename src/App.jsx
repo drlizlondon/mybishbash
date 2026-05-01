@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  DEFAULT_HOME_SCREEN_VERSIONS,
   loadCards,
+  loadCardPacks,
+  loadHomeScreenVersions,
   loadMood,
   loadProfile,
+  loadSelectedHomeScreenVersion,
   loadSetupComplete,
   saveCards,
+  saveCardPacks,
+  saveHomeScreenVersions,
   saveMood,
   saveProfile,
+  saveSelectedHomeScreenVersion,
   saveSetupComplete,
 } from "./storage";
 import {
@@ -29,6 +36,56 @@ import {
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
   return THEMES.includes(theme) ? theme : THEMES[0];
+}
+
+function getDisguiseFromLocation() {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const disguise = params.get("disguise");
+  return disguise && DEFAULT_HOME_SCREEN_VERSIONS[disguise] ? disguise : null;
+}
+
+function getInstallUrl(path) {
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).toString();
+}
+
+function openNativeApp(appUrl, fallbackUrl) {
+  let didHide = false;
+
+  const handleVisibility = () => {
+    if (document.visibilityState === "hidden") {
+      didHide = true;
+    }
+  };
+
+  document.addEventListener("visibilitychange", handleVisibility, true);
+  window.location.href = appUrl;
+
+  window.setTimeout(() => {
+    document.removeEventListener("visibilitychange", handleVisibility, true);
+    if (!didHide && document.visibilityState === "visible") {
+      window.location.href = fallbackUrl;
+    }
+  }, 1000);
+}
+
+function openSafariEscape() {
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true);
+
+  const safariHref = isStandalone
+    ? "x-safari-https://www.google.com"
+    : "https://www.google.com";
+
+  if (isStandalone) {
+    window.location.href = safariHref;
+    return;
+  }
+
+  window.open(safariHref, "_blank", "noopener,noreferrer");
 }
 
 function pickRandomHomeCardForDisplay(currentCards, timezone) {
@@ -127,11 +184,93 @@ function getPackRepresentative(cards, packId) {
   return packCards.find((card) => !card.paused) ?? packCards[0] ?? null;
 }
 
+function resolveVersionConfig(version) {
+  return {
+    cardMode: "normal",
+    selectedPackId: "",
+    ...version,
+  };
+}
+
+function buildCustomPackOverlay(pack, activeIndex = 0) {
+  return {
+    type: "custom-pack",
+    packId: pack.id,
+    name: pack.name,
+    messages: pack.messages,
+    activeIndex,
+  };
+}
+
+function getStartupState(cards, timezone, versionConfig, cardPacks) {
+  if (versionConfig.cardMode === "custom_pack" && versionConfig.selectedPackId) {
+    const selectedPack = cardPacks.find(
+      (pack) => pack.id === versionConfig.selectedPackId && Array.isArray(pack.messages) && pack.messages.length > 0,
+    );
+
+    if (selectedPack) {
+      return {
+        cards,
+        screen: "interruption",
+        overlay: buildCustomPackOverlay(selectedPack),
+      };
+    }
+  }
+
+  const { normalized, selected } = pickRandomHomeCardForDisplay(cards, timezone);
+
+  if (!selected) {
+    return {
+      cards: normalized,
+      screen: "interruption",
+      overlay: { type: "empty" },
+    };
+  }
+
+  const nextCards = normalized.map((card) =>
+    card.id === selected.id
+      ? { ...card, lastShownAt: new Date().toISOString() }
+      : card,
+  );
+
+  return {
+    cards: nextCards,
+    screen: "interruption",
+    overlay: {
+      type: "reveal",
+      cardId: selected.id,
+      phase: "visible",
+    },
+  };
+}
+
 function App() {
-  const initialState = useMemo(() => buildInitialState(), []);
+  const initialDisguiseVersionId = getDisguiseFromLocation() ?? loadSelectedHomeScreenVersion();
+  const initialState = useMemo(() => {
+    const base = buildInitialState();
+    const cardPacks = loadCardPacks();
+    const versions = loadHomeScreenVersions();
+    const activeVersion = resolveVersionConfig(versions[initialDisguiseVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.safari);
+
+    if (!base.setupComplete) {
+      return { ...base, cardPacks, homeScreenVersions: versions, activeVersion };
+    }
+
+    const startup = getStartupState(base.cards, base.profile.timezone, activeVersion, cardPacks);
+    return {
+      ...base,
+      ...startup,
+      cardPacks,
+      homeScreenVersions: versions,
+      activeVersion,
+    };
+  }, []);
   const [cards, setCards] = useState(initialState.cards);
   const [mood, setMood] = useState(initialState.mood);
   const [profile, setProfile] = useState(initialState.profile);
+  const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
+  const [selectedHomeScreenVersion, setSelectedHomeScreenVersion] = useState(() => loadSelectedHomeScreenVersion());
+  const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [screen, setScreen] = useState(initialState.screen);
   const [activeTab, setActiveTab] = useState("home");
@@ -139,6 +278,7 @@ function App() {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingPackId, setEditingPackId] = useState(null);
+  const [editingCustomPackId, setEditingCustomPackId] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
   const hasMountedRef = useRef(false);
@@ -147,6 +287,10 @@ function App() {
   const setupCompleteRef = useRef(setupComplete);
   const overlayRef = useRef(overlay);
   const composerOpenRef = useRef(isComposerOpen);
+  const activeDisguiseVersionId = getDisguiseFromLocation() ?? selectedHomeScreenVersion;
+  const activeDisguiseVersion = resolveVersionConfig(
+    homeScreenVersions[activeDisguiseVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.safari,
+  );
 
   useEffect(() => {
     setupCompleteRef.current = setupComplete;
@@ -177,6 +321,18 @@ function App() {
   }, [profile]);
 
   useEffect(() => {
+    saveHomeScreenVersions(homeScreenVersions);
+  }, [homeScreenVersions]);
+
+  useEffect(() => {
+    saveSelectedHomeScreenVersion(selectedHomeScreenVersion);
+  }, [selectedHomeScreenVersion]);
+
+  useEffect(() => {
+    saveCardPacks(cardPacks);
+  }, [cardPacks]);
+
+  useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
     if (JSON.stringify(normalized) !== JSON.stringify(cards)) {
       setCards(normalized);
@@ -191,7 +347,7 @@ function App() {
         skipNextAutoOpenRef.current = false;
       } else {
         timer = window.setTimeout(() => {
-          openRandomReveal();
+          openVersionAwareInterruption();
         }, 150);
       }
     }
@@ -214,7 +370,7 @@ function App() {
           hiddenFor > 4000
         ) {
           window.setTimeout(() => {
-            openRandomReveal();
+            openVersionAwareInterruption();
           }, 120);
         }
       }
@@ -231,7 +387,7 @@ function App() {
         window.clearTimeout(transitionTimerRef.current);
       }
     };
-  }, [setupComplete, profile.timezone]);
+  }, [setupComplete, profile.timezone, activeDisguiseVersion.cardMode, activeDisguiseVersion.selectedPackId, cardPacks]);
 
   useEffect(() => {
     if (screen === "library") {
@@ -245,7 +401,22 @@ function App() {
     );
   }
 
-  function openRandomReveal() {
+  function openVersionAwareInterruption() {
+    if (activeDisguiseVersion.cardMode === "custom_pack" && activeDisguiseVersion.selectedPackId) {
+      const selectedPack = cardPacks.find(
+        (pack) =>
+          pack.id === activeDisguiseVersion.selectedPackId &&
+          Array.isArray(pack.messages) &&
+          pack.messages.length > 0,
+      );
+
+      if (selectedPack) {
+        setScreen("interruption");
+        setOverlay(buildCustomPackOverlay(selectedPack));
+        return;
+      }
+    }
+
     let nextOverlay = { type: "empty" };
 
     updateCards((current) => {
@@ -497,6 +668,84 @@ function App() {
     updateCards((current) => current.filter((card) => card.sourcePackId !== packId));
   }
 
+  function handleSelectHomeScreenVersion(versionId) {
+    setSelectedHomeScreenVersion(versionId);
+  }
+
+  function handleUpdateHomeScreenIcon(versionId, imageDataUrl) {
+    setHomeScreenVersions((current) => ({
+      ...current,
+      [versionId]: {
+        ...current[versionId],
+        customIconSrc: imageDataUrl,
+      },
+    }));
+  }
+
+  function handleSaveVersionBehavior(versionId, updates) {
+    setHomeScreenVersions((current) => ({
+      ...current,
+      [versionId]: {
+        ...resolveVersionConfig(current[versionId]),
+        ...updates,
+      },
+    }));
+  }
+
+  function handleSaveCustomPack(packData) {
+    const nextPack = {
+      id: packData.id ?? createId(),
+      name: packData.name.trim(),
+      linkedVersionId: packData.linkedVersionId ?? "",
+      messages: packData.messages.map((item) => item.trim()).filter(Boolean),
+    };
+
+    if (!nextPack.name || nextPack.messages.length === 0) return null;
+
+    if (nextPack.linkedVersionId) {
+      setHomeScreenVersions((current) => ({
+        ...current,
+        [nextPack.linkedVersionId]: {
+          ...resolveVersionConfig(current[nextPack.linkedVersionId]),
+          cardMode: "custom_pack",
+          selectedPackId: nextPack.id,
+        },
+      }));
+    }
+
+    setCardPacks((current) => {
+      const exists = current.some((pack) => pack.id === nextPack.id);
+      if (exists) {
+        return current.map((pack) => (pack.id === nextPack.id ? nextPack : pack));
+      }
+      return [nextPack, ...current];
+    });
+
+    setEditingCustomPackId(null);
+    return nextPack;
+  }
+
+  function handleDeleteCustomPack(packId) {
+    setCardPacks((current) => current.filter((pack) => pack.id !== packId));
+    setHomeScreenVersions((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([id, version]) => [
+          id,
+          version.selectedPackId === packId
+            ? { ...version, cardMode: "normal", selectedPackId: "" }
+            : version,
+        ]),
+      ),
+    );
+  }
+
+  function openCustomPackPreview(packId) {
+    const pack = cardPacks.find((item) => item.id === packId);
+    if (!pack || !pack.messages?.length) return;
+    setScreen("interruption");
+    setOverlay(buildCustomPackOverlay(pack));
+  }
+
   const editingCard = useMemo(
     () => cards.find((card) => card.id === editingId) ?? null,
     [cards, editingId],
@@ -505,6 +754,11 @@ function App() {
   const editingPackCard = useMemo(
     () => (editingPackId ? getPackRepresentative(cards, editingPackId) : null),
     [cards, editingPackId],
+  );
+
+  const editingCustomPack = useMemo(
+    () => cardPacks.find((pack) => pack.id === editingCustomPackId) ?? null,
+    [cardPacks, editingCustomPackId],
   );
 
   const activeRevealCard = overlay?.cardId
@@ -725,7 +979,22 @@ function App() {
               ) : null}
 
               {activeTab === "theme" ? <MoodPanel mood={mood} onSelectMood={setMood} /> : null}
-              {activeTab === "settings" ? <SettingsPanel profile={profile} onSaveProfile={setProfile} /> : null}
+              {activeTab === "settings" ? (
+                <SettingsPanel
+                  profile={profile}
+                  onSaveProfile={setProfile}
+                  homeScreenVersions={homeScreenVersions}
+                  selectedHomeScreenVersion={selectedHomeScreenVersion}
+                  onSelectHomeScreenVersion={handleSelectHomeScreenVersion}
+                  onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
+                  cardPacks={cardPacks}
+                  onSaveVersionBehavior={handleSaveVersionBehavior}
+                  onCreatePack={(versionId) => setEditingCustomPackId(`new:${versionId}`)}
+                  onEditPack={(packId) => setEditingCustomPackId(packId)}
+                  onDeletePack={handleDeleteCustomPack}
+                  onPreviewPack={openCustomPackPreview}
+                />
+              ) : null}
             </main>
           </div>
 
@@ -781,6 +1050,17 @@ function App() {
         />
       ) : null}
 
+      {editingCustomPackId ? (
+        <CustomPackEditor
+          key={editingCustomPackId}
+          initialPack={editingCustomPack}
+          linkedVersionId={editingCustomPackId.startsWith("new:") ? editingCustomPackId.replace("new:", "") : editingCustomPack?.linkedVersionId ?? ""}
+          versions={homeScreenVersions}
+          onClose={() => setEditingCustomPackId(null)}
+          onSave={handleSaveCustomPack}
+        />
+      ) : null}
+
       {overlay ? (
         <Overlay
           overlay={overlay}
@@ -795,7 +1075,7 @@ function App() {
         />
       ) : null}
 
-      <ContinueToSafariButton />
+      <RealAppButton version={activeDisguiseVersion} />
     </>
   );
 }
@@ -1043,6 +1323,99 @@ function PackEditor({ packTitle, initialCard, onClose, onSave }) {
   );
 }
 
+function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onSave }) {
+  const [name, setName] = useState(initialPack?.name ?? "");
+  const [messages, setMessages] = useState(initialPack?.messages ?? [""]);
+  const [selectedVersion, setSelectedVersion] = useState(initialPack?.linkedVersionId ?? linkedVersionId ?? "");
+
+  function updateMessage(index, value) {
+    setMessages((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+  }
+
+  function addMessage() {
+    setMessages((current) => [...current, ""]);
+  }
+
+  function removeMessage(index) {
+    setMessages((current) => (current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)));
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onSave({
+      id: initialPack?.id,
+      name,
+      linkedVersionId: selectedVersion,
+      messages,
+    });
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="composer pack-editor" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
+        <div className="composer-heading">
+          <p className="eyebrow">{initialPack ? "Edit custom pack" : "Create custom pack"}</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <label className="field">
+          <span>Pack name</span>
+          <input
+            className="settings-input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Instagram Interruptions"
+          />
+        </label>
+        <label className="field">
+          <span>Linked app/version, optional</span>
+          <select
+            className="settings-input"
+            value={selectedVersion}
+            onChange={(event) => setSelectedVersion(event.target.value)}
+          >
+            <option value="">Not linked</option>
+            {Object.values(versions).map((version) => (
+              <option key={version.id} value={version.id}>
+                {version.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="field">
+          <span>Messages</span>
+          <div className="custom-pack-message-grid">
+            {messages.map((message, index) => (
+              <div key={`${index}-${initialPack?.id ?? "new"}`} className="custom-pack-message-row">
+                <textarea
+                  value={message}
+                  onChange={(event) => updateMessage(index, event.target.value)}
+                  rows={3}
+                  placeholder="Do you really want to go on Instagram right now?"
+                />
+                <button
+                  type="button"
+                  className="text-button danger-soft-button"
+                  onClick={() => removeMessage(index)}
+                >
+                  Delete message
+                </button>
+              </div>
+            ))}
+          </div>
+          <button type="button" className="pack-button secondary" onClick={addMessage}>
+            Add message
+          </button>
+        </div>
+        <button type="submit" className="save-button">
+          Save pack
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function LibraryPanel({ cards, onActivate, onDeactivate }) {
   return (
     <section className="panel-section">
@@ -1087,7 +1460,20 @@ function LibraryPanel({ cards, onActivate, onDeactivate }) {
   );
 }
 
-function SettingsPanel({ profile, onSaveProfile }) {
+function SettingsPanel({
+  profile,
+  onSaveProfile,
+  homeScreenVersions,
+  selectedHomeScreenVersion,
+  onSelectHomeScreenVersion,
+  onUpdateHomeScreenIcon,
+  cardPacks,
+  onSaveVersionBehavior,
+  onCreatePack,
+  onEditPack,
+  onDeletePack,
+  onPreviewPack,
+}) {
   const [name, setName] = useState(profile.name ?? "");
   const [timezone, setTimezone] = useState(profile.timezone ?? "Europe/London");
   const [isOpen, setIsOpen] = useState(false);
@@ -1161,6 +1547,171 @@ function SettingsPanel({ profile, onSaveProfile }) {
           </button>
         </div>
       </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Home Screen versions</p>
+          <span>Choose how this appears on your Home Screen.</span>
+        </div>
+        <div className="home-screen-version-list">
+          {Object.values(homeScreenVersions).map((version) => {
+            const previewIcon = version.customIconSrc || version.iconSrc;
+            const installUrl = getInstallUrl(version.installPath);
+
+            return (
+              <article
+                key={version.id}
+                className={`home-screen-version-card ${selectedHomeScreenVersion === version.id ? "selected-version-card" : ""}`}
+              >
+                <img
+                  src={previewIcon}
+                  alt={`${version.name} cover icon`}
+                  className="home-screen-version-icon"
+                />
+                <div className="home-screen-version-copy">
+                  <div className="home-screen-version-title">
+                    <strong>{version.name}</strong>
+                    {selectedHomeScreenVersion === version.id ? <span>Selected</span> : null}
+                  </div>
+                  <p>{version.realAppLabel} button opens {version.fallbackUrl.replace("https://", "")}</p>
+                  <a
+                    href={installUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="home-screen-install-link"
+                  >
+                    Open install page
+                  </a>
+                </div>
+                <div className="home-screen-version-actions">
+                  <div className="field">
+                    <span>Card behaviour</span>
+                    <div className="version-mode-grid">
+                      <button
+                        type="button"
+                        className={`frequency-option ${version.cardMode === "normal" ? "selected" : ""}`}
+                        onClick={() => onSaveVersionBehavior(version.id, { cardMode: "normal", selectedPackId: "" })}
+                      >
+                        Normal BishBash mode
+                      </button>
+                      <button
+                        type="button"
+                        className={`frequency-option ${version.cardMode === "custom_pack" ? "selected" : ""}`}
+                        onClick={() => onSaveVersionBehavior(version.id, { cardMode: "custom_pack" })}
+                      >
+                        Custom card pack mode
+                      </button>
+                    </div>
+                  </div>
+                  {version.cardMode === "custom_pack" ? (
+                    <div className="field">
+                      <span>Selected pack</span>
+                      <select
+                        className="settings-input"
+                        value={version.selectedPackId ?? ""}
+                        onChange={(event) =>
+                          onSaveVersionBehavior(version.id, {
+                            cardMode: "custom_pack",
+                            selectedPackId: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">Choose a custom pack</option>
+                        {cardPacks.map((pack) => (
+                          <option key={pack.id} value={pack.id}>
+                            {pack.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={`pack-button ${selectedHomeScreenVersion === version.id ? "secondary" : ""}`}
+                    onClick={() => onSelectHomeScreenVersion(version.id)}
+                  >
+                    {selectedHomeScreenVersion === version.id ? "Using this version" : "Use this version"}
+                  </button>
+                  <button
+                    type="button"
+                    className="pack-button secondary"
+                    onClick={() => onCreatePack(version.id)}
+                  >
+                    Create new custom card pack
+                  </button>
+                  <label className="icon-upload-button">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (typeof reader.result === "string") {
+                            onUpdateHomeScreenIcon(version.id, reader.result);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                        event.target.value = "";
+                      }}
+                    />
+                    Replace cover icon
+                  </label>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Card Packs</p>
+          <span>Write your own interruption decks for different Home Screen versions.</span>
+        </div>
+        <div className="home-screen-version-list">
+          {cardPacks.length === 0 ? (
+            <article className="home-screen-version-card pack-manager-card">
+              <div className="home-screen-version-copy pack-manager-copy">
+                <div className="home-screen-version-title">
+                  <strong>No custom packs yet</strong>
+                </div>
+                <p>Make a little deck of interruptions for Instagram, YouTube, or any version you want to soften.</p>
+              </div>
+            </article>
+          ) : null}
+          {cardPacks.map((pack) => (
+            <article key={pack.id} className="home-screen-version-card pack-manager-card">
+              <div className="home-screen-version-copy pack-manager-copy">
+                <div className="home-screen-version-title">
+                  <strong>{pack.name}</strong>
+                  {pack.linkedVersionId ? (
+                    <span>{homeScreenVersions[pack.linkedVersionId]?.name ?? pack.linkedVersionId}</span>
+                  ) : null}
+                </div>
+                <ul className="pack-message-list">
+                  {pack.messages.map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="home-screen-version-actions">
+                <button type="button" className="pack-button secondary" onClick={() => onEditPack(pack.id)}>
+                  Edit pack
+                </button>
+                <button type="button" className="pack-button secondary" onClick={() => onPreviewPack(pack.id)}>
+                  Preview cards
+                </button>
+                <button type="button" className="pack-button secondary" onClick={() => onEditPack(pack.id)}>
+                  Add message
+                </button>
+                <button type="button" className="pack-button secondary danger-soft-button" onClick={() => onDeletePack(pack.id)}>
+                  Delete pack
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -1183,6 +1734,10 @@ function Overlay({ overlay, card, timezone, onClose, onAction, onPackReaction })
         <p>see you later</p>
       </div>
     );
+  }
+
+  if (overlay.type === "custom-pack") {
+    return <CustomPackOverlay overlay={overlay} onClose={onClose} />;
   }
 
   if (!card) return null;
@@ -1222,6 +1777,77 @@ function Overlay({ overlay, card, timezone, onClose, onAction, onPackReaction })
           <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
         </div>
       )}
+    </div>
+  );
+}
+
+function CustomPackOverlay({ overlay, onClose }) {
+  const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
+  const touchStartX = useRef(null);
+  const messages = overlay.messages ?? [];
+
+  useEffect(() => {
+    setActiveIndex(overlay.activeIndex ?? 0);
+  }, [overlay.activeIndex, overlay.packId]);
+
+  function move(delta) {
+    if (messages.length === 0) return;
+    setActiveIndex((current) => {
+      const next = current + delta;
+      if (next < 0) return 0;
+      if (next >= messages.length) return messages.length - 1;
+      return next;
+    });
+  }
+
+  return (
+    <div className="overlay-screen custom-pack-screen">
+      <button
+        type="button"
+        className="overlay-library-button"
+        onClick={onClose}
+        aria-label="Open library"
+      >
+        <BookGlyph />
+      </button>
+      <div
+        className="custom-pack-carousel"
+        onTouchStart={(event) => {
+          touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+        }}
+        onTouchEnd={(event) => {
+          if (touchStartX.current == null) return;
+          const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
+          const delta = endX - touchStartX.current;
+          touchStartX.current = null;
+          if (Math.abs(delta) < 36) return;
+          move(delta < 0 ? 1 : -1);
+        }}
+      >
+        <div className="custom-pack-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
+          {messages.map((message, index) => (
+            <article key={`${overlay.packId}-${index}`} className="custom-pack-card">
+              <p className="eyebrow">{overlay.name}</p>
+              <span className="mini-glyph" aria-hidden="true">
+                <HeartGlyph />
+              </span>
+              <h2>{message}</h2>
+              <p className="tiny-note">Swipe through these little interruptions.</p>
+            </article>
+          ))}
+        </div>
+      </div>
+      <div className="onboarding-pagination">
+        {messages.map((message, index) => (
+          <button
+            key={`${overlay.packId}-dot-${index}`}
+            type="button"
+            className={`pagination-dot ${index === activeIndex ? "active" : ""}`}
+            onClick={() => setActiveIndex(index)}
+            aria-label={`Show card ${index + 1}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1351,27 +1977,24 @@ function ActionButton({ label, onClick, tone = "ghost" }) {
   );
 }
 
-function ContinueToSafariButton() {
-  const isStandalone =
-    typeof window !== "undefined" &&
-    (window.matchMedia?.("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true);
-
-  const safariHref = isStandalone
-    ? "x-safari-https://www.google.com"
-    : "https://www.google.com";
-
+function RealAppButton({ version }) {
   return (
-    <a
+    <button
+      type="button"
       className="continue-safari-button"
-      href={safariHref}
-      target={isStandalone ? undefined : "_blank"}
-      rel={isStandalone ? undefined : "noopener noreferrer"}
-      aria-label="Continue to Safari"
+      onClick={() => {
+        if (version.id === "safari") {
+          openSafariEscape();
+          return;
+        }
+
+        openNativeApp(version.appUrl, version.fallbackUrl);
+      }}
+      aria-label={`Open ${version.realAppLabel}`}
     >
       <SafariGlyph />
-      <span>Safari</span>
-    </a>
+      <span>{version.realAppLabel}</span>
+    </button>
   );
 }
 
