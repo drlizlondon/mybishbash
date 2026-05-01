@@ -33,6 +33,8 @@ self.addEventListener("fetch", (event) => {
     const appRoute =
       url.pathname === "/bishbash/home" ||
       url.pathname === "/bishbash/library" ||
+      url.pathname === "/bishbash/log" ||
+      url.pathname === "/bishbash/packs" ||
       url.pathname === "/bishbash/mood" ||
       url.pathname === "/bishbash/settings" ||
       url.pathname.startsWith("/bishbash/card/") ||

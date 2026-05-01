@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   loadCards,
@@ -16,6 +16,13 @@ import {
   saveSelectedHomeScreenVersion,
   saveSetupComplete,
 } from "./storage";
+import {
+  createEventRecord,
+  formatTwentyFourHourTime,
+  getStartOfWeek,
+  loadEventLog,
+  persistEventRecord,
+} from "./eventLog";
 import {
   PACKS,
   FREQUENCY_OPTIONS,
@@ -136,8 +143,10 @@ function parseRoute(path) {
     };
   }
 
+  if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
+  if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
   if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
-  if (normalized === "/mood") return { kind: "mood", path: normalized, tab: "theme" };
+  if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
   return { kind: "home", path: "/home", tab: "home" };
 }
@@ -150,6 +159,26 @@ function getInstallUrl(path) {
 function openNativeApp(appUrl) {
   if (!appUrl) return;
   window.location.href = appUrl;
+}
+
+function getAppLauncherConfig(selectedVersionId, versions) {
+  if (selectedVersionId === "bishbash") {
+    return {
+      id: "safari",
+      label: "Safari",
+      type: "safari",
+    };
+  }
+
+  const selected = versions[selectedVersionId];
+  if (!selected?.realAppLabel) return null;
+
+  return {
+    id: selected.id,
+    label: selected.realAppLabel,
+    type: selected.id === "safari" ? "safari" : "native",
+    appUrl: selected.appUrl,
+  };
 }
 
 function openSafariEscape() {
@@ -179,6 +208,52 @@ function getInterruptionPackForVersion(versionId, versions, customPacks) {
 
   if (selectedCustomPack) return selectedCustomPack;
   return DEFAULT_INTERRUPTION_PACKS[versionId] ?? null;
+}
+
+function isMeaningfulEvent(event) {
+  return event.event_type !== "intercept_card_viewed";
+}
+
+function isRecentMomentEvent(event) {
+  return [
+    "bash_done",
+    "bash_do_now",
+    "intercept_do_something_else",
+    "intercept_continue_to_app",
+  ].includes(event.event_type);
+}
+
+function getWeeklyShiftCount(events, now = new Date()) {
+  const weekStart = getStartOfWeek(now).getTime();
+  const shiftTypes = new Set(["bash_done", "bash_do_now", "intercept_do_something_else"]);
+  return events.filter((event) => {
+    if (!shiftTypes.has(event.event_type)) return false;
+    return new Date(event.created_at).getTime() >= weekStart;
+  }).length;
+}
+
+function describeLogEvent(event) {
+  if (event.event_type === "intercept_do_something_else") {
+    return `You chose something else instead of opening ${event.app_name || "that app"}.`;
+  }
+
+  if (event.event_type === "intercept_continue_to_app") {
+    return `You continued to ${event.app_name || "the app"} after pausing.`;
+  }
+
+  if (event.event_type === "bash_done") {
+    return `You completed: ${event.bash_title || "a BishBash"}`;
+  }
+
+  if (event.event_type === "bash_do_now") {
+    return `You chose to do: ${event.bash_title || "a BishBash"}`;
+  }
+
+  if (event.event_type === "bash_not_done") {
+    return `You left this BishBash for later: ${event.bash_title || "a BishBash"}`;
+  }
+
+  return "A little BishBash moment was recorded.";
 }
 
 function pickRandomHomeCardForDisplay(currentCards, timezone) {
@@ -275,6 +350,7 @@ function App() {
       ...base,
       cardPacks: loadCardPacks(),
       homeScreenVersions: loadHomeScreenVersions(),
+      events: loadEventLog(),
     };
   }, []);
   const [cards, setCards] = useState(initialState.cards);
@@ -283,6 +359,7 @@ function App() {
   const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
   const [selectedHomeScreenVersion, setSelectedHomeScreenVersion] = useState(() => loadSelectedHomeScreenVersion());
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
+  const [events, setEvents] = useState(initialState.events);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(null);
@@ -298,6 +375,10 @@ function App() {
   const activeInterceptionVersion = route.kind === "intercept"
     ? resolveVersionConfig(homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId])
     : null;
+  const appLauncher = useMemo(
+    () => getAppLauncherConfig(selectedHomeScreenVersion, homeScreenVersions),
+    [selectedHomeScreenVersion, homeScreenVersions],
+  );
 
   useEffect(() => {
     saveCards(cards);
@@ -412,6 +493,12 @@ function App() {
     );
   }
 
+  const logEvent = useCallback(async (input) => {
+    const record = createEventRecord(input);
+    const next = await persistEventRecord(record);
+    setEvents(next);
+  }, []);
+
   function openSpecificReveal(cardId) {
     const selected = cards.find((card) => card.id === cardId);
     if (!selected) return;
@@ -450,6 +537,22 @@ function App() {
     updateCards((current) =>
       current.map((card) => (card.id === updatedCard.id ? updatedCard : card)),
     );
+    const eventType =
+      action === "done"
+        ? "bash_done"
+        : action === "now"
+          ? "bash_do_now"
+          : "bash_not_done";
+    void logEvent({
+      event_type: eventType,
+      source_type: "standard_bishbash",
+      bash_id: activeCard.id,
+      bash_title: activeCard.promptText,
+      metadata: {
+        frequency: activeCard.frequency,
+        timingWindows: activeCard.timingWindows,
+      },
+    });
 
     setOverlay((currentOverlay) =>
       currentOverlay ? { ...currentOverlay, phase: "dissolving", action } : currentOverlay,
@@ -759,6 +862,14 @@ function App() {
 
     return count;
   }, [cards, profile.timezone]);
+  const personalLibraryItems = useMemo(
+    () => homeItems.filter((item) => item.type === "single" && !item.representative.sourcePackId),
+    [homeItems],
+  );
+  const recentMeaningfulEvents = useMemo(
+    () => events.filter(isRecentMomentEvent).slice(0, 5),
+    [events],
+  );
 
   return (
     <>
@@ -904,18 +1015,44 @@ function App() {
               ) : null}
 
               {activeTab === "library" ? (
-                <LibraryPanel
+                <StandardLibraryPanel
+                  items={personalLibraryItems}
+                  timezone={profile.timezone}
+                  menuOpenId={menuOpenId}
+                  setMenuOpenId={setMenuOpenId}
+                  openEditor={openEditor}
+                  handleResetItem={handleResetItem}
+                  handleTogglePause={handleTogglePause}
+                  handleDeleteCard={handleDeleteCard}
+                  openSpecificReveal={openSpecificReveal}
+                />
+              ) : null}
+
+              {activeTab === "log" ? (
+                <LogPanel
+                  events={recentMeaningfulEvents}
+                  timezone={profile.timezone}
+                  weeklyShiftCount={getWeeklyShiftCount(events)}
+                  onCreateBishBash={() => {
+                    setEditingId(null);
+                    setIsComposerOpen(true);
+                  }}
+                />
+              ) : null}
+
+              {activeTab === "packs" ? (
+                <PacksPanel
                   cards={cards}
                   onActivate={activatePack}
                   onDeactivate={deactivatePack}
                 />
               ) : null}
-
-              {activeTab === "theme" ? <MoodPanel mood={mood} onSelectMood={setMood} /> : null}
               {activeTab === "settings" ? (
                 <SettingsPanel
                   profile={profile}
                   onSaveProfile={setProfile}
+                  mood={mood}
+                  onSelectMood={setMood}
                   homeScreenVersions={homeScreenVersions}
                   selectedHomeScreenVersion={selectedHomeScreenVersion}
                   onSelectHomeScreenVersion={handleSelectHomeScreenVersion}
@@ -940,9 +1077,13 @@ function App() {
               <BookGlyph />
               <span>Library</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "theme" ? "active" : ""}`} onClick={() => navigateTo("/mood")}>
-              <ThemeGlyph />
-              <span>Mood</span>
+            <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} onClick={() => navigateTo("/log")}>
+              <LogGlyph />
+              <span>Log</span>
+            </button>
+            <button type="button" className={`nav-item ${activeTab === "packs" ? "active" : ""}`} onClick={() => navigateTo("/packs")}>
+              <PacksGlyph />
+              <span>Packs</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "settings" ? "active" : ""}`} onClick={() => navigateTo("/settings")}>
               <SettingsGlyph />
@@ -1011,9 +1152,37 @@ function App() {
           }}
           onAction={handleAction}
           onChooseElse={() => navigateTo("/home")}
+          onLogEvent={logEvent}
         />
       ) : null}
+
+      {screen !== "interception" && appLauncher ? (
+        <AppLauncherButton version={appLauncher} />
+      ) : null}
     </>
+  );
+}
+
+function AppLauncherButton({ version }) {
+  function handleOpen() {
+    if (version.type === "safari") {
+      openSafariEscape();
+      return;
+    }
+
+    openNativeApp(version.appUrl);
+  }
+
+  return (
+    <button
+      type="button"
+      className="continue-safari-button"
+      onClick={handleOpen}
+      aria-label={`Open ${version.label}`}
+    >
+      <SafariGlyph />
+      <span>{version.label}</span>
+    </button>
   );
 }
 
@@ -1161,33 +1330,182 @@ function Composer({ initialCard, onClose, onSave }) {
   );
 }
 
-function MoodPanel({ mood, onSelectMood }) {
+function StandardLibraryPanel({
+  items,
+  timezone,
+  menuOpenId,
+  setMenuOpenId,
+  openEditor,
+  handleResetItem,
+  handleTogglePause,
+  handleDeleteCard,
+  openSpecificReveal,
+}) {
   return (
-    <section className="panel-section">
+    <section className="library">
       <div className="section-heading solo">
         <div>
-          <h2>Mood</h2>
-          <p>Choose the feeling of BishBash as a whole.</p>
+          <h2>Library</h2>
+          <p>Your own BishBashes, gathered in one quiet place.</p>
         </div>
       </div>
-      <div className="theme-showcase">
-        {THEMES.map((theme) => (
-          <article
-            key={theme}
-            className={`theme-showcase-card theme-${getThemeClass(theme)} ${mood === theme ? "selected-mood" : ""}`}
-          >
-            <p className="eyebrow">{theme}</p>
-            <h3>have you stretched today?</h3>
-            <button
-              type="button"
-              className={`pack-button ${mood === theme ? "secondary" : ""}`}
-              onClick={() => onSelectMood(theme)}
+      <div className="card-stack">
+        {items.map((item) => {
+          const status = getStatusMeta(item.representative, new Date(), timezone);
+          return (
+            <article
+              key={item.id}
+              className={`library-card ${menuOpenId === item.id ? "menu-open" : ""} theme-${getThemeClass(item.representative.theme)}`}
+              onClick={() => openSpecificReveal(item.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openSpecificReveal(item.id);
+                }
+              }}
             >
-              {mood === theme ? "Selected" : "Use this mood"}
-            </button>
-          </article>
-        ))}
+              <div className="tile">
+                <CardIcon icon={item.representative.icon} />
+              </div>
+              <div className="card-copy">
+                <h3>{item.representative.promptText}</h3>
+              </div>
+              <div className="card-status">
+                <span className="badge">{status.badge}</span>
+              </div>
+              <div className="menu-wrap">
+                <button
+                  type="button"
+                  className="menu-trigger"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpenId((current) => (current === item.id ? null : item.id));
+                  }}
+                  aria-label="Card menu"
+                >
+                  •••
+                </button>
+                {menuOpenId === item.id ? (
+                  <div className="menu">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openEditor(item.id);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleResetItem(item);
+                      }}
+                    >
+                      Reset for today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleTogglePause(item);
+                      }}
+                    >
+                      {item.representative.paused ? "Unpause" : "Pause"}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-soft"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteCard(item.id);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
       </div>
+    </section>
+  );
+}
+
+function LogPanel({ events, timezone, weeklyShiftCount, onCreateBishBash }) {
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const filledDots = Math.min(weeklyShiftCount, 14);
+
+  return (
+    <section className="log-screen">
+      <header className="log-header">
+        <span className="log-heart" aria-hidden="true">
+          <HeartGlyph />
+        </span>
+        <h2>BishBash Log</h2>
+        <p>tiny choices. real change.</p>
+      </header>
+
+      <article className="log-hero-card">
+        {weeklyShiftCount > 0 ? (
+          <>
+            <h3>
+              You chose <span>yourself</span> {weeklyShiftCount} {weeklyShiftCount === 1 ? "time" : "times"} this week.
+            </h3>
+            <div className="growth-visual">
+              <GrowthFlower count={weeklyShiftCount} />
+            </div>
+            <div className="growth-dots" aria-hidden="true">
+              {Array.from({ length: 14 }).map((_, index) => (
+                <span key={index} className={`growth-dot ${index < filledDots ? "filled" : ""}`} />
+              ))}
+            </div>
+            <p className="growth-caption">Every little shift adds up.</p>
+          </>
+        ) : (
+          <div className="log-empty-state">
+            <h3>Your first little shift will appear here.</h3>
+            <p>Every quiet choice begins somewhere.</p>
+            <button type="button" className="pack-button" onClick={onCreateBishBash} aria-label="Make a BishBash">
+              Make a BishBash
+            </button>
+          </div>
+        )}
+      </article>
+
+      <article className="recent-moments-card">
+        <h3>Recent moments</h3>
+        {events.length > 0 ? (
+          <div className="recent-event-list">
+            {events.map((event, index) => (
+              <button
+                key={event.id}
+                type="button"
+                className={`event-row ${index === events.length - 1 ? "last" : ""}`}
+                onClick={() => setSelectedEvent(event)}
+                aria-label={`Open details for ${describeLogEvent(event)}`}
+              >
+                <span className="event-icon-bubble" aria-hidden="true">
+                  {event.event_type.startsWith("intercept_") ? <LogGlyph /> : <HeartGlyph />}
+                </span>
+                <span className="event-copy">{describeLogEvent(event)}</span>
+                <span className="event-time">{formatTwentyFourHourTime(event.created_at, timezone)}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
+        )}
+      </article>
+
+      {selectedEvent ? (
+        <EventDetailModal event={selectedEvent} timezone={timezone} onClose={() => setSelectedEvent(null)} />
+      ) : null}
     </section>
   );
 }
@@ -1353,12 +1671,12 @@ function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onS
   );
 }
 
-function LibraryPanel({ cards, onActivate, onDeactivate }) {
+function PacksPanel({ cards, onActivate, onDeactivate }) {
   return (
     <section className="panel-section">
       <div className="section-heading solo">
         <div>
-          <h2>Library</h2>
+          <h2>Packs</h2>
           <p>Activate ready-made BishBash packs that can appear at random through the day.</p>
         </div>
       </div>
@@ -1400,6 +1718,8 @@ function LibraryPanel({ cards, onActivate, onDeactivate }) {
 function SettingsPanel({
   profile,
   onSaveProfile,
+  mood,
+  onSelectMood,
   homeScreenVersions,
   selectedHomeScreenVersion,
   onSelectHomeScreenVersion,
@@ -1482,6 +1802,30 @@ function SettingsPanel({
           >
             Save personalisation
           </button>
+        </div>
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Mood</p>
+          <span>Choose the overall feeling of BishBash.</span>
+        </div>
+        <div className="theme-showcase settings-theme-showcase">
+          {THEMES.map((theme) => (
+            <article
+              key={theme}
+              className={`theme-showcase-card theme-${getThemeClass(theme)} ${mood === theme ? "selected-mood" : ""}`}
+            >
+              <p className="eyebrow">{theme}</p>
+              <h3>have you stretched today?</h3>
+              <button
+                type="button"
+                className={`pack-button ${mood === theme ? "secondary" : ""}`}
+                onClick={() => onSelectMood(theme)}
+              >
+                {mood === theme ? "Selected" : "Use this mood"}
+              </button>
+            </article>
+          ))}
         </div>
       </div>
       <div className="settings-card">
@@ -1642,7 +1986,92 @@ function SettingsPanel({
   );
 }
 
-function Overlay({ overlay, card, route, version, timezone, onClose, onAction, onChooseElse }) {
+function GrowthFlower({ count }) {
+  const stage = count >= 15 ? "full" : count >= 10 ? "partial" : count >= 6 ? "stem" : count >= 3 ? "leaves" : "sprout";
+  return (
+    <svg viewBox="0 0 180 180" className={`growth-flower stage-${stage}`} aria-hidden="true">
+      <defs>
+        <linearGradient id="petalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#F0A08E" />
+          <stop offset="100%" stopColor="#E87661" />
+        </linearGradient>
+      </defs>
+      <path d="M90 144c0-18 0-34 1-52" className="stem-path" />
+      {stage !== "sprout" ? (
+        <>
+          <path d="M91 110c16-3 26-14 26-28-14 1-24 11-26 28z" className="leaf-path" />
+          <path d="M89 122c-15-3-25-13-25-28 14 1 24 11 25 28z" className="leaf-path" />
+        </>
+      ) : null}
+      {stage === "stem" || stage === "partial" || stage === "full" ? (
+        <circle cx="91" cy="78" r="10" className="bud-core" />
+      ) : null}
+      {stage === "partial" || stage === "full" ? (
+        <>
+          <path d="M91 52c9 0 16 9 16 18-9 0-16-9-16-18z" className="petal-path" />
+          <path d="M67 78c0-9 9-16 18-16 0 9-9 16-18 16z" className="petal-path" />
+          <path d="M115 78c0-9-9-16-18-16 0 9 9 16 18 16z" className="petal-path" />
+        </>
+      ) : null}
+      {stage === "full" ? (
+        <>
+          <path d="M91 102c-9 0-16-9-16-18 9 0 16 9 16 18z" className="petal-path" />
+          <path d="M75 60c8-5 20-3 25 5-8 5-20 3-25-5z" className="petal-path" />
+          <path d="M107 60c-8-5-20-3-25 5 8 5 20 3 25-5z" className="petal-path" />
+        </>
+      ) : null}
+      {stage === "sprout" ? <path d="M90 124c6-12 14-18 22-21-2 12-10 20-22 21z" className="sprout-path" /> : null}
+    </svg>
+  );
+}
+
+function EventDetailModal({ event, timezone, onClose }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="composer event-detail-card" onClick={(eventClick) => eventClick.stopPropagation()}>
+        <div className="composer-heading">
+          <p className="eyebrow">Moment detail</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="event-detail-body">
+          <h3>{describeLogEvent(event)}</h3>
+          <dl className="event-detail-list">
+            <div>
+              <dt>Time</dt>
+              <dd>{formatTwentyFourHourTime(event.created_at, timezone)}</dd>
+            </div>
+            {event.bash_title ? (
+              <div>
+                <dt>BishBash</dt>
+                <dd>{event.bash_title}</dd>
+              </div>
+            ) : null}
+            {event.app_name ? (
+              <div>
+                <dt>App source</dt>
+                <dd>{event.app_name}</dd>
+              </div>
+            ) : null}
+            {event.pack_id ? (
+              <div>
+                <dt>Pack</dt>
+                <dd>{event.metadata?.packTitle ?? event.pack_id}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>Event type</dt>
+              <dd>{event.event_type}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Overlay({ overlay, card, route, version, timezone, onClose, onAction, onChooseElse, onLogEvent }) {
   if (overlay.type === "empty" && route.kind === "intercept") {
     return (
       <div className="overlay-screen empty-state interception-screen" onClick={onClose}>
@@ -1674,7 +2103,7 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
   }
 
   if (overlay.type === "intercept-pack") {
-    return <InterceptionOverlay overlay={overlay} version={version} onChooseElse={onChooseElse} />;
+    return <InterceptionOverlay overlay={overlay} version={version} onChooseElse={onChooseElse} onLogEvent={onLogEvent} />;
   }
 
   if (overlay.type === "custom-pack-preview") {
@@ -1786,7 +2215,7 @@ function CustomPackOverlay({ overlay, onClose }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -1806,6 +2235,24 @@ function InterceptionOverlay({ overlay, version, onChooseElse }) {
     };
   }, [overlay.activeIndex, overlay.packId]);
 
+  useEffect(() => {
+    const activeMessage = messages[activeIndex];
+    if (!activeMessage || !version) return;
+
+    void onLogEvent({
+      event_type: "intercept_card_viewed",
+      source_type: "interception",
+      app_id: version.id,
+      app_name: version.name,
+      pack_id: overlay.packId,
+      message_id: `${overlay.packId}:${activeIndex}`,
+      metadata: {
+        packTitle: overlay.name,
+        message: activeMessage,
+      },
+    });
+  }, [activeIndex, messages, onLogEvent, overlay.name, overlay.packId, version]);
+
   function move(delta) {
     if (messages.length === 0) return;
     setActiveIndex((current) => {
@@ -1819,6 +2266,18 @@ function InterceptionOverlay({ overlay, version, onChooseElse }) {
   function continueToApp() {
     if (!version) return;
     setShowFallbackLink(false);
+    void onLogEvent({
+      event_type: "intercept_continue_to_app",
+      source_type: "interception",
+      app_id: version.id,
+      app_name: version.name,
+      pack_id: overlay.packId,
+      message_id: `${overlay.packId}:${activeIndex}`,
+      metadata: {
+        packTitle: overlay.name,
+        message: messages[activeIndex] ?? null,
+      },
+    });
 
     if (version.id === "safari") {
       openSafariEscape();
@@ -1874,7 +2333,25 @@ function InterceptionOverlay({ overlay, version, onChooseElse }) {
         ))}
       </div>
       <div className="interception-actions">
-        <ActionButton label="I'll do something else" tone="solid" onClick={onChooseElse} />
+        <ActionButton
+          label="I'll do something else"
+          tone="solid"
+          onClick={() => {
+            void onLogEvent({
+              event_type: "intercept_do_something_else",
+              source_type: "interception",
+              app_id: version?.id ?? null,
+              app_name: version?.name ?? null,
+              pack_id: overlay.packId,
+              message_id: `${overlay.packId}:${activeIndex}`,
+              metadata: {
+                packTitle: overlay.name,
+                message: messages[activeIndex] ?? null,
+              },
+            });
+            onChooseElse();
+          }}
+        />
         <ActionButton label={`Continue to ${version?.name ?? "app"}`} onClick={continueToApp} />
       </div>
       {showFallbackLink && version?.manualUrl ? (
@@ -2144,13 +2621,23 @@ function BookGlyph() {
   );
 }
 
-function ThemeGlyph() {
+function LogGlyph() {
   return (
     <svg viewBox="0 0 32 32" className="nav-glyph" aria-hidden="true">
-      <path d="M16 25c5 0 9-4 9-9 0-6-5-11-11-11S3 10 3 16s5 9 9 9c2 0 3-1 3-3 0-1-1-2-1-3 0-2 1-3 2-3z" />
-      <path d="M11 11h.01" />
-      <path d="M18 10h.01" />
-      <path d="M20 16h.01" />
+      <path d="M16 24V12" />
+      <path d="M16 12c4 0 7-3 7-7-4 0-7 3-7 7z" />
+      <path d="M16 15c-4 0-7 3-7 7 4 0 7-3 7-7z" />
+      <path d="M16 18c4 0 7 3 7 7-4 0-7-3-7-7z" />
+    </svg>
+  );
+}
+
+function PacksGlyph() {
+  return (
+    <svg viewBox="0 0 32 32" className="nav-glyph" aria-hidden="true">
+      <path d="M7 10h18v6H7z" />
+      <path d="M9 16h14v10H9z" />
+      <path d="M14 7h4" />
     </svg>
   );
 }
