@@ -478,6 +478,44 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
+    useEffect(() => {
+  if (!setupComplete) return;
+  if (route.kind !== "home") return;
+  if (overlay) return;
+  if (cards.length === 0) return;
+
+  const eligible = cards.filter((card) =>
+    isEligible(card, new Date(), profile.timezone)
+  );
+
+  if (eligible.length === 0) return;
+
+  const selected =
+    eligible[Math.floor(Math.random() * eligible.length)];
+
+  setOverlay({
+    type: "reveal",
+    cardId: selected.id,
+    phase: "visible",
+  });
+
+  updateCards((current) =>
+    current.map((card) =>
+      card.id === selected.id
+        ? {
+            ...card,
+            lastShownAt: new Date().toISOString(),
+          }
+        : card
+    )
+  );
+}, [
+  setupComplete,
+  route.kind,
+  overlay,
+  cards,
+  profile.timezone,
+]);
   }, [route, setupComplete, homeScreenVersions, cardPacks]);
 
   function navigateTo(path, { replace = false } = {}) {
