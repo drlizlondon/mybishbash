@@ -26,7 +26,7 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     iconSrc: "/bishbash/icons/apple-touch-icon.png",
     realAppLabel: "Safari",
     appUrl: "",
-    manualUrl: "https://www.google.com",
+    manualUrl: "x-safari-https://google.com",
     interruptionPackId: "",
   },
   youtube: {
