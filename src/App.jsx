@@ -936,11 +936,6 @@ if (!selected) {
     () => events.filter(isRecentMomentEvent).slice(0, 5),
     [events],
   );
-const recentMeaningfulEvents = useMemo(
-  () => events.filter(isRecentMomentEvent).slice(0, 5),
-  [events],
-);
-
 if (overlay?.type === "reveal" || overlay?.type === "empty") {
   return (
     <>
