@@ -874,15 +874,18 @@ textarea {
 .overlay-screen {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 99999;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 20px);
   overflow-y: auto;
-  background: linear-gradient(180deg, #fcf7f3 0%, #f7f2ee 52%, #f4e9e2 100%);
+  background:
+    linear-gradient(180deg, #fcf7f3 0%, #f7f2ee 52%, #f4e9e2 100%),
+    #f7f2ee;
   opacity: 1;
   isolation: isolate;
+  transform: translateZ(0);
   animation: reveal-in 420ms ease both;
 }
 
