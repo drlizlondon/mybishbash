@@ -112,14 +112,27 @@ export function saveProfile(value) {
 export function loadHomeScreenVersions() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(HOME_SCREEN_VERSIONS_KEY) ?? "{}");
+
     return Object.fromEntries(
-      Object.entries(DEFAULT_HOME_SCREEN_VERSIONS).map(([id, defaults]) => [
-        id,
-        {
+      Object.entries(DEFAULT_HOME_SCREEN_VERSIONS).map(([id, defaults]) => {
+        const merged = {
           ...defaults,
           ...(stored?.[id] ?? {}),
-        },
-      ]),
+        };
+
+        if (id === "safari") {
+          return [
+            id,
+            {
+              ...merged,
+              appUrl: "",
+              manualUrl: "x-safari-https://www.google.com",
+            },
+          ];
+        }
+
+        return [id, merged];
+      }),
     );
   } catch {
     return DEFAULT_HOME_SCREEN_VERSIONS;
