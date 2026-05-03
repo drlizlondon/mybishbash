@@ -943,7 +943,40 @@ textarea {
   gap: 10px;
   padding-top: 16px;
 }
+.caught-up-safari-link {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 12px 18px 12px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(47, 42, 40, 0.08);
+  color: var(--charcoal);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow:
+    0 12px 28px rgba(114, 79, 65, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+}
 
+.caught-up-safari-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #eef7ff 0%, #d8ecff 100%);
+  color: #2674c8;
+}
+
+.caught-up-safari-icon svg {
+  width: 18px;
+  height: 18px;
+}
 .pack-reaction-row {
   width: min(100%, 360px);
   align-self: center;
