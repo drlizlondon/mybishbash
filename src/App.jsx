@@ -187,9 +187,11 @@ function openSafariEscape() {
     (window.matchMedia?.("(display-mode: standalone)").matches ||
       window.navigator.standalone === true);
 
-  const safariHref = isStandalone
-    ? "x-safari-https://www.google.com"
-    : "https://www.google.com";
+function openSafariEscape() {
+  const safariHref = "x-safari-https://www.apple.com";
+
+  window.location.href = safariHref;
+}
 
   if (isStandalone) {
     window.location.href = safariHref;
