@@ -1,4 +1,4 @@
-const CACHE_NAME = "bishbash-cache-v6";
+const CACHE_NAME = "bishbash-cache-v7";
 const APP_SHELL = [
   "/bishbash/",
   "/bishbash/index.html",
@@ -38,6 +38,7 @@ self.addEventListener("fetch", (event) => {
       url.pathname === "/bishbash/mood" ||
       url.pathname === "/bishbash/settings" ||
       url.pathname.startsWith("/bishbash/card/") ||
+      url.pathname === "/bishbash/caught-up" ||
       url.pathname.startsWith("/bishbash/intercept/");
 
     if (appRoute) {
