@@ -181,10 +181,17 @@ function getAppLauncherConfig(selectedVersionId, versions) {
     appUrl: selected.appUrl,
   };
 }
-
 function openSafariEscape() {
-  window.location.href = "x-safari-https://www.google.com";
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true);
+
+  window.location.href = isStandalone
+    ? "x-safari-https://www.google.com"
+    : "https://www.google.com";
 }
+
 function getInterruptionPackForVersion(versionId, versions, customPacks) {
   const version = versions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId];
   const selectedId = version?.interruptionPackId || version?.selectedPackId || "";
@@ -2190,18 +2197,19 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
     <h2>You&apos;re all caught up for now.</h2>
     <p>see you later</p>
 
-   <a
+   <button
+  type="button"
   className="caught-up-safari-link"
-  href="x-safari-https://www.google.com"
   onClick={(event) => {
     event.stopPropagation();
+    openSafariEscape();
   }}
 >
   <span className="caught-up-safari-icon" aria-hidden="true">
     <CompassGlyph />
   </span>
   <span>Safari</span>
-</a>
+</button>
   </div>
 );
   }
