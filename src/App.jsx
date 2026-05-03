@@ -182,25 +182,8 @@ function getAppLauncherConfig(selectedVersionId, versions) {
 }
 
 function openSafariEscape() {
-  const isStandalone =
-    typeof window !== "undefined" &&
-    (window.matchMedia?.("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true);
-
-function openSafariEscape() {
-  const safariHref = "x-safari-https://www.apple.com";
-
-  window.location.href = safariHref;
+  window.location.href = "x-safari-https://google.com";
 }
-
-  if (isStandalone) {
-    window.location.href = safariHref;
-    return;
-  }
-
-  window.open(safariHref, "_blank", "noopener,noreferrer");
-}
-
 function getInterruptionPackForVersion(versionId, versions, customPacks) {
   const version = versions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId];
   const selectedId = version?.interruptionPackId || version?.selectedPackId || "";
