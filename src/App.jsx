@@ -958,7 +958,7 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
   onLogEvent={logEvent}
 />
 
-{appLauncher ? <AppLauncherButton version={appLauncher} /> : null}
+<AppLauncherButton version={{ id: "safari", label: "Safari", type: "safari" }} />
       </>
   );
 }
