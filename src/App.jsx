@@ -936,7 +936,39 @@ if (!selected) {
     () => events.filter(isRecentMomentEvent).slice(0, 5),
     [events],
   );
+const recentMeaningfulEvents = useMemo(
+  () => events.filter(isRecentMomentEvent).slice(0, 5),
+  [events],
+);
 
+if (overlay?.type === "reveal" || overlay?.type === "empty") {
+  return (
+    <>
+      <div className="grain" />
+
+      <Overlay
+        overlay={overlay}
+        activeRevealCard={activeRevealCard}
+        profile={profile}
+        onClose={() => {
+          setOverlay(null);
+          navigateTo("/home");
+        }}
+        onAction={handleAction}
+        onPackReaction={handlePackReaction}
+        version={activeInterceptionVersion}
+        onChooseElse={() => {
+          setOverlay(null);
+          navigateTo("/home");
+        }}
+        onLogEvent={logEvent}
+      />
+    </>
+  );
+}
+
+return (
+  <>
 return (
   <>
     <div className="grain" />
