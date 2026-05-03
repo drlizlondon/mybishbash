@@ -276,18 +276,20 @@ function pickRandomHomeCardForDisplay(currentCards, timezone) {
     packCards,
   }));
 
-  const pool = [...singles, ...packs];
-  if (pool.length === 0) {
-    return { normalized, selected: null };
+  // Prioritise personal (non-pack) cards over pack cards. Only if no personal cards are eligible do we fall back to pack cards.
+  // First pick from singles if any exist.
+  if (singles.length > 0) {
+    const chosenSingle = singles[Math.floor(Math.random() * singles.length)];
+    return { normalized, selected: chosenSingle.card };
   }
-
-  const chosen = pool[Math.floor(Math.random() * pool.length)];
-  if (chosen.type === "single") {
-    return { normalized, selected: chosen.card };
+  // If no personal cards are available, pick from packs if any exist.
+  if (packs.length > 0) {
+    const chosenPack = packs[Math.floor(Math.random() * packs.length)];
+    const selected = chosenPack.packCards[Math.floor(Math.random() * chosenPack.packCards.length)];
+    return { normalized, selected };
   }
-
-  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
-  return { normalized, selected };
+  // If neither singles nor packs are available, return null.
+  return { normalized, selected: null };
 }
 
 function buildInitialState() {
@@ -481,46 +483,48 @@ function App() {
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
   }, [route, setupComplete, homeScreenVersions, cardPacks]);
   useEffect(() => {
-  if (hasAutoLaunchedRef.current) return;
-  if (!setupComplete) return;
-  if (route.kind !== "home") return;
-  if (overlay) return;
-  if (cards.length === 0) return;
+    if (hasAutoLaunchedRef.current) return;
+    if (!setupComplete) return;
+    if (route.kind !== "home") return;
+    if (overlay) return;
+    if (cards.length === 0) return;
 
-  const eligible = cards.filter((card) =>
-    isEligible(card, new Date(), profile.timezone)
-  );
+    // Use the prioritised picker to select a card for auto-launch.
+    const { selected } = pickRandomHomeCardForDisplay(cards, profile.timezone);
 
-  if (eligible.length === 0) return;
+    // If there are no eligible cards (personal or pack), show the caught-up state.
+    if (!selected) {
+      hasAutoLaunchedRef.current = true;
+      setOverlay({ type: "empty" });
+      return;
+    }
 
-  const selected =
-    eligible[Math.floor(Math.random() * eligible.length)];
+    hasAutoLaunchedRef.current = true;
 
-  hasAutoLaunchedRef.current = true;
+    setOverlay({
+      type: "reveal",
+      cardId: selected.id,
+      phase: "visible",
+    });
 
-  setOverlay({
-    type: "reveal",
-    cardId: selected.id,
-    phase: "visible",
-  });
-
-  updateCards((current) =>
-    current.map((card) =>
-      card.id === selected.id
-        ? {
-            ...card,
-            lastShownAt: new Date().toISOString(),
-          }
-        : card
-    )
-  );
-}, [
-  setupComplete,
-  route.kind,
-  overlay,
-  cards,
-  profile.timezone,
-]);
+    // Record the reveal time on the selected card.
+    updateCards((current) =>
+      current.map((card) =>
+        card.id === selected.id
+          ? {
+              ...card,
+              lastShownAt: new Date().toISOString(),
+            }
+          : card,
+      ),
+    );
+  }, [
+    setupComplete,
+    route.kind,
+    overlay,
+    cards,
+    profile.timezone,
+  ]);
   
 
 
@@ -602,6 +606,37 @@ function App() {
       currentOverlay ? { ...currentOverlay, phase: "dissolving", action } : currentOverlay,
     );
 
+    transitionTimerRef.current = window.setTimeout(() => {
+      setOverlay(null);
+      navigateTo("/home");
+    }, 720);
+  }
+
+  // Lightweight reaction handler for pack cards. Dislike pauses the specific pack card; like leaves it active.
+  function handlePackReaction(reaction) {
+    if (!overlay || overlay.type !== "reveal") return;
+    const activeCard = cards.find((card) => card.id === overlay.cardId);
+    if (!activeCard) {
+      setOverlay(null);
+      return;
+    }
+    // If the user dislikes the card, mark it as paused so it won't be selected again.
+    if (reaction === "dislike") {
+      updateCards((current) =>
+        current.map((card) =>
+          card.id === activeCard.id
+            ? {
+                ...card,
+                paused: true,
+              }
+            : card,
+        ),
+      );
+    }
+    // Dissolve the overlay and return home after a short delay.
+    setOverlay((currentOverlay) =>
+      currentOverlay ? { ...currentOverlay, phase: "dissolving", action: reaction } : currentOverlay,
+    );
     transitionTimerRef.current = window.setTimeout(() => {
       setOverlay(null);
       navigateTo("/home");
@@ -1197,6 +1232,7 @@ function App() {
           onAction={handleAction}
           onChooseElse={() => navigateTo("/home")}
           onLogEvent={logEvent}
+          onPackReaction={handlePackReaction}
         />
       ) : null}
 
@@ -2115,7 +2151,7 @@ function EventDetailModal({ event, timezone, onClose }) {
   );
 }
 
-function Overlay({ overlay, card, route, version, timezone, onClose, onAction, onChooseElse, onLogEvent }) {
+function Overlay({ overlay, card, route, version, timezone, onClose, onAction, onChooseElse, onLogEvent, onPackReaction }) {
   if (overlay.type === "empty" && route.kind === "intercept") {
     return (
       <div className="overlay-screen empty-state interception-screen" onClick={onClose}>
@@ -2179,11 +2215,18 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
         {card.attribution ? <p className="card-attribution">{card.attribution}</p> : null}
         <p className="tiny-note">a gentle nudge from the version of you that cares</p>
       </div>
-      <div className="action-row">
-        <ActionButton label="Not done" onClick={() => onAction("later")} />
-        <ActionButton label="I'll do it now" onClick={() => onAction("now")} />
-        <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
-      </div>
+      {card.sourcePackId ? (
+        <div className="action-row">
+          <ActionButton label="Dislike" onClick={() => onPackReaction("dislike")} />
+          <ActionButton label="Like" tone="solid" onClick={() => onPackReaction("like")} />
+        </div>
+      ) : (
+        <div className="action-row">
+          <ActionButton label="Not done" onClick={() => onAction("later")} />
+          <ActionButton label="I'll do it now" onClick={() => onAction("now")} />
+          <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
+        </div>
+      )}
     </div>
   );
 }
