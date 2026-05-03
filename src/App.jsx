@@ -143,6 +143,7 @@ function parseRoute(path) {
     };
   }
 
+  if (normalized === "/caught-up") return { kind: "caught-up", path: normalized, tab: "home" };
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
   if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
   if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
