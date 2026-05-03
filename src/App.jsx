@@ -370,6 +370,7 @@ function App() {
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
+  const hasAutoLaunchedRef = useRef(false);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = route.kind === "intercept"
@@ -480,6 +481,7 @@ function App() {
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
   }, [route, setupComplete, homeScreenVersions, cardPacks]);
 useEffect(() => {
+  if (hasAutoLaunchedRef.current) return;
   if (!setupComplete) return;
   if (route.kind !== "home") return;
   if (overlay) return;
@@ -493,6 +495,8 @@ useEffect(() => {
 
   const selected =
     eligible[Math.floor(Math.random() * eligible.length)];
+
+  hasAutoLaunchedRef.current = true;
 
   setOverlay({
     type: "reveal",
@@ -517,6 +521,9 @@ useEffect(() => {
   cards,
   profile.timezone,
 ]);
+  
+
+
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
     const url = `${BASE_PATH}${normalized === "/" ? "" : normalized}`;
