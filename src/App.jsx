@@ -939,30 +939,32 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
   return (
     <>
       <div className="grain" />
-     <Overlay
-  overlay={overlay}
-  card={activeRevealCard}
-  route={route}
-  version={activeInterceptionVersion}
-  timezone={profile.timezone}
-  onClose={() => {
-    setOverlay(null);
-    navigateTo("/home");
-  }}
-  onAction={handleAction}
-  onPackReaction={handlePackReaction}
-  onChooseElse={() => {
-    setOverlay(null);
-    navigateTo("/home");
-  }}
-  onLogEvent={logEvent}
-/>
 
-<AppLauncherButton version={{ id: "safari", label: "Safari", type: "safari" }} />
-      </>
+      <Overlay
+        overlay={overlay}
+        card={activeRevealCard}
+        route={route}
+        version={activeInterceptionVersion}
+        timezone={profile.timezone}
+        onClose={() => {
+          setOverlay(null);
+          navigateTo("/home");
+        }}
+        onAction={handleAction}
+        onPackReaction={handlePackReaction}
+        onChooseElse={() => {
+          setOverlay(null);
+          navigateTo("/home");
+        }}
+        onLogEvent={logEvent}
+      />
+
+      <AppLauncherButton
+        version={{ id: "safari", label: "Safari", type: "safari" }}
+      />
+    </>
   );
 }
-  
 return (
   <>
     <div className="grain" />
