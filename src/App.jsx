@@ -182,7 +182,7 @@ function getAppLauncherConfig(selectedVersionId, versions) {
 }
 
 function openSafariEscape() {
-  window.location.href = "x-safari-https://google.com";
+  window.location.href = "x-safari-https://www.google.com";
 }
 function getInterruptionPackForVersion(versionId, versions, customPacks) {
   const version = versions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId];
