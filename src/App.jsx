@@ -936,7 +936,7 @@ return (
   <>
     <div className="grain" />
 
-    {screen === "library" && !["reveal", "empty"].includes(overlay?.type) ? (
+    {screen === "library" ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
           <div className="app-inner">
             <header className="hero">
