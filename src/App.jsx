@@ -480,7 +480,7 @@ function App() {
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
   }, [route, setupComplete, homeScreenVersions, cardPacks]);
-useEffect(() => {
+  useEffect(() => {
   if (hasAutoLaunchedRef.current) return;
   if (!setupComplete) return;
   if (route.kind !== "home") return;
