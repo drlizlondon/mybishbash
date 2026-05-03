@@ -1,4 +1,4 @@
-const CACHE_NAME = "bishbash-cache-v10";
+const CACHE_NAME = "bishbash-cache-v11";
 const APP_SHELL = [
   "/bishbash/",
   "/bishbash/index.html",
