@@ -965,6 +965,11 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
   }}
   onLogEvent={logEvent}
 />
+      </>
+
+  );
+
+}
         onClose={() => {
           setOverlay(null);
           navigateTo("/home");
