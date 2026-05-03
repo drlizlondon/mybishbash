@@ -455,7 +455,12 @@ function App() {
       );
       return;
     }
-
+if (route.kind === "caught-up") {
+  setScreen("library");
+  setOverlay({ type: "empty" });
+  return;
+}
+    
 setScreen("library");
 
 if (route.kind === "card") {
@@ -479,10 +484,9 @@ if (route.kind === "card") {
     const { selected } = pickRandomHomeCardForDisplay(cards, profile.timezone);
 
     // If there are no eligible cards (personal or pack), show the caught-up state.
- if (!selected) {
+if (!selected) {
   hasAutoLaunchedRef.current = true;
-  setScreen("library");
-  setOverlay({ type: "empty" });
+  navigateTo("/caught-up", { replace: true });
   return;
 }
 
