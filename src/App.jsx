@@ -2158,15 +2158,27 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
           type="button"
           className="overlay-library-button"
           onClick={onClose}
-          aria-label="Open library"
-        >
-          <BookGlyph />
-        </button>
-        <p className="eyebrow">BishBash</p>
-        <h2>You&apos;re all caught up for now.</h2>
-        <p>see you later</p>
-      </div>
-    );
+                aria-label="Open library"
+    >
+      <BookGlyph />
+    </button>
+    <p className="eyebrow">BishBash</p>
+    <h2>You&apos;re all caught up for now.</h2>
+    <p>see you later</p>
+
+    <div className="action-row">
+      <button
+        type="button"
+        className="action-button solid"
+        onClick={() => {
+          window.location.href = getInstallUrl(homeScreenVersions.safari.installPath);
+        }}
+      >
+        Add Safari fake icon
+      </button>
+    </div>
+  </div>
+);
   }
 
   if (overlay.type === "intercept-pack") {
