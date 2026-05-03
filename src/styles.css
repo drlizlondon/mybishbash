@@ -874,16 +874,15 @@ textarea {
 .overlay-screen {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 9999;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 20px);
   overflow-y: auto;
-  background:
-    radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.82), transparent 24%),
-    radial-gradient(circle at 84% 12%, rgba(233, 120, 93, 0.08), transparent 18%),
-    linear-gradient(180deg, #fcf7f3 0%, var(--cream) 52%, #f4e9e2 100%);
+  background: linear-gradient(180deg, #fcf7f3 0%, #f7f2ee 52%, #f4e9e2 100%);
+  opacity: 1;
+  isolation: isolate;
   animation: reveal-in 420ms ease both;
 }
 
