@@ -478,7 +478,8 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-    useEffect(() => {
+  }, [route, setupComplete, homeScreenVersions, cardPacks]);
+useEffect(() => {
   if (!setupComplete) return;
   if (route.kind !== "home") return;
   if (overlay) return;
@@ -516,8 +517,6 @@ function App() {
   cards,
   profile.timezone,
 ]);
-  }, [route, setupComplete, homeScreenVersions, cardPacks]);
-
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
     const url = `${BASE_PATH}${normalized === "/" ? "" : normalized}`;
