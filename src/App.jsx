@@ -500,11 +500,7 @@ function App() {
 
     hasAutoLaunchedRef.current = true;
 
-    setOverlay({
-      type: "reveal",
-      cardId: selected.id,
-      phase: "visible",
-    });
+   navigateTo(`/card/${encodeURIComponent(selected.id)}`, { replace: true });
 
     // Record the reveal time on the selected card.
     updateCards((current) =>
@@ -949,12 +945,12 @@ function App() {
     [events],
   );
 
-  return (
-    <>
-      <div className="grain" />
+return (
+  <>
+    <div className="grain" />
 
-      {screen === "library" ? (
-        <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
+    {screen === "library" && !["reveal", "empty"].includes(overlay?.type) ? (
+      <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
           <div className="app-inner">
             <header className="hero">
               <div className="hero-copy">
