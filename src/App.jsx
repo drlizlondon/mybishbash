@@ -2190,18 +2190,18 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
     <h2>You&apos;re all caught up for now.</h2>
     <p>see you later</p>
 
-    <div className="action-row">
-  <button
-    type="button"
-    className="app-launcher-pill"
-    onClick={openSafariEscape}
-  >
-    <span className="launcher-icon" aria-hidden="true">
-      <CompassGlyph />
-    </span>
-    <span>Safari</span>
-  </button>
-</div>
+   <a
+  className="caught-up-safari-link"
+  href="x-safari-https://www.google.com"
+  onClick={(event) => {
+    event.stopPropagation();
+  }}
+>
+  <span className="caught-up-safari-icon" aria-hidden="true">
+    <CompassGlyph />
+  </span>
+  <span>Safari</span>
+</a>
   </div>
 );
   }
