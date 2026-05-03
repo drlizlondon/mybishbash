@@ -2191,16 +2191,17 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
     <p>see you later</p>
 
     <div className="action-row">
-      <button
-        type="button"
-        className="action-button solid"
-        onClick={() => {
-          window.location.href = getInstallUrl(homeScreenVersions.safari.installPath);
-        }}
-      >
-        Add Safari fake icon
-      </button>
-    </div>
+  <button
+    type="button"
+    className="app-launcher-pill"
+    onClick={openSafariEscape}
+  >
+    <span className="launcher-icon" aria-hidden="true">
+      <CompassGlyph />
+    </span>
+    <span>Safari</span>
+  </button>
+</div>
   </div>
 );
   }
