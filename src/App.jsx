@@ -182,16 +182,8 @@ function getAppLauncherConfig(selectedVersionId, versions) {
   };
 }
 function openSafariEscape() {
-  const isStandalone =
-    typeof window !== "undefined" &&
-    (window.matchMedia?.("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true);
-
-  window.location.href = isStandalone
-    ? "x-safari-https://www.google.com"
-    : "https://www.google.com";
+  window.location.href = "x-safari-https://www.google.com";
 }
-
 function getInterruptionPackForVersion(versionId, versions, customPacks) {
   const version = versions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId];
   const selectedId = version?.interruptionPackId || version?.selectedPackId || "";
@@ -965,28 +957,12 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
   }}
   onLogEvent={logEvent}
 />
+
+{appLauncher ? <AppLauncherButton version={appLauncher} /> : null}
       </>
-
-  );
-
-}
-        onClose={() => {
-          setOverlay(null);
-          navigateTo("/home");
-        }}
-        onAction={handleAction}
-        onPackReaction={handlePackReaction}
-        version={activeInterceptionVersion}
-        onChooseElse={() => {
-          setOverlay(null);
-          navigateTo("/home");
-        }}
-        onLogEvent={logEvent}
-      />
-    </>
   );
 }
-
+  
 return (
   <>
     <div className="grain" />
