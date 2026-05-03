@@ -470,15 +470,17 @@ function App() {
       return;
     }
 
-    setScreen("library");
-    if (route.kind === "card") {
-      setOverlay({
-        type: "reveal",
-        cardId: route.cardId,
-        phase: "visible",
-      });
-      return;
-    }
+if (route.kind === "card") {
+  setScreen("card");
+  setOverlay({
+    type: "reveal",
+    cardId: route.cardId,
+    phase: "visible",
+  });
+  return;
+}
+
+setScreen("library");
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
   }, [route, setupComplete, homeScreenVersions, cardPacks]);
@@ -493,10 +495,11 @@ function App() {
 
     // If there are no eligible cards (personal or pack), show the caught-up state.
     if (!selected) {
-      hasAutoLaunchedRef.current = true;
-      setOverlay({ type: "empty" });
-      return;
-    }
+  hasAutoLaunchedRef.current = true;
+  setScreen("card");
+  setOverlay({ type: "empty" });
+  return;
+}
 
     hasAutoLaunchedRef.current = true;
 
