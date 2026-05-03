@@ -487,7 +487,6 @@ function App() {
     if (!setupComplete) return;
     if (route.kind !== "home") return;
     if (overlay) return;
-    if (cards.length === 0) return;
 
     // Use the prioritised picker to select a card for auto-launch.
     const { selected } = pickRandomHomeCardForDisplay(cards, profile.timezone);
