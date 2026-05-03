@@ -940,7 +940,6 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
   return (
     <>
       <div className="grain" />
-
       <Overlay
         overlay={overlay}
         activeRevealCard={activeRevealCard}
@@ -962,8 +961,6 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
   );
 }
 
-return (
-  <>
 return (
   <>
     <div className="grain" />
