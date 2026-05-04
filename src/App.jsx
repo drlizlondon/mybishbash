@@ -936,39 +936,61 @@ if (!selected) {
     [events],
   );
 if (overlay?.type === "reveal" || overlay?.type === "empty") {
+  const launcherVersion =
+    appLauncher ?? { id: "safari", label: "Safari", type: "safari" };
+
   return (
     <>
       <div className="grain" />
 
-      <Overlay
-        overlay={overlay}
-        card={activeRevealCard}
-        route={route}
-        version={activeInterceptionVersion}
-        timezone={profile.timezone}
-        onClose={() => {
-          setOverlay(null);
-          navigateTo("/home");
-        }}
-        onAction={handleAction}
-        onPackReaction={handlePackReaction}
-        onChooseElse={() => {
-          setOverlay(null);
-          navigateTo("/home");
-        }}
-        onLogEvent={logEvent}
-      />
+      {overlay.type === "empty" ? (
+        <main className="caught-up-page">
+          <section className="caught-up-card">
+            <p className="eyebrow">BishBash</p>
+            <h2>You&apos;re all caught up for now.</h2>
+            <p>See you later.</p>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                setOverlay(null);
+                navigateTo("/home");
+              }}
+            >
+              Back home
+            </button>
+          </section>
+        </main>
+      ) : (
+        <Overlay
+          overlay={overlay}
+          card={activeRevealCard}
+          route={route}
+          version={activeInterceptionVersion}
+          timezone={profile.timezone}
+          onClose={() => {
+            setOverlay(null);
+            navigateTo("/home");
+          }}
+          onAction={handleAction}
+          onPackReaction={handlePackReaction}
+          onChooseElse={() => {
+            setOverlay(null);
+            navigateTo("/home");
+          }}
+          onLogEvent={logEvent}
+        />
+      )}
 
-      <AppLauncherButton
-        version={{ id: "safari", label: "Safari", type: "safari" }}
-      />
+      <AppLauncherButton version={launcherVersion} />
     </>
   );
 }
-return (
-  <>
-    <div className="grain" />
+  return (
 
+  <>
+
+    <div className="grain" />
     {screen === "library" ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
           <div className="app-inner">
