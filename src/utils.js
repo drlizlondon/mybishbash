@@ -339,17 +339,18 @@ export function getCurrentWindow(date = new Date(), timeZone) {
 
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
+  const isPackCard = Boolean(card.sourcePackId);
   if (card.paused) return false;
   if (card.disliked) return false;
-  if (card.doneDate === todayKey || card.statusToday === "doneToday") return false;
+  if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) return false;
   if (
-    !card.sourcePackId &&
+    !isPackCard &&
     card.lastShownAt &&
     new Date(card.lastShownAt).getTime() + THIRTY_MINUTES > date.getTime()
   ) {
     return false;
   }
-  if (card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
+  if (!isPackCard && card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
     return false;
   }
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
@@ -395,16 +396,17 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const currentWindow = getCurrentWindow(date, timeZone);
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
+  const isPackCard = Boolean(card.sourcePackId);
 
   if (card.paused) {
     return { badge: "paused", detail: "hidden for now" };
   }
 
-  if (card.doneDate === todayKey || card.statusToday === "doneToday") {
+  if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) {
     return { badge: "done", detail: "see you tomorrow" };
   }
 
-  if (card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
+  if (!isPackCard && card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
     return {
       badge: "pending",
       detail: `returns in ${formatTimeRemaining(new Date(card.notYetUntil).getTime() - date.getTime())}`,

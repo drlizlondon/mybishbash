@@ -14,11 +14,13 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     name: "BishBash",
     installPath: "/bishbash/install/bishbash/",
     launchPath: "/home",
-    iconSrc: "/bishbash/icons/apple-touch-icon.png",
+    iconSrc: "/bishbash/icons/bishbash-cover.png",
     realAppLabel: "",
     appUrl: "",
     manualUrl: "",
     interruptionPackId: "",
+    useInterruptionPack: false,
+    interruptionPaused: false,
   },
   safari: {
     id: "safari",
@@ -30,6 +32,8 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "",
     manualUrl: "x-safari-https://www.google.com",
     interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
   },
   youtube: {
     id: "youtube",
@@ -41,6 +45,8 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "youtube://",
     manualUrl: "https://www.youtube.com",
     interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
   },
   instagram: {
     id: "instagram",
@@ -52,6 +58,8 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "instagram://app",
     manualUrl: "https://www.instagram.com",
     interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
   },
 };
 
@@ -122,6 +130,22 @@ export function loadHomeScreenVersions() {
           ...(stored?.[id] ?? {}),
         };
 
+        if (id === "bishbash") {
+          return [
+            id,
+            {
+              ...merged,
+              iconSrc: defaults.iconSrc,
+              customIconSrc: "",
+              realAppLabel: "",
+              appUrl: "",
+              manualUrl: "",
+              useInterruptionPack: false,
+              interruptionPaused: false,
+            },
+          ];
+        }
+
         if (id === "safari") {
           return [
             id,
@@ -129,11 +153,24 @@ export function loadHomeScreenVersions() {
               ...merged,
               appUrl: "",
               manualUrl: "x-safari-https://www.google.com",
+              useInterruptionPack:
+                typeof merged.useInterruptionPack === "boolean" ? merged.useInterruptionPack : defaults.useInterruptionPack,
+              interruptionPaused: Boolean(merged.interruptionPaused),
             },
           ];
         }
 
-        return [id, merged];
+        return [
+          id,
+          {
+            ...merged,
+            useInterruptionPack:
+              typeof merged.useInterruptionPack === "boolean"
+                ? merged.useInterruptionPack
+                : defaults.useInterruptionPack,
+            interruptionPaused: Boolean(merged.interruptionPaused),
+          },
+        ];
       }),
     );
   } catch {

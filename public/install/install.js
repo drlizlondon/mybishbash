@@ -3,7 +3,7 @@
     bishbash: {
       id: "bishbash",
       name: "BishBash",
-      iconSrc: "/bishbash/icons/apple-touch-icon.png",
+      iconSrc: "/bishbash/icons/bishbash-cover.png",
       manifestHref: "/bishbash/manifest.webmanifest",
       realAppLabel: "",
       appUrl: "",
@@ -19,6 +19,7 @@
       appUrl: "",
       manualUrl: "https://www.google.com",
       launchPath: "/intercept/safari",
+      useInterruptionPack: true,
     },
     youtube: {
       id: "youtube",
@@ -29,6 +30,7 @@
       appUrl: "youtube://",
       manualUrl: "https://www.youtube.com",
       launchPath: "/intercept/youtube",
+      useInterruptionPack: true,
     },
     instagram: {
       id: "instagram",
@@ -39,6 +41,7 @@
       appUrl: "instagram://app",
       manualUrl: "https://www.instagram.com",
       launchPath: "/intercept/instagram",
+      useInterruptionPack: true,
     },
   };
 
@@ -54,7 +57,15 @@
   }
 
   const version = { ...baseVersion, ...(stored[versionId] || {}) };
+  if (version.id === "bishbash") {
+    version.iconSrc = defaults.bishbash.iconSrc;
+    version.customIconSrc = "";
+    version.realAppLabel = "";
+    version.appUrl = "";
+    version.manualUrl = "";
+  }
   const iconSrc = version.customIconSrc || version.iconSrc;
+  const iconType = iconSrc.includes("image/jpeg") || /\.jpe?g(?:$|\?)/i.test(iconSrc) ? "image/jpeg" : "image/png";
 
   document.title = `${version.name} · BishBash`;
 
@@ -66,12 +77,13 @@
 
   const manifestLink = document.querySelector('link[rel="manifest"]');
   if (manifestLink) {
+    const startUrl = new URL(`/bishbash${version.launchPath}`, window.location.origin).toString();
     const manifest = {
       name: version.name,
       short_name: version.name,
-      id: `https://drlizlondon.github.io/bishbash${version.launchPath}`,
-      start_url: `https://drlizlondon.github.io/bishbash${version.launchPath}`,
-      scope: "https://drlizlondon.github.io/bishbash/",
+      id: startUrl,
+      start_url: startUrl,
+      scope: new URL("/bishbash/", window.location.origin).toString(),
       display: "standalone",
       background_color: "#F7F2EE",
       theme_color: "#F7F2EE",
@@ -79,7 +91,7 @@
         {
           src: iconSrc,
           sizes: "180x180",
-          type: "image/png",
+          type: iconType,
         },
       ],
     };

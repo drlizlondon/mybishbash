@@ -1,7 +1,8 @@
 {
   "name": "YouTube",
   "short_name": "YouTube",
-  "start_url": "https://drlizlondon.github.io/bishbash/?disguise=youtube",
+  "id": "https://drlizlondon.github.io/bishbash/intercept/youtube",
+  "start_url": "https://drlizlondon.github.io/bishbash/intercept/youtube",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",

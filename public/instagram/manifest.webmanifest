@@ -1,7 +1,8 @@
 {
   "name": "Instagram",
   "short_name": "Instagram",
-  "start_url": "https://drlizlondon.github.io/bishbash/?disguise=instagram",
+  "id": "https://drlizlondon.github.io/bishbash/intercept/instagram",
+  "start_url": "https://drlizlondon.github.io/bishbash/intercept/instagram",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",

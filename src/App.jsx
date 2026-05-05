@@ -99,6 +99,14 @@ function getRouteFromLocation(setupComplete) {
 
   const params = new URLSearchParams(window.location.search);
   const routeParam = params.get("route");
+  const disguiseParam = params.get("disguise");
+  const disguisedVersion = /^(instagram|youtube|safari)$/.test(disguiseParam ?? "")
+    ? disguiseParam
+    : null;
+  if (disguisedVersion) {
+    return `/intercept/${disguisedVersion}`;
+  }
+
   const rawPath = routeParam || window.location.pathname.replace(BASE_PATH || "", "") || "/";
   const normalized = normalizeRoutePath(rawPath);
 
@@ -168,13 +176,7 @@ function openNativeApp(appUrl) {
 }
 
 function getAppLauncherConfig(selectedVersionId, versions) {
-  if (selectedVersionId === "bishbash") {
-    return {
-      id: "safari",
-      label: "Safari",
-      type: "safari",
-    };
-  }
+  if (selectedVersionId === "bishbash") return null;
 
   const selected = versions[selectedVersionId];
   if (!selected?.realAppLabel) return null;
@@ -254,16 +256,25 @@ function isInterruptionSummaryEvent(event) {
   return ["intercept_do_something_else", "intercept_continue_to_app"].includes(event.event_type);
 }
 
-function pickRandomHomeCardForDisplay(currentCards, timezone) {
+function pickRandomHomeCardForDisplay(
+  currentCards,
+  timezone,
+  selectedVersionId,
+  versions,
+  customPacks,
+) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
+  const selectedVersion = selectedVersionId ? resolveVersionConfig(versions[selectedVersionId]) : null;
+  const interruptionPack =
+    selectedVersion &&
+    selectedVersion.id !== "bishbash" &&
+    selectedVersion.useInterruptionPack &&
+    !selectedVersion.interruptionPaused
+      ? getInterruptionPackForVersion(selectedVersion.id, versions, customPacks)
+      : null;
   const singles = normalized
     .filter((card) => !card.sourcePackId && isEligible(card, new Date(), timezone))
     .map((card) => ({ type: "single", card }));
-
-  if (singles.length > 0) {
-    const chosen = singles[Math.floor(Math.random() * singles.length)];
-    return { normalized, selected: chosen.card };
-  }
 
   const packMap = new Map();
   normalized.forEach((card) => {
@@ -279,11 +290,29 @@ function pickRandomHomeCardForDisplay(currentCards, timezone) {
     packCards,
   }));
 
-  if (packs.length === 0) {
+  const candidates = [...singles];
+
+  if (interruptionPack) {
+    candidates.push({
+      type: "interruption",
+      pack: interruptionPack,
+      versionId: selectedVersion.id,
+    });
+  } else {
+    candidates.push(...packs);
+  }
+
+  if (candidates.length === 0) {
     return { normalized, selected: null };
   }
 
-  const chosen = packs[Math.floor(Math.random() * packs.length)];
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  if (chosen.type === "single") {
+    return { normalized, selected: chosen.card };
+  }
+  if (chosen.type === "interruption") {
+    return { normalized, selected: null, interruption: chosen };
+  }
   const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
   return { normalized, selected };
 }
@@ -346,6 +375,27 @@ function getPackDislikeKey(card) {
   return `${card.sourcePackId}:${card.promptText ?? ""}`;
 }
 
+function buildInterruptionHomeItem(version, pack) {
+  const icon = version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book";
+  return {
+    type: "interruption-version",
+    id: `interruption:${version.id}`,
+    versionId: version.id,
+    pack,
+    representative: {
+      id: `interruption:${version.id}`,
+      dashboardTitle: pack.name,
+      promptText: pack.messages?.[0] ?? `${version.name} interruptions`,
+      theme: "Minimal",
+      icon,
+      paused: Boolean(version.interruptionPaused),
+      timingWindows: ["morning", "day", "evening"],
+      frequency: "multi_daily",
+      createdAt: "",
+    },
+  };
+}
+
 function App() {
   const initialState = useMemo(() => {
     const base = buildInitialState();
@@ -379,9 +429,13 @@ function App() {
   const transitionTimerRef = useRef(null);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
-  const activeInterceptionVersion = route.kind === "intercept"
-    ? resolveVersionConfig(homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId])
-    : null;
+  const activeInterceptionVersion = useMemo(
+    () =>
+      route.kind === "intercept"
+        ? resolveVersionConfig(homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId])
+        : null,
+    [homeScreenVersions, route.kind, route.versionId],
+  );
   const appLauncher = useMemo(
     () => getAppLauncherConfig(selectedHomeScreenVersion, homeScreenVersions),
     [selectedHomeScreenVersion, homeScreenVersions],
@@ -389,10 +443,13 @@ function App() {
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
   const hiddenSinceRef = useRef(null);
+  const suppressNextHomeAutoLaunchRef = useRef(false);
+  const isLaunchingHomeOverlay =
+    screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
   useEffect(() => {
     saveCards(cards);
-  }, [cards]);
+  }, [cards, homeScreenVersions, cardPacks]);
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
@@ -511,11 +568,21 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      const version = resolveVersionConfig(
+        homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId],
+      );
+      if (!version.useInterruptionPack) {
+        setScreen("library");
+        setShouldLaunchOverlay(true);
+        navigateTo("/home", { replace: true });
+        return;
+      }
+
       const pack = getInterruptionPackForVersion(route.versionId, homeScreenVersions, cardPacks);
       setScreen("interception");
       setOverlay(
         pack
-          ? buildCustomPackOverlay(pack, 0, "intercept-pack")
+          ? { ...buildCustomPackOverlay(pack, 0, "intercept-pack"), versionId: route.versionId }
           : { type: "empty", message: "No interruption pack linked yet." },
       );
       return;
@@ -530,22 +597,40 @@ function App() {
     setScreen("library");
 
     if (route.kind === "card") {
+      if (overlay?.type === "reveal" && overlay.cardId === route.cardId) {
+        return;
+      }
       setOverlay({
         type: "reveal",
         cardId: route.cardId,
-        phase: "visible",
       });
       return;
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
-      const { selected } = pickRandomHomeCardForDisplay(cards, profile.timezone);
+      if (suppressNextHomeAutoLaunchRef.current) {
+        suppressNextHomeAutoLaunchRef.current = false;
+        setShouldLaunchOverlay(false);
+        setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
+        return;
+      }
+
+      const { selected, interruption } = pickRandomHomeCardForDisplay(
+        cards,
+        profile.timezone,
+        selectedHomeScreenVersion,
+        homeScreenVersions,
+        cardPacks,
+      );
       setShouldLaunchOverlay(false);
+      if (interruption) {
+        setOverlay({ ...buildCustomPackOverlay(interruption.pack, 0, "intercept-pack"), versionId: interruption.versionId });
+        return;
+      }
       if (selected) {
         setOverlay({
           type: "reveal",
           cardId: selected.id,
-          phase: "visible",
         });
         return;
       }
@@ -554,8 +639,12 @@ function App() {
       return;
     }
 
+    if (route.kind === "home") {
+      return;
+    }
+
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay]);
+  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay, selectedHomeScreenVersion]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -631,14 +720,10 @@ function App() {
       },
     });
 
-    setOverlay((currentOverlay) =>
-      currentOverlay ? { ...currentOverlay, phase: "dissolving", action } : currentOverlay,
-    );
-
-    transitionTimerRef.current = window.setTimeout(() => {
-      setOverlay(null);
-      navigateTo("/home");
-    }, 720);
+    suppressNextHomeAutoLaunchRef.current = true;
+    setShouldLaunchOverlay(false);
+    navigateTo("/home", { replace: true });
+    setOverlay(null);
   }
 
   function handleSaveCard(formData) {
@@ -777,7 +862,6 @@ function App() {
 
     updateCards((current) => [...buildCardsFromPack(pack), ...current]);
     setHiddenLibraryPacks((current) => current.filter((id) => id !== packId));
-    navigateTo("/home");
   }
 
   function deactivatePack(packId) {
@@ -793,8 +877,28 @@ function App() {
     const dislikeKey = getPackDislikeKey(card);
     if (!dislikeKey) return;
     setDislikedPackCardIds((current) => (current.includes(dislikeKey) ? current : [...current, dislikeKey]));
+    suppressNextHomeAutoLaunchRef.current = true;
+    setShouldLaunchOverlay(false);
     setOverlay(null);
     navigateTo("/home");
+  }
+
+  function handleToggleInterruptionPause(versionId) {
+    setHomeScreenVersions((current) => ({
+      ...current,
+      [versionId]: {
+        ...resolveVersionConfig(current[versionId]),
+        interruptionPaused: !current[versionId]?.interruptionPaused,
+      },
+    }));
+    setMenuOpenId(null);
+  }
+
+  function openInterruptionHomeReveal(versionId) {
+    const version = resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]);
+    const pack = getInterruptionPackForVersion(versionId, homeScreenVersions, cardPacks);
+    if (version.interruptionPaused || !pack) return;
+    setOverlay({ ...buildCustomPackOverlay(pack, 0, "intercept-pack"), versionId });
   }
 
   function handleSelectHomeScreenVersion(versionId) {
@@ -891,6 +995,15 @@ function App() {
   const activeRevealCard = overlay?.cardId
     ? cards.find((card) => card.id === overlay.cardId)
     : null;
+  const activeOverlayVersion = useMemo(
+    () =>
+      overlay?.type === "intercept-pack" && overlay?.versionId
+        ? resolveVersionConfig(
+            homeScreenVersions[overlay.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[overlay.versionId],
+          )
+        : activeInterceptionVersion,
+    [activeInterceptionVersion, homeScreenVersions, overlay?.type, overlay?.versionId],
+  );
 
   const homeItems = useMemo(() => {
     const grouped = new Map();
@@ -916,6 +1029,16 @@ function App() {
       });
     });
 
+    Object.values(homeScreenVersions).forEach((version) => {
+      if (version.id === "bishbash") return;
+      const resolvedVersion = resolveVersionConfig(version);
+      if (resolvedVersion.id !== selectedHomeScreenVersion) return;
+      const pack = getInterruptionPackForVersion(resolvedVersion.id, homeScreenVersions, cardPacks);
+      if (!pack) return;
+
+      grouped.set(`interruption:${resolvedVersion.id}`, buildInterruptionHomeItem(resolvedVersion, pack));
+    });
+
     return Array.from(grouped.values()).sort((left, right) => {
       const leftRank = getHomeSortRank(left.representative);
       const rightRank = getHomeSortRank(right.representative);
@@ -926,7 +1049,7 @@ function App() {
       const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
       return rightCreated - leftCreated;
     });
-  }, [cards]);
+  }, [cards, homeScreenVersions, cardPacks, selectedHomeScreenVersion]);
   const eligibleHomeCount = useMemo(() => {
     let count = 0;
     const seenPackIds = new Set();
@@ -986,13 +1109,11 @@ function App() {
     () => Object.values(homeScreenVersions).filter((version) => version.id !== "bishbash"),
     [homeScreenVersions],
   );
-  const homeReminderItems = useMemo(() => homeItems.slice(0, 3), [homeItems]);
+  const homeReminderItems = useMemo(() => homeItems, [homeItems]);
   return (
-
-  <>
-
-    <div className="grain" />
-    {screen === "library" ? (
+    <>
+      <div className="grain" />
+      {screen === "library" && !isLaunchingHomeOverlay ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
           <div className="app-inner">
             <Masthead
@@ -1011,19 +1132,14 @@ function App() {
                   setMenuOpenId={setMenuOpenId}
                   openSpecificReveal={openSpecificReveal}
                   openPackReveal={openPackReveal}
+                  openInterruptionHomeReveal={openInterruptionHomeReveal}
                   openEditor={openEditor}
                   openPackEditor={openPackEditor}
                   handleResetItem={handleResetItem}
                   handleTogglePause={handleTogglePause}
+                  handleToggleInterruptionPause={handleToggleInterruptionPause}
                   handleDeleteCard={handleDeleteCard}
                   deactivatePack={deactivatePack}
-                  completionEvents={completionEvents}
-                  interruptionTodayCount={interruptionTodayCount}
-                  onOpenLibrary={() => navigateTo("/library")}
-                  onOpenLog={() => {
-                    setLogFilter("intercepts");
-                    navigateTo("/log");
-                  }}
                   onCreate={() => {
                     setEditingId(null);
                     setIsComposerOpen(true);
@@ -1067,14 +1183,12 @@ function App() {
                   onCreateInterruptionPack={(versionId) => setEditingCustomPackId(`new:${versionId}`)}
                   onPreviewInterruptionPack={openCustomPackPreview}
                   libraryPacks={visibleLibraryPacks}
-                  onLikeLibraryPack={activatePack}
-                  onDislikeLibraryPack={hideLibraryPack}
+                  onActivateLibraryPack={activatePack}
+                  onDeactivateLibraryPack={deactivatePack}
                 />
               ) : null}
               {activeTab === "settings" ? (
                 <SettingsPanel
-                  profile={profile}
-                  onSaveProfile={setProfile}
                   mood={mood}
                   onSelectMood={setMood}
                   homeScreenVersions={homeScreenVersions}
@@ -1120,7 +1234,11 @@ function App() {
       {screen === "onboarding" ? (
         <Onboarding
           onCreate={() => {
+            setOverlay(null);
+            setMenuOpenId(null);
             setEditingId(null);
+            setEditingPackId(null);
+            setEditingCustomPackId(null);
             setIsComposerOpen(true);
           }}
         />
@@ -1164,28 +1282,37 @@ function App() {
           overlay={overlay}
           card={activeRevealCard}
           route={route}
-          version={activeInterceptionVersion}
+          version={activeOverlayVersion}
           timezone={profile.timezone}
           onClose={() => {
             if (overlay.type === "custom-pack-preview") {
               setOverlay(null);
               return;
             }
+            suppressNextHomeAutoLaunchRef.current = true;
+            setShouldLaunchOverlay(false);
+            navigateTo("/home", { replace: true });
             setOverlay(null);
-            navigateTo("/home");
           }}
           onAction={handleAction}
           onPackLike={() => {
+            suppressNextHomeAutoLaunchRef.current = true;
+            setShouldLaunchOverlay(false);
             setOverlay(null);
             navigateTo("/home");
           }}
           onPackDislike={dislikePackCard}
-          onChooseElse={() => navigateTo("/home")}
+          onChooseElse={() => {
+            suppressNextHomeAutoLaunchRef.current = true;
+            setShouldLaunchOverlay(false);
+            setOverlay(null);
+            navigateTo("/home", { replace: true });
+          }}
           onLogEvent={logEvent}
         />
       ) : null}
 
-      {appLauncher ? (
+      {screen !== "onboarding" && appLauncher ? (
         <AppLauncherButton version={appLauncher} />
       ) : null}
     </>
@@ -1389,115 +1516,151 @@ function HomePanel({
   setMenuOpenId,
   openSpecificReveal,
   openPackReveal,
+  openInterruptionHomeReveal,
   openEditor,
   openPackEditor,
   handleResetItem,
   handleTogglePause,
+  handleToggleInterruptionPause,
   handleDeleteCard,
   deactivatePack,
-  completionEvents,
-  interruptionTodayCount,
-  onOpenLibrary,
-  onOpenLog,
   onCreate,
 }) {
   return (
-    <section className="home-screen">
-      <article className="home-hero-card">
-        <div className="home-hero-copy">
-          <p className="eyebrow">A gentle pause</p>
-          <span className="mini-glyph" aria-hidden="true">
-            <HeartGlyph />
-          </span>
-          <h2>You&apos;ve got this. One small step at a time.</h2>
-          <p>a gentle nudge from your future self</p>
-          <button type="button" className="pack-button hero-cta" onClick={onCreate}>
-            Make a BishBash
-          </button>
+    <section className="library">
+      <div className="section-heading solo">
+        <div>
+          <h2>Your BishBash list</h2>
+          <p>All your little nudges, gathered in one quiet place.</p>
         </div>
-        <div className="hero-illustration" aria-hidden="true">
-          <span className="hero-spark hero-spark-one" />
-          <span className="hero-spark hero-spark-two" />
-          <span className="hero-spark hero-spark-three" />
-          <span className="hero-sun" />
-          <span className="hero-reflection" />
-          <span className="hero-stone" />
-        </div>
-      </article>
+        <button type="button" className="pack-button secondary home-create-button" onClick={onCreate}>
+          Make a BishBash
+        </button>
+      </div>
+      <div className="card-stack">
+        {reminderItems.map((item) => {
+          const status = getStatusMeta(item.representative, new Date(), timezone);
+          function openItem() {
+            if (item.type === "interruption-version") {
+              openInterruptionHomeReveal(item.versionId);
+              return;
+            }
+            if (item.type === "pack") {
+              openPackReveal(item.id);
+              return;
+            }
+            openSpecificReveal(item.id);
+          }
 
-      <section className="home-section">
-        <div className="home-section-heading">
-          <h2>Today&apos;s reminders</h2>
-          <button type="button" className="section-link-button" onClick={onOpenLibrary}>
-            See all
-          </button>
-        </div>
-        <div className="reminder-grid">
-          {reminderItems.map((item) => (
-            <HomeReminderCard
+          return (
+            <article
               key={item.id}
-              item={item}
-              timezone={timezone}
-              menuOpenId={menuOpenId}
-              setMenuOpenId={setMenuOpenId}
-              openSpecificReveal={openSpecificReveal}
-              openPackReveal={openPackReveal}
-              openEditor={openEditor}
-              openPackEditor={openPackEditor}
-              handleResetItem={handleResetItem}
-              handleTogglePause={handleTogglePause}
-              handleDeleteCard={handleDeleteCard}
-              deactivatePack={deactivatePack}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="home-section">
-        <div className="home-section-heading">
-          <h2>Recently completed</h2>
-          <button type="button" className="section-link-button" onClick={() => onOpenLog()}>
-            View all
-          </button>
-        </div>
-        <article className="completed-card">
-          {completionEvents.length > 0 ? (
-            completionEvents.map((event, index) => (
-              <div key={event.id} className={`completed-row ${index === completionEvents.length - 1 ? "last" : ""}`}>
-                <span className="completed-check" aria-hidden="true">
-                  <CheckGlyph />
-                </span>
-                <div className="completed-copy">
-                  <h3>{event.bash_title || "A BishBash"}</h3>
-                  <p>{formatTwentyFourHourTime(event.created_at, timezone)}</p>
-                </div>
-                <span className="completed-heart" aria-hidden="true">
-                  <HeartGlyph />
-                </span>
+              className={`library-card ${menuOpenId === item.id ? "menu-open" : ""} theme-${getThemeClass(item.representative.theme)}`}
+              onClick={openItem}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openItem();
+                }
+              }}
+            >
+              <div className="tile">
+                <CardIcon icon={item.representative.icon} sourcePackId={item.representative.sourcePackId} />
               </div>
-            ))
-          ) : (
-            <div className="completed-row last completed-empty">
-              <div className="completed-copy">
-                <p>Completed BishBashes will appear here.</p>
+              <div className="card-copy">
+                <h3>{getHomeCardTitle(item.representative)}</h3>
               </div>
-            </div>
-          )}
-        </article>
-      </section>
-
-      <button type="button" className="interruption-strip" onClick={onOpenLog}>
-        <span className="interruption-strip-icon" aria-hidden="true">
-          <SparkGlyph />
-        </span>
-        <span className="interruption-strip-copy">
-          <strong>Interrupted you today</strong>
-          <span>{interruptionTodayCount === 0 ? "No interruptions yet today" : "A little evidence of your pauses"}</span>
-        </span>
-        <span className="interruption-strip-count">
-          {interruptionTodayCount === 0 ? "—" : interruptionTodayCount === 1 ? "1 time" : `${interruptionTodayCount} times`}
-        </span>
-      </button>
+              <div className="card-status">
+                <span className="badge">{status.badge}</span>
+              </div>
+              <div className="menu-wrap">
+                <button
+                  type="button"
+                  className="menu-trigger"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpenId((current) => (current === item.id ? null : item.id));
+                  }}
+                  aria-label="Card menu"
+                >
+                  •••
+                </button>
+                {menuOpenId === item.id ? (
+                  <div className="menu">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (item.type === "interruption-version") {
+                          openInterruptionHomeReveal(item.versionId);
+                          return;
+                        }
+                        if (item.type === "pack") {
+                          openPackEditor(item.id);
+                          return;
+                        }
+                        openEditor(item.id);
+                      }}
+                    >
+                      {item.type === "interruption-version" ? "Preview pack" : item.type === "pack" ? "Edit pack" : "Edit"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (item.type === "interruption-version") {
+                          return;
+                        }
+                        handleResetItem(item);
+                      }}
+                      disabled={item.type === "interruption-version"}
+                    >
+                      Reset for today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (item.type === "interruption-version") {
+                          handleToggleInterruptionPause(item.versionId);
+                          return;
+                        }
+                        handleTogglePause(item);
+                      }}
+                    >
+                      {item.representative.paused ? "Unpause" : "Pause"}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-soft"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (item.type === "interruption-version") {
+                          handleToggleInterruptionPause(item.versionId);
+                          return;
+                        }
+                        if (item.type === "pack") {
+                          deactivatePack(item.id);
+                          return;
+                        }
+                        handleDeleteCard(item.id);
+                      }}
+                    >
+                      {item.type === "interruption-version"
+                        ? item.representative.paused ? "Enable pack" : "Pause pack"
+                        : item.type === "pack"
+                          ? "Remove pack"
+                          : "Delete"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -1960,8 +2123,8 @@ function PacksPanel({
   onCreateInterruptionPack,
   onPreviewInterruptionPack,
   libraryPacks,
-  onLikeLibraryPack,
-  onDislikeLibraryPack,
+  onActivateLibraryPack,
+  onDeactivateLibraryPack,
 }) {
   return (
     <section className="panel-section">
@@ -2013,34 +2176,44 @@ function PacksPanel({
             <p>Ready-made BishBashes you can add into your day.</p>
           </div>
         </div>
-        <div className="packs-list-card">
+        <div className="library-pack-stack">
           {libraryPacks.map((pack, index) => {
             const active = cards.some((card) => card.sourcePackId === pack.id);
+            const sampleEntry = pack.entries[0];
+            const canActivate = Array.isArray(pack.entries) && pack.entries.length > 0;
             return (
-              <article key={pack.id} className={`pack-row pack-row-library ${index === libraryPacks.length - 1 ? "last" : ""}`}>
-                <div className="pack-row-icon">
-                  <CardIcon icon={pack.icon ?? "heart"} sourcePackId={pack.id} />
-                </div>
-                <div className="pack-row-copy">
+              <article
+                key={pack.id}
+                className={`library-pack-card theme-${getThemeClass(pack.theme)} ${active ? "active" : ""} ${index === libraryPacks.length - 1 ? "last" : ""}`}
+              >
+                <div className="library-pack-copy">
+                  <p className="eyebrow">{active ? "Active pack" : "Pack"}</p>
                   <h3>{pack.title}</h3>
-                  <p>{pack.entries[0]?.promptText ?? pack.description}</p>
+                  <p>{pack.description}</p>
+                  {sampleEntry ? (
+                    <blockquote>
+                      <p>{sampleEntry.promptText}</p>
+                      {sampleEntry.attribution ? <cite>{sampleEntry.attribution}</cite> : null}
+                    </blockquote>
+                  ) : (
+                    <p className="pack-state">Coming soon</p>
+                  )}
                 </div>
                 <button
                   type="button"
-                  className={`pack-circle-action ${active ? "active" : ""}`}
-                  onClick={() => onLikeLibraryPack(pack.id)}
-                  aria-label={`Like ${pack.title}`}
+                  className={`library-pack-button ${active ? "secondary" : ""}`}
+                  onClick={() => {
+                    if (active) {
+                      onDeactivateLibraryPack(pack.id);
+                      return;
+                    }
+                    onActivateLibraryPack(pack.id);
+                  }}
+                  disabled={!canActivate}
                 >
-                  <HeartGlyph />
+                  {canActivate ? (active ? "Deactivate pack" : "Activate pack") : "Coming soon"}
                 </button>
-                <button
-                  type="button"
-                  className="pack-circle-action"
-                  onClick={() => onDislikeLibraryPack(pack.id)}
-                  aria-label={`Dislike ${pack.title}`}
-                >
-                  <CloseGlyph />
-                </button>
+                {active ? <p className="pack-active-note">Active in your BishBashes</p> : null}
               </article>
             );
           })}
@@ -2058,8 +2231,6 @@ function PacksPanel({
 }
 
 function SettingsPanel({
-  profile,
-  onSaveProfile,
   mood,
   onSelectMood,
   homeScreenVersions,
@@ -2073,14 +2244,7 @@ function SettingsPanel({
   onPreviewPack,
   onAssignPackToVersion,
 }) {
-  const [name, setName] = useState(profile.name ?? "");
-  const [timezone, setTimezone] = useState(profile.timezone ?? "Europe/London");
   const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    setName(profile.name ?? "");
-    setTimezone(profile.timezone ?? "Europe/London");
-  }, [profile]);
 
   return (
     <section className="panel-section">
@@ -2111,40 +2275,6 @@ function SettingsPanel({
             </ul>
           </div>
         ) : null}
-      </div>
-      <div className="settings-card">
-        <p>Personalisation</p>
-        <div className="settings-form">
-          <label className="field">
-            <span>Name</span>
-            <input
-              className="settings-input"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Your name"
-            />
-          </label>
-          <label className="field">
-            <span>Timezone</span>
-            <select
-              className="settings-input"
-              value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
-            >
-              <option value="Europe/London">UK (Europe/London)</option>
-              <option value="Europe/Dublin">Ireland (Europe/Dublin)</option>
-              <option value="America/New_York">US East (America/New_York)</option>
-              <option value="America/Los_Angeles">US West (America/Los_Angeles)</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            className="pack-button"
-            onClick={() => onSaveProfile({ name, timezone })}
-          >
-            Save personalisation
-          </button>
-        </div>
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
@@ -2215,25 +2345,40 @@ function SettingsPanel({
                 </div>
                 <div className="home-screen-version-actions">
                   {!isStandardVersion ? (
-                    <div className="field">
-                      <span>Linked interruption pack</span>
-                      <select
-                        className="settings-input"
-                        value={version.interruptionPackId ?? version.selectedPackId ?? ""}
-                        onChange={(event) =>
-                          onAssignPackToVersion(version.id, {
-                            interruptionPackId: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">Use built-in {version.name} interruptions</option>
-                        {assignablePacks.map((pack) => (
-                          <option key={pack.id} value={pack.id}>
-                            {pack.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <>
+                      <label className="timing-option settings-checkbox-row">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(version.useInterruptionPack)}
+                          onChange={(event) =>
+                            onAssignPackToVersion(version.id, {
+                              useInterruptionPack: event.target.checked,
+                            })
+                          }
+                        />
+                        <span>Use interruption pack</span>
+                      </label>
+                      <div className="field">
+                        <span>Linked interruption pack</span>
+                        <select
+                          className="settings-input"
+                          value={version.interruptionPackId ?? version.selectedPackId ?? ""}
+                          onChange={(event) =>
+                            onAssignPackToVersion(version.id, {
+                              interruptionPackId: event.target.value,
+                            })
+                          }
+                          disabled={!version.useInterruptionPack}
+                        >
+                          <option value="">Use built-in {version.name} interruptions</option>
+                          {assignablePacks.map((pack) => (
+                            <option key={pack.id} value={pack.id}>
+                              {pack.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
                   ) : null}
                   <button
                     type="button"
@@ -2439,35 +2584,32 @@ function Overlay({
 
   if (overlay.type === "empty") {
     return (
-      <div className="overlay-screen empty-state" onClick={onClose}>
+      <div className="overlay-screen empty-state">
         <div className="floating floating-heart" />
         <button
           type="button"
           className="overlay-library-button"
           onClick={onClose}
-                aria-label="Open library"
-    >
-      <BookGlyph />
-    </button>
-    <p className="eyebrow">BishBash</p>
-    <h2>You&apos;re all caught up for now.</h2>
-    <p>see you later</p>
-
-   <button
-  type="button"
-  className="caught-up-safari-link"
-  onClick={(event) => {
-    event.stopPropagation();
-    openSafariEscape();
-  }}
->
-  <span className="caught-up-safari-icon" aria-hidden="true">
-    <CompassGlyph />
-  </span>
-  <span>Safari</span>
-</button>
-  </div>
-);
+          aria-label="Open library"
+        >
+          <BookGlyph />
+        </button>
+        <div className="caught-up-content">
+          <p className="eyebrow">BishBash</p>
+          <h2>You&apos;re all caught up for now.</h2>
+          <p className="caught-up-copy">see you later</p>
+          <div className="caught-up-actions">
+            <button
+              type="button"
+              className="action-button"
+              onClick={onClose}
+            >
+              Back home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (overlay.type === "intercept-pack") {
@@ -2808,6 +2950,14 @@ function Onboarding({ onCreate }) {
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
+          <button
+            type="button"
+            className="onboarding-arrow onboarding-arrow-left"
+            onClick={() => goToSlide(activeSlide - 1)}
+            aria-label="Show previous welcome card"
+          >
+            <ChevronLeftGlyph />
+          </button>
           <div
             className="onboarding-track"
             style={{ transform: `translateX(-${activeSlide * 100}%)` }}
@@ -2831,6 +2981,14 @@ function Onboarding({ onCreate }) {
               </article>
             ))}
           </div>
+          <button
+            type="button"
+            className="onboarding-arrow onboarding-arrow-right"
+            onClick={() => goToSlide(activeSlide + 1)}
+            aria-label="Show next welcome card"
+          >
+            <ChevronRightGlyph />
+          </button>
         </div>
 
         <div className="onboarding-pagination">
@@ -2865,6 +3023,22 @@ function ActionButton({ label, onClick, tone = "ghost" }) {
     >
       {label}
     </button>
+  );
+}
+
+function ChevronLeftGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14.5 5.5 8 12l6.5 6.5" />
+    </svg>
+  );
+}
+
+function ChevronRightGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9.5 5.5 16 12l-6.5 6.5" />
+    </svg>
   );
 }
 

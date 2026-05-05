@@ -1,7 +1,8 @@
 {
   "name": "Safari",
   "short_name": "Safari",
-  "start_url": "https://drlizlondon.github.io/bishbash/?disguise=safari",
+  "id": "https://drlizlondon.github.io/bishbash/intercept/safari",
+  "start_url": "https://drlizlondon.github.io/bishbash/intercept/safari",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
