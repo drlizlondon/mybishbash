@@ -1518,10 +1518,6 @@ function App() {
                   timezone={profile.timezone}
                   weeklyShiftCount={getWeeklyShiftCount(events)}
                   filter={logFilter}
-                  onCreateBishBash={() => {
-                    setEditingId(null);
-                    setIsComposerOpen(true);
-                  }}
                 />
               ) : null}
 
@@ -2230,7 +2226,7 @@ function StandardLibraryPanel({
   );
 }
 
-function LogPanel({ events, timezone, weeklyShiftCount, filter, onCreateBishBash }) {
+function LogPanel({ events, timezone, weeklyShiftCount, filter }) {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const filledDots = Math.min(weeklyShiftCount, 14);
 
@@ -2264,9 +2260,6 @@ function LogPanel({ events, timezone, weeklyShiftCount, filter, onCreateBishBash
           <div className="log-empty-state">
             <h3>Your first little shift will appear here.</h3>
             <p>Every quiet choice begins somewhere.</p>
-            <button type="button" className="pack-button" onClick={onCreateBishBash} aria-label="Make a BishBash">
-              Make a BishBash
-            </button>
           </div>
         )}
       </article>
