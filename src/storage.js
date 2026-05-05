@@ -5,6 +5,8 @@ const PROFILE_KEY = "bishbash.profile.v1";
 const HOME_SCREEN_VERSIONS_KEY = "bishbash.home-screen-versions.v1";
 const HOME_SCREEN_SELECTED_KEY = "bishbash.home-screen-selected.v1";
 const CARD_PACKS_KEY = "bishbash.card-packs.v1";
+const HIDDEN_LIBRARY_PACKS_KEY = "bishbash.hidden-library-packs.v1";
+const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
 
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
   bishbash: {
@@ -163,4 +165,30 @@ export function loadCardPacks() {
 
 export function saveCardPacks(value) {
   window.localStorage.setItem(CARD_PACKS_KEY, JSON.stringify(value));
+}
+
+export function loadHiddenLibraryPacks() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(HIDDEN_LIBRARY_PACKS_KEY) ?? "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveHiddenLibraryPacks(value) {
+  window.localStorage.setItem(HIDDEN_LIBRARY_PACKS_KEY, JSON.stringify(value));
+}
+
+export function loadDislikedPackCardIds() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(DISLIKED_PACK_CARD_IDS_KEY) ?? "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDislikedPackCardIds(value) {
+  window.localStorage.setItem(DISLIKED_PACK_CARD_IDS_KEY, JSON.stringify(value));
 }

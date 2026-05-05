@@ -340,6 +340,7 @@ export function getCurrentWindow(date = new Date(), timeZone) {
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   if (card.paused) return false;
+  if (card.disliked) return false;
   if (card.doneDate === todayKey || card.statusToday === "doneToday") return false;
   if (
     !card.sourcePackId &&
@@ -366,6 +367,9 @@ export function normalizeCards(cards, date = new Date(), timeZone) {
     }
     if (!next.frequency) {
       next.frequency = "once_daily";
+    }
+    if (typeof next.disliked !== "boolean") {
+      next.disliked = false;
     }
     if (next.doneDate !== todayKey && next.statusToday === "doneToday") {
       next.statusToday = "fresh";
@@ -510,6 +514,7 @@ export function buildCardsFromPack(pack) {
     frequency: "once_daily",
     timingWindows: ["morning", "day", "evening"],
     paused: false,
+    disliked: false,
     sourcePackId: pack.id,
   }));
 }

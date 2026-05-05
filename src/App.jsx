@@ -3,6 +3,8 @@ import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   loadCards,
   loadCardPacks,
+  loadDislikedPackCardIds,
+  loadHiddenLibraryPacks,
   loadHomeScreenVersions,
   loadMood,
   loadProfile,
@@ -10,6 +12,8 @@ import {
   loadSetupComplete,
   saveCards,
   saveCardPacks,
+  saveDislikedPackCardIds,
+  saveHiddenLibraryPacks,
   saveHomeScreenVersions,
   saveMood,
   saveProfile,
@@ -38,6 +42,7 @@ import {
   getThemeClass,
   isEligible,
   normalizeCards,
+  getTodayKey,
 } from "./utils";
 
 function resolveTheme(theme) {
@@ -241,11 +246,24 @@ function describeLogEvent(event) {
   return "A little BishBash moment was recorded.";
 }
 
+function isCompletionEvent(event) {
+  return event.event_type === "bash_done";
+}
+
+function isInterruptionSummaryEvent(event) {
+  return ["intercept_do_something_else", "intercept_continue_to_app"].includes(event.event_type);
+}
+
 function pickRandomHomeCardForDisplay(currentCards, timezone) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const singles = normalized
     .filter((card) => !card.sourcePackId && isEligible(card, new Date(), timezone))
     .map((card) => ({ type: "single", card }));
+
+  if (singles.length > 0) {
+    const chosen = singles[Math.floor(Math.random() * singles.length)];
+    return { normalized, selected: chosen.card };
+  }
 
   const packMap = new Map();
   normalized.forEach((card) => {
@@ -261,20 +279,13 @@ function pickRandomHomeCardForDisplay(currentCards, timezone) {
     packCards,
   }));
 
-  // Prioritise personal (non-pack) cards over pack cards. Only if no personal cards are eligible do we fall back to pack cards.
-  // First pick from singles if any exist.
-  if (singles.length > 0) {
-    const chosenSingle = singles[Math.floor(Math.random() * singles.length)];
-    return { normalized, selected: chosenSingle.card };
+  if (packs.length === 0) {
+    return { normalized, selected: null };
   }
-  // If no personal cards are available, pick from packs if any exist.
-  if (packs.length > 0) {
-    const chosenPack = packs[Math.floor(Math.random() * packs.length)];
-    const selected = chosenPack.packCards[Math.floor(Math.random() * chosenPack.packCards.length)];
-    return { normalized, selected };
-  }
-  // If neither singles nor packs are available, return null.
-  return { normalized, selected: null };
+
+  const chosen = packs[Math.floor(Math.random() * packs.length)];
+  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
+  return { normalized, selected };
 }
 
 function buildInitialState() {
@@ -309,7 +320,7 @@ function getHomeCardTitle(card) {
 
 function getPackRepresentative(cards, packId) {
   const packCards = cards.filter((card) => card.sourcePackId === packId);
-  return packCards.find((card) => !card.paused) ?? packCards[0] ?? null;
+  return packCards.find((card) => !card.paused && !card.disliked) ?? null;
 }
 
 function resolveVersionConfig(version) {
@@ -330,13 +341,20 @@ function buildCustomPackOverlay(pack, activeIndex = 0, type = "custom-pack-previ
   };
 }
 
+function getPackDislikeKey(card) {
+  if (!card?.sourcePackId) return "";
+  return `${card.sourcePackId}:${card.promptText ?? ""}`;
+}
+
 function App() {
   const initialState = useMemo(() => {
     const base = buildInitialState();
     return {
       ...base,
       cardPacks: loadCardPacks(),
+      dislikedPackCardIds: loadDislikedPackCardIds(),
       homeScreenVersions: loadHomeScreenVersions(),
+      hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
     };
   }, []);
@@ -346,6 +364,8 @@ function App() {
   const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
   const [selectedHomeScreenVersion, setSelectedHomeScreenVersion] = useState(() => loadSelectedHomeScreenVersion());
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
+  const [dislikedPackCardIds, setDislikedPackCardIds] = useState(initialState.dislikedPackCardIds);
+  const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
@@ -357,7 +377,6 @@ function App() {
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
-  const hasAutoLaunchedRef = useRef(false);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = route.kind === "intercept"
@@ -367,6 +386,9 @@ function App() {
     () => getAppLauncherConfig(selectedHomeScreenVersion, homeScreenVersions),
     [selectedHomeScreenVersion, homeScreenVersions],
   );
+  const [logFilter, setLogFilter] = useState("all");
+  const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
+  const hiddenSinceRef = useRef(null);
 
   useEffect(() => {
     saveCards(cards);
@@ -395,6 +417,14 @@ function App() {
   useEffect(() => {
     saveCardPacks(cardPacks);
   }, [cardPacks]);
+
+  useEffect(() => {
+    saveDislikedPackCardIds(dislikedPackCardIds);
+  }, [dislikedPackCardIds]);
+
+  useEffect(() => {
+    saveHiddenLibraryPacks(hiddenLibraryPacks);
+  }, [hiddenLibraryPacks]);
 
   useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
@@ -428,6 +458,42 @@ function App() {
   }, [profile.timezone]);
 
   useEffect(() => {
+    setCards((current) =>
+      normalizeCards(current, new Date(), profile.timezone).map((card) => ({
+        ...card,
+        disliked: card.sourcePackId ? dislikedPackCardIds.includes(getPackDislikeKey(card)) : card.disliked ?? false,
+      })),
+    );
+  }, [dislikedPackCardIds, profile.timezone]);
+
+  useEffect(() => {
+    if (activeTab !== "log" && logFilter !== "all") {
+      setLogFilter("all");
+    }
+  }, [activeTab, logFilter]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenSinceRef.current = Date.now();
+        return;
+      }
+
+      if (document.visibilityState === "visible") {
+        const hiddenFor = hiddenSinceRef.current ? Date.now() - hiddenSinceRef.current : 0;
+        hiddenSinceRef.current = null;
+        if (hiddenFor > 1000 && route.kind === "home" && setupComplete) {
+          setShouldLaunchOverlay(true);
+          navigateTo("/home", { replace: true });
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [cards, profile.timezone, route.kind, setupComplete]);
+
+  useEffect(() => {
     if (!setupComplete && route.kind !== "intercept") {
       setScreen("onboarding");
       setOverlay(null);
@@ -454,65 +520,42 @@ function App() {
       );
       return;
     }
-if (route.kind === "caught-up") {
-  setScreen("library");
-  setOverlay({ type: "empty" });
-  return;
-}
-    
-setScreen("library");
 
-if (route.kind === "card") {
-  setOverlay({
-    type: "reveal",
-    cardId: route.cardId,
-    phase: "visible",
-  });
-  return;
-}
+    if (route.kind === "caught-up") {
+      setScreen("library");
+      setOverlay({ type: "empty" });
+      return;
+    }
+
+    setScreen("library");
+
+    if (route.kind === "card") {
+      setOverlay({
+        type: "reveal",
+        cardId: route.cardId,
+        phase: "visible",
+      });
+      return;
+    }
+
+    if (route.kind === "home" && shouldLaunchOverlay) {
+      const { selected } = pickRandomHomeCardForDisplay(cards, profile.timezone);
+      setShouldLaunchOverlay(false);
+      if (selected) {
+        setOverlay({
+          type: "reveal",
+          cardId: selected.id,
+          phase: "visible",
+        });
+        return;
+      }
+
+      setOverlay({ type: "empty" });
+      return;
+    }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, cardPacks]);
-  useEffect(() => {
-    if (hasAutoLaunchedRef.current) return;
-    if (!setupComplete) return;
-    if (route.kind !== "home") return;
-    if (overlay) return;
-
-    // Use the prioritised picker to select a card for auto-launch.
-    const { selected } = pickRandomHomeCardForDisplay(cards, profile.timezone);
-
-    // If there are no eligible cards (personal or pack), show the caught-up state.
-if (!selected) {
-  hasAutoLaunchedRef.current = true;
-  navigateTo("/caught-up", { replace: true });
-  return;
-}
-
-    hasAutoLaunchedRef.current = true;
-
-   navigateTo(`/card/${encodeURIComponent(selected.id)}`, { replace: true });
-
-    // Record the reveal time on the selected card.
-    updateCards((current) =>
-      current.map((card) =>
-        card.id === selected.id
-          ? {
-              ...card,
-              lastShownAt: new Date().toISOString(),
-            }
-          : card,
-      ),
-    );
-  }, [
-    setupComplete,
-    route.kind,
-    overlay,
-    cards,
-    profile.timezone,
-  ]);
-  
-
+  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -592,37 +635,6 @@ if (!selected) {
       currentOverlay ? { ...currentOverlay, phase: "dissolving", action } : currentOverlay,
     );
 
-    transitionTimerRef.current = window.setTimeout(() => {
-      setOverlay(null);
-      navigateTo("/home");
-    }, 720);
-  }
-
-  // Lightweight reaction handler for pack cards. Dislike pauses the specific pack card; like leaves it active.
-  function handlePackReaction(reaction) {
-    if (!overlay || overlay.type !== "reveal") return;
-    const activeCard = cards.find((card) => card.id === overlay.cardId);
-    if (!activeCard) {
-      setOverlay(null);
-      return;
-    }
-    // If the user dislikes the card, mark it as paused so it won't be selected again.
-    if (reaction === "dislike") {
-      updateCards((current) =>
-        current.map((card) =>
-          card.id === activeCard.id
-            ? {
-                ...card,
-                paused: true,
-              }
-            : card,
-        ),
-      );
-    }
-    // Dissolve the overlay and return home after a short delay.
-    setOverlay((currentOverlay) =>
-      currentOverlay ? { ...currentOverlay, phase: "dissolving", action: reaction } : currentOverlay,
-    );
     transitionTimerRef.current = window.setTimeout(() => {
       setOverlay(null);
       navigateTo("/home");
@@ -764,11 +776,25 @@ if (!selected) {
     if (!pack || isPackActive(packId)) return;
 
     updateCards((current) => [...buildCardsFromPack(pack), ...current]);
+    setHiddenLibraryPacks((current) => current.filter((id) => id !== packId));
     navigateTo("/home");
   }
 
   function deactivatePack(packId) {
     updateCards((current) => current.filter((card) => card.sourcePackId !== packId));
+  }
+
+  function hideLibraryPack(packId) {
+    setHiddenLibraryPacks((current) => (current.includes(packId) ? current : [...current, packId]));
+  }
+
+  function dislikePackCard(cardId) {
+    const card = cards.find((item) => item.id === cardId);
+    const dislikeKey = getPackDislikeKey(card);
+    if (!dislikeKey) return;
+    setDislikedPackCardIds((current) => (current.includes(dislikeKey) ? current : [...current, dislikeKey]));
+    setOverlay(null);
+    navigateTo("/home");
   }
 
   function handleSelectHomeScreenVersion(versionId) {
@@ -935,57 +961,32 @@ if (!selected) {
     () => events.filter(isRecentMomentEvent).slice(0, 5),
     [events],
   );
-if (overlay?.type === "reveal" || overlay?.type === "empty") {
-  const launcherVersion =
-    appLauncher ?? { id: "safari", label: "Safari", type: "safari" };
-
-  return (
-    <>
-      <div className="grain" />
-
-      {overlay.type === "empty" ? (
-        <main className="caught-up-page">
-          <section className="caught-up-card">
-            <p className="eyebrow">BishBash</p>
-            <h2>You&apos;re all caught up for now.</h2>
-            <p>See you later.</p>
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => {
-                setOverlay(null);
-                navigateTo("/home");
-              }}
-            >
-              Back home
-            </button>
-          </section>
-        </main>
-      ) : (
-        <Overlay
-          overlay={overlay}
-          card={activeRevealCard}
-          route={route}
-          version={activeInterceptionVersion}
-          timezone={profile.timezone}
-          onClose={() => {
-            setOverlay(null);
-            navigateTo("/home");
-          }}
-          onAction={handleAction}
-          onPackReaction={handlePackReaction}
-          onChooseElse={() => {
-            setOverlay(null);
-            navigateTo("/home");
-          }}
-          onLogEvent={logEvent}
-        />
-      )}
-
-      <AppLauncherButton version={launcherVersion} />
-    </>
+  const visibleLibraryPacks = useMemo(
+    () => PACKS.filter((pack) => !hiddenLibraryPacks.includes(pack.id)),
+    [hiddenLibraryPacks],
   );
-}
+  const completionEvents = useMemo(
+    () => events.filter(isCompletionEvent).slice(0, 3),
+    [events],
+  );
+  const interruptionTodayCount = useMemo(() => {
+    const todayKey = getTodayKey(new Date(), profile.timezone);
+    return events.filter((event) => {
+      if (!isInterruptionSummaryEvent(event)) return false;
+      return getTodayKey(new Date(event.created_at), profile.timezone) === todayKey;
+    }).length;
+  }, [events, profile.timezone]);
+  const logEventsForPanel = useMemo(() => {
+    if (logFilter === "intercepts") {
+      return recentMeaningfulEvents.filter((event) => event.event_type.startsWith("intercept_"));
+    }
+    return recentMeaningfulEvents;
+  }, [logFilter, recentMeaningfulEvents]);
+  const interruptionPacks = useMemo(
+    () => Object.values(homeScreenVersions).filter((version) => version.id !== "bishbash"),
+    [homeScreenVersions],
+  );
+  const homeReminderItems = useMemo(() => homeItems.slice(0, 3), [homeItems]);
   return (
 
   <>
@@ -994,140 +995,40 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
     {screen === "library" ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
           <div className="app-inner">
-            <header className="hero">
-              <div className="hero-copy">
-                <div className="hero-mark" aria-hidden="true">
-                  <HeartGlyph />
-                </div>
-                <p className="wordmark">BishBash</p>
-                <h1>private little messages from your earlier self</h1>
-                <span className="hero-dot" aria-hidden="true" />
-              </div>
-              <button
-                type="button"
-                className="add-button"
-                onClick={() => {
-                  setEditingId(null);
-                  setIsComposerOpen(true);
-                }}
-                aria-label="Create a BishBash"
-              >
-                +
-              </button>
-            </header>
+            <Masthead
+              onCreate={() => {
+                setEditingId(null);
+                setIsComposerOpen(true);
+              }}
+            />
 
             <main className="content">
               {activeTab === "home" ? (
-                <section className="library">
-                <div className="section-heading">
-                  <div>
-                    <h2>Your BishBash list</h2>
-                    <p>little notes waiting for future you</p>
-                  </div>
-                </div>
-
-                <div className="card-stack">
-                  {homeItems.map((item) => {
-                    const status = getStatusMeta(item.representative, new Date(), profile.timezone);
-                    return (
-                      <article
-                        key={item.id}
-                        className={`library-card ${menuOpenId === item.id ? "menu-open" : ""} theme-${getThemeClass(item.representative.theme)}`}
-                        onClick={() =>
-                          item.type === "pack"
-                            ? openPackReveal(item.id)
-                            : openSpecificReveal(item.id)
-                        }
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            if (item.type === "pack") {
-                              openPackReveal(item.id);
-                            } else {
-                              openSpecificReveal(item.id);
-                            }
-                          }
-                        }}
-                      >
-                        <div className="tile">
-                          <CardIcon
-                            theme={item.representative.theme}
-                            icon={item.representative.icon}
-                            sourcePackId={item.representative.sourcePackId}
-                          />
-                        </div>
-                        <div className="card-copy">
-                          <h3>{getHomeCardTitle(item.representative)}</h3>
-                        </div>
-                        <div className="card-status">
-                          <span className="badge">{status.badge}</span>
-                        </div>
-                        <div className="menu-wrap">
-                          <button
-                            type="button"
-                            className="menu-trigger"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setMenuOpenId((current) => (current === item.id ? null : item.id))
-                            }}
-                            aria-label="Card menu"
-                          >
-                            •••
-                          </button>
-                          {menuOpenId === item.id ? (
-                            <div className="menu">
-                              <button type="button" onClick={(event) => {
-                                event.stopPropagation();
-                                if (item.type === "pack") {
-                                  openPackEditor(item.id);
-                                  return;
-                                }
-                                openEditor(item.id);
-                              }}>
-                                {item.type === "pack" ? "Edit pack" : "Edit"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleResetItem(item);
-                                }}
-                              >
-                                Reset for today
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleTogglePause(item);
-                                }}
-                              >
-                                {item.representative.paused ? "Unpause" : "Pause"}
-                              </button>
-                              <button
-                                type="button"
-                                className="danger-soft"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (item.type === "pack") {
-                                    deactivatePack(item.id);
-                                    return;
-                                  }
-                                  handleDeleteCard(item.id);
-                                }}
-                              >
-                                {item.type === "pack" ? "Remove pack" : "Delete"}
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-                </section>
+                <HomePanel
+                  reminderItems={homeReminderItems}
+                  timezone={profile.timezone}
+                  menuOpenId={menuOpenId}
+                  setMenuOpenId={setMenuOpenId}
+                  openSpecificReveal={openSpecificReveal}
+                  openPackReveal={openPackReveal}
+                  openEditor={openEditor}
+                  openPackEditor={openPackEditor}
+                  handleResetItem={handleResetItem}
+                  handleTogglePause={handleTogglePause}
+                  handleDeleteCard={handleDeleteCard}
+                  deactivatePack={deactivatePack}
+                  completionEvents={completionEvents}
+                  interruptionTodayCount={interruptionTodayCount}
+                  onOpenLibrary={() => navigateTo("/library")}
+                  onOpenLog={() => {
+                    setLogFilter("intercepts");
+                    navigateTo("/log");
+                  }}
+                  onCreate={() => {
+                    setEditingId(null);
+                    setIsComposerOpen(true);
+                  }}
+                />
               ) : null}
 
               {activeTab === "library" ? (
@@ -1146,9 +1047,10 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
 
               {activeTab === "log" ? (
                 <LogPanel
-                  events={recentMeaningfulEvents}
+                  events={logEventsForPanel}
                   timezone={profile.timezone}
                   weeklyShiftCount={getWeeklyShiftCount(events)}
+                  filter={logFilter}
                   onCreateBishBash={() => {
                     setEditingId(null);
                     setIsComposerOpen(true);
@@ -1159,8 +1061,14 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
               {activeTab === "packs" ? (
                 <PacksPanel
                   cards={cards}
-                  onActivate={activatePack}
-                  onDeactivate={deactivatePack}
+                  interruptionPacks={interruptionPacks}
+                  customPacks={cardPacks}
+                  onEditInterruptionPack={(packId) => setEditingCustomPackId(packId)}
+                  onCreateInterruptionPack={(versionId) => setEditingCustomPackId(`new:${versionId}`)}
+                  onPreviewInterruptionPack={openCustomPackPreview}
+                  libraryPacks={visibleLibraryPacks}
+                  onLikeLibraryPack={activatePack}
+                  onDislikeLibraryPack={hideLibraryPack}
                 />
               ) : null}
               {activeTab === "settings" ? (
@@ -1267,13 +1175,17 @@ if (overlay?.type === "reveal" || overlay?.type === "empty") {
             navigateTo("/home");
           }}
           onAction={handleAction}
+          onPackLike={() => {
+            setOverlay(null);
+            navigateTo("/home");
+          }}
+          onPackDislike={dislikePackCard}
           onChooseElse={() => navigateTo("/home")}
           onLogEvent={logEvent}
-          onPackReaction={handlePackReaction}
         />
       ) : null}
 
-      {screen !== "interception" && appLauncher ? (
+      {appLauncher ? (
         <AppLauncherButton version={appLauncher} />
       ) : null}
     </>
@@ -1447,6 +1359,258 @@ function Composer({ initialCard, onClose, onSave }) {
   );
 }
 
+function Masthead({ onCreate }) {
+  return (
+    <header className="hero">
+      <div className="hero-copy">
+        <div className="hero-mark" aria-hidden="true">
+          <HeartGlyph />
+        </div>
+        <p className="wordmark">BishBash</p>
+        <h1>private little messages from your earlier self</h1>
+        <span className="hero-dot" aria-hidden="true" />
+      </div>
+      <button
+        type="button"
+        className="add-button"
+        onClick={onCreate}
+        aria-label="Create a BishBash"
+      >
+        +
+      </button>
+    </header>
+  );
+}
+
+function HomePanel({
+  reminderItems,
+  timezone,
+  menuOpenId,
+  setMenuOpenId,
+  openSpecificReveal,
+  openPackReveal,
+  openEditor,
+  openPackEditor,
+  handleResetItem,
+  handleTogglePause,
+  handleDeleteCard,
+  deactivatePack,
+  completionEvents,
+  interruptionTodayCount,
+  onOpenLibrary,
+  onOpenLog,
+  onCreate,
+}) {
+  return (
+    <section className="home-screen">
+      <article className="home-hero-card">
+        <div className="home-hero-copy">
+          <p className="eyebrow">A gentle pause</p>
+          <span className="mini-glyph" aria-hidden="true">
+            <HeartGlyph />
+          </span>
+          <h2>You&apos;ve got this. One small step at a time.</h2>
+          <p>a gentle nudge from your future self</p>
+          <button type="button" className="pack-button hero-cta" onClick={onCreate}>
+            Make a BishBash
+          </button>
+        </div>
+        <div className="hero-illustration" aria-hidden="true">
+          <span className="hero-spark hero-spark-one" />
+          <span className="hero-spark hero-spark-two" />
+          <span className="hero-spark hero-spark-three" />
+          <span className="hero-sun" />
+          <span className="hero-reflection" />
+          <span className="hero-stone" />
+        </div>
+      </article>
+
+      <section className="home-section">
+        <div className="home-section-heading">
+          <h2>Today&apos;s reminders</h2>
+          <button type="button" className="section-link-button" onClick={onOpenLibrary}>
+            See all
+          </button>
+        </div>
+        <div className="reminder-grid">
+          {reminderItems.map((item) => (
+            <HomeReminderCard
+              key={item.id}
+              item={item}
+              timezone={timezone}
+              menuOpenId={menuOpenId}
+              setMenuOpenId={setMenuOpenId}
+              openSpecificReveal={openSpecificReveal}
+              openPackReveal={openPackReveal}
+              openEditor={openEditor}
+              openPackEditor={openPackEditor}
+              handleResetItem={handleResetItem}
+              handleTogglePause={handleTogglePause}
+              handleDeleteCard={handleDeleteCard}
+              deactivatePack={deactivatePack}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="home-section-heading">
+          <h2>Recently completed</h2>
+          <button type="button" className="section-link-button" onClick={() => onOpenLog()}>
+            View all
+          </button>
+        </div>
+        <article className="completed-card">
+          {completionEvents.length > 0 ? (
+            completionEvents.map((event, index) => (
+              <div key={event.id} className={`completed-row ${index === completionEvents.length - 1 ? "last" : ""}`}>
+                <span className="completed-check" aria-hidden="true">
+                  <CheckGlyph />
+                </span>
+                <div className="completed-copy">
+                  <h3>{event.bash_title || "A BishBash"}</h3>
+                  <p>{formatTwentyFourHourTime(event.created_at, timezone)}</p>
+                </div>
+                <span className="completed-heart" aria-hidden="true">
+                  <HeartGlyph />
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="completed-row last completed-empty">
+              <div className="completed-copy">
+                <p>Completed BishBashes will appear here.</p>
+              </div>
+            </div>
+          )}
+        </article>
+      </section>
+
+      <button type="button" className="interruption-strip" onClick={onOpenLog}>
+        <span className="interruption-strip-icon" aria-hidden="true">
+          <SparkGlyph />
+        </span>
+        <span className="interruption-strip-copy">
+          <strong>Interrupted you today</strong>
+          <span>{interruptionTodayCount === 0 ? "No interruptions yet today" : "A little evidence of your pauses"}</span>
+        </span>
+        <span className="interruption-strip-count">
+          {interruptionTodayCount === 0 ? "—" : interruptionTodayCount === 1 ? "1 time" : `${interruptionTodayCount} times`}
+        </span>
+      </button>
+    </section>
+  );
+}
+
+function HomeReminderCard({
+  item,
+  timezone,
+  menuOpenId,
+  setMenuOpenId,
+  openSpecificReveal,
+  openPackReveal,
+  openEditor,
+  openPackEditor,
+  handleResetItem,
+  handleTogglePause,
+  handleDeleteCard,
+  deactivatePack,
+}) {
+  const status = getStatusMeta(item.representative, new Date(), timezone);
+  const openCard = () => {
+    if (item.type === "pack") {
+      openPackReveal(item.id);
+      return;
+    }
+    openSpecificReveal(item.id);
+  };
+
+  return (
+    <article
+      className={`reminder-card ${menuOpenId === item.id ? "menu-open" : ""}`}
+      onClick={openCard}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openCard();
+        }
+      }}
+    >
+      <div className="reminder-top">
+        <div className="reminder-icon-bubble">
+          <CardIcon icon={item.representative.icon} sourcePackId={item.representative.sourcePackId} />
+        </div>
+        <div className="menu-wrap">
+          <button
+            type="button"
+            className="menu-trigger reminder-menu-trigger"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuOpenId((current) => (current === item.id ? null : item.id));
+            }}
+            aria-label="Card menu"
+          >
+            •••
+          </button>
+          {menuOpenId === item.id ? (
+            <div className="menu">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (item.type === "pack") {
+                    openPackEditor(item.id);
+                    return;
+                  }
+                  openEditor(item.id);
+                }}
+              >
+                {item.type === "pack" ? "Edit pack" : "Edit"}
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleResetItem(item);
+                }}
+              >
+                Reset for today
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleTogglePause(item);
+                }}
+              >
+                {item.representative.paused ? "Unpause" : "Pause"}
+              </button>
+              <button
+                type="button"
+                className="danger-soft"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (item.type === "pack") {
+                    deactivatePack(item.id);
+                    return;
+                  }
+                  handleDeleteCard(item.id);
+                }}
+              >
+                {item.type === "pack" ? "Remove pack" : "Delete"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <h3>{getHomeCardTitle(item.representative)}</h3>
+      <span className={`reminder-status-pill ${status.badge === "done" ? "done" : ""}`}>{status.badge}</span>
+    </article>
+  );
+}
+
 function StandardLibraryPanel({
   items,
   timezone,
@@ -1554,7 +1718,7 @@ function StandardLibraryPanel({
   );
 }
 
-function LogPanel({ events, timezone, weeklyShiftCount, onCreateBishBash }) {
+function LogPanel({ events, timezone, weeklyShiftCount, filter, onCreateBishBash }) {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const filledDots = Math.min(weeklyShiftCount, 14);
 
@@ -1565,7 +1729,7 @@ function LogPanel({ events, timezone, weeklyShiftCount, onCreateBishBash }) {
           <HeartGlyph />
         </span>
         <h2>BishBash Log</h2>
-        <p>tiny choices. real change.</p>
+        <p>{filter === "intercepts" ? "the little pauses before the pull." : "tiny choices. real change."}</p>
       </header>
 
       <article className="log-hero-card">
@@ -1788,46 +1952,107 @@ function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onS
   );
 }
 
-function PacksPanel({ cards, onActivate, onDeactivate }) {
+function PacksPanel({
+  cards,
+  interruptionPacks,
+  customPacks,
+  onEditInterruptionPack,
+  onCreateInterruptionPack,
+  onPreviewInterruptionPack,
+  libraryPacks,
+  onLikeLibraryPack,
+  onDislikeLibraryPack,
+}) {
   return (
     <section className="panel-section">
       <div className="section-heading solo">
         <div>
           <h2>Packs</h2>
-          <p>Activate ready-made BishBash packs that can appear at random through the day.</p>
+          <p>Gentle interruption decks and ready-made BishBashes, gathered in one quiet place.</p>
         </div>
       </div>
-      <div className="theme-showcase">
-        {PACKS.map((pack) => {
-          const activeCount = cards.filter((card) => card.sourcePackId === pack.id).length;
-          const active = activeCount > 0;
 
-          return (
-            <article key={pack.id} className={`theme-showcase-card theme-${getThemeClass(pack.theme)}`}>
-              <p className="eyebrow">{active ? "Active pack" : "Pack"}</p>
-              <h3>{pack.title}</h3>
-              <p>{pack.description}</p>
-              {pack.entries[0] ? (
-                <>
-                  <p className="pack-sample">{pack.entries[0].promptText}</p>
-                  <p className="pack-meta">{pack.entries[0].attribution}</p>
-                </>
-              ) : (
-                <p className="pack-meta">Source-first pack planned. Needs verified archival content.</p>
-              )}
-              <button
-                type="button"
-                className={`pack-button ${active ? "secondary" : ""}`}
-                disabled={pack.comingSoon}
-                onClick={() => (active ? onDeactivate(pack.id) : onActivate(pack.id))}
-              >
-                {pack.comingSoon ? "Coming soon" : active ? "Deactivate pack" : "Activate pack"}
-              </button>
-              {active ? <p className="pack-state">Active in your BishBashes</p> : null}
+      <section className="packs-section">
+        <div className="home-section-heading packs-heading">
+          <div>
+            <h2>Interruption Packs</h2>
+            <p>Cards that appear before opening selected apps.</p>
+          </div>
+        </div>
+        <div className="packs-list-card">
+          {interruptionPacks.map((version) => {
+            const linkedPack = customPacks.find((pack) => pack.id === version.interruptionPackId);
+            const preview = linkedPack?.messages?.[0] ?? DEFAULT_INTERRUPTION_PACKS[version.id]?.messages?.[0] ?? "A little pause before the app opens.";
+            return (
+              <article key={version.id} className="pack-row pack-row-interruption">
+                <div className="pack-row-icon">
+                  <CardIcon icon={version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book"} />
+                </div>
+                <div className="pack-row-copy">
+                  <h3>{linkedPack?.name ?? `${version.name} Interruptions`}</h3>
+                  <p>{preview}</p>
+                </div>
+                <button
+                  type="button"
+                  className="pack-row-indicator"
+                  onClick={() => linkedPack ? onPreviewInterruptionPack(linkedPack.id) : onCreateInterruptionPack(version.id)}
+                  aria-label={linkedPack ? `Preview ${linkedPack.name}` : `Create ${version.name} interruption pack`}
+                >
+                  {linkedPack ? <HeartGlyph /> : <PlusGlyph />}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="packs-section">
+        <div className="home-section-heading packs-heading">
+          <div>
+            <h2>Library Packs</h2>
+            <p>Ready-made BishBashes you can add into your day.</p>
+          </div>
+        </div>
+        <div className="packs-list-card">
+          {libraryPacks.map((pack, index) => {
+            const active = cards.some((card) => card.sourcePackId === pack.id);
+            return (
+              <article key={pack.id} className={`pack-row pack-row-library ${index === libraryPacks.length - 1 ? "last" : ""}`}>
+                <div className="pack-row-icon">
+                  <CardIcon icon={pack.icon ?? "heart"} sourcePackId={pack.id} />
+                </div>
+                <div className="pack-row-copy">
+                  <h3>{pack.title}</h3>
+                  <p>{pack.entries[0]?.promptText ?? pack.description}</p>
+                </div>
+                <button
+                  type="button"
+                  className={`pack-circle-action ${active ? "active" : ""}`}
+                  onClick={() => onLikeLibraryPack(pack.id)}
+                  aria-label={`Like ${pack.title}`}
+                >
+                  <HeartGlyph />
+                </button>
+                <button
+                  type="button"
+                  className="pack-circle-action"
+                  onClick={() => onDislikeLibraryPack(pack.id)}
+                  aria-label={`Dislike ${pack.title}`}
+                >
+                  <CloseGlyph />
+                </button>
+              </article>
+            );
+          })}
+          {libraryPacks.length === 0 ? (
+            <article className="pack-row pack-row-library last">
+              <div className="pack-row-copy full">
+                <p>Hidden pack suggestions will stay out of the way for now.</p>
+              </div>
             </article>
-          );
-        })}
-      </div>
+          ) : null}
+        </div>
+      </section>
     </section>
   );
 }
@@ -2188,7 +2413,19 @@ function EventDetailModal({ event, timezone, onClose }) {
   );
 }
 
-function Overlay({ overlay, card, route, version, timezone, onClose, onAction, onChooseElse, onLogEvent, onPackReaction }) {
+function Overlay({
+  overlay,
+  card,
+  route,
+  version,
+  timezone,
+  onClose,
+  onAction,
+  onPackLike,
+  onPackDislike,
+  onChooseElse,
+  onLogEvent,
+}) {
   if (overlay.type === "empty" && route.kind === "intercept") {
     return (
       <div className="overlay-screen empty-state interception-screen" onClick={onClose}>
@@ -2266,18 +2503,20 @@ function Overlay({ overlay, card, route, version, timezone, onClose, onAction, o
         {card.attribution ? <p className="card-attribution">{card.attribution}</p> : null}
         <p className="tiny-note">a gentle nudge from the version of you that cares</p>
       </div>
-      {card.sourcePackId ? (
-        <div className="action-row">
-          <ActionButton label="Dislike" onClick={() => onPackReaction("dislike")} />
-          <ActionButton label="Like" tone="solid" onClick={() => onPackReaction("like")} />
-        </div>
-      ) : (
-        <div className="action-row">
-          <ActionButton label="Not done" onClick={() => onAction("later")} />
-          <ActionButton label="I'll do it now" onClick={() => onAction("now")} />
-          <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
-        </div>
-      )}
+      <div className="action-row">
+        {card.sourcePackId ? (
+          <>
+            <ActionButton label="Dislike" onClick={() => onPackDislike(card.id)} />
+            <ActionButton label="Like" tone="solid" onClick={onPackLike} />
+          </>
+        ) : (
+          <>
+            <ActionButton label="Not done" onClick={() => onAction("later")} />
+            <ActionButton label="I'll do it now" onClick={() => onAction("now")} />
+            <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2626,6 +2865,40 @@ function ActionButton({ label, onClick, tone = "ghost" }) {
     >
       {label}
     </button>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="check-glyph" aria-hidden="true">
+      <path d="M5 12.5l4.2 4.2L19 7.4" />
+    </svg>
+  );
+}
+
+function SparkGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="spark-glyph" aria-hidden="true">
+      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" />
+    </svg>
+  );
+}
+
+function PlusGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="plus-glyph" aria-hidden="true">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="close-glyph" aria-hidden="true">
+      <path d="M7 7l10 10" />
+      <path d="M17 7L7 17" />
+    </svg>
   );
 }
 
