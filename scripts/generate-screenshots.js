@@ -309,15 +309,27 @@ async function shot(page, name, { fullPage = false } = {}) {
 }
 
 async function movePastInterruption(page) {
-  const labels = ["Not yet", "Done", "Like", "Dislike"];
+  const labels = ["Not yet", "Done", "Like", "Dislike", "Back home"];
   for (const label of labels) {
-    const button = page.getByRole("button", { name: label }).first();
+    const button = page.locator(".overlay-screen .action-button", { hasText: label }).first();
     if (await button.isVisible().catch(() => false)) {
       await button.click();
       await page.waitForTimeout(1100);
       return;
     }
   }
+
+  const closeButton = page.locator(".overlay-screen .overlay-library-button").first();
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click();
+    await page.waitForTimeout(700);
+  }
+}
+
+async function openNav(page, label) {
+  await movePastInterruption(page);
+  await page.getByRole("button", { name: label }).click();
+  await page.waitForTimeout(500);
 }
 
 async function main() {
@@ -344,9 +356,7 @@ async function main() {
     {
       const { context, page } = await createPage(browser);
       await seed(page, storageForReadyApp);
-      await movePastInterruption(page);
-      await page.locator(".bottom-nav .nav-item").nth(1).click();
-      await page.waitForTimeout(500);
+      await openNav(page, "Packs");
       await shot(page, "03-library.png");
       await context.close();
     }
@@ -354,9 +364,7 @@ async function main() {
     {
       const { context, page } = await createPage(browser);
       await seed(page, storageForReadyApp);
-      await movePastInterruption(page);
-      await page.locator(".bottom-nav .nav-item").nth(2).click();
-      await page.waitForTimeout(500);
+      await openNav(page, "Log");
       await shot(page, "04-mood.png");
       await context.close();
     }
@@ -364,9 +372,7 @@ async function main() {
     {
       const { context, page } = await createPage(browser);
       await seed(page, storageForReadyApp);
-      await movePastInterruption(page);
-      await page.locator(".bottom-nav .nav-item").nth(3).click();
-      await page.waitForTimeout(500);
+      await openNav(page, "Settings");
       await shot(page, "05-settings-top.png");
       await page.evaluate(() =>
         window.scrollTo({ top: document.body.scrollHeight * 0.55, behavior: "instant" }),
