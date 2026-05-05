@@ -1509,6 +1509,10 @@ function App() {
                   handleResetItem={handleResetItem}
                   handleTogglePause={handleTogglePause}
                   handleDeleteCard={handleDeleteCard}
+                  onCreate={() => {
+                    setEditingId(null);
+                    setIsComposerOpen(true);
+                  }}
                 />
               ) : null}
 
@@ -1879,9 +1883,6 @@ function Masthead({ onCreate }) {
         <div className="hero-mark" aria-hidden="true">
           <HeartGlyph />
         </div>
-        <p className="wordmark">BishBash</p>
-        <h1>private little messages from your earlier self</h1>
-        <span className="hero-dot" aria-hidden="true" />
       </div>
       <button
         type="button"
@@ -1906,6 +1907,7 @@ function HomePanel({
   handleResetItem,
   handleTogglePause,
   handleDeleteCard,
+  onCreate,
 }) {
   return (
     <section className="library">
@@ -1916,6 +1918,15 @@ function HomePanel({
         </div>
       </div>
       <div className="card-stack">
+        {reminderItems.length === 0 ? (
+          <article className="home-empty-card">
+            <h3>No cards yet</h3>
+            <p>Start by creating one small nudge</p>
+            <button type="button" className="pack-button" onClick={onCreate}>
+              Create card
+            </button>
+          </article>
+        ) : null}
         {reminderItems.map((item) => {
           const status = getStatusMeta(item.representative, new Date(), timezone);
           function openItem() {
