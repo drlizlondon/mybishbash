@@ -5,6 +5,7 @@ import {
   loadCards,
   loadCardPacks,
   loadDislikedPackCardIds,
+  loadGlobalInterruptionMode,
   loadHiddenLibraryPacks,
   loadHomeScreenVersions,
   loadMood,
@@ -14,6 +15,7 @@ import {
   saveCards,
   saveCardPacks,
   saveDislikedPackCardIds,
+  saveGlobalInterruptionMode,
   saveHiddenLibraryPacks,
   saveHomeScreenVersions,
   saveMood,
@@ -57,7 +59,7 @@ const INTERRUPTION_LAUNCHER_CONTEXTS = ["safari", "youtube", "instagram"];
 
 const DEFAULT_INTERRUPTION_PACKS = {
   safari: {
-    id: "default-safari-interruptions",
+    id: "safari-interruption",
     type: "interruption",
     targetApp: "safari",
     active: true,
@@ -70,7 +72,7 @@ const DEFAULT_INTERRUPTION_PACKS = {
     ],
   },
   instagram: {
-    id: "default-instagram-interruptions",
+    id: "instagram-interruption",
     type: "interruption",
     targetApp: "instagram",
     active: true,
@@ -84,7 +86,7 @@ const DEFAULT_INTERRUPTION_PACKS = {
     ],
   },
   youtube: {
-    id: "default-youtube-interruptions",
+    id: "youtube-interruption",
     type: "interruption",
     targetApp: "youtube",
     active: true,
@@ -171,7 +173,7 @@ function parseRoute(path) {
   if (normalized === "/caught-up") return { kind: "caught-up", path: normalized, tab: "home" };
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
   if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
-  if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
+  if (normalized === "/library") return { kind: "packs", path: "/packs", tab: "packs" };
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
   return { kind: "home", path: "/home", tab: "home" };
@@ -214,29 +216,90 @@ function getLauncherContextFromRoute(route) {
     : NORMAL_LAUNCHER_CONTEXT;
 }
 
+function getInterruptionFolderId(targetApp) {
+  return `${targetApp}-interruption`;
+}
+
 function getInterruptionCardText(card) {
   return typeof card === "string" ? card : card?.text ?? card?.promptText ?? card?.title ?? "";
 }
 
-function normalizeInterruptionPack(pack, targetApp, version) {
+function normalizeInterruptionPack(pack, targetApp, version, { readOnly = false } = {}) {
   if (!pack) return null;
-  const messages = Array.isArray(pack.cards)
-    ? pack.cards.map(getInterruptionCardText).filter(Boolean)
-    : (pack.messages ?? []).filter(Boolean);
+  const rawCards = Array.isArray(pack.cards)
+    ? pack.cards
+    : (pack.messages ?? []).map((message, index) => ({ id: `${pack.id}:${index}`, text: message, title: message }));
+  const cards = rawCards
+    .map((card, index) => {
+      const text = getInterruptionCardText(card).trim();
+      if (!text) return null;
+      return {
+        id: typeof card === "string" ? `${pack.id}:${index}` : card.id ?? `${pack.id}:${index}`,
+        title: typeof card === "string" ? text : card.title ?? text,
+        text,
+        readOnly: typeof card === "string" ? readOnly : card.readOnly ?? readOnly,
+        createdAt: typeof card === "string" ? null : card.createdAt ?? null,
+      };
+    })
+    .filter(Boolean);
   const active = typeof pack.active === "boolean" ? pack.active : Boolean(version?.useInterruptionPack ?? true);
 
   return {
     ...pack,
     type: "interruption",
+    id: pack.id || getInterruptionFolderId(targetApp),
     targetApp: pack.targetApp || pack.linkedVersionId || targetApp,
     linkedVersionId: pack.linkedVersionId || pack.targetApp || targetApp,
     active,
-    cards: messages.map((message, index) => ({
-      id: `${pack.id}:${index}`,
-      title: message,
-      text: message,
-    })),
-    messages,
+    cards,
+    messages: cards.map((card) => card.text),
+  };
+}
+
+function getStoredInterruptionPackForTarget(targetApp, customPacks, versions = {}) {
+  const version = versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp];
+  const selectedId = version?.interruptionPackId || version?.selectedPackId || "";
+  return customPacks.find((pack) => (pack.targetApp ?? pack.linkedVersionId) === targetApp)
+    ?? customPacks.find((pack) => pack.id === selectedId)
+    ?? null;
+}
+
+function buildInterruptionFolder(targetApp, versions, customPacks, { hiddenCardIds = [], globalEnabled = true, includeHidden = false } = {}) {
+  if (!isInterruptionLauncherContext(targetApp)) return null;
+
+  const version = resolveVersionConfig(versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp]);
+  const basePack = normalizeInterruptionPack(DEFAULT_INTERRUPTION_PACKS[targetApp], targetApp, version, {
+    readOnly: true,
+  });
+  const storedPack = normalizeInterruptionPack(
+    getStoredInterruptionPackForTarget(targetApp, customPacks, versions),
+    targetApp,
+    version,
+    { readOnly: false },
+  );
+
+  if (!basePack && !storedPack) return null;
+
+  const folderId = getInterruptionFolderId(targetApp);
+  const cards = [...(basePack?.cards ?? []), ...(storedPack?.cards ?? [])]
+    .map((card) => ({
+      ...card,
+      hidden: hiddenCardIds.includes(getPackDislikeKey({ sourcePackId: folderId, promptText: card.text })),
+    }))
+    .filter((card) => includeHidden || !card.hidden);
+
+  return {
+    id: folderId,
+    type: "interruption",
+    targetApp,
+    linkedVersionId: targetApp,
+    active: Boolean(globalEnabled),
+    name: `${version.name} Interruptions`,
+    description: `Cards shown only when launcherContext is "${targetApp}".`,
+    editable: true,
+    cards,
+    messages: cards.map((card) => card.text),
+    userPackId: storedPack?.id ?? null,
   };
 }
 
@@ -244,36 +307,16 @@ function getInterruptionPackForLauncher(
   launcherContext,
   versions,
   customPacks,
-  { includeInactive = false, hiddenCardIds = [] } = {},
+  { includeInactive = false, hiddenCardIds = [], globalEnabled = true } = {},
 ) {
   if (!isInterruptionLauncherContext(launcherContext)) return null;
-
-  const version = resolveVersionConfig(
-    versions[launcherContext] ?? DEFAULT_HOME_SCREEN_VERSIONS[launcherContext],
-  );
-  const selectedId = version?.interruptionPackId || version?.selectedPackId || "";
-  const selectedCustomPack = customPacks.find(
-    (pack) =>
-      pack.id === selectedId &&
-      (pack.targetApp ?? pack.linkedVersionId ?? launcherContext) === launcherContext,
-  );
-  const basePack = selectedCustomPack ?? DEFAULT_INTERRUPTION_PACKS[launcherContext] ?? null;
-  const normalized = normalizeInterruptionPack(basePack, launcherContext, version);
-
-  if (!normalized) return null;
-  const active = normalized.active && Boolean(version.useInterruptionPack) && !version.interruptionPaused;
-  if (!includeInactive && !active) return null;
-
-  const visibleCards = normalized.cards.filter(
-    (card) => !hiddenCardIds.includes(getPackDislikeKey({ sourcePackId: normalized.id, promptText: card.text })),
-  );
-
-  return {
-    ...normalized,
-    active,
-    cards: visibleCards,
-    messages: visibleCards.map((card) => card.text),
-  };
+  const folder = buildInterruptionFolder(launcherContext, versions, customPacks, {
+    hiddenCardIds,
+    globalEnabled,
+  });
+  if (!folder) return null;
+  if (!includeInactive && !folder.active) return null;
+  return folder;
 }
 
 function isMeaningfulEvent(event) {
@@ -337,10 +380,12 @@ function pickRandomHomeCardForDisplay(
   versions,
   customPacks,
   hiddenCardIds,
+  globalInterruptionMode,
 ) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, customPacks, {
     hiddenCardIds,
+    globalEnabled: globalInterruptionMode,
   });
   const singles = normalized
     .filter((card) => !card.sourcePackId && isEligible(card, new Date(), timezone))
@@ -469,6 +514,28 @@ function buildInterruptionHomeItem(version, pack) {
   };
 }
 
+function buildInterruptionCardHomeItem(version, pack, card, index) {
+  const icon = version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book";
+  return {
+    type: "interruption-card",
+    id: `${pack.id}:${card.id}`,
+    versionId: version.id,
+    packId: pack.id,
+    cardIndex: index,
+    representative: {
+      id: card.id,
+      dashboardTitle: card.text,
+      promptText: card.text,
+      theme: "Minimal",
+      icon,
+      paused: false,
+      timingWindows: ["morning", "day", "evening"],
+      frequency: "multi_daily",
+      createdAt: card.createdAt ?? "",
+    },
+  };
+}
+
 function App() {
   const initialState = useMemo(() => {
     const base = buildInitialState();
@@ -476,6 +543,7 @@ function App() {
       ...base,
       cardPacks: loadCardPacks(),
       dislikedPackCardIds: loadDislikedPackCardIds(),
+      globalInterruptionMode: loadGlobalInterruptionMode(),
       homeScreenVersions: loadHomeScreenVersions(),
       hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
@@ -488,6 +556,7 @@ function App() {
   const [selectedHomeScreenVersion, setSelectedHomeScreenVersion] = useState(() => loadSelectedHomeScreenVersion());
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
   const [dislikedPackCardIds, setDislikedPackCardIds] = useState(initialState.dislikedPackCardIds);
+  const [globalInterruptionMode, setGlobalInterruptionMode] = useState(initialState.globalInterruptionMode);
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
@@ -500,6 +569,7 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [editingPackId, setEditingPackId] = useState(null);
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
+  const [selectedPackDetail, setSelectedPackDetail] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
@@ -555,6 +625,10 @@ function App() {
   }, [dislikedPackCardIds]);
 
   useEffect(() => {
+    saveGlobalInterruptionMode(globalInterruptionMode);
+  }, [globalInterruptionMode]);
+
+  useEffect(() => {
     saveHiddenLibraryPacks(hiddenLibraryPacks);
   }, [hiddenLibraryPacks]);
 
@@ -605,6 +679,22 @@ function App() {
   }, [activeTab, logFilter]);
 
   useEffect(() => {
+    if (!menuOpenId) return undefined;
+
+    function handlePointerDown(event) {
+      if (event.target.closest?.(".menu-wrap")) return;
+      setMenuOpenId(null);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [menuOpenId]);
+
+  useEffect(() => {
+    setMenuOpenId(null);
+  }, [activeTab, route.kind, overlay?.type]);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         hiddenSinceRef.current = Date.now();
@@ -649,6 +739,7 @@ function App() {
       );
       const pack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
+        globalEnabled: globalInterruptionMode,
       });
       if (!pack) {
         setScreen("library");
@@ -700,6 +791,7 @@ function App() {
         homeScreenVersions,
         cardPacks,
         dislikedPackCardIds,
+        globalInterruptionMode,
       );
       setShouldLaunchOverlay(false);
       if (interruption) {
@@ -723,7 +815,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds]);
+  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -977,6 +1069,31 @@ function App() {
     setHiddenLibraryPacks((current) => (current.includes(packId) ? current : [...current, packId]));
   }
 
+  function setPackCardHidden(packId, text, hidden) {
+    const dislikeKey = getPackDislikeKey({ sourcePackId: packId, promptText: text });
+    if (!dislikeKey) return;
+    setDislikedPackCardIds((current) => {
+      if (hidden) {
+        return current.includes(dislikeKey) ? current : [...current, dislikeKey];
+      }
+      return current.filter((item) => item !== dislikeKey);
+    });
+    const isInterruption = packId.endsWith("-interruption");
+    void logEvent({
+      event_type: isInterruption
+        ? hidden ? "intercept_card_disliked" : "intercept_card_restored"
+        : hidden ? "pack_card_disliked" : "pack_card_restored",
+      source_type: isInterruption ? "interruption" : "library",
+      card_source: isInterruption ? "interruption" : "library",
+      card_id: dislikeKey,
+      card_title: text,
+      card_text: text,
+      pack_id: packId,
+      target_app: isInterruption ? packId.replace(/-interruption$/, "") : null,
+      action_taken: hidden ? "disliked" : "restored",
+    });
+  }
+
   function dislikePackCard(cardId) {
     const card = cards.find((item) => item.id === cardId);
     const dislikeKey = getPackDislikeKey(card);
@@ -1018,6 +1135,66 @@ function App() {
     });
   }
 
+  function handleSaveInterruptionCard(targetApp, cardId, text) {
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+
+    setCardPacks((current) => {
+      const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions);
+      const packId = existing?.id ?? `${targetApp}-user-interruptions`;
+      const existingCards = existing?.cards ?? existing?.messages?.map((message, index) => ({
+        id: `${packId}:${index}`,
+        text: message,
+        title: message,
+      })) ?? [];
+      const nextCard = {
+        id: cardId ?? createId(),
+        text: trimmedText,
+        title: trimmedText,
+        readOnly: false,
+        createdAt: new Date().toISOString(),
+      };
+      const nextCards = cardId
+        ? existingCards.map((card) => (card.id === cardId ? nextCard : card))
+        : [...existingCards, nextCard];
+      const nextPack = {
+        id: packId,
+        type: "interruption",
+        name: `${homeScreenVersions[targetApp]?.name ?? targetApp} Interruptions`,
+        targetApp,
+        linkedVersionId: targetApp,
+        active: true,
+        editable: true,
+        cards: nextCards,
+        messages: nextCards.map((card) => card.text),
+      };
+
+      if (existing) {
+        return current.map((pack) => (pack.id === existing.id ? nextPack : pack));
+      }
+      return [nextPack, ...current];
+    });
+  }
+
+  function handleDeleteInterruptionCard(targetApp, cardId) {
+    setCardPacks((current) => {
+      const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions);
+      if (!existing) return current;
+      const existingCards = existing.cards ?? existing.messages?.map((message, index) => ({
+        id: `${existing.id}:${index}`,
+        text: message,
+        title: message,
+      })) ?? [];
+      const nextCards = existingCards.filter((card) => card.id !== cardId);
+      const nextPack = {
+        ...existing,
+        cards: nextCards,
+        messages: nextCards.map((card) => card.text),
+      };
+      return current.map((pack) => (pack.id === existing.id ? nextPack : pack));
+    });
+  }
+
   function handleToggleInterruptionPause(versionId) {
     const willPause = !homeScreenVersions[versionId]?.interruptionPaused;
     setHomeScreenVersions((current) => ({
@@ -1038,13 +1215,14 @@ function App() {
     setMenuOpenId(null);
   }
 
-  function openInterruptionHomeReveal(versionId) {
+  function openInterruptionHomeReveal(versionId, cardIndex = 0) {
     const version = resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]);
     const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, cardPacks, {
       hiddenCardIds: dislikedPackCardIds,
+      globalEnabled: globalInterruptionMode,
     });
     if (version.interruptionPaused || !pack || pack.messages.length === 0) return;
-    setOverlay({ ...buildCustomPackOverlay(pack, 0, "intercept-pack"), versionId });
+    setOverlay({ ...buildCustomPackOverlay(pack, cardIndex, "intercept-pack"), versionId });
   }
 
   function handleSelectHomeScreenVersion(versionId) {
@@ -1081,6 +1259,16 @@ function App() {
     }
   }
 
+  function handleSetGlobalInterruptionMode(value) {
+    setGlobalInterruptionMode(value);
+    void logEvent({
+      event_type: value ? "global_interruption_mode_enabled" : "global_interruption_mode_disabled",
+      source_type: "settings",
+      card_source: "settings",
+      action_taken: value ? "enabled" : "disabled",
+    });
+  }
+
   function handleResetSharedState() {
     const confirmed = window.confirm("Clear the shared BishBash state on this device?");
     if (!confirmed) return;
@@ -1093,6 +1281,7 @@ function App() {
     setSelectedHomeScreenVersion("bishbash");
     setCardPacks([]);
     setDislikedPackCardIds([]);
+    setGlobalInterruptionMode(true);
     setHiddenLibraryPacks([]);
     setEvents([]);
     setSetupComplete(false);
@@ -1193,28 +1382,13 @@ function App() {
   );
 
   const homeItems = useMemo(() => {
-    const grouped = new Map();
-
-    cards.forEach((card) => {
-      if (card.sourcePackId) {
-        if (!grouped.has(card.sourcePackId)) {
-          const representative = getPackRepresentative(cards, card.sourcePackId);
-          if (!representative) return;
-          grouped.set(card.sourcePackId, {
-            type: "pack",
-            id: card.sourcePackId,
-            representative,
-          });
-        }
-        return;
-      }
-
-      grouped.set(card.id, {
-        type: "single",
+    const items = cards
+      .filter((card) => isEligible(card, new Date(), profile.timezone))
+      .map((card) => ({
+        type: card.sourcePackId ? "library-card" : "single",
         id: card.id,
         representative: card,
-      });
-    });
+      }));
 
     Object.values(homeScreenVersions).forEach((version) => {
       if (version.id === "bishbash" || launcherContext === NORMAL_LAUNCHER_CONTEXT) return;
@@ -1222,13 +1396,16 @@ function App() {
       if (resolvedVersion.id !== launcherContext) return;
       const pack = getInterruptionPackForLauncher(resolvedVersion.id, homeScreenVersions, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
+        globalEnabled: globalInterruptionMode,
       });
       if (!pack || pack.messages.length === 0) return;
 
-      grouped.set(`interruption:${resolvedVersion.id}`, buildInterruptionHomeItem(resolvedVersion, pack));
+      pack.cards.forEach((card, index) => {
+        items.push(buildInterruptionCardHomeItem(resolvedVersion, pack, card, index));
+      });
     });
 
-    return Array.from(grouped.values()).sort((left, right) => {
+    return items.sort((left, right) => {
       const leftRank = getHomeSortRank(left.representative);
       const rightRank = getHomeSortRank(right.representative);
 
@@ -1238,7 +1415,7 @@ function App() {
       const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
       return rightCreated - leftCreated;
     });
-  }, [cards, homeScreenVersions, cardPacks, launcherContext, dislikedPackCardIds]);
+  }, [cards, profile.timezone, homeScreenVersions, cardPacks, launcherContext, dislikedPackCardIds, globalInterruptionMode]);
   const eligibleHomeCount = useMemo(() => {
     let count = 0;
     const seenPackIds = new Set();
@@ -1295,8 +1472,15 @@ function App() {
     return recentMeaningfulEvents;
   }, [logFilter, recentMeaningfulEvents]);
   const interruptionPacks = useMemo(
-    () => Object.values(homeScreenVersions).filter((version) => version.id !== "bishbash"),
-    [homeScreenVersions],
+    () =>
+      INTERRUPTION_LAUNCHER_CONTEXTS.map((targetApp) =>
+        buildInterruptionFolder(targetApp, homeScreenVersions, cardPacks, {
+          hiddenCardIds: dislikedPackCardIds,
+          globalEnabled: globalInterruptionMode,
+          includeHidden: true,
+        }),
+      ).filter(Boolean),
+    [homeScreenVersions, cardPacks, dislikedPackCardIds, globalInterruptionMode],
   );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
   return (
@@ -1320,33 +1504,11 @@ function App() {
                   menuOpenId={menuOpenId}
                   setMenuOpenId={setMenuOpenId}
                   openSpecificReveal={openSpecificReveal}
-                  openPackReveal={openPackReveal}
                   openInterruptionHomeReveal={openInterruptionHomeReveal}
                   openEditor={openEditor}
-                  openPackEditor={openPackEditor}
-                  handleResetItem={handleResetItem}
-                  handleTogglePause={handleTogglePause}
-                  handleToggleInterruptionPause={handleToggleInterruptionPause}
-                  handleDeleteCard={handleDeleteCard}
-                  deactivatePack={deactivatePack}
-                  onCreate={() => {
-                    setEditingId(null);
-                    setIsComposerOpen(true);
-                  }}
-                />
-              ) : null}
-
-              {activeTab === "library" ? (
-                <StandardLibraryPanel
-                  items={personalLibraryItems}
-                  timezone={profile.timezone}
-                  menuOpenId={menuOpenId}
-                  setMenuOpenId={setMenuOpenId}
-                  openEditor={openEditor}
                   handleResetItem={handleResetItem}
                   handleTogglePause={handleTogglePause}
                   handleDeleteCard={handleDeleteCard}
-                  openSpecificReveal={openSpecificReveal}
                 />
               ) : null}
 
@@ -1367,13 +1529,11 @@ function App() {
                 <PacksPanel
                   cards={cards}
                   interruptionPacks={interruptionPacks}
-                  customPacks={cardPacks}
-                  onEditInterruptionPack={(packId) => setEditingCustomPackId(packId)}
-                  onCreateInterruptionPack={(versionId) => setEditingCustomPackId(`new:${versionId}`)}
-                  onPreviewInterruptionPack={openCustomPackPreview}
+                  hiddenCardIds={dislikedPackCardIds}
                   libraryPacks={visibleLibraryPacks}
                   onActivateLibraryPack={activatePack}
                   onDeactivateLibraryPack={deactivatePack}
+                  onOpenPack={setSelectedPackDetail}
                 />
               ) : null}
               {activeTab === "settings" ? (
@@ -1384,12 +1544,8 @@ function App() {
                   selectedHomeScreenVersion={selectedHomeScreenVersion}
                   onSelectHomeScreenVersion={handleSelectHomeScreenVersion}
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
-                  cardPacks={cardPacks}
-                  onCreatePack={(versionId) => setEditingCustomPackId(`new:${versionId}`)}
-                  onEditPack={(packId) => setEditingCustomPackId(packId)}
-                  onDeletePack={handleDeleteCustomPack}
-                  onPreviewPack={openCustomPackPreview}
-                  onAssignPackToVersion={handleSaveVersionBehavior}
+                  globalInterruptionMode={globalInterruptionMode}
+                  onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
                   onResetSharedState={handleResetSharedState}
                 />
               ) : null}
@@ -1400,10 +1556,6 @@ function App() {
             <button type="button" className={`nav-item ${activeTab === "home" ? "active" : ""}`} onClick={() => navigateTo("/home")}>
               <HomeGlyph />
               <span>Home</span>
-            </button>
-            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} onClick={() => navigateTo("/library")}>
-              <BookGlyph />
-              <span>Library</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} onClick={() => navigateTo("/log")}>
               <LogGlyph />
@@ -1464,6 +1616,23 @@ function App() {
           versions={homeScreenVersions}
           onClose={() => setEditingCustomPackId(null)}
           onSave={handleSaveCustomPack}
+        />
+      ) : null}
+
+      {selectedPackDetail ? (
+        <PackDetailModal
+          detail={selectedPackDetail}
+          cards={cards}
+          libraryPacks={visibleLibraryPacks}
+          interruptionPacks={interruptionPacks}
+          hiddenCardIds={dislikedPackCardIds}
+          isPackActive={isPackActive}
+          onActivateLibraryPack={activatePack}
+          onDeactivateLibraryPack={deactivatePack}
+          onSetPackCardHidden={setPackCardHidden}
+          onSaveInterruptionCard={handleSaveInterruptionCard}
+          onDeleteInterruptionCard={handleDeleteInterruptionCard}
+          onClose={() => setSelectedPackDetail(null)}
         />
       ) : null}
 
@@ -1720,38 +1889,26 @@ function HomePanel({
   menuOpenId,
   setMenuOpenId,
   openSpecificReveal,
-  openPackReveal,
   openInterruptionHomeReveal,
   openEditor,
-  openPackEditor,
   handleResetItem,
   handleTogglePause,
-  handleToggleInterruptionPause,
   handleDeleteCard,
-  deactivatePack,
-  onCreate,
 }) {
   return (
     <section className="library">
       <div className="section-heading solo">
         <div>
           <h2>Your BishBash list</h2>
-          <p>All your little nudges, gathered in one quiet place.</p>
+          <p>Ready cards and actions for right now.</p>
         </div>
-        <button type="button" className="pack-button secondary home-create-button" onClick={onCreate}>
-          Make a BishBash
-        </button>
       </div>
       <div className="card-stack">
         {reminderItems.map((item) => {
           const status = getStatusMeta(item.representative, new Date(), timezone);
           function openItem() {
-            if (item.type === "interruption-version") {
-              openInterruptionHomeReveal(item.versionId);
-              return;
-            }
-            if (item.type === "pack") {
-              openPackReveal(item.id);
+            if (item.type === "interruption-card") {
+              openInterruptionHomeReveal(item.versionId, item.cardIndex);
               return;
             }
             openSpecificReveal(item.id);
@@ -1775,7 +1932,7 @@ function HomePanel({
                 <CardIcon icon={item.representative.icon} sourcePackId={item.representative.sourcePackId} />
               </div>
               <div className="card-copy">
-                <h3>{getHomeCardTitle(item.representative)}</h3>
+                <h3>{item.representative.promptText}</h3>
               </div>
               <div className="card-status">
                 <span className="badge">{status.badge}</span>
@@ -1798,29 +1955,25 @@ function HomePanel({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-version") {
-                          openInterruptionHomeReveal(item.versionId);
-                          return;
-                        }
-                        if (item.type === "pack") {
-                          openPackEditor(item.id);
+                        if (item.type === "interruption-card") {
+                          openInterruptionHomeReveal(item.versionId, item.cardIndex);
                           return;
                         }
                         openEditor(item.id);
                       }}
                     >
-                      {item.type === "interruption-version" ? "Preview pack" : item.type === "pack" ? "Edit pack" : "Edit"}
+                      {item.type === "interruption-card" ? "Open card" : "Edit"}
                     </button>
                     <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-version") {
+                        if (item.type === "interruption-card") {
                           return;
                         }
                         handleResetItem(item);
                       }}
-                      disabled={item.type === "interruption-version"}
+                      disabled={item.type === "interruption-card"}
                     >
                       Reset for today
                     </button>
@@ -1828,12 +1981,12 @@ function HomePanel({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-version") {
-                          handleToggleInterruptionPause(item.versionId);
+                        if (item.type === "interruption-card") {
                           return;
                         }
                         handleTogglePause(item);
                       }}
+                      disabled={item.type === "interruption-card"}
                     >
                       {item.representative.paused ? "Unpause" : "Pause"}
                     </button>
@@ -1842,22 +1995,14 @@ function HomePanel({
                       className="danger-soft"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-version") {
-                          handleToggleInterruptionPause(item.versionId);
-                          return;
-                        }
-                        if (item.type === "pack") {
-                          deactivatePack(item.id);
+                        if (item.type === "interruption-card") {
                           return;
                         }
                         handleDeleteCard(item.id);
                       }}
+                      disabled={item.type === "interruption-card"}
                     >
-                      {item.type === "interruption-version"
-                        ? item.representative.paused ? "Enable pack" : "Pause pack"
-                        : item.type === "pack"
-                          ? "Remove pack"
-                          : "Delete"}
+                      Delete
                     </button>
                   </div>
                 ) : null}
@@ -2324,20 +2469,18 @@ function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onS
 function PacksPanel({
   cards,
   interruptionPacks,
-  customPacks,
-  onEditInterruptionPack,
-  onCreateInterruptionPack,
-  onPreviewInterruptionPack,
+  hiddenCardIds,
   libraryPacks,
   onActivateLibraryPack,
   onDeactivateLibraryPack,
+  onOpenPack,
 }) {
   return (
     <section className="panel-section">
       <div className="section-heading solo">
         <div>
           <h2>Packs</h2>
-          <p>Gentle interruption decks and ready-made BishBashes, gathered in one quiet place.</p>
+          <p>Manage the card content BishBash can draw from.</p>
         </div>
       </div>
 
@@ -2345,34 +2488,29 @@ function PacksPanel({
         <div className="home-section-heading packs-heading">
           <div>
             <h2>Interruption Packs</h2>
-            <p>Cards that appear before opening selected apps.</p>
+            <p>Folders selected automatically by launcher context.</p>
           </div>
         </div>
         <div className="packs-list-card">
-          {interruptionPacks.map((version) => {
-            const linkedPack = customPacks.find((pack) => pack.id === version.interruptionPackId);
-            const normalizedPack = normalizeInterruptionPack(
-              linkedPack ?? DEFAULT_INTERRUPTION_PACKS[version.id],
-              version.id,
-              version,
-            );
-            const preview = normalizedPack?.cards?.[0]?.text ?? "A little pause before the app opens.";
+          {interruptionPacks.map((pack) => {
+            const visibleCount = pack.cards.filter((card) => !card.hidden).length;
             return (
-              <article key={version.id} className="pack-row pack-row-interruption">
+              <article key={pack.id} className="pack-row pack-row-interruption">
                 <div className="pack-row-icon">
-                  <CardIcon icon={version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book"} />
+                  <CardIcon icon={pack.targetApp === "instagram" ? "heart" : pack.targetApp === "youtube" ? "star" : "book"} />
                 </div>
                 <div className="pack-row-copy">
-                  <h3>{normalizedPack?.name ?? `${version.name} Interruptions`}</h3>
-                  <p>{preview}</p>
+                  <h3>{pack.name}</h3>
+                  <p>{pack.description}</p>
+                  <p className="pack-meta">{visibleCount} cards · built-in cards hidden only · user cards editable</p>
                 </div>
                 <button
                   type="button"
                   className="pack-row-indicator"
-                  onClick={() => linkedPack ? onPreviewInterruptionPack(linkedPack.id) : onCreateInterruptionPack(version.id)}
-                  aria-label={linkedPack ? `Preview ${linkedPack.name}` : `Create ${version.name} interruption pack`}
+                  onClick={() => onOpenPack({ type: "interruption", id: pack.id, targetApp: pack.targetApp })}
+                  aria-label={`Open ${pack.name}`}
                 >
-                  {linkedPack ? <HeartGlyph /> : <PlusGlyph />}
+                  <ChevronRightGlyph />
                 </button>
               </article>
             );
@@ -2390,8 +2528,10 @@ function PacksPanel({
         <div className="library-pack-stack">
           {libraryPacks.map((pack, index) => {
             const active = cards.some((card) => card.sourcePackId === pack.id);
-            const sampleEntry = pack.entries[0];
             const canActivate = Array.isArray(pack.entries) && pack.entries.length > 0;
+            const hiddenCount = pack.entries.filter((entry) =>
+              hiddenCardIds.includes(getPackDislikeKey({ sourcePackId: pack.id, promptText: entry.promptText })),
+            ).length;
             return (
               <article
                 key={pack.id}
@@ -2401,29 +2541,32 @@ function PacksPanel({
                   <p className="eyebrow">{active ? "Active pack" : "Pack"}</p>
                   <h3>{pack.title}</h3>
                   <p>{pack.description}</p>
-                  {sampleEntry ? (
-                    <blockquote>
-                      <p>{sampleEntry.promptText}</p>
-                      {sampleEntry.attribution ? <cite>{sampleEntry.attribution}</cite> : null}
-                    </blockquote>
-                  ) : (
-                    <p className="pack-state">Coming soon</p>
-                  )}
+                  <p className="pack-meta">{pack.entries.length} cards · read-only{hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}</p>
                 </div>
-                <button
-                  type="button"
-                  className={`library-pack-button ${active ? "secondary" : ""}`}
-                  onClick={() => {
-                    if (active) {
-                      onDeactivateLibraryPack(pack.id);
-                      return;
-                    }
-                    onActivateLibraryPack(pack.id);
-                  }}
-                  disabled={!canActivate}
-                >
-                  {canActivate ? (active ? "Deactivate pack" : "Activate pack") : "Coming soon"}
-                </button>
+                <div className="home-screen-version-actions">
+                  <button
+                    type="button"
+                    className={`library-pack-button ${active ? "secondary" : ""}`}
+                    onClick={() => {
+                      if (active) {
+                        onDeactivateLibraryPack(pack.id);
+                        return;
+                      }
+                      onActivateLibraryPack(pack.id);
+                    }}
+                    disabled={!canActivate}
+                  >
+                    {canActivate ? (active ? "Deactivate pack" : "Activate pack") : "Coming soon"}
+                  </button>
+                  <button
+                    type="button"
+                    className="pack-button secondary"
+                    onClick={() => onOpenPack({ type: "library", id: pack.id })}
+                    disabled={!canActivate}
+                  >
+                    Open
+                  </button>
+                </div>
                 {active ? <p className="pack-active-note">Active in your BishBashes</p> : null}
               </article>
             );
@@ -2441,6 +2584,183 @@ function PacksPanel({
   );
 }
 
+function PackDetailModal({
+  detail,
+  cards,
+  libraryPacks,
+  interruptionPacks,
+  hiddenCardIds,
+  isPackActive,
+  onActivateLibraryPack,
+  onDeactivateLibraryPack,
+  onSetPackCardHidden,
+  onSaveInterruptionCard,
+  onDeleteInterruptionCard,
+  onClose,
+}) {
+  const [editingCard, setEditingCard] = useState(null);
+  const [draftText, setDraftText] = useState("");
+
+  const libraryPack = detail.type === "library"
+    ? libraryPacks.find((pack) => pack.id === detail.id)
+    : null;
+  const interruptionPack = detail.type === "interruption"
+    ? interruptionPacks.find((pack) => pack.id === detail.id)
+    : null;
+  const active = libraryPack ? isPackActive(libraryPack.id) : interruptionPack?.active;
+
+  function startNewInterruptionCard() {
+    setEditingCard({ id: null });
+    setDraftText("");
+  }
+
+  function startEditInterruptionCard(card) {
+    setEditingCard(card);
+    setDraftText(card.text);
+  }
+
+  function saveInterruptionDraft(event) {
+    event.preventDefault();
+    if (!interruptionPack) return;
+    onSaveInterruptionCard(interruptionPack.targetApp, editingCard?.id ?? null, draftText);
+    setEditingCard(null);
+    setDraftText("");
+  }
+
+  if (!libraryPack && !interruptionPack) return null;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="composer pack-editor" onClick={(event) => event.stopPropagation()}>
+        <div className="composer-heading">
+          <p className="eyebrow">{libraryPack ? "Library pack" : "Interruption folder"}</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        {libraryPack ? (
+          <>
+            <div className="field">
+              <span>{libraryPack.title}</span>
+              <p className="pack-editor-copy">{libraryPack.description}</p>
+              <p className="pack-meta">{libraryPack.entries.length} cards · read-only</p>
+            </div>
+            <button
+              type="button"
+              className={`pack-button ${active ? "secondary" : ""}`}
+              onClick={() => {
+                if (active) {
+                  onDeactivateLibraryPack(libraryPack.id);
+                  return;
+                }
+                onActivateLibraryPack(libraryPack.id);
+              }}
+              disabled={libraryPack.entries.length === 0}
+            >
+              {active ? "Deactivate pack" : "Activate pack"}
+            </button>
+            <div className="custom-pack-message-grid">
+              {libraryPack.entries.map((entry, index) => {
+                const hidden = hiddenCardIds.includes(
+                  getPackDislikeKey({ sourcePackId: libraryPack.id, promptText: entry.promptText }),
+                );
+                const activeCard = cards.find(
+                  (card) => card.sourcePackId === libraryPack.id && card.promptText === entry.promptText,
+                );
+                return (
+                  <article key={`${libraryPack.id}-${index}`} className="home-screen-version-card pack-manager-card">
+                    <div className="home-screen-version-copy pack-manager-copy">
+                      <div className="home-screen-version-title">
+                        <strong>{entry.promptText}</strong>
+                        <span>{hidden ? "Hidden" : "Visible"}</span>
+                      </div>
+                      {entry.attribution ? <p>{entry.attribution}</p> : null}
+                      {activeCard ? <p className="pack-meta">{getStatusMeta(activeCard).badge}</p> : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="pack-button secondary"
+                      onClick={() => onSetPackCardHidden(libraryPack.id, entry.promptText, !hidden)}
+                    >
+                      {hidden ? "Restore card" : "Hide card"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+
+        {interruptionPack ? (
+          <>
+            <div className="field">
+              <span>{interruptionPack.name}</span>
+              <p className="pack-editor-copy">{interruptionPack.description}</p>
+              <p className="pack-meta">{interruptionPack.cards.length} cards · launcherContext: {interruptionPack.targetApp}</p>
+            </div>
+            <button type="button" className="pack-button" onClick={startNewInterruptionCard}>
+              Add card
+            </button>
+            {editingCard ? (
+              <form className="custom-pack-message-grid" onSubmit={saveInterruptionDraft}>
+                <label className="field">
+                  <span>{editingCard.id ? "Edit card" : "New card"}</span>
+                  <textarea
+                    value={draftText}
+                    onChange={(event) => setDraftText(event.target.value)}
+                    rows={3}
+                    placeholder="Do you really want to open this app right now?"
+                  />
+                </label>
+                <button type="submit" className="save-button">
+                  Save card
+                </button>
+              </form>
+            ) : null}
+            <div className="custom-pack-message-grid">
+              {interruptionPack.cards.map((card) => (
+                <article key={card.id} className="home-screen-version-card pack-manager-card">
+                  <div className="home-screen-version-copy pack-manager-copy">
+                    <div className="home-screen-version-title">
+                      <strong>{card.text}</strong>
+                      <span>{card.readOnly ? "Read-only" : "Editable"}{card.hidden ? " · hidden" : ""}</span>
+                    </div>
+                  </div>
+                  <div className="home-screen-version-actions">
+                    {card.readOnly ? (
+                      <button
+                        type="button"
+                        className="pack-button secondary"
+                        onClick={() => onSetPackCardHidden(interruptionPack.id, card.text, !card.hidden)}
+                      >
+                        {card.hidden ? "Restore card" : "Hide card"}
+                      </button>
+                    ) : (
+                      <>
+                        <button type="button" className="pack-button secondary" onClick={() => startEditInterruptionCard(card)}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="pack-button secondary danger-soft-button"
+                          onClick={() => onDeleteInterruptionCard(interruptionPack.targetApp, card.id)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function SettingsPanel({
   mood,
   onSelectMood,
@@ -2448,12 +2768,8 @@ function SettingsPanel({
   selectedHomeScreenVersion,
   onSelectHomeScreenVersion,
   onUpdateHomeScreenIcon,
-  cardPacks,
-  onCreatePack,
-  onEditPack,
-  onDeletePack,
-  onPreviewPack,
-  onAssignPackToVersion,
+  globalInterruptionMode,
+  onSetGlobalInterruptionMode,
   onResetSharedState,
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -2487,6 +2803,20 @@ function SettingsPanel({
             </ul>
           </div>
         ) : null}
+      </div>
+      <div className="settings-card settings-compact">
+        <div className="settings-version-heading">
+          <p>Interruption mode</p>
+          <span>When on, supported launcher contexts can show their matching interruption cards.</span>
+        </div>
+        <label className="timing-option settings-checkbox-row">
+          <input
+            type="checkbox"
+            checked={globalInterruptionMode}
+            onChange={(event) => onSetGlobalInterruptionMode(event.target.checked)}
+          />
+          <span>{globalInterruptionMode ? "Interruption mode is ON" : "Interruption mode is OFF"}</span>
+        </label>
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
@@ -2522,9 +2852,6 @@ function SettingsPanel({
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(version.installPath);
             const isStandardVersion = version.id === "bishbash";
-            const assignablePacks = cardPacks.filter(
-              (pack) => !pack.targetApp || pack.targetApp === version.id || pack.linkedVersionId === version.id,
-            );
 
             return (
               <article
@@ -2544,7 +2871,7 @@ function SettingsPanel({
                   <p>
                     {isStandardVersion
                       ? "Launches straight into your standard BishBash home."
-                      : `Launches ${version.name} interception before opening the real app.`}
+                      : `Uses launcherContext "${version.id}" and shares the same BishBash state.`}
                   </p>
                   <a
                     href={installUrl}
@@ -2556,42 +2883,6 @@ function SettingsPanel({
                   </a>
                 </div>
                 <div className="home-screen-version-actions">
-                  {!isStandardVersion ? (
-                    <>
-                      <label className="timing-option settings-checkbox-row">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(version.useInterruptionPack)}
-                          onChange={(event) =>
-                            onAssignPackToVersion(version.id, {
-                              useInterruptionPack: event.target.checked,
-                            })
-                          }
-                        />
-                        <span>Use interruption pack</span>
-                      </label>
-                      <div className="field">
-                        <span>Linked interruption pack</span>
-                        <select
-                          className="settings-input"
-                          value={version.interruptionPackId ?? version.selectedPackId ?? ""}
-                          onChange={(event) =>
-                            onAssignPackToVersion(version.id, {
-                              interruptionPackId: event.target.value,
-                            })
-                          }
-                          disabled={!version.useInterruptionPack}
-                        >
-                          <option value="">Use built-in {version.name} interruptions</option>
-                          {assignablePacks.map((pack) => (
-                            <option key={pack.id} value={pack.id}>
-                              {pack.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  ) : null}
                   <button
                     type="button"
                     className={`pack-button ${selectedHomeScreenVersion === version.id ? "secondary" : ""}`}
@@ -2599,14 +2890,7 @@ function SettingsPanel({
                   >
                     {selectedHomeScreenVersion === version.id ? "Using this version" : "Use this version"}
                   </button>
-                  <button
-                    type="button"
-                    className="pack-button secondary"
-                    onClick={() => onCreatePack(version.id)}
-                    disabled={isStandardVersion}
-                  >
-                    {isStandardVersion ? "Standard launch route" : "Create interruption pack"}
-                  </button>
+                  <p className="pack-meta">{isStandardVersion ? "launcherContext: normal" : `launcherContext: ${version.id}`}</p>
                   <label className="icon-upload-button">
                     <input
                       type="file"
@@ -2633,55 +2917,6 @@ function SettingsPanel({
         </div>
       </div>
       <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Interruption Packs</p>
-          <span>Write your own swipeable interruption decks for Instagram, YouTube, Safari, or any future version.</span>
-        </div>
-        <div className="home-screen-version-list">
-          {cardPacks.length === 0 ? (
-            <article className="home-screen-version-card pack-manager-card">
-              <div className="home-screen-version-copy pack-manager-copy">
-                <div className="home-screen-version-title">
-                  <strong>No interruption packs yet</strong>
-                </div>
-                <p>Make a quiet swipeable deck for Instagram, YouTube, Safari, or any version you want to soften.</p>
-              </div>
-            </article>
-          ) : null}
-          {cardPacks.map((pack) => (
-            <article key={pack.id} className="home-screen-version-card pack-manager-card">
-              <div className="home-screen-version-copy pack-manager-copy">
-                <div className="home-screen-version-title">
-                  <strong>{pack.name}</strong>
-                  {pack.targetApp || pack.linkedVersionId ? (
-                    <span>{homeScreenVersions[pack.targetApp ?? pack.linkedVersionId]?.name ?? pack.targetApp ?? pack.linkedVersionId}</span>
-                  ) : null}
-                </div>
-                <ul className="pack-message-list">
-                  {(pack.messages ?? pack.cards?.map((card) => card.text ?? card.title) ?? []).map((message) => (
-                    <li key={message}>{message}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="home-screen-version-actions">
-                <button type="button" className="pack-button secondary" onClick={() => onEditPack(pack.id)}>
-                  Edit pack
-                </button>
-                <button type="button" className="pack-button secondary" onClick={() => onPreviewPack(pack.id)}>
-                  Preview cards
-                </button>
-                <button type="button" className="pack-button secondary" onClick={() => onEditPack(pack.id)}>
-                  Add message
-                </button>
-                <button type="button" className="pack-button secondary danger-soft-button" onClick={() => onDeletePack(pack.id)}>
-                  Delete pack
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-      <div className="settings-card settings-compact">
         <div className="settings-version-heading">
           <p>Development reset</p>
           <span>Clear the one shared local BishBash state on this device for testing.</span>

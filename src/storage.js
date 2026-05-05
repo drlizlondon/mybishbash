@@ -7,6 +7,7 @@ const HOME_SCREEN_SELECTED_KEY = "bishbash.home-screen-selected.v1";
 const CARD_PACKS_KEY = "bishbash.card-packs.v1";
 const HIDDEN_LIBRARY_PACKS_KEY = "bishbash.hidden-library-packs.v1";
 const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
+const GLOBAL_INTERRUPTION_MODE_KEY = "bishbash.global-interruption-mode.v1";
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
@@ -18,6 +19,7 @@ const SHARED_STORAGE_KEYS = [
   CARD_PACKS_KEY,
   HIDDEN_LIBRARY_PACKS_KEY,
   DISLIKED_PACK_CARD_IDS_KEY,
+  GLOBAL_INTERRUPTION_MODE_KEY,
   "bishbash.event-log.v1",
   "bishbash.user-id.v1",
 ];
@@ -242,6 +244,15 @@ export function loadDislikedPackCardIds() {
 
 export function saveDislikedPackCardIds(value) {
   window.localStorage.setItem(DISLIKED_PACK_CARD_IDS_KEY, JSON.stringify(value));
+}
+
+export function loadGlobalInterruptionMode() {
+  const stored = window.localStorage.getItem(GLOBAL_INTERRUPTION_MODE_KEY);
+  return stored == null ? true : stored === "true";
+}
+
+export function saveGlobalInterruptionMode(value) {
+  window.localStorage.setItem(GLOBAL_INTERRUPTION_MODE_KEY, String(value));
 }
 
 export function clearSharedBishBashState() {
