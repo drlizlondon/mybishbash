@@ -8,6 +8,20 @@ const CARD_PACKS_KEY = "bishbash.card-packs.v1";
 const HIDDEN_LIBRARY_PACKS_KEY = "bishbash.hidden-library-packs.v1";
 const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
 
+const SHARED_STORAGE_KEYS = [
+  STORAGE_KEY,
+  SETUP_KEY,
+  MOOD_KEY,
+  PROFILE_KEY,
+  HOME_SCREEN_VERSIONS_KEY,
+  HOME_SCREEN_SELECTED_KEY,
+  CARD_PACKS_KEY,
+  HIDDEN_LIBRARY_PACKS_KEY,
+  DISLIKED_PACK_CARD_IDS_KEY,
+  "bishbash.event-log.v1",
+  "bishbash.user-id.v1",
+];
+
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
   bishbash: {
     id: "bishbash",
@@ -228,4 +242,8 @@ export function loadDislikedPackCardIds() {
 
 export function saveDislikedPackCardIds(value) {
   window.localStorage.setItem(DISLIKED_PACK_CARD_IDS_KEY, JSON.stringify(value));
+}
+
+export function clearSharedBishBashState() {
+  SHARED_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
 }

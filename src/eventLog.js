@@ -53,18 +53,31 @@ async function postEventToSupabase(event) {
 }
 
 export function createEventRecord(input) {
+  const actionTaken =
+    input.action_taken ??
+    input.action ??
+    input.event_type?.replace(/^bash_/, "").replace(/^intercept_/, "") ??
+    null;
+
   return {
     id: createId(),
     user_id: getUserId(),
     event_type: input.event_type,
     created_at: input.created_at ?? new Date().toISOString(),
-    source_type: input.source_type ?? "standard_bishbash",
+    source_type: input.source_type ?? input.card_source ?? "personal",
     bash_id: input.bash_id ?? null,
     bash_title: input.bash_title ?? null,
+    card_id: input.card_id ?? input.bash_id ?? input.message_id ?? null,
+    card_title: input.card_title ?? input.bash_title ?? input.card_text ?? null,
+    card_text: input.card_text ?? input.bash_title ?? input.card_title ?? null,
+    card_source: input.card_source ?? input.source_type ?? "personal",
     app_id: input.app_id ?? null,
     app_name: input.app_name ?? null,
+    launcher_context: input.launcher_context ?? input.launcherContext ?? "normal",
+    target_app: input.target_app ?? input.targetApp ?? input.app_id ?? null,
     pack_id: input.pack_id ?? null,
     message_id: input.message_id ?? null,
+    action_taken: actionTaken,
     metadata: input.metadata ?? null,
   };
 }
