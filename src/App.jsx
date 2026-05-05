@@ -173,7 +173,7 @@ function parseRoute(path) {
   if (normalized === "/caught-up") return { kind: "caught-up", path: normalized, tab: "home" };
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
   if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
-  if (normalized === "/library") return { kind: "packs", path: "/packs", tab: "packs" };
+  if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
   return { kind: "home", path: "/home", tab: "home" };
@@ -1512,6 +1512,20 @@ function App() {
                 />
               ) : null}
 
+              {activeTab === "library" ? (
+                <StandardLibraryPanel
+                  items={personalLibraryItems}
+                  timezone={profile.timezone}
+                  menuOpenId={menuOpenId}
+                  setMenuOpenId={setMenuOpenId}
+                  openEditor={openEditor}
+                  handleResetItem={handleResetItem}
+                  handleTogglePause={handleTogglePause}
+                  handleDeleteCard={handleDeleteCard}
+                  openSpecificReveal={openSpecificReveal}
+                />
+              ) : null}
+
               {activeTab === "log" ? (
                 <LogPanel
                   events={logEventsForPanel}
@@ -1525,7 +1539,6 @@ function App() {
                 <PacksPanel
                   cards={cards}
                   interruptionPacks={interruptionPacks}
-                  hiddenCardIds={dislikedPackCardIds}
                   libraryPacks={visibleLibraryPacks}
                   onActivateLibraryPack={activatePack}
                   onDeactivateLibraryPack={deactivatePack}
@@ -1552,6 +1565,10 @@ function App() {
             <button type="button" className={`nav-item ${activeTab === "home" ? "active" : ""}`} onClick={() => navigateTo("/home")}>
               <HomeGlyph />
               <span>Home</span>
+            </button>
+            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} onClick={() => navigateTo("/library")}>
+              <BookGlyph />
+              <span>Library</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} onClick={() => navigateTo("/log")}>
               <LogGlyph />
@@ -2461,7 +2478,6 @@ function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onS
 function PacksPanel({
   cards,
   interruptionPacks,
-  hiddenCardIds,
   libraryPacks,
   onActivateLibraryPack,
   onDeactivateLibraryPack,
@@ -2485,7 +2501,6 @@ function PacksPanel({
         </div>
         <div className="packs-list-card">
           {interruptionPacks.map((pack) => {
-            const visibleCount = pack.cards.filter((card) => !card.hidden).length;
             return (
               <article key={pack.id} className="pack-row pack-row-interruption">
                 <div className="pack-row-icon">
@@ -2493,8 +2508,6 @@ function PacksPanel({
                 </div>
                 <div className="pack-row-copy">
                   <h3>{pack.name}</h3>
-                  <p>{pack.description}</p>
-                  <p className="pack-meta">{visibleCount} cards · built-in cards hidden only · user cards editable</p>
                 </div>
                 <button
                   type="button"
@@ -2521,9 +2534,6 @@ function PacksPanel({
           {libraryPacks.map((pack, index) => {
             const active = cards.some((card) => card.sourcePackId === pack.id);
             const canActivate = Array.isArray(pack.entries) && pack.entries.length > 0;
-            const hiddenCount = pack.entries.filter((entry) =>
-              hiddenCardIds.includes(getPackDislikeKey({ sourcePackId: pack.id, promptText: entry.promptText })),
-            ).length;
             return (
               <article
                 key={pack.id}
@@ -2533,7 +2543,6 @@ function PacksPanel({
                   <p className="eyebrow">{active ? "Active pack" : "Pack"}</p>
                   <h3>{pack.title}</h3>
                   <p>{pack.description}</p>
-                  <p className="pack-meta">{pack.entries.length} cards · read-only{hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}</p>
                 </div>
                 <div className="home-screen-version-actions">
                   <button
@@ -2549,14 +2558,6 @@ function PacksPanel({
                     disabled={!canActivate}
                   >
                     {canActivate ? (active ? "Deactivate pack" : "Activate pack") : "Coming soon"}
-                  </button>
-                  <button
-                    type="button"
-                    className="pack-button secondary"
-                    onClick={() => onOpenPack({ type: "library", id: pack.id })}
-                    disabled={!canActivate}
-                  >
-                    Open
                   </button>
                 </div>
                 {active ? <p className="pack-active-note">Active in your BishBashes</p> : null}
