@@ -1675,7 +1675,6 @@ function App() {
             navigateTo("/home");
           }}
           onPackDislike={dislikePackCard}
-          onInterruptionDislike={dislikeInterruptionPackCard}
           onChooseElse={() => {
             suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
@@ -3034,7 +3033,6 @@ function Overlay({
   onAction,
   onPackLike,
   onPackDislike,
-  onInterruptionDislike,
   onChooseElse,
   onLogEvent,
 }) {
@@ -3085,7 +3083,6 @@ function Overlay({
         overlay={overlay}
         version={version}
         onChooseElse={onChooseElse}
-        onInterruptionDislike={onInterruptionDislike}
         onLogEvent={onLogEvent}
       />
     );
@@ -3209,7 +3206,7 @@ function CustomPackOverlay({ overlay, onClose }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onInterruptionDislike, onLogEvent }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -3346,13 +3343,6 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onInterruptionDis
         ))}
       </div>
       <div className="interception-actions">
-        <ActionButton
-          label="Dislike card"
-          onClick={() => {
-            onInterruptionDislike?.(overlay.packId, cards[activeIndex]);
-            move(1);
-          }}
-        />
         <ActionButton
           label="I'll do something else"
           tone="solid"
