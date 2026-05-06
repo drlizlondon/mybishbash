@@ -3648,12 +3648,17 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
   const fallbackTimerRef = useRef(null);
-  const messages = overlay.messages ?? [];
-  const cards = overlay.cards ?? messages.map((message, index) => ({
-    id: `${overlay.packId}:${index}`,
-    title: message,
-    text: message,
-  }));
+  const viewedCardRef = useRef("");
+  const messages = useMemo(() => overlay.messages ?? [], [overlay.messages]);
+  const cards = useMemo(
+    () =>
+      overlay.cards ?? messages.map((message, index) => ({
+        id: `${overlay.packId}:${index}`,
+        title: message,
+        text: message,
+      })),
+    [messages, overlay.cards, overlay.packId],
+  );
 
   useEffect(() => {
     setActiveIndex(overlay.activeIndex ?? 0);
@@ -3671,6 +3676,10 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   useEffect(() => {
     const activeMessage = messages[activeIndex];
     if (!activeMessage || !version) return;
+
+    const viewKey = `${overlay.packId}:${cards[activeIndex]?.id ?? activeIndex}`;
+    if (viewedCardRef.current === viewKey) return;
+    viewedCardRef.current = viewKey;
 
     void onLogEvent({
       event_type: "intercept_card_viewed",
@@ -3837,8 +3846,8 @@ function Onboarding({ onCreate }) {
     },
     {
       id: "private-ritual",
-      message: "Private, local, and just for future-you.",
-      support: "No accounts. No cloud. Just your own little ritual waiting when you need it.",
+      message: "Private, synced, and just for future-you.",
+      support: "Use your sync code to connect every launcher, browser, and device to the same BishBash.",
     },
   ];
   const [activeSlide, setActiveSlide] = useState(0);
