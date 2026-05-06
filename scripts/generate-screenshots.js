@@ -19,63 +19,100 @@ function getTodayKey(date, timeZone) {
 const now = new Date();
 const inNinetyMinutes = new Date(now.getTime() + 90 * 60 * 1000).toISOString();
 const todayKey = getTodayKey(now, "Europe/London");
+const allWindows = ["morning", "day", "evening", "night"];
 
 const homeScreenVersions = {
+  bishbash: {
+    id: "bishbash",
+    name: "BishBash",
+    installPath: "/bishbash/install/bishbash/",
+    launchPath: "/home",
+    iconSrc: "/bishbash/icons/bishbash-cover.png",
+    realAppLabel: "",
+    appUrl: "",
+    manualUrl: "",
+    interruptionPackId: "",
+    useInterruptionPack: false,
+    interruptionPaused: false,
+  },
   safari: {
     id: "safari",
     name: "Safari",
-    installPath: "/bishbash/safari/",
+    installPath: "/bishbash/install/safari/",
+    launchPath: "/intercept/safari",
     iconSrc: "/bishbash/icons/apple-touch-icon.png",
     realAppLabel: "Safari",
     appUrl: "",
-    fallbackUrl: "https://www.google.com",
-    cardMode: "normal",
-    selectedPackId: "",
+    manualUrl: "x-safari-https://www.google.com",
+    interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
   },
   youtube: {
     id: "youtube",
     name: "YouTube",
-    installPath: "/bishbash/youtube/",
+    installPath: "/bishbash/install/youtube/",
+    launchPath: "/intercept/youtube",
     iconSrc: "/bishbash/icons/youtube-cover.png",
     realAppLabel: "YouTube",
     appUrl: "youtube://",
-    fallbackUrl: "https://www.youtube.com",
-    cardMode: "custom_pack",
-    selectedPackId: "youtube-slower-scroll",
+    manualUrl: "https://www.youtube.com",
+    interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
   },
   instagram: {
     id: "instagram",
     name: "Instagram",
-    installPath: "/bishbash/instagram/",
+    installPath: "/bishbash/install/instagram/",
+    launchPath: "/intercept/instagram",
     iconSrc: "/bishbash/icons/instagram-cover.jpg",
     realAppLabel: "Instagram",
     appUrl: "instagram://app",
-    fallbackUrl: "https://www.instagram.com",
-    cardMode: "custom_pack",
-    selectedPackId: "instagram-interruptions",
+    manualUrl: "https://www.instagram.com",
+    interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
   },
 };
 
-const customPacks = [
+const cardPacks = [
   {
-    id: "instagram-interruptions",
-    name: "Instagram Interruptions",
-    linkedVersionId: "instagram",
-    messages: [
-      "Do you really want to go on Instagram right now?",
-      "Open your own life before opening everyone else's.",
-      "What were you hoping Instagram would fix?",
-      "Could this moment belong to you instead?",
+    id: "safari-interruption",
+    type: "interruption",
+    targetApp: "safari",
+    active: true,
+    name: "Safari Interruptions",
+    linkedVersionId: "safari",
+    cards: [
+      { id: "safari-1", text: "Do you want the internet, or a little pause first?", title: "Do you want the internet, or a little pause first?" },
+      { id: "safari-2", text: "What were you hoping to find online just now?", title: "What were you hoping to find online just now?" },
     ],
   },
   {
-    id: "youtube-slower-scroll",
+    id: "instagram-interruption",
+    type: "interruption",
+    targetApp: "instagram",
+    active: true,
+    name: "Instagram Interruptions",
+    linkedVersionId: "instagram",
+    cards: [
+      { id: "instagram-1", text: "Do you really want to go on Instagram right now?", title: "Do you really want to go on Instagram right now?" },
+      { id: "instagram-2", text: "Open your own life before opening everyone else's.", title: "Open your own life before opening everyone else's." },
+      { id: "instagram-3", text: "What were you hoping Instagram would fix?", title: "What were you hoping Instagram would fix?" },
+    ],
+  },
+  {
+    id: "youtube-interruption",
+    type: "interruption",
+    targetApp: "youtube",
+    active: true,
     name: "YouTube Interruptions",
     linkedVersionId: "youtube",
-    messages: [
-      "Were you looking for one thing, or somewhere to disappear?",
-      "Would rest feel better than another video?",
-      "Could ten quiet minutes be kinder than autoplay?",
+    cards: [
+      { id: "youtube-1", text: "Were you looking for one thing, or somewhere to disappear?", title: "Were you looking for one thing, or somewhere to disappear?" },
+      { id: "youtube-2", text: "Would rest feel better than another video?", title: "Would rest feel better than another video?" },
+      { id: "youtube-3", text: "Could ten quiet minutes be kinder than autoplay?", title: "Could ten quiet minutes be kinder than autoplay?" },
     ],
   },
 ];
@@ -236,13 +273,14 @@ const demoCards = [
 ];
 
 const storageForReadyApp = {
-  "bishbash.cards.v1": demoCards,
+  "bishbash.cards.v1": demoCards.map((card) => ({ ...card, timingWindows: allWindows })),
   "bishbash.setup-complete.v1": "true",
   "bishbash.mood.v1": "Soft Bloom",
   "bishbash.profile.v1": { name: "Liz", timezone: "Europe/London" },
   "bishbash.home-screen-versions.v1": homeScreenVersions,
   "bishbash.home-screen-selected.v1": "safari",
-  "bishbash.card-packs.v1": customPacks,
+  "bishbash.card-packs.v1": cardPacks,
+  "bishbash.global-interruption-mode.v1": "true",
 };
 
 const storageForOnboarding = {
@@ -252,13 +290,15 @@ const storageForOnboarding = {
   "bishbash.profile.v1": { name: "", timezone: "Europe/London" },
   "bishbash.home-screen-versions.v1": homeScreenVersions,
   "bishbash.home-screen-selected.v1": "safari",
-  "bishbash.card-packs.v1": customPacks,
+  "bishbash.card-packs.v1": cardPacks,
+  "bishbash.global-interruption-mode.v1": "true",
 };
 
 const storageForEmpty = {
   ...storageForReadyApp,
   "bishbash.cards.v1": demoCards.map((card) => ({
     ...card,
+    timingWindows: allWindows,
     paused: !card.sourcePackId,
     notYetUntil: card.sourcePackId ? null : now.toISOString(),
     doneDate: card.sourcePackId ? todayKey : card.doneDate,
@@ -357,7 +397,7 @@ async function main() {
       const { context, page } = await createPage(browser);
       await seed(page, storageForReadyApp);
       await openNav(page, "Packs");
-      await shot(page, "03-library.png");
+      await shot(page, "03-packs.png");
       await context.close();
     }
 
@@ -365,7 +405,7 @@ async function main() {
       const { context, page } = await createPage(browser);
       await seed(page, storageForReadyApp);
       await openNav(page, "Log");
-      await shot(page, "04-mood.png");
+      await shot(page, "04-log.png");
       await context.close();
     }
 
@@ -378,7 +418,7 @@ async function main() {
         window.scrollTo({ top: document.body.scrollHeight * 0.55, behavior: "instant" }),
       );
       await page.waitForTimeout(400);
-      await shot(page, "06-settings-card-packs.png");
+      await shot(page, "06-settings-launchers.png");
       await context.close();
     }
 
@@ -412,7 +452,7 @@ async function main() {
 
     {
       const { context, page } = await createPage(browser);
-      await page.goto("http://127.0.0.1:4173/bishbash/safari/", {
+      await page.goto("http://127.0.0.1:4173/bishbash/install/safari/", {
         waitUntil: "networkidle",
       });
       await page.waitForTimeout(500);
@@ -422,7 +462,7 @@ async function main() {
 
     {
       const { context, page } = await createPage(browser);
-      await page.goto("http://127.0.0.1:4173/bishbash/youtube/", {
+      await page.goto("http://127.0.0.1:4173/bishbash/install/youtube/", {
         waitUntil: "networkidle",
       });
       await page.waitForTimeout(500);
@@ -432,7 +472,7 @@ async function main() {
 
     {
       const { context, page } = await createPage(browser);
-      await page.goto("http://127.0.0.1:4173/bishbash/instagram/", {
+      await page.goto("http://127.0.0.1:4173/bishbash/install/instagram/", {
         waitUntil: "networkidle",
       });
       await page.waitForTimeout(500);

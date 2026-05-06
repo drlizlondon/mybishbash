@@ -1391,6 +1391,9 @@ textarea {
 }
 
 .action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 58px;
   border-radius: 999px;
   border: 1px solid rgba(47, 42, 40, 0.08);
@@ -1400,6 +1403,8 @@ textarea {
   box-shadow: 0 10px 24px rgba(120, 87, 65, 0.08);
   font-size: 17px;
   font-weight: 600;
+  text-align: center;
+  text-decoration: none;
 }
 
 .action-button.solid {
@@ -2466,6 +2471,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  text-decoration: none;
   box-shadow:
     0 10px 24px rgba(114, 79, 65, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
@@ -3487,34 +3493,6 @@ body {
   gap: 10px;
 }
 
-.theme-minimal,
-.theme-pop-art,
-.theme-black-and-white,
-.theme-soft-bloom,
-.theme-paper-cut,
-.theme-rainbow,
-.theme-starry-sky {
-  --mood-ink: #111111;
-  --mood-muted: #6b6b6b;
-  --mood-accent: #e76f51;
-  background: #ffffff;
-  color: #111111;
-}
-
-.theme-starry-sky h3,
-.theme-starry-sky p,
-.theme-starry-sky .eyebrow,
-.theme-starry-sky .badge,
-.theme-starry-sky .icon-illustration,
-.app-mood.theme-starry-sky .settings-card,
-.app-mood.theme-starry-sky .library-card,
-.app-mood.theme-starry-sky .home-screen-version-card,
-.app-mood.theme-starry-sky .packs-list-card {
-  color: #111111;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-}
-
 .theme-showcase-card {
   min-height: auto;
   gap: 14px;
@@ -3530,6 +3508,108 @@ body {
 .pack-active-note,
 .pack-state {
   display: none;
+}
+
+.library-card.theme-minimal,
+.card-stack .library-card.theme-minimal:first-of-type,
+.theme-showcase-card.theme-minimal,
+.composer-preview.theme-minimal,
+.custom-pack-card.theme-minimal {
+  --mood-ink: #171717;
+  --mood-muted: #6b6b6b;
+  --mood-accent: #e76f51;
+  background: #ffffff;
+  color: #171717;
+}
+
+.library-card.theme-pop-art,
+.card-stack .library-card.theme-pop-art:first-of-type,
+.theme-showcase-card.theme-pop-art,
+.composer-preview.theme-pop-art,
+.custom-pack-card.theme-pop-art {
+  --mood-ink: #241017;
+  --mood-muted: #6d384b;
+  --mood-accent: #e76f51;
+  background: linear-gradient(135deg, #ffe15f 0%, #ff8f70 52%, #ff6fae 100%);
+  color: #241017;
+}
+
+.library-card.theme-soft-bloom,
+.card-stack .library-card.theme-soft-bloom:first-of-type,
+.theme-showcase-card.theme-soft-bloom,
+.composer-preview.theme-soft-bloom,
+.custom-pack-card.theme-soft-bloom,
+.library-card.theme-paper-cut,
+.card-stack .library-card.theme-paper-cut:first-of-type,
+.theme-showcase-card.theme-paper-cut,
+.composer-preview.theme-paper-cut,
+.custom-pack-card.theme-paper-cut {
+  --mood-ink: #263128;
+  --mood-muted: #586355;
+  --mood-accent: #b95d73;
+  background: linear-gradient(145deg, rgba(255, 246, 250, 0.96), rgba(218, 235, 218, 0.94) 54%, rgba(239, 198, 210, 0.84));
+  color: #263128;
+}
+
+.library-card.theme-rainbow,
+.card-stack .library-card.theme-rainbow:first-of-type,
+.theme-showcase-card.theme-rainbow,
+.composer-preview.theme-rainbow,
+.custom-pack-card.theme-rainbow {
+  --mood-ink: #12383b;
+  --mood-muted: #315b5f;
+  --mood-accent: #196f91;
+  background: linear-gradient(135deg, rgba(255, 96, 137, 0.9), rgba(255, 221, 91, 0.9) 35%, rgba(91, 214, 151, 0.86) 66%, rgba(83, 155, 232, 0.9));
+  color: #12383b;
+}
+
+.library-card.theme-starry-sky,
+.card-stack .library-card.theme-starry-sky:first-of-type,
+.theme-showcase-card.theme-starry-sky,
+.composer-preview.theme-starry-sky,
+.custom-pack-card.theme-starry-sky {
+  --mood-ink: #fbf4ec;
+  --mood-muted: #d9cbbf;
+  --mood-accent: #f4c96d;
+  background: radial-gradient(circle at 22% 18%, rgba(255, 240, 190, 0.2), transparent 28%), linear-gradient(145deg, #19223d, #0e1529 68%, #080b16);
+  color: #fbf4ec;
+}
+
+.library-card.theme-pop-art .tile,
+.library-card.theme-rainbow .tile,
+.library-card.theme-soft-bloom .tile,
+.library-card.theme-paper-cut .tile {
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.library-card.theme-starry-sky .tile,
+.theme-showcase-card.theme-starry-sky .pack-button.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fbf4ec;
+}
+
+.library-card.theme-starry-sky .card-copy h3,
+.theme-showcase-card.theme-starry-sky h3,
+.theme-showcase-card.theme-starry-sky .eyebrow {
+  color: #fbf4ec;
+}
+
+.library-card.theme-starry-sky .badge {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fbf4ec;
+}
+
+.continue-safari-button img {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.continue-safari-button.raised {
+  bottom: calc(env(safe-area-inset-bottom) + 220px);
 }
 
 @media (min-width: 700px) {

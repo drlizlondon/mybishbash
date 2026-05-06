@@ -189,6 +189,14 @@ function openNativeApp(appUrl) {
   window.location.href = appUrl;
 }
 
+function getVersionOpenHref(version) {
+  if (!version) return "";
+  if (version.id === "safari" || version.type === "safari") {
+    return version.manualUrl || "x-safari-https://www.google.com";
+  }
+  return version.appUrl || version.manualUrl || "";
+}
+
 function getAppLauncherConfig(selectedVersionId, versions) {
   if (!selectedVersionId || selectedVersionId === NORMAL_LAUNCHER_CONTEXT || selectedVersionId === "bishbash") return null;
 
@@ -200,6 +208,8 @@ function getAppLauncherConfig(selectedVersionId, versions) {
     label: selected.realAppLabel,
     type: selected.id === "safari" ? "safari" : "native",
     appUrl: selected.appUrl,
+    manualUrl: selected.manualUrl,
+    iconSrc: selected.customIconSrc || selected.iconSrc,
   };
 }
 function openSafariEscape() {
@@ -581,9 +591,10 @@ function App() {
         : null,
     [homeScreenVersions, route.kind, route.versionId],
   );
+  const activeLauncherButtonContext = route.kind === "intercept" ? route.versionId : selectedHomeScreenVersion;
   const appLauncher = useMemo(
-    () => getAppLauncherConfig(launcherContext, homeScreenVersions),
-    [launcherContext, homeScreenVersions],
+    () => getAppLauncherConfig(activeLauncherButtonContext, homeScreenVersions),
+    [activeLauncherButtonContext, homeScreenVersions],
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
@@ -1703,32 +1714,27 @@ function App() {
       ) : null}
 
       {screen !== "onboarding" && appLauncher ? (
-        <AppLauncherButton version={appLauncher} />
+        <AppLauncherButton
+          version={appLauncher}
+          raised={Boolean(overlay) && overlay.type !== "custom-pack-preview" && overlay.type !== "intercept-pack"}
+        />
       ) : null}
     </>
   );
 }
 
-function AppLauncherButton({ version }) {
-  function handleOpen() {
-    if (version.type === "safari") {
-      openSafariEscape();
-      return;
-    }
-
-    openNativeApp(version.appUrl);
-  }
+function AppLauncherButton({ version, raised = false }) {
+  const href = getVersionOpenHref(version);
 
   return (
-    <button
-      type="button"
-      className="continue-safari-button"
-      onClick={handleOpen}
+    <a
+      className={`continue-safari-button ${raised ? "raised" : ""}`}
+      href={href}
       aria-label={`Open ${version.label}`}
     >
-      <SafariGlyph />
+      {version.iconSrc ? <img src={version.iconSrc} alt="" aria-hidden="true" /> : <SafariGlyph />}
       <span>{version.label}</span>
-    </button>
+    </a>
   );
 }
 
@@ -3271,7 +3277,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
     });
   }
 
-  function continueToApp() {
+  function handleContinueToApp() {
     if (!version) return;
     setShowFallbackLink(false);
     void onLogEvent({
@@ -3294,12 +3300,6 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
       },
     });
 
-    if (version.id === "safari") {
-      openSafariEscape();
-      return;
-    }
-
-    openNativeApp(version.appUrl);
     fallbackTimerRef.current = window.setTimeout(() => {
       if (document.visibilityState === "visible") {
         setShowFallbackLink(true);
@@ -3374,7 +3374,11 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
             onChooseElse();
           }}
         />
-        <ActionButton label={`Continue to ${version?.name ?? "app"}`} onClick={continueToApp} />
+        <ActionButton
+          label={`Continue to ${version?.name ?? "app"}`}
+          href={getVersionOpenHref(version)}
+          onClick={handleContinueToApp}
+        />
       </div>
       {showFallbackLink && version?.manualUrl ? (
         <p className="manual-open-copy">
@@ -3517,13 +3521,19 @@ function Onboarding({ onCreate }) {
   );
 }
 
-function ActionButton({ label, onClick, tone = "ghost" }) {
+function ActionButton({ label, onClick, tone = "ghost", href }) {
+  const className = `action-button ${tone}`;
+
+  if (href) {
+    return (
+      <a className={className} href={href} onClick={onClick}>
+        {label}
+      </a>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      className={`action-button ${tone}`}
-      onClick={onClick}
-    >
+    <button type="button" className={className} onClick={onClick}>
       {label}
     </button>
   );
