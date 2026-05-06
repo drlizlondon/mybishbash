@@ -1394,7 +1394,13 @@ function App() {
 
   const homeItems = useMemo(() => {
     const items = cards
-      .filter((card) => isEligible(card, new Date(), profile.timezone))
+      .filter((card) => {
+        const isPersonalCard = !card.sourcePackId;
+        if (isPersonalCard) {
+          return !card.disliked;
+        }
+        return isEligible(card, new Date(), profile.timezone);
+      })
       .map((card) => ({
         type: card.sourcePackId ? "library-card" : "single",
         id: card.id,
@@ -1454,8 +1460,20 @@ function App() {
     return count;
   }, [cards, profile.timezone]);
   const personalLibraryItems = useMemo(
-    () => homeItems.filter((item) => item.type === "single" && !item.representative.sourcePackId),
-    [homeItems],
+    () =>
+      cards
+        .filter((card) => !card.sourcePackId)
+        .map((card) => ({
+          type: "single",
+          id: card.id,
+          representative: card,
+        }))
+        .sort((left, right) => {
+          const leftCreated = new Date(left.representative.createdAt ?? 0).getTime();
+          const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
+          return rightCreated - leftCreated;
+        }),
+    [cards],
   );
   const recentMeaningfulEvents = useMemo(
     () => events.filter(isRecentMomentEvent).slice(0, 5),
@@ -1964,7 +1982,7 @@ function HomePanel({
                 <h3>{item.representative.promptText}</h3>
               </div>
               <div className="card-status">
-                <span className="badge">{status.badge}</span>
+                <span className={`badge ${status.badge}`}>{status.badge}</span>
               </div>
               <div className="menu-wrap">
                 <button
@@ -2148,7 +2166,7 @@ function HomeReminderCard({
         </div>
       </div>
       <h3>{getHomeCardTitle(item.representative)}</h3>
-      <span className={`reminder-status-pill ${status.badge === "done" ? "done" : ""}`}>{status.badge}</span>
+      <span className={`reminder-status-pill ${status.badge}`}>{status.badge}</span>
     </article>
   );
 }
@@ -2196,7 +2214,7 @@ function StandardLibraryPanel({
                 <h3>{item.representative.promptText}</h3>
               </div>
               <div className="card-status">
-                <span className="badge">{status.badge}</span>
+                <span className={`badge ${status.badge}`}>{status.badge}</span>
               </div>
               <div className="menu-wrap">
                 <button

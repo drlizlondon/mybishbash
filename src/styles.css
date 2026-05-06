@@ -3211,6 +3211,12 @@ body {
   text-transform: lowercase;
 }
 
+.badge.upcoming,
+.reminder-status-pill.upcoming {
+  background: #fff3df;
+  color: #9a5b20;
+}
+
 .reminder-status-pill.done {
   background: #f0f0f0;
   color: #6b6b6b;
@@ -3512,6 +3518,7 @@ body {
 
 .library-card.theme-minimal,
 .card-stack .library-card.theme-minimal:first-of-type,
+.theme-option.theme-minimal,
 .theme-showcase-card.theme-minimal,
 .composer-preview.theme-minimal,
 .custom-pack-card.theme-minimal {
@@ -3524,6 +3531,7 @@ body {
 
 .library-card.theme-pop-art,
 .card-stack .library-card.theme-pop-art:first-of-type,
+.theme-option.theme-pop-art,
 .theme-showcase-card.theme-pop-art,
 .composer-preview.theme-pop-art,
 .custom-pack-card.theme-pop-art {
@@ -3536,11 +3544,13 @@ body {
 
 .library-card.theme-soft-bloom,
 .card-stack .library-card.theme-soft-bloom:first-of-type,
+.theme-option.theme-soft-bloom,
 .theme-showcase-card.theme-soft-bloom,
 .composer-preview.theme-soft-bloom,
 .custom-pack-card.theme-soft-bloom,
 .library-card.theme-paper-cut,
 .card-stack .library-card.theme-paper-cut:first-of-type,
+.theme-option.theme-paper-cut,
 .theme-showcase-card.theme-paper-cut,
 .composer-preview.theme-paper-cut,
 .custom-pack-card.theme-paper-cut {
@@ -3553,6 +3563,7 @@ body {
 
 .library-card.theme-rainbow,
 .card-stack .library-card.theme-rainbow:first-of-type,
+.theme-option.theme-rainbow,
 .theme-showcase-card.theme-rainbow,
 .composer-preview.theme-rainbow,
 .custom-pack-card.theme-rainbow {
@@ -3565,6 +3576,7 @@ body {
 
 .library-card.theme-starry-sky,
 .card-stack .library-card.theme-starry-sky:first-of-type,
+.theme-option.theme-starry-sky,
 .theme-showcase-card.theme-starry-sky,
 .composer-preview.theme-starry-sky,
 .custom-pack-card.theme-starry-sky {
@@ -3590,6 +3602,7 @@ body {
 }
 
 .library-card.theme-starry-sky .card-copy h3,
+.theme-option.theme-starry-sky,
 .theme-showcase-card.theme-starry-sky h3,
 .theme-showcase-card.theme-starry-sky .eyebrow {
   color: #fbf4ec;

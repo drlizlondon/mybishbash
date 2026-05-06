@@ -415,7 +415,7 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
 
   if (!windows.includes(currentWindow)) {
     return {
-      badge: "ready",
+      badge: "upcoming",
       detail: `waits for ${formatWindowList(windows)}`,
     };
   }
