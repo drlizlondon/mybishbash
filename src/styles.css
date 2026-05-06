@@ -3237,6 +3237,12 @@ body {
   animation: menu-pop 140ms ease both;
 }
 
+.card-stack .library-card:first-of-type .menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform-origin: top right;
+}
+
 .menu button {
   background: transparent;
   color: #111111;
