@@ -29,7 +29,16 @@ import {
   getStartOfWeek,
   loadEventLog,
   persistEventRecord,
+  saveEventLog,
 } from "./eventLog";
+import {
+  clearConnectedProfileForTesting,
+  connectProfileBySyncCode,
+  createNewProfileWithState,
+  getConnectedProfile,
+  loadSharedState,
+  saveSharedState,
+} from "./lib/bishbashSync";
 import {
   PACKS,
   FREQUENCY_OPTIONS,
@@ -500,6 +509,61 @@ function buildInitialState() {
   };
 }
 
+function buildSharedState({
+  cards,
+  setupComplete,
+  mood,
+  profile,
+  homeScreenVersions,
+  selectedHomeScreenVersion,
+  cardPacks,
+  hiddenLibraryPacks,
+  dislikedPackCardIds,
+  globalInterruptionMode,
+  events,
+}) {
+  return {
+    version: 1,
+    cards,
+    setupComplete,
+    mood,
+    profile,
+    homeScreenVersions,
+    selectedHomeScreenVersion,
+    cardPacks,
+    hiddenLibraryPacks,
+    dislikedPackCardIds,
+    globalInterruptionMode,
+    events,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeSharedState(state, fallback) {
+  const source = state && typeof state === "object" ? state : {};
+  return {
+    cards: Array.isArray(source.cards) ? source.cards : fallback.cards,
+    setupComplete: typeof source.setupComplete === "boolean" ? source.setupComplete : fallback.setupComplete,
+    mood: resolveTheme(source.mood ?? fallback.mood),
+    profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
+    homeScreenVersions:
+      source.homeScreenVersions && typeof source.homeScreenVersions === "object"
+        ? source.homeScreenVersions
+        : fallback.homeScreenVersions,
+    selectedHomeScreenVersion: source.selectedHomeScreenVersion ?? fallback.selectedHomeScreenVersion,
+    cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
+    hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
+    dislikedPackCardIds: Array.isArray(source.dislikedPackCardIds)
+      ? source.dislikedPackCardIds
+      : fallback.dislikedPackCardIds,
+    globalInterruptionMode:
+      typeof source.globalInterruptionMode === "boolean"
+        ? source.globalInterruptionMode
+        : fallback.globalInterruptionMode,
+    events: Array.isArray(source.events) ? source.events : fallback.events,
+  };
+}
+
 function getHomeCardTitle(card) {
   return card.dashboardTitle ?? card.promptText?.trim() ?? "";
 }
@@ -617,6 +681,9 @@ function App() {
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
+  const [syncConnection, setSyncConnection] = useState(() => getConnectedProfile());
+  const [syncStatus, setSyncStatus] = useState(() => (getConnectedProfile() ? "loading" : "needs-connection"));
+  const [syncError, setSyncError] = useState("");
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(null);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
@@ -629,6 +696,8 @@ function App() {
   const [selectedPackDetail, setSelectedPackDetail] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
+  const isApplyingSharedStateRef = useRef(false);
+  const cloudSaveTimerRef = useRef(null);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
@@ -650,9 +719,125 @@ function App() {
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
+  const currentSharedState = useCallback(
+    () =>
+      buildSharedState({
+        cards,
+        setupComplete,
+        mood,
+        profile,
+        homeScreenVersions,
+        selectedHomeScreenVersion,
+        cardPacks,
+        hiddenLibraryPacks,
+        dislikedPackCardIds,
+        globalInterruptionMode,
+        events,
+      }),
+    [
+      cards,
+      setupComplete,
+      mood,
+      profile,
+      homeScreenVersions,
+      selectedHomeScreenVersion,
+      cardPacks,
+      hiddenLibraryPacks,
+      dislikedPackCardIds,
+      globalInterruptionMode,
+      events,
+    ],
+  );
+
+  const applySharedState = useCallback((incomingState) => {
+    const fallback = buildSharedState({
+      cards: initialState.cards,
+      setupComplete: initialState.setupComplete,
+      mood: initialState.mood,
+      profile: initialState.profile,
+      homeScreenVersions: initialState.homeScreenVersions,
+      selectedHomeScreenVersion,
+      cardPacks: initialState.cardPacks,
+      hiddenLibraryPacks: initialState.hiddenLibraryPacks,
+      dislikedPackCardIds: initialState.dislikedPackCardIds,
+      globalInterruptionMode: initialState.globalInterruptionMode,
+      events: initialState.events,
+    });
+    const next = normalizeSharedState(incomingState, fallback);
+
+    isApplyingSharedStateRef.current = true;
+    setCards(normalizeCards(next.cards, new Date(), next.profile.timezone).map((card) => ({
+      ...card,
+      theme: resolveTheme(card.theme),
+    })));
+    setSetupComplete(next.setupComplete);
+    setMood(resolveTheme(next.mood));
+    setProfile({
+      name: next.profile?.name ?? "",
+      timezone: next.profile?.timezone ?? "Europe/London",
+    });
+    setHomeScreenVersions(next.homeScreenVersions);
+    setSelectedHomeScreenVersion(next.selectedHomeScreenVersion);
+    setCardPacks(next.cardPacks);
+    setHiddenLibraryPacks(next.hiddenLibraryPacks);
+    setDislikedPackCardIds(next.dislikedPackCardIds);
+    setGlobalInterruptionMode(next.globalInterruptionMode);
+    setEvents(next.events);
+    setScreen(next.setupComplete ? "library" : "onboarding");
+    setRoutePath(getRouteFromLocation(next.setupComplete));
+    window.setTimeout(() => {
+      isApplyingSharedStateRef.current = false;
+    }, 0);
+  }, [initialState, selectedHomeScreenVersion]);
+
   useEffect(() => {
     saveCards(cards);
   }, [cards, homeScreenVersions, cardPacks]);
+
+  useEffect(() => {
+    if (!syncConnection?.profileId) return;
+
+    let cancelled = false;
+    setSyncStatus("loading");
+    setSyncError("");
+
+    loadSharedState(syncConnection.profileId)
+      .then((sharedState) => {
+        if (cancelled) return;
+        applySharedState(sharedState);
+        setSyncStatus("ready");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSyncError(error?.message ?? "Could not load your BishBash profile.");
+        setSyncStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [syncConnection?.profileId, applySharedState]);
+
+  useEffect(() => {
+    if (syncStatus !== "ready" || !syncConnection?.profileId || isApplyingSharedStateRef.current) return undefined;
+
+    if (cloudSaveTimerRef.current) {
+      window.clearTimeout(cloudSaveTimerRef.current);
+    }
+
+    cloudSaveTimerRef.current = window.setTimeout(() => {
+      saveSharedState(syncConnection.profileId, currentSharedState()).catch((error) => {
+        // TODO: queue offline saves instead of only preserving the local mirror.
+        console.warn("Could not save BishBash shared state", error);
+      });
+    }, 500);
+
+    return () => {
+      if (cloudSaveTimerRef.current) {
+        window.clearTimeout(cloudSaveTimerRef.current);
+      }
+    };
+  }, [syncStatus, syncConnection?.profileId, currentSharedState]);
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
@@ -689,6 +874,10 @@ function App() {
   useEffect(() => {
     saveHiddenLibraryPacks(hiddenLibraryPacks);
   }, [hiddenLibraryPacks]);
+
+  useEffect(() => {
+    saveEventLog(events);
+  }, [events]);
 
   useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
@@ -1333,9 +1522,13 @@ function App() {
   }
 
   function handleResetSharedState() {
-    const confirmed = window.confirm("Clear the shared BishBash state on this device?");
+    const confirmed = window.confirm("Clear local development state on this launcher/device? This will not delete the cloud profile.");
     if (!confirmed) return;
 
+    clearConnectedProfileForTesting();
+    setSyncConnection(null);
+    setSyncStatus("needs-connection");
+    setSyncError("");
     clearSharedBishBashState();
     setCards([]);
     setMood(resolveTheme("Minimal"));
@@ -1352,6 +1545,42 @@ function App() {
     setOverlay(null);
     setScreen("onboarding");
     navigateTo("/onboarding", { replace: true });
+  }
+
+  async function handleStartNewSyncProfile() {
+    setSyncStatus("loading");
+    setSyncError("");
+    try {
+      const created = await createNewProfileWithState(currentSharedState());
+      setSyncConnection({ profileId: created.profileId, syncCode: created.syncCode });
+      setSyncStatus("ready");
+    } catch (error) {
+      setSyncError(error?.message ?? "Could not create a new BishBash profile.");
+      setSyncStatus("needs-connection");
+    }
+  }
+
+  async function handleConnectSyncProfile(syncCode) {
+    setSyncStatus("loading");
+    setSyncError("");
+    try {
+      const connected = await connectProfileBySyncCode(syncCode);
+      setSyncConnection({ profileId: connected.profileId, syncCode: connected.syncCode });
+      applySharedState(connected.state);
+      setSyncStatus("ready");
+    } catch (error) {
+      setSyncError(error?.message ?? "Could not connect that BishBash profile.");
+      setSyncStatus("needs-connection");
+    }
+  }
+
+  function handleDisconnectSyncProfile() {
+    const confirmed = window.confirm("Disconnect this launcher/device from the current BishBash profile?");
+    if (!confirmed) return;
+    clearConnectedProfileForTesting();
+    setSyncConnection(null);
+    setSyncStatus("needs-connection");
+    setSyncError("");
   }
 
   function handleSaveCustomPack(packData) {
@@ -1573,6 +1802,33 @@ function App() {
     [homeScreenVersions, cardPacks, dislikedPackCardIds, globalInterruptionMode],
   );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
+
+  if (syncStatus === "loading") {
+    return <SyncConnectionScreen mode="loading" error={syncError} />;
+  }
+
+  if (syncStatus === "error") {
+    return (
+      <SyncConnectionScreen
+        mode="error"
+        error={syncError}
+        onStartNew={handleStartNewSyncProfile}
+        onConnect={handleConnectSyncProfile}
+      />
+    );
+  }
+
+  if (syncStatus === "needs-connection") {
+    return (
+      <SyncConnectionScreen
+        mode="connect"
+        error={syncError}
+        onStartNew={handleStartNewSyncProfile}
+        onConnect={handleConnectSyncProfile}
+      />
+    );
+  }
+
   return (
     <>
       <div className="grain" />
@@ -1650,6 +1906,8 @@ function App() {
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
                   globalInterruptionMode={globalInterruptionMode}
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
+                  syncConnection={syncConnection}
+                  onDisconnectSyncProfile={handleDisconnectSyncProfile}
                   onResetSharedState={handleResetSharedState}
                 />
               ) : null}
@@ -2860,6 +3118,58 @@ function PackDetailModal({
   );
 }
 
+function SyncConnectionScreen({ mode, error, onStartNew, onConnect }) {
+  const [syncCode, setSyncCode] = useState("");
+  const [showConnect, setShowConnect] = useState(false);
+
+  function submitExisting(event) {
+    event.preventDefault();
+    if (!syncCode.trim()) return;
+    onConnect(syncCode);
+  }
+
+  return (
+    <main className="sync-screen">
+      <section className="sync-card">
+        <span className="sync-heart" aria-hidden="true">
+          <HeartGlyph />
+        </span>
+        <h1>BishBash</h1>
+        {mode === "loading" ? (
+          <p>Loading your shared BishBash...</p>
+        ) : (
+          <>
+            <p>Connect this launcher to your shared BishBash profile.</p>
+            {error ? <p className="sync-error">{error}</p> : null}
+            <button type="button" className="pack-button" onClick={onStartNew}>
+              Start new BishBash
+            </button>
+            <button type="button" className="pack-button secondary" onClick={() => setShowConnect((current) => !current)}>
+              I already have a BishBash
+            </button>
+            {showConnect || mode === "error" ? (
+              <form className="sync-form" onSubmit={submitExisting}>
+                <label className="field">
+                  <span>Sync code</span>
+                  <input
+                    className="settings-input"
+                    value={syncCode}
+                    onChange={(event) => setSyncCode(event.target.value.toUpperCase())}
+                    placeholder="BISH-7K2M-PQ9A"
+                  />
+                </label>
+                <button type="submit" className="save-button">
+                  Connect BishBash
+                </button>
+              </form>
+            ) : null}
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
 function SettingsPanel({
   mood,
   onSelectMood,
@@ -2869,6 +3179,8 @@ function SettingsPanel({
   onUpdateHomeScreenIcon,
   globalInterruptionMode,
   onSetGlobalInterruptionMode,
+  syncConnection,
+  onDisconnectSyncProfile,
   onResetSharedState,
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -3015,13 +3327,37 @@ function SettingsPanel({
           })}
         </div>
       </div>
+      <div className="settings-card settings-compact">
+        <div className="settings-version-heading">
+          <p>Sync profile</p>
+          <span>Use this code to connect another home-screen version or another device.</span>
+        </div>
+        <div className="sync-profile-row">
+          <strong>{syncConnection?.syncCode ?? "Not connected"}</strong>
+          <button
+            type="button"
+            className="pack-button secondary"
+            onClick={() => {
+              if (syncConnection?.syncCode) {
+                void navigator.clipboard?.writeText(syncConnection.syncCode);
+              }
+            }}
+            disabled={!syncConnection?.syncCode}
+          >
+            Copy sync code
+          </button>
+          <button type="button" className="pack-button secondary" onClick={onDisconnectSyncProfile}>
+            Connect another BishBash
+          </button>
+        </div>
+      </div>
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Development reset</p>
-          <span>Clear the one shared local BishBash state on this device for testing.</span>
+          <span>Clear local development state on this launcher/device. This does not delete the cloud profile.</span>
         </div>
         <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
-          Clear shared BishBash state
+          Clear local development state
         </button>
       </div>
     </section>

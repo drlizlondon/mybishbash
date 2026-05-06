@@ -3710,6 +3710,52 @@ body {
   bottom: calc(env(safe-area-inset-bottom) + 220px);
 }
 
+.sync-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f7f4ef;
+}
+
+.sync-card {
+  width: min(100%, 430px);
+  display: grid;
+  gap: 16px;
+  padding: 28px 22px;
+  border: 1px solid #eeeae4;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  text-align: center;
+}
+
+.sync-card h1,
+.sync-card p {
+  margin: 0;
+}
+
+.sync-heart {
+  width: 26px;
+  margin: 0 auto;
+  color: #e76f51;
+}
+
+.sync-error {
+  color: #9a5145;
+}
+
+.sync-form,
+.sync-profile-row {
+  display: grid;
+  gap: 12px;
+}
+
+.sync-profile-row strong {
+  color: var(--mood-ink, #111111);
+  letter-spacing: 0.08em;
+}
+
 @media (min-width: 700px) {
   .hero {
     min-height: 58px;
