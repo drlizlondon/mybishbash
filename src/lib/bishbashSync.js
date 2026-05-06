@@ -60,6 +60,10 @@ export function getSyncErrorMessage(error, fallback = "Could not sync your BishB
     return "Supabase is connected, but the BishBash tables are not installed yet. Apply the SQL migration, then try again.";
   }
 
+  if (error?.code === "42501" || /permission denied/i.test(error?.message ?? "")) {
+    return "Supabase is connected, but BishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
+  }
+
   if (error?.message) return error.message;
   return fallback;
 }
