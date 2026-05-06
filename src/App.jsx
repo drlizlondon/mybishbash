@@ -56,6 +56,7 @@ function resolveTheme(theme) {
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const NORMAL_LAUNCHER_CONTEXT = "normal";
 const INTERRUPTION_LAUNCHER_CONTEXTS = ["safari", "youtube", "instagram"];
+const INTERRUPTION_CARD_COOLDOWN_MS = 10 * 60 * 1000;
 
 const DEFAULT_INTERRUPTION_PACKS = {
   safari: {
@@ -383,6 +384,31 @@ function isInterruptionSummaryEvent(event) {
   return ["intercept_do_something_else", "intercept_continue_to_app"].includes(event.event_type);
 }
 
+function getRecentInterruptionCardKeys(events, packId, date = new Date()) {
+  const cutoff = date.getTime() - INTERRUPTION_CARD_COOLDOWN_MS;
+  return new Set(
+    events
+      .filter((event) => {
+        if (event.pack_id !== packId) return false;
+        if (event.card_source !== "interruption" && event.source_type !== "interruption") return false;
+        return new Date(event.created_at).getTime() > cutoff;
+      })
+      .flatMap((event) => [event.card_id, event.message_id].filter(Boolean)),
+  );
+}
+
+function pickInterruptionCardIndex(pack, events, date = new Date()) {
+  const cards = pack?.cards ?? [];
+  if (cards.length === 0) return 0;
+
+  const recentKeys = getRecentInterruptionCardKeys(events, pack.id, date);
+  const available = cards
+    .map((card, index) => ({ card, index }))
+    .filter(({ card, index }) => !recentKeys.has(card.id) && !recentKeys.has(`${pack.id}:${index}`));
+  const candidates = available.length > 0 ? available : cards.map((card, index) => ({ card, index }));
+  return candidates[Math.floor(Math.random() * candidates.length)]?.index ?? 0;
+}
+
 function pickRandomHomeCardForDisplay(
   currentCards,
   timezone,
@@ -391,6 +417,7 @@ function pickRandomHomeCardForDisplay(
   customPacks,
   hiddenCardIds,
   globalInterruptionMode,
+  events,
 ) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, customPacks, {
@@ -418,14 +445,19 @@ function pickRandomHomeCardForDisplay(
   const candidates = [...singles];
 
   if (interruptionPack) {
-    candidates.push({
-      type: "interruption",
-      pack: interruptionPack,
-      versionId: launcherContext,
-    });
-  } else {
-    candidates.push(...packs);
+    return {
+      normalized,
+      selected: null,
+      interruption: {
+        type: "interruption",
+        pack: interruptionPack,
+        versionId: launcherContext,
+        activeIndex: pickInterruptionCardIndex(interruptionPack, events),
+      },
+    };
   }
+
+  candidates.push(...packs);
 
   if (candidates.length === 0) {
     return { normalized, selected: null };
@@ -477,6 +509,21 @@ function getPackRepresentative(cards, packId) {
   return packCards.find((card) => !card.paused && !card.disliked) ?? null;
 }
 
+function buildLibraryPackHomeItem(packId, packCards) {
+  const representative = packCards[0];
+  return {
+    type: "pack",
+    id: packId,
+    representative: {
+      ...representative,
+      id: packId,
+      promptText: representative.dashboardTitle ?? representative.promptText,
+      dashboardTitle: representative.dashboardTitle ?? representative.promptText,
+      frequency: "multi_daily",
+    },
+  };
+}
+
 function resolveVersionConfig(version) {
   return {
     launchPath: "/home",
@@ -513,11 +560,11 @@ function buildInterruptionHomeItem(version, pack) {
     representative: {
       id: `interruption:${version.id}`,
       dashboardTitle: pack.name,
-      promptText: pack.cards?.[0]?.text ?? pack.messages?.[0] ?? `${version.name} interruptions`,
+      promptText: pack.name ?? `${version.name} interruptions`,
       theme: "Minimal",
       icon,
       paused: Boolean(version.interruptionPaused),
-      timingWindows: ["morning", "day", "evening"],
+      timingWindows: ["morning", "day", "evening", "night"],
       frequency: "multi_daily",
       createdAt: "",
     },
@@ -762,7 +809,7 @@ function App() {
       setScreen("interception");
       setOverlay(
         pack?.messages?.length
-          ? { ...buildCustomPackOverlay(pack, 0, "intercept-pack"), versionId: route.versionId }
+          ? { ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"), versionId: route.versionId }
           : { type: "empty", message: "No interruption cards available." },
       );
       return;
@@ -803,10 +850,14 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
+        events,
       );
       setShouldLaunchOverlay(false);
       if (interruption) {
-        setOverlay({ ...buildCustomPackOverlay(interruption.pack, 0, "intercept-pack"), versionId: interruption.versionId });
+        setOverlay({
+          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
+          versionId: interruption.versionId,
+        });
         return;
       }
       if (selected) {
@@ -826,7 +877,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode]);
+  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -971,7 +1022,7 @@ function App() {
   }
 
   function handleDeleteCard(cardId) {
-    updateCards((current) => current.filter((card) => card.id !== cardId));
+    updateCards((current) => current.filter((card) => card.id !== cardId && card.sourcePackId !== cardId));
     setMenuOpenId(null);
   }
 
@@ -1226,14 +1277,15 @@ function App() {
     setMenuOpenId(null);
   }
 
-  function openInterruptionHomeReveal(versionId, cardIndex = 0) {
+  function openInterruptionHomeReveal(versionId, cardIndex = null) {
     const version = resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]);
     const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, cardPacks, {
       hiddenCardIds: dislikedPackCardIds,
       globalEnabled: globalInterruptionMode,
     });
     if (version.interruptionPaused || !pack || pack.messages.length === 0) return;
-    setOverlay({ ...buildCustomPackOverlay(pack, cardIndex, "intercept-pack"), versionId });
+    const activeIndex = typeof cardIndex === "number" ? cardIndex : pickInterruptionCardIndex(pack, events);
+    setOverlay({ ...buildCustomPackOverlay(pack, activeIndex, "intercept-pack"), versionId });
   }
 
   function handleSelectHomeScreenVersion(versionId) {
@@ -1394,18 +1446,25 @@ function App() {
 
   const homeItems = useMemo(() => {
     const items = cards
-      .filter((card) => {
-        const isPersonalCard = !card.sourcePackId;
-        if (isPersonalCard) {
-          return !card.disliked;
-        }
-        return isEligible(card, new Date(), profile.timezone);
-      })
+      .filter((card) => !card.sourcePackId && !card.disliked)
       .map((card) => ({
-        type: card.sourcePackId ? "library-card" : "single",
+        type: "single",
         id: card.id,
         representative: card,
       }));
+
+    const packMap = new Map();
+    cards.forEach((card) => {
+      if (!card.sourcePackId || !isEligible(card, new Date(), profile.timezone)) return;
+      if (!packMap.has(card.sourcePackId)) {
+        packMap.set(card.sourcePackId, []);
+      }
+      packMap.get(card.sourcePackId).push(card);
+    });
+
+    packMap.forEach((packCards, packId) => {
+      items.push(buildLibraryPackHomeItem(packId, packCards));
+    });
 
     Object.values(homeScreenVersions).forEach((version) => {
       if (version.id === "bishbash" || launcherContext === NORMAL_LAUNCHER_CONTEXT) return;
@@ -1417,12 +1476,14 @@ function App() {
       });
       if (!pack || pack.messages.length === 0) return;
 
-      pack.cards.forEach((card, index) => {
-        items.push(buildInterruptionCardHomeItem(resolvedVersion, pack, card, index));
-      });
+      items.unshift(buildInterruptionHomeItem(resolvedVersion, pack));
     });
 
     return items.sort((left, right) => {
+      const leftInterruption = left.type === "interruption-version" || left.type === "interruption-card";
+      const rightInterruption = right.type === "interruption-version" || right.type === "interruption-card";
+      if (leftInterruption !== rightInterruption) return leftInterruption ? -1 : 1;
+
       const leftRank = getHomeSortRank(left.representative);
       const rightRank = getHomeSortRank(right.representative);
 
@@ -1533,6 +1594,7 @@ function App() {
                   menuOpenId={menuOpenId}
                   setMenuOpenId={setMenuOpenId}
                   openSpecificReveal={openSpecificReveal}
+                  openPackReveal={openPackReveal}
                   openInterruptionHomeReveal={openInterruptionHomeReveal}
                   openEditor={openEditor}
                   handleResetItem={handleResetItem}
@@ -1926,6 +1988,7 @@ function HomePanel({
   menuOpenId,
   setMenuOpenId,
   openSpecificReveal,
+  openPackReveal,
   openInterruptionHomeReveal,
   openEditor,
   handleResetItem,
@@ -1954,8 +2017,12 @@ function HomePanel({
         {reminderItems.map((item) => {
           const status = getStatusMeta(item.representative, new Date(), timezone);
           function openItem() {
-            if (item.type === "interruption-card") {
-              openInterruptionHomeReveal(item.versionId, item.cardIndex);
+            if (item.type === "interruption-card" || item.type === "interruption-version") {
+              openInterruptionHomeReveal(item.versionId, item.cardIndex ?? null);
+              return;
+            }
+            if (item.type === "pack") {
+              openPackReveal(item.id);
               return;
             }
             openSpecificReveal(item.id);
@@ -2002,25 +2069,29 @@ function HomePanel({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-card") {
-                          openInterruptionHomeReveal(item.versionId, item.cardIndex);
+                        if (item.type === "interruption-card" || item.type === "interruption-version") {
+                          openInterruptionHomeReveal(item.versionId, item.cardIndex ?? null);
+                          return;
+                        }
+                        if (item.type === "pack") {
+                          openPackReveal(item.id);
                           return;
                         }
                         openEditor(item.id);
                       }}
                     >
-                      {item.type === "interruption-card" ? "Open card" : "Edit"}
+                      {item.type === "interruption-card" || item.type === "interruption-version" || item.type === "pack" ? "Open card" : "Edit"}
                     </button>
                     <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-card") {
+                        if (item.type === "interruption-card" || item.type === "interruption-version") {
                           return;
                         }
                         handleResetItem(item);
                       }}
-                      disabled={item.type === "interruption-card"}
+                      disabled={item.type === "interruption-card" || item.type === "interruption-version"}
                     >
                       Reset for today
                     </button>
@@ -2028,12 +2099,12 @@ function HomePanel({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-card") {
+                        if (item.type === "interruption-card" || item.type === "interruption-version") {
                           return;
                         }
                         handleTogglePause(item);
                       }}
-                      disabled={item.type === "interruption-card"}
+                      disabled={item.type === "interruption-card" || item.type === "interruption-version"}
                     >
                       {item.representative.paused ? "Unpause" : "Pause"}
                     </button>
@@ -2042,12 +2113,12 @@ function HomePanel({
                       className="danger-soft"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (item.type === "interruption-card") {
+                        if (item.type === "interruption-card" || item.type === "interruption-version") {
                           return;
                         }
                         handleDeleteCard(item.id);
                       }}
-                      disabled={item.type === "interruption-card"}
+                      disabled={item.type === "interruption-card" || item.type === "interruption-version"}
                     >
                       Delete
                     </button>
