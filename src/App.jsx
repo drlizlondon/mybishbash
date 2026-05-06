@@ -576,14 +576,16 @@ function getPackRepresentative(cards, packId) {
 
 function buildLibraryPackHomeItem(packId, packCards) {
   const representative = packCards[0];
+  const pack = PACKS.find((item) => item.id === packId);
+  const packTitle = pack?.title ?? representative.dashboardTitle ?? representative.promptText;
   return {
     type: "pack",
     id: packId,
     representative: {
       ...representative,
       id: packId,
-      promptText: representative.dashboardTitle ?? representative.promptText,
-      dashboardTitle: representative.dashboardTitle ?? representative.promptText,
+      promptText: packTitle,
+      dashboardTitle: packTitle,
       frequency: "multi_daily",
     },
   };
