@@ -50,9 +50,18 @@ export function clearConnectedProfileForTesting() {
 
 function requireSupabase() {
   if (!supabase) {
-    throw new Error("Supabase is not configured. Add VITE_SUPABASE_ANON_KEY to the environment.");
+    throw new Error("Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the environment.");
   }
   return supabase;
+}
+
+export function getSyncErrorMessage(error, fallback = "Could not sync your BishBash profile.") {
+  if (error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "")) {
+    return "Supabase is connected, but the BishBash tables are not installed yet. Apply the SQL migration, then try again.";
+  }
+
+  if (error?.message) return error.message;
+  return fallback;
 }
 
 export async function loadSharedState(profileId) {

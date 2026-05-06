@@ -36,6 +36,7 @@ import {
   connectProfileBySyncCode,
   createNewProfileWithState,
   getConnectedProfile,
+  getSyncErrorMessage,
   loadSharedState,
   saveSharedState,
 } from "./lib/bishbashSync";
@@ -809,7 +810,7 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
-        setSyncError(error?.message ?? "Could not load your BishBash profile.");
+        setSyncError(getSyncErrorMessage(error, "Could not load your BishBash profile."));
         setSyncStatus("error");
       });
 
@@ -1555,7 +1556,7 @@ function App() {
       setSyncConnection({ profileId: created.profileId, syncCode: created.syncCode });
       setSyncStatus("ready");
     } catch (error) {
-      setSyncError(error?.message ?? "Could not create a new BishBash profile.");
+      setSyncError(getSyncErrorMessage(error, "Could not create a new BishBash profile."));
       setSyncStatus("needs-connection");
     }
   }
@@ -1569,7 +1570,7 @@ function App() {
       applySharedState(connected.state);
       setSyncStatus("ready");
     } catch (error) {
-      setSyncError(error?.message ?? "Could not connect that BishBash profile.");
+      setSyncError(getSyncErrorMessage(error, "Could not connect that BishBash profile."));
       setSyncStatus("needs-connection");
     }
   }
