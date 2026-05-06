@@ -3613,6 +3613,85 @@ body {
   color: #fbf4ec;
 }
 
+.app-shell.app-mood.theme-minimal {
+  --mood-ink: #282522;
+  --mood-muted: #645a53;
+  --mood-accent: #b75f4e;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(235, 229, 220, 0.9));
+  color: #282522;
+}
+
+.app-shell.app-mood.theme-pop-art {
+  --mood-ink: #351814;
+  --mood-muted: #743228;
+  --mood-accent: #d7352a;
+  background: linear-gradient(180deg, rgba(255, 244, 92, 0.34), rgba(255, 132, 77, 0.3) 48%, rgba(68, 188, 210, 0.26));
+  color: #351814;
+}
+
+.app-shell.app-mood.theme-soft-bloom,
+.app-shell.app-mood.theme-paper-cut {
+  --mood-ink: #263128;
+  --mood-muted: #586355;
+  --mood-accent: #b95d73;
+  background: linear-gradient(180deg, rgba(255, 244, 249, 0.94), rgba(219, 236, 220, 0.86) 58%, rgba(241, 211, 220, 0.78));
+  color: #263128;
+}
+
+.app-shell.app-mood.theme-rainbow {
+  --mood-ink: #12383b;
+  --mood-muted: #315b5f;
+  --mood-accent: #196f91;
+  background: linear-gradient(180deg, rgba(255, 96, 137, 0.24), rgba(255, 221, 91, 0.26) 34%, rgba(91, 214, 151, 0.24) 66%, rgba(83, 155, 232, 0.28));
+  color: #12383b;
+}
+
+.app-shell.app-mood.theme-starry-sky {
+  --mood-ink: #fbf4ec;
+  --mood-muted: #d9cbbf;
+  --mood-accent: #f4c96d;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(244, 201, 109, 0.16), transparent 28%),
+    linear-gradient(180deg, rgba(36, 43, 75, 0.98), rgba(14, 18, 31, 0.98));
+  color: #fbf4ec;
+}
+
+.app-shell.app-mood .section-heading h2,
+.app-shell.app-mood .panel-section h2,
+.app-shell.app-mood .log-header h2,
+.app-shell.app-mood .settings-version-heading p,
+.app-shell.app-mood .recent-moments-card h3 {
+  color: var(--mood-ink);
+}
+
+.app-shell.app-mood .section-heading p,
+.app-shell.app-mood .panel-section p,
+.app-shell.app-mood .settings-version-heading span,
+.app-shell.app-mood .caught-up-copy {
+  color: var(--mood-muted);
+}
+
+.app-shell.app-mood.theme-starry-sky .hero-mark,
+.app-shell.app-mood.theme-starry-sky .nav-item.active,
+.app-shell.app-mood.theme-starry-sky .icon-illustration,
+.app-shell.app-mood.theme-starry-sky .mini-glyph {
+  color: #f4c96d;
+}
+
+.app-shell.app-mood.theme-starry-sky .settings-card,
+.app-shell.app-mood.theme-starry-sky .recent-moments-card,
+.app-shell.app-mood.theme-starry-sky .home-screen-version-card,
+.app-shell.app-mood.theme-starry-sky .packs-list-card {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fbf4ec;
+}
+
+.app-shell.app-mood.theme-starry-sky .bottom-nav,
+.app-shell.app-mood.theme-starry-sky .continue-safari-button {
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .continue-safari-button img {
   width: 22px;
   height: 22px;
