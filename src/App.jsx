@@ -208,21 +208,6 @@ function getVersionOpenHref(version) {
   return version.appUrl || version.manualUrl || "";
 }
 
-function getAppLauncherConfig(selectedVersionId, versions) {
-  if (!selectedVersionId || selectedVersionId === NORMAL_LAUNCHER_CONTEXT || selectedVersionId === "bishbash") return null;
-
-  const selected = versions[selectedVersionId];
-  if (!selected?.realAppLabel) return null;
-
-  return {
-    id: selected.id,
-    label: selected.realAppLabel,
-    type: selected.id === "safari" ? "safari" : "native",
-    appUrl: selected.appUrl,
-    manualUrl: selected.manualUrl,
-    iconSrc: selected.customIconSrc || selected.iconSrc,
-  };
-}
 function openSafariEscape() {
   window.location.href = "x-safari-https://www.google.com";
 }
@@ -542,16 +527,45 @@ function buildSharedState({
 
 function normalizeSharedState(state, fallback) {
   const source = state && typeof state === "object" ? state : {};
+  const mergedHomeScreenVersions = Object.fromEntries(
+    Object.entries(DEFAULT_HOME_SCREEN_VERSIONS).map(([id, defaults]) => {
+      const sourceVersion =
+        source.homeScreenVersions && typeof source.homeScreenVersions === "object"
+          ? source.homeScreenVersions[id]
+          : null;
+      const fallbackVersion = fallback.homeScreenVersions?.[id] ?? {};
+      const merged = resolveVersionConfig({
+        ...defaults,
+        ...fallbackVersion,
+        ...(sourceVersion && typeof sourceVersion === "object" ? sourceVersion : {}),
+      });
+
+      return [
+        id,
+        {
+          ...merged,
+          // Keep launcher identity and install routes immutable.
+          id: defaults.id,
+          name: defaults.name,
+          installPath: defaults.installPath,
+          launchPath: defaults.launchPath,
+          iconSrc: defaults.iconSrc,
+        },
+      ];
+    }),
+  );
+  const selectedHomeScreenVersion =
+    typeof source.selectedHomeScreenVersion === "string" && mergedHomeScreenVersions[source.selectedHomeScreenVersion]
+      ? source.selectedHomeScreenVersion
+      : fallback.selectedHomeScreenVersion;
+
   return {
     cards: Array.isArray(source.cards) ? source.cards : fallback.cards,
     setupComplete: typeof source.setupComplete === "boolean" ? source.setupComplete : fallback.setupComplete,
     mood: resolveTheme(source.mood ?? fallback.mood),
     profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
-    homeScreenVersions:
-      source.homeScreenVersions && typeof source.homeScreenVersions === "object"
-        ? source.homeScreenVersions
-        : fallback.homeScreenVersions,
-    selectedHomeScreenVersion: source.selectedHomeScreenVersion ?? fallback.selectedHomeScreenVersion,
+    homeScreenVersions: mergedHomeScreenVersions,
+    selectedHomeScreenVersion,
     cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
     hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
     dislikedPackCardIds: Array.isArray(source.dislikedPackCardIds)
@@ -710,10 +724,12 @@ function App() {
         : null,
     [homeScreenVersions, route.kind, route.versionId],
   );
-  const activeLauncherButtonContext = route.kind === "intercept" ? route.versionId : selectedHomeScreenVersion;
-  const appLauncher = useMemo(
-    () => getAppLauncherConfig(activeLauncherButtonContext, homeScreenVersions),
-    [activeLauncherButtonContext, homeScreenVersions],
+  const fakeLauncherVersions = useMemo(
+    () =>
+      INTERRUPTION_LAUNCHER_CONTEXTS.map((versionId) =>
+        resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]),
+      ).filter((version) => Boolean(version?.realAppLabel)),
+    [homeScreenVersions],
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
@@ -2054,9 +2070,9 @@ function App() {
         />
       ) : null}
 
-      {screen !== "onboarding" && appLauncher ? (
-        <AppLauncherButton
-          version={appLauncher}
+      {screen !== "onboarding" && fakeLauncherVersions.length > 0 ? (
+        <FakeAppLauncherBar
+          versions={fakeLauncherVersions}
           raised={Boolean(overlay) && overlay.type !== "custom-pack-preview" && overlay.type !== "intercept-pack"}
         />
       ) : null}
@@ -2064,18 +2080,25 @@ function App() {
   );
 }
 
-function AppLauncherButton({ version, raised = false }) {
-  const href = getVersionOpenHref(version);
-
+function FakeAppLauncherBar({ versions, raised = false }) {
   return (
-    <a
-      className={`continue-safari-button ${raised ? "raised" : ""}`}
-      href={href}
-      aria-label={`Open ${version.label}`}
-    >
-      {version.iconSrc ? <img src={version.iconSrc} alt="" aria-hidden="true" /> : <SafariGlyph />}
-      <span>{version.label}</span>
-    </a>
+    <div className={`fake-launcher-bar ${raised ? "raised" : ""}`} aria-label="Fake app launchers">
+      {versions.map((version) => (
+        <a
+          key={version.id}
+          className="fake-launcher-button"
+          href={getVersionOpenHref(version)}
+          aria-label={`Open ${version.realAppLabel}`}
+        >
+          {version.customIconSrc || version.iconSrc ? (
+            <img src={version.customIconSrc || version.iconSrc} alt="" aria-hidden="true" />
+          ) : (
+            <SafariGlyph />
+          )}
+          <span>{version.realAppLabel}</span>
+        </a>
+      ))}
+    </div>
   );
 }
 
@@ -3264,7 +3287,8 @@ function SettingsPanel({
         <div className="home-screen-version-list">
           {Object.values(homeScreenVersions).map((version) => {
             const previewIcon = version.customIconSrc || version.iconSrc;
-            const installUrl = getInstallUrl(version.installPath);
+            const installPath = DEFAULT_HOME_SCREEN_VERSIONS[version.id]?.installPath || version.installPath;
+            const installUrl = getInstallUrl(installPath);
             const isStandardVersion = version.id === "bishbash";
 
             return (
@@ -3300,7 +3324,11 @@ function SettingsPanel({
                   <button
                     type="button"
                     className={`pack-button ${selectedHomeScreenVersion === version.id ? "secondary" : ""}`}
-                    onClick={() => onSelectHomeScreenVersion(version.id)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onSelectHomeScreenVersion(version.id);
+                    }}
                   >
                     {selectedHomeScreenVersion === version.id ? "Using this version" : "Use this version"}
                   </button>

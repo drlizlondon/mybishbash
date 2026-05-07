@@ -151,6 +151,10 @@ export function loadHomeScreenVersions() {
             id,
             {
               ...merged,
+              id: defaults.id,
+              name: defaults.name,
+              installPath: defaults.installPath,
+              launchPath: defaults.launchPath,
               iconSrc: defaults.iconSrc,
               customIconSrc: "",
               realAppLabel: "",
@@ -167,6 +171,11 @@ export function loadHomeScreenVersions() {
             id,
             {
               ...merged,
+              id: defaults.id,
+              name: defaults.name,
+              installPath: defaults.installPath,
+              launchPath: defaults.launchPath,
+              iconSrc: defaults.iconSrc,
               appUrl: "",
               manualUrl: "x-safari-https://www.google.com",
               useInterruptionPack:
@@ -180,6 +189,11 @@ export function loadHomeScreenVersions() {
           id,
           {
             ...merged,
+            id: defaults.id,
+            name: defaults.name,
+            installPath: defaults.installPath,
+            launchPath: defaults.launchPath,
+            iconSrc: defaults.iconSrc,
             useInterruptionPack:
               typeof merged.useInterruptionPack === "boolean"
                 ? merged.useInterruptionPack
