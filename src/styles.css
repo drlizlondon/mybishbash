@@ -2483,6 +2483,38 @@ textarea {
   font-weight: 500;
 }
 
+.fake-launcher-bar {
+  position: fixed;
+  right: 18px;
+  bottom: calc(env(safe-area-inset-bottom) + 94px);
+  z-index: 100001;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fake-launcher-button {
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 999px;
+  padding: 0 12px 0 10px;
+  background: rgba(255, 251, 248, 0.78);
+  color: var(--ink-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  box-shadow:
+    0 10px 24px rgba(114, 79, 65, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(16px);
+}
+
+.fake-launcher-button span {
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
 .safari-glyph {
   width: 18px;
   height: 18px;
@@ -3482,6 +3514,14 @@ body {
   backdrop-filter: none;
 }
 
+.fake-launcher-button {
+  background: #ffffff;
+  border: 1px solid #eeeae4;
+  color: #111111;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  backdrop-filter: none;
+}
+
 .overlay-screen {
   background: #f7f4ef;
 }
@@ -3694,11 +3734,13 @@ body {
 }
 
 .app-shell.app-mood.theme-starry-sky .bottom-nav,
-.app-shell.app-mood.theme-starry-sky .continue-safari-button {
+.app-shell.app-mood.theme-starry-sky .continue-safari-button,
+.app-shell.app-mood.theme-starry-sky .fake-launcher-button {
   background: rgba(255, 255, 255, 0.9);
 }
 
-.continue-safari-button img {
+.continue-safari-button img,
+.fake-launcher-button img {
   width: 22px;
   height: 22px;
   border-radius: 7px;
@@ -3706,7 +3748,8 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.continue-safari-button.raised {
+.continue-safari-button.raised,
+.fake-launcher-bar.raised {
   bottom: calc(env(safe-area-inset-bottom) + 220px);
 }
 
