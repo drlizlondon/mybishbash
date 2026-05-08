@@ -534,7 +534,7 @@ function buildSharedState({
 
 function normalizeSharedState(state, fallback) {
   const source = state && typeof state === "object" ? state : {};
-  
+
   let normalizedBehavior = fallback.launcherBehaviorSettings;
   if (source.launcherBehaviorSettings && typeof source.launcherBehaviorSettings === "object") {
     normalizedBehavior = source.launcherBehaviorSettings;
@@ -566,6 +566,39 @@ function normalizeSharedState(state, fallback) {
         : fallback.globalInterruptionMode,
     events: Array.isArray(source.events) ? source.events : fallback.events,
   };
+}
+
+function mergeEntitiesById(local = [], incoming = []) {
+  const map = new Map();
+
+  if (Array.isArray(incoming)) {
+    incoming.forEach((item) => {
+      if (item?.id) map.set(item.id, item);
+    });
+  }
+
+  if (Array.isArray(local)) {
+    local.forEach((item) => {
+      if (item?.id) {
+        const existing = map.get(item.id);
+        if (existing) {
+          const incomingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+          const localTime = item.updatedAt ? new Date(item.updatedAt).getTime() : 0;
+
+          if (incomingTime > localTime && incomingTime > 0) {
+            // Keep incoming (already in map)
+          } else {
+            // Prefer local for conflicts to avoid losing offline edits
+            map.set(item.id, item);
+          }
+        } else {
+          map.set(item.id, item);
+        }
+      }
+    });
+  }
+
+  return Array.from(map.values());
 }
 
 function getHomeCardTitle(card) {
@@ -710,6 +743,7 @@ function App() {
   const transitionTimerRef = useRef(null);
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
+  const lastCloudStateStrRef = useRef(null);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
@@ -768,6 +802,9 @@ function App() {
   );
 
   const applySharedState = useCallback((incomingState) => {
+    const { updatedAt, ...incomingStateContent } = incomingState || {};
+    lastCloudStateStrRef.current = JSON.stringify(incomingStateContent);
+
     const fallback = buildSharedState({
       cards: initialState.cards,
       setupComplete: initialState.setupComplete,
@@ -783,10 +820,14 @@ function App() {
     const next = normalizeSharedState(incomingState, fallback);
 
     isApplyingSharedStateRef.current = true;
-    setCards(normalizeCards(next.cards, new Date(), next.profile.timezone).map((card) => ({
-      ...card,
-      theme: resolveTheme(card.theme),
-    })));
+
+    setCards((currentCards) => {
+      const merged = mergeEntitiesById(currentCards, next.cards);
+      return normalizeCards(merged, new Date(), next.profile.timezone).map((card) => ({
+        ...card,
+        theme: resolveTheme(card.theme),
+      }));
+    });
     setSetupComplete(next.setupComplete);
     setMood(resolveTheme(next.mood));
     setProfile({
@@ -794,17 +835,18 @@ function App() {
       timezone: next.profile?.timezone ?? "Europe/London",
     });
     setLauncherBehaviorSettings(next.launcherBehaviorSettings);
-    setCardPacks(next.cardPacks);
+    setCardPacks((currentPacks) => mergeEntitiesById(currentPacks, next.cardPacks));
     setHiddenLibraryPacks(next.hiddenLibraryPacks);
     setDislikedPackCardIds(next.dislikedPackCardIds);
     setGlobalInterruptionMode(next.globalInterruptionMode);
-    
+
     // Merge incoming cloud events with current local events to prevent data loss.
     // This ensures offline actions survive sync.
     setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
-    
+
     setScreen(next.setupComplete ? "library" : "onboarding");
     setRoutePath(getRouteFromLocation(next.setupComplete));
+
     window.setTimeout(() => {
       isApplyingSharedStateRef.current = false;
     }, 0);
@@ -846,10 +888,24 @@ function App() {
     }
 
     cloudSaveTimerRef.current = window.setTimeout(() => {
-      saveSharedState(syncConnection.profileId, currentSharedState()).catch((error) => {
-        // TODO: queue offline saves instead of only preserving the local mirror.
-        console.warn("Could not save BishBash shared state", error);
-      });
+      if (isApplyingSharedStateRef.current) return;
+
+      const stateToSave = currentSharedState();
+      const { updatedAt, ...stateContent } = stateToSave;
+      const stateStr = JSON.stringify(stateContent);
+
+      if (stateStr === lastCloudStateStrRef.current) {
+        return;
+      }
+
+      saveSharedState(syncConnection.profileId, stateToSave)
+        .then(() => {
+          lastCloudStateStrRef.current = stateStr;
+        })
+        .catch((error) => {
+          // TODO: queue offline saves instead of only preserving the local mirror.
+          console.warn("Could not save BishBash shared state", error);
+        });
     }, 500);
 
     return () => {
@@ -858,6 +914,31 @@ function App() {
       }
     };
   }, [syncStatus, syncConnection?.profileId, currentSharedState]);
+
+  useEffect(() => {
+    if (syncStatus !== "ready" || !syncConnection?.profileId) return undefined;
+
+    const pollInterval = window.setInterval(() => {
+      loadSharedState(syncConnection.profileId)
+        .then((sharedState) => {
+          if (!sharedState) return;
+
+          const { updatedAt, ...incomingStateContent } = sharedState;
+          const incomingStateStr = JSON.stringify(incomingStateContent);
+
+          if (incomingStateStr === lastCloudStateStrRef.current) {
+            return;
+          }
+
+          applySharedState(sharedState);
+        })
+        .catch((error) => {
+          console.warn("Could not periodically sync BishBash profile", error);
+        });
+    }, 5000);
+
+    return () => window.clearInterval(pollInterval);
+  }, [syncStatus, syncConnection?.profileId, applySharedState]);
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
