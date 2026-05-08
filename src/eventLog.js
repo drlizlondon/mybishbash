@@ -14,6 +14,30 @@ function safeParse(rawValue, fallback) {
   }
 }
 
+export function mergeEventsById(localEvents = [], incomingEvents = []) {
+  const mergedMap = new Map();
+
+  if (Array.isArray(localEvents)) {
+    localEvents.forEach((event) => {
+      if (event && event.id) {
+        mergedMap.set(event.id, event);
+      }
+    });
+  }
+
+  if (Array.isArray(incomingEvents)) {
+    incomingEvents.forEach((event) => {
+      if (event && event.id) {
+        mergedMap.set(event.id, event);
+      }
+    });
+  }
+
+  return Array.from(mergedMap.values())
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    .slice(0, 500);
+}
+
 export function getUserId() {
   const existing = window.localStorage.getItem(USER_ID_KEY);
   if (existing) return existing;
@@ -84,7 +108,7 @@ export function createEventRecord(input) {
 
 export async function persistEventRecord(event) {
   const current = loadEventLog();
-  const next = [event, ...current].slice(0, 500);
+  const next = mergeEventsById(current, [event]);
   saveEventLog(next);
   void postEventToSupabase(event);
   return next;

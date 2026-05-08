@@ -32,6 +32,7 @@ import {
   loadEventLog,
   persistEventRecord,
   saveEventLog,
+  mergeEventsById,
 } from "./eventLog";
 import {
   clearConnectedProfileForTesting,
@@ -797,7 +798,11 @@ function App() {
     setHiddenLibraryPacks(next.hiddenLibraryPacks);
     setDislikedPackCardIds(next.dislikedPackCardIds);
     setGlobalInterruptionMode(next.globalInterruptionMode);
-    setEvents(next.events);
+    
+    // Merge incoming cloud events with current local events to prevent data loss.
+    // This ensures offline actions survive sync.
+    setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
+    
     setScreen(next.setupComplete ? "library" : "onboarding");
     setRoutePath(getRouteFromLocation(next.setupComplete));
     window.setTimeout(() => {
