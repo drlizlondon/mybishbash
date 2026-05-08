@@ -3282,6 +3282,7 @@ function SettingsPanel({
             </button>
           ))}
         </div>
+      </div>
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Home Screen versions</p>
