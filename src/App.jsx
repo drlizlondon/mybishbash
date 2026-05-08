@@ -8,6 +8,7 @@ import {
   loadGlobalInterruptionMode,
   loadHiddenLibraryPacks,
   loadHomeScreenVersions,
+  loadLauncherBehaviorSettings,
   loadMood,
   loadProfile,
   loadSelectedHomeScreenVersion,
@@ -18,6 +19,7 @@ import {
   saveGlobalInterruptionMode,
   saveHiddenLibraryPacks,
   saveHomeScreenVersions,
+  saveLauncherBehaviorSettings,
   saveMood,
   saveProfile,
   saveSelectedHomeScreenVersion,
@@ -230,11 +232,12 @@ function getInterruptionCardText(card) {
   return typeof card === "string" ? card : card?.text ?? card?.promptText ?? card?.title ?? "";
 }
 
-function normalizeInterruptionPack(pack, targetApp, version, { readOnly = false } = {}) {
+function normalizeInterruptionPack(pack, targetApp, version, behavior, { readOnly = false } = {}) {
   if (!pack) return null;
   const rawCards = Array.isArray(pack.cards)
     ? pack.cards
     : (pack.messages ?? []).map((message, index) => ({ id: `${pack.id}:${index}`, text: message, title: message }));
+  const usePack = behavior?.useInterruptionPack ?? version?.useInterruptionPack ?? true;
   const cards = rawCards
     .map((card, index) => {
       const text = getInterruptionCardText(card).trim();
@@ -248,7 +251,7 @@ function normalizeInterruptionPack(pack, targetApp, version, { readOnly = false 
       };
     })
     .filter(Boolean);
-  const active = typeof pack.active === "boolean" ? pack.active : Boolean(version?.useInterruptionPack ?? true);
+  const active = typeof pack.active === "boolean" ? pack.active : Boolean(usePack);
 
   return {
     ...pack,
@@ -262,25 +265,28 @@ function normalizeInterruptionPack(pack, targetApp, version, { readOnly = false 
   };
 }
 
-function getStoredInterruptionPackForTarget(targetApp, customPacks, versions = {}) {
+function getStoredInterruptionPackForTarget(targetApp, customPacks, versions = {}, behaviors = {}) {
+  const behavior = behaviors[targetApp] ?? {};
   const version = versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp];
-  const selectedId = version?.interruptionPackId || version?.selectedPackId || "";
+  const selectedId = behavior.interruptionPackId || version?.interruptionPackId || version?.selectedPackId || "";
   return customPacks.find((pack) => (pack.targetApp ?? pack.linkedVersionId) === targetApp)
     ?? customPacks.find((pack) => pack.id === selectedId)
     ?? null;
 }
 
-function buildInterruptionFolder(targetApp, versions, customPacks, { hiddenCardIds = [], globalEnabled = true, includeHidden = false } = {}) {
+function buildInterruptionFolder(targetApp, versions, behaviors, customPacks, { hiddenCardIds = [], globalEnabled = true, includeHidden = false } = {}) {
   if (!isInterruptionLauncherContext(targetApp)) return null;
 
-  const version = resolveVersionConfig(versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp]);
-  const basePack = normalizeInterruptionPack(DEFAULT_INTERRUPTION_PACKS[targetApp], targetApp, version, {
+  const behavior = behaviors[targetApp] ?? {};
+  const version = resolveVersionConfig(versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp], behavior);
+  const basePack = normalizeInterruptionPack(DEFAULT_INTERRUPTION_PACKS[targetApp], targetApp, version, behavior, {
     readOnly: true,
   });
   const storedPack = normalizeInterruptionPack(
-    getStoredInterruptionPackForTarget(targetApp, customPacks, versions),
+    getStoredInterruptionPackForTarget(targetApp, customPacks, versions, behaviors),
     targetApp,
     version,
+    behavior,
     { readOnly: false },
   );
 
@@ -312,11 +318,12 @@ function buildInterruptionFolder(targetApp, versions, customPacks, { hiddenCardI
 function getInterruptionPackForLauncher(
   launcherContext,
   versions,
+  behaviors,
   customPacks,
   { includeInactive = false, hiddenCardIds = [], globalEnabled = true } = {},
 ) {
   if (!isInterruptionLauncherContext(launcherContext)) return null;
-  const folder = buildInterruptionFolder(launcherContext, versions, customPacks, {
+  const folder = buildInterruptionFolder(launcherContext, versions, behaviors, customPacks, {
     hiddenCardIds,
     globalEnabled,
   });
@@ -409,13 +416,14 @@ function pickRandomHomeCardForDisplay(
   timezone,
   launcherContext,
   versions,
+  behaviors,
   customPacks,
   hiddenCardIds,
   globalInterruptionMode,
   events,
 ) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
-  const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, customPacks, {
+  const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, behaviors, customPacks, {
     hiddenCardIds,
     globalEnabled: globalInterruptionMode,
   });
@@ -500,8 +508,7 @@ function buildSharedState({
   setupComplete,
   mood,
   profile,
-  homeScreenVersions,
-  selectedHomeScreenVersion,
+  launcherBehaviorSettings,
   cardPacks,
   hiddenLibraryPacks,
   dislikedPackCardIds,
@@ -514,8 +521,7 @@ function buildSharedState({
     setupComplete,
     mood,
     profile,
-    homeScreenVersions,
-    selectedHomeScreenVersion,
+    launcherBehaviorSettings,
     cardPacks,
     hiddenLibraryPacks,
     dislikedPackCardIds,
@@ -527,6 +533,7 @@ function buildSharedState({
 
 function normalizeSharedState(state, fallback) {
   const source = state && typeof state === "object" ? state : {};
+<<<<<<< HEAD
   const mergedHomeScreenVersions = Object.fromEntries(
     Object.entries(DEFAULT_HOME_SCREEN_VERSIONS).map(([id, defaults]) => {
       const sourceVersion =
@@ -558,14 +565,39 @@ function normalizeSharedState(state, fallback) {
     typeof source.selectedHomeScreenVersion === "string" && mergedHomeScreenVersions[source.selectedHomeScreenVersion]
       ? source.selectedHomeScreenVersion
       : fallback.selectedHomeScreenVersion;
+=======
+  
+  let normalizedBehavior = fallback.launcherBehaviorSettings;
+  if (source.launcherBehaviorSettings && typeof source.launcherBehaviorSettings === "object") {
+    normalizedBehavior = source.launcherBehaviorSettings;
+  } else if (source.homeScreenVersions && typeof source.homeScreenVersions === "object") {
+    normalizedBehavior = {};
+    for (const [id, version] of Object.entries(source.homeScreenVersions)) {
+      normalizedBehavior[id] = {
+        useInterruptionPack: version.useInterruptionPack,
+        interruptionPaused: version.interruptionPaused,
+        interruptionPackId: version.interruptionPackId,
+      };
+    }
+  }
+>>>>>>> f4c71e3 (Stabilise launcher state sync architecture)
 
   return {
     cards: Array.isArray(source.cards) ? source.cards : fallback.cards,
     setupComplete: typeof source.setupComplete === "boolean" ? source.setupComplete : fallback.setupComplete,
     mood: resolveTheme(source.mood ?? fallback.mood),
     profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
+<<<<<<< HEAD
     homeScreenVersions: mergedHomeScreenVersions,
     selectedHomeScreenVersion,
+=======
+    homeScreenVersions:
+      source.homeScreenVersions && typeof source.homeScreenVersions === "object"
+        ? source.homeScreenVersions
+        : fallback.homeScreenVersions,
+    selectedHomeScreenVersion: source.selectedHomeScreenVersion ?? fallback.selectedHomeScreenVersion,
+    launcherBehaviorSettings: normalizedBehavior,
+>>>>>>> f4c71e3 (Stabilise launcher state sync architecture)
     cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
     hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
     dislikedPackCardIds: Array.isArray(source.dislikedPackCardIds)
@@ -605,16 +637,19 @@ function buildLibraryPackHomeItem(packId, packCards) {
   };
 }
 
-function resolveVersionConfig(version) {
+function resolveVersionConfig(version, behavior = {}) {
   return {
     launchPath: "/home",
     interruptionPackId: "",
     ...version,
+    useInterruptionPack: behavior.useInterruptionPack ?? version?.useInterruptionPack ?? true,
+    interruptionPaused: behavior.interruptionPaused ?? version?.interruptionPaused ?? false,
+    interruptionPackId: behavior.interruptionPackId ?? version?.interruptionPackId ?? "",
   };
 }
 
 function buildCustomPackOverlay(pack, activeIndex = 0, type = "custom-pack-preview") {
-  const normalizedPack = normalizeInterruptionPack(pack, pack.targetApp ?? pack.linkedVersionId ?? "");
+  const normalizedPack = normalizeInterruptionPack(pack, pack.targetApp ?? pack.linkedVersionId ?? "", {}, {});
   return {
     type,
     packId: normalizedPack.id,
@@ -631,8 +666,9 @@ function getPackDislikeKey(card) {
   return `${card.sourcePackId}:${card.promptText ?? ""}`;
 }
 
-function buildInterruptionHomeItem(version, pack) {
+function buildInterruptionHomeItem(version, pack, behavior) {
   const icon = version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book";
+  const isPaused = behavior?.interruptionPaused ?? version.interruptionPaused ?? false;
   return {
     type: "interruption-version",
     id: `interruption:${version.id}`,
@@ -644,7 +680,7 @@ function buildInterruptionHomeItem(version, pack) {
       promptText: pack.name ?? `${version.name} interruptions`,
       theme: "Minimal",
       icon,
-      paused: Boolean(version.interruptionPaused),
+      paused: Boolean(isPaused),
       timingWindows: ["morning", "day", "evening", "night"],
       frequency: "multi_daily",
       createdAt: "",
@@ -683,6 +719,7 @@ function App() {
       dislikedPackCardIds: loadDislikedPackCardIds(),
       globalInterruptionMode: loadGlobalInterruptionMode(),
       homeScreenVersions: loadHomeScreenVersions(),
+      launcherBehaviorSettings: loadLauncherBehaviorSettings(),
       hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
     };
@@ -692,6 +729,7 @@ function App() {
   const [profile, setProfile] = useState(initialState.profile);
   const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
   const [selectedHomeScreenVersion, setSelectedHomeScreenVersion] = useState(() => loadSelectedHomeScreenVersion());
+  const [launcherBehaviorSettings, setLauncherBehaviorSettings] = useState(initialState.launcherBehaviorSettings);
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
   const [dislikedPackCardIds, setDislikedPackCardIds] = useState(initialState.dislikedPackCardIds);
   const [globalInterruptionMode, setGlobalInterruptionMode] = useState(initialState.globalInterruptionMode);
@@ -720,16 +758,26 @@ function App() {
   const activeInterceptionVersion = useMemo(
     () =>
       route.kind === "intercept"
-        ? resolveVersionConfig(homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId])
+        ? resolveVersionConfig(
+            homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId],
+            launcherBehaviorSettings[route.versionId]
+          )
         : null,
-    [homeScreenVersions, route.kind, route.versionId],
+    [homeScreenVersions, launcherBehaviorSettings, route.kind, route.versionId],
   );
+<<<<<<< HEAD
   const fakeLauncherVersions = useMemo(
     () =>
       INTERRUPTION_LAUNCHER_CONTEXTS.map((versionId) =>
         resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]),
       ).filter((version) => Boolean(version?.realAppLabel)),
     [homeScreenVersions],
+=======
+  const activeLauncherButtonContext = route.kind === "intercept" ? route.versionId : NORMAL_LAUNCHER_CONTEXT;
+  const appLauncher = useMemo(
+    () => getAppLauncherConfig(activeLauncherButtonContext, homeScreenVersions),
+    [activeLauncherButtonContext, homeScreenVersions],
+>>>>>>> f4c71e3 (Stabilise launcher state sync architecture)
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
@@ -745,8 +793,7 @@ function App() {
         setupComplete,
         mood,
         profile,
-        homeScreenVersions,
-        selectedHomeScreenVersion,
+        launcherBehaviorSettings,
         cardPacks,
         hiddenLibraryPacks,
         dislikedPackCardIds,
@@ -758,8 +805,7 @@ function App() {
       setupComplete,
       mood,
       profile,
-      homeScreenVersions,
-      selectedHomeScreenVersion,
+      launcherBehaviorSettings,
       cardPacks,
       hiddenLibraryPacks,
       dislikedPackCardIds,
@@ -774,8 +820,7 @@ function App() {
       setupComplete: initialState.setupComplete,
       mood: initialState.mood,
       profile: initialState.profile,
-      homeScreenVersions: initialState.homeScreenVersions,
-      selectedHomeScreenVersion,
+      launcherBehaviorSettings: initialState.launcherBehaviorSettings,
       cardPacks: initialState.cardPacks,
       hiddenLibraryPacks: initialState.hiddenLibraryPacks,
       dislikedPackCardIds: initialState.dislikedPackCardIds,
@@ -795,8 +840,7 @@ function App() {
       name: next.profile?.name ?? "",
       timezone: next.profile?.timezone ?? "Europe/London",
     });
-    setHomeScreenVersions(next.homeScreenVersions);
-    setSelectedHomeScreenVersion(next.selectedHomeScreenVersion);
+    setLauncherBehaviorSettings(next.launcherBehaviorSettings);
     setCardPacks(next.cardPacks);
     setHiddenLibraryPacks(next.hiddenLibraryPacks);
     setDislikedPackCardIds(next.dislikedPackCardIds);
@@ -808,6 +852,7 @@ function App() {
       isApplyingSharedStateRef.current = false;
     }, 0);
   }, [initialState, selectedHomeScreenVersion]);
+  }, [initialState]);
 
   useEffect(() => {
     saveCards(cards);
@@ -877,6 +922,10 @@ function App() {
   useEffect(() => {
     saveSelectedHomeScreenVersion(selectedHomeScreenVersion);
   }, [selectedHomeScreenVersion]);
+
+  useEffect(() => {
+    saveLauncherBehaviorSettings(launcherBehaviorSettings);
+  }, [launcherBehaviorSettings]);
 
   useEffect(() => {
     saveCardPacks(cardPacks);
@@ -1002,8 +1051,9 @@ function App() {
       setLauncherContext(route.versionId);
       const version = resolveVersionConfig(
         homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId],
+        launcherBehaviorSettings[route.versionId]
       );
-      const pack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, cardPacks, {
+      const pack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
       });
@@ -1055,6 +1105,7 @@ function App() {
         profile.timezone,
         launcherContext,
         homeScreenVersions,
+        launcherBehaviorSettings,
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
@@ -1085,7 +1136,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1410,7 +1461,7 @@ function App() {
     if (!trimmedText) return;
 
     setCardPacks((current) => {
-      const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions);
+      const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions, launcherBehaviorSettings);
       const packId = existing?.id ?? `${targetApp}-user-interruptions`;
       const existingCards = existing?.cards ?? existing?.messages?.map((message, index) => ({
         id: `${packId}:${index}`,
@@ -1448,7 +1499,7 @@ function App() {
 
   function handleDeleteInterruptionCard(targetApp, cardId) {
     setCardPacks((current) => {
-      const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions);
+      const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions, launcherBehaviorSettings);
       if (!existing) return current;
       const existingCards = existing.cards ?? existing.messages?.map((message, index) => ({
         id: `${existing.id}:${index}`,
@@ -1466,19 +1517,19 @@ function App() {
   }
 
   function handleToggleInterruptionPause(versionId) {
-    const willPause = !homeScreenVersions[versionId]?.interruptionPaused;
-    setHomeScreenVersions((current) => ({
+    const willPause = !launcherBehaviorSettings[versionId]?.interruptionPaused;
+    setLauncherBehaviorSettings((current) => ({
       ...current,
       [versionId]: {
-        ...resolveVersionConfig(current[versionId]),
-        interruptionPaused: !current[versionId]?.interruptionPaused,
+        ...(current[versionId] || {}),
+        interruptionPaused: willPause,
       },
     }));
     void logEvent({
       event_type: willPause ? "interruption_pack_deactivated" : "interruption_pack_activated",
       source_type: "interruption",
       card_source: "interruption",
-      pack_id: resolveVersionConfig(homeScreenVersions[versionId])?.interruptionPackId || DEFAULT_INTERRUPTION_PACKS[versionId]?.id,
+      pack_id: resolveVersionConfig(homeScreenVersions[versionId], launcherBehaviorSettings[versionId])?.interruptionPackId || DEFAULT_INTERRUPTION_PACKS[versionId]?.id,
       target_app: versionId,
       action_taken: willPause ? "deactivated" : "activated",
     });
@@ -1486,8 +1537,11 @@ function App() {
   }
 
   function openInterruptionHomeReveal(versionId, cardIndex = null) {
-    const version = resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]);
-    const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, cardPacks, {
+    const version = resolveVersionConfig(
+      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+      launcherBehaviorSettings[versionId]
+    );
+    const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
       hiddenCardIds: dislikedPackCardIds,
       globalEnabled: globalInterruptionMode,
     });
@@ -1511,10 +1565,10 @@ function App() {
   }
 
   function handleSaveVersionBehavior(versionId, updates) {
-    setHomeScreenVersions((current) => ({
+    setLauncherBehaviorSettings((current) => ({
       ...current,
       [versionId]: {
-        ...resolveVersionConfig(current[versionId]),
+        ...(current[versionId] || {}),
         ...updates,
       },
     }));
@@ -1523,7 +1577,7 @@ function App() {
         event_type: updates.useInterruptionPack ? "interruption_pack_activated" : "interruption_pack_deactivated",
         source_type: "interruption",
         card_source: "interruption",
-        pack_id: resolveVersionConfig(homeScreenVersions[versionId])?.interruptionPackId || DEFAULT_INTERRUPTION_PACKS[versionId]?.id,
+        pack_id: resolveVersionConfig(homeScreenVersions[versionId], { ...launcherBehaviorSettings[versionId], ...updates })?.interruptionPackId || DEFAULT_INTERRUPTION_PACKS[versionId]?.id,
         target_app: versionId,
         action_taken: updates.useInterruptionPack ? "activated" : "deactivated",
       });
@@ -1554,6 +1608,7 @@ function App() {
     setProfile({ name: "", timezone: "Europe/London" });
     setHomeScreenVersions(loadHomeScreenVersions());
     setSelectedHomeScreenVersion("bishbash");
+    setLauncherBehaviorSettings(loadLauncherBehaviorSettings());
     setCardPacks([]);
     setDislikedPackCardIds([]);
     setGlobalInterruptionMode(true);
@@ -1622,10 +1677,10 @@ function App() {
     if (!nextPack.name || nextPack.messages.length === 0) return null;
 
     if (nextPack.targetApp) {
-      setHomeScreenVersions((current) => ({
+      setLauncherBehaviorSettings((current) => ({
         ...current,
         [nextPack.targetApp]: {
-          ...resolveVersionConfig(current[nextPack.targetApp]),
+          ...(current[nextPack.targetApp] || {}),
           interruptionPackId: nextPack.id,
         },
       }));
@@ -1645,13 +1700,13 @@ function App() {
 
   function handleDeleteCustomPack(packId) {
     setCardPacks((current) => current.filter((pack) => pack.id !== packId));
-    setHomeScreenVersions((current) =>
+    setLauncherBehaviorSettings((current) =>
       Object.fromEntries(
-        Object.entries(current).map(([id, version]) => [
+        Object.entries(current).map(([id, behavior]) => [
           id,
-          (version.interruptionPackId === packId || version.selectedPackId === packId)
-            ? { ...version, interruptionPackId: "" }
-            : version,
+          (behavior.interruptionPackId === packId || behavior.selectedPackId === packId)
+            ? { ...behavior, interruptionPackId: "" }
+            : behavior,
         ]),
       ),
     );
@@ -1687,9 +1742,11 @@ function App() {
       overlay?.type === "intercept-pack" && overlay?.versionId
         ? resolveVersionConfig(
             homeScreenVersions[overlay.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[overlay.versionId],
+            launcherBehaviorSettings[overlay.versionId]
           )
         : activeInterceptionVersion,
     [activeInterceptionVersion, homeScreenVersions, overlay?.type, overlay?.versionId],
+    [activeInterceptionVersion, homeScreenVersions, launcherBehaviorSettings, overlay?.type, overlay?.versionId],
   );
 
   const homeItems = useMemo(() => {
@@ -1716,15 +1773,15 @@ function App() {
 
     Object.values(homeScreenVersions).forEach((version) => {
       if (version.id === "bishbash" || launcherContext === NORMAL_LAUNCHER_CONTEXT) return;
-      const resolvedVersion = resolveVersionConfig(version);
+      const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
       if (resolvedVersion.id !== launcherContext) return;
-      const pack = getInterruptionPackForLauncher(resolvedVersion.id, homeScreenVersions, cardPacks, {
+      const pack = getInterruptionPackForLauncher(resolvedVersion.id, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
       });
       if (!pack || pack.messages.length === 0) return;
 
-      items.unshift(buildInterruptionHomeItem(resolvedVersion, pack));
+      items.unshift(buildInterruptionHomeItem(resolvedVersion, pack, launcherBehaviorSettings[version.id]));
     });
 
     return items.sort((left, right) => {
@@ -1741,7 +1798,7 @@ function App() {
       const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
       return rightCreated - leftCreated;
     });
-  }, [cards, profile.timezone, homeScreenVersions, cardPacks, launcherContext, dislikedPackCardIds, globalInterruptionMode]);
+  }, [cards, profile.timezone, homeScreenVersions, launcherBehaviorSettings, cardPacks, launcherContext, dislikedPackCardIds, globalInterruptionMode]);
   const eligibleHomeCount = useMemo(() => {
     let count = 0;
     const seenPackIds = new Set();
@@ -1812,13 +1869,13 @@ function App() {
   const interruptionPacks = useMemo(
     () =>
       INTERRUPTION_LAUNCHER_CONTEXTS.map((targetApp) =>
-        buildInterruptionFolder(targetApp, homeScreenVersions, cardPacks, {
+        buildInterruptionFolder(targetApp, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
           hiddenCardIds: dislikedPackCardIds,
           globalEnabled: globalInterruptionMode,
           includeHidden: true,
         }),
       ).filter(Boolean),
-    [homeScreenVersions, cardPacks, dislikedPackCardIds, globalInterruptionMode],
+    [homeScreenVersions, launcherBehaviorSettings, cardPacks, dislikedPackCardIds, globalInterruptionMode],
   );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 

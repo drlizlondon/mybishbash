@@ -8,18 +8,18 @@ const CARD_PACKS_KEY = "bishbash.card-packs.v1";
 const HIDDEN_LIBRARY_PACKS_KEY = "bishbash.hidden-library-packs.v1";
 const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
 const GLOBAL_INTERRUPTION_MODE_KEY = "bishbash.global-interruption-mode.v1";
+const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "bishbash.launcher-behavior-settings.v1";
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
   SETUP_KEY,
   MOOD_KEY,
   PROFILE_KEY,
-  HOME_SCREEN_VERSIONS_KEY,
-  HOME_SCREEN_SELECTED_KEY,
   CARD_PACKS_KEY,
   HIDDEN_LIBRARY_PACKS_KEY,
   DISLIKED_PACK_CARD_IDS_KEY,
   GLOBAL_INTERRUPTION_MODE_KEY,
+  LAUNCHER_BEHAVIOR_SETTINGS_KEY,
   "bishbash.event-log.v1",
   "bishbash.user-id.v1",
 ];
@@ -79,6 +79,13 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
   },
 };
 
+export const DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS = {
+  bishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
+  safari: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+  youtube: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+  instagram: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+};
+
 function safeParse(rawValue) {
   try {
     const parsed = JSON.parse(rawValue);
@@ -133,6 +140,35 @@ export function loadProfile() {
 
 export function saveProfile(value) {
   window.localStorage.setItem(PROFILE_KEY, JSON.stringify(value));
+}
+
+export function loadLauncherBehaviorSettings() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY));
+    if (stored) {
+      return { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS, ...stored };
+    }
+
+    const legacyVersions = JSON.parse(window.localStorage.getItem(HOME_SCREEN_VERSIONS_KEY));
+    if (legacyVersions) {
+      const migrated = {};
+      for (const [id, version] of Object.entries(legacyVersions)) {
+        migrated[id] = {
+          useInterruptionPack: version.useInterruptionPack ?? DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS[id]?.useInterruptionPack ?? true,
+          interruptionPaused: version.interruptionPaused ?? false,
+          interruptionPackId: version.interruptionPackId ?? "",
+        };
+      }
+      return { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS, ...migrated };
+    }
+    return DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS;
+  } catch {
+    return DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS;
+  }
+}
+
+export function saveLauncherBehaviorSettings(value) {
+  window.localStorage.setItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY, JSON.stringify(value));
 }
 
 export function loadHomeScreenVersions() {
