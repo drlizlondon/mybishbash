@@ -67,52 +67,6 @@ function resolveTheme(theme) {
 }
 
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-const NORMAL_LAUNCHER_CONTEXT = "normal";
-const INTERRUPTION_LAUNCHER_CONTEXTS = ["safari", "youtube", "instagram"];
-const INTERRUPTION_CARD_COOLDOWN_MS = 10 * 60 * 1000;
-
-const DEFAULT_INTERRUPTION_PACKS = {
-  safari: {
-    id: "safari-interruption",
-    type: "interruption",
-    targetApp: "safari",
-    active: true,
-    name: "Safari Interruptions",
-    linkedVersionId: "safari",
-    messages: [
-      "Do you want the internet, or a little pause first?",
-      "What were you hoping to find online just now?",
-      "Could your attention belong to real life for one more minute?",
-    ],
-  },
-  instagram: {
-    id: "instagram-interruption",
-    type: "interruption",
-    targetApp: "instagram",
-    active: true,
-    name: "Instagram Interruptions",
-    linkedVersionId: "instagram",
-    messages: [
-      "Is Instagram the best use of your attention right now?",
-      "Instagram is making money from your attention.",
-      "What were you hoping Instagram would fix?",
-      "Open your own life before opening everyone else's.",
-    ],
-  },
-  youtube: {
-    id: "youtube-interruption",
-    type: "interruption",
-    targetApp: "youtube",
-    active: true,
-    name: "YouTube Interruptions",
-    linkedVersionId: "youtube",
-    messages: [
-      "Do you want YouTube, or do you want to disappear for a while?",
-      "Would a short real break feel better than autoplay?",
-      "What would actually help you more than another video?",
-    ],
-  },
-};
 
 function normalizeRoutePath(path) {
   if (!path) return "/";
@@ -203,136 +157,6 @@ function openNativeApp(appUrl) {
   window.location.href = appUrl;
 }
 
-function getVersionOpenHref(version) {
-  if (!version) return "";
-  if (version.id === "safari" || version.type === "safari") {
-    return version.manualUrl || "x-safari-https://www.google.com";
-  }
-  return version.appUrl || version.manualUrl || "";
-}
-
-function openSafariEscape() {
-  window.location.href = "x-safari-https://www.google.com";
-}
-
-function isInterruptionLauncherContext(value) {
-  return INTERRUPTION_LAUNCHER_CONTEXTS.includes(value);
-}
-
-function getLauncherContextFromRoute(route) {
-  return route.kind === "intercept" && isInterruptionLauncherContext(route.versionId)
-    ? route.versionId
-    : NORMAL_LAUNCHER_CONTEXT;
-}
-
-function getInterruptionFolderId(targetApp) {
-  return `${targetApp}-interruption`;
-}
-
-function getInterruptionCardText(card) {
-  return typeof card === "string" ? card : card?.text ?? card?.promptText ?? card?.title ?? "";
-}
-
-function normalizeInterruptionPack(pack, targetApp, version, behavior, { readOnly = false } = {}) {
-  if (!pack) return null;
-  const rawCards = Array.isArray(pack.cards)
-    ? pack.cards
-    : (pack.messages ?? []).map((message, index) => ({ id: `${pack.id}:${index}`, text: message, title: message }));
-  const usePack = behavior?.useInterruptionPack ?? version?.useInterruptionPack ?? true;
-  const cards = rawCards
-    .map((card, index) => {
-      const text = getInterruptionCardText(card).trim();
-      if (!text) return null;
-      return {
-        id: typeof card === "string" ? `${pack.id}:${index}` : card.id ?? `${pack.id}:${index}`,
-        title: typeof card === "string" ? text : card.title ?? text,
-        text,
-        readOnly: typeof card === "string" ? readOnly : card.readOnly ?? readOnly,
-        createdAt: typeof card === "string" ? null : card.createdAt ?? null,
-      };
-    })
-    .filter(Boolean);
-  const active = typeof pack.active === "boolean" ? pack.active : Boolean(usePack);
-
-  return {
-    ...pack,
-    type: "interruption",
-    id: pack.id || getInterruptionFolderId(targetApp),
-    targetApp: pack.targetApp || pack.linkedVersionId || targetApp,
-    linkedVersionId: pack.linkedVersionId || pack.targetApp || targetApp,
-    active,
-    cards,
-    messages: cards.map((card) => card.text),
-  };
-}
-
-function getStoredInterruptionPackForTarget(targetApp, customPacks, versions = {}, behaviors = {}) {
-  const behavior = behaviors[targetApp] ?? {};
-  const version = versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp];
-  const selectedId = behavior.interruptionPackId || version?.interruptionPackId || version?.selectedPackId || "";
-  return customPacks.find((pack) => (pack.targetApp ?? pack.linkedVersionId) === targetApp)
-    ?? customPacks.find((pack) => pack.id === selectedId)
-    ?? null;
-}
-
-function buildInterruptionFolder(targetApp, versions, behaviors, customPacks, { hiddenCardIds = [], globalEnabled = true, includeHidden = false } = {}) {
-  if (!isInterruptionLauncherContext(targetApp)) return null;
-
-  const behavior = behaviors[targetApp] ?? {};
-  const version = resolveVersionConfig(versions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp], behavior);
-  const basePack = normalizeInterruptionPack(DEFAULT_INTERRUPTION_PACKS[targetApp], targetApp, version, behavior, {
-    readOnly: true,
-  });
-  const storedPack = normalizeInterruptionPack(
-    getStoredInterruptionPackForTarget(targetApp, customPacks, versions, behaviors),
-    targetApp,
-    version,
-    behavior,
-    { readOnly: false },
-  );
-
-  if (!basePack && !storedPack) return null;
-
-  const folderId = getInterruptionFolderId(targetApp);
-  const cards = [...(basePack?.cards ?? []), ...(storedPack?.cards ?? [])]
-    .map((card) => ({
-      ...card,
-      hidden: hiddenCardIds.includes(getPackDislikeKey({ sourcePackId: folderId, promptText: card.text })),
-    }))
-    .filter((card) => includeHidden || !card.hidden);
-
-  return {
-    id: folderId,
-    type: "interruption",
-    targetApp,
-    linkedVersionId: targetApp,
-    active: Boolean(globalEnabled),
-    name: `${version.name} Interruptions`,
-    description: `Cards shown only when launcherContext is "${targetApp}".`,
-    editable: true,
-    cards,
-    messages: cards.map((card) => card.text),
-    userPackId: storedPack?.id ?? null,
-  };
-}
-
-function getInterruptionPackForLauncher(
-  launcherContext,
-  versions,
-  behaviors,
-  customPacks,
-  { includeInactive = false, hiddenCardIds = [], globalEnabled = true } = {},
-) {
-  if (!isInterruptionLauncherContext(launcherContext)) return null;
-  const folder = buildInterruptionFolder(launcherContext, versions, behaviors, customPacks, {
-    hiddenCardIds,
-    globalEnabled,
-  });
-  if (!folder) return null;
-  if (!includeInactive && !folder.active) return null;
-  return folder;
-}
-
 function isMeaningfulEvent(event) {
   return event.event_type !== "intercept_card_viewed";
 }
@@ -385,31 +209,6 @@ function isCompletionEvent(event) {
 
 function isInterruptionSummaryEvent(event) {
   return ["intercept_do_something_else", "intercept_continue_to_app"].includes(event.event_type);
-}
-
-function getRecentInterruptionCardKeys(events, packId, date = new Date()) {
-  const cutoff = date.getTime() - INTERRUPTION_CARD_COOLDOWN_MS;
-  return new Set(
-    events
-      .filter((event) => {
-        if (event.pack_id !== packId) return false;
-        if (event.card_source !== "interruption" && event.source_type !== "interruption") return false;
-        return new Date(event.created_at).getTime() > cutoff;
-      })
-      .flatMap((event) => [event.card_id, event.message_id].filter(Boolean)),
-  );
-}
-
-function pickInterruptionCardIndex(pack, events, date = new Date()) {
-  const cards = pack?.cards ?? [];
-  if (cards.length === 0) return 0;
-
-  const recentKeys = getRecentInterruptionCardKeys(events, pack.id, date);
-  const available = cards
-    .map((card, index) => ({ card, index }))
-    .filter(({ card, index }) => !recentKeys.has(card.id) && !recentKeys.has(`${pack.id}:${index}`));
-  const candidates = available.length > 0 ? available : cards.map((card, index) => ({ card, index }));
-  return candidates[Math.floor(Math.random() * candidates.length)]?.index ?? 0;
 }
 
 function pickRandomHomeCardForDisplay(
@@ -627,79 +426,6 @@ function buildLibraryPackHomeItem(packId, packCards) {
   };
 }
 
-function resolveVersionConfig(version, behavior = {}) {
-  return {
-    launchPath: "/home",
-    interruptionPackId: "",
-    ...version,
-    useInterruptionPack: behavior.useInterruptionPack ?? version?.useInterruptionPack ?? true,
-    interruptionPaused: behavior.interruptionPaused ?? version?.interruptionPaused ?? false,
-    interruptionPackId: behavior.interruptionPackId ?? version?.interruptionPackId ?? "",
-  };
-}
-
-function buildCustomPackOverlay(pack, activeIndex = 0, type = "custom-pack-preview") {
-  const normalizedPack = normalizeInterruptionPack(pack, pack.targetApp ?? pack.linkedVersionId ?? "", {}, {});
-  return {
-    type,
-    packId: normalizedPack.id,
-    name: normalizedPack.name,
-    targetApp: normalizedPack.targetApp,
-    cards: normalizedPack.cards,
-    messages: normalizedPack.messages,
-    activeIndex,
-  };
-}
-
-function getPackDislikeKey(card) {
-  if (!card?.sourcePackId) return "";
-  return `${card.sourcePackId}:${card.promptText ?? ""}`;
-}
-
-function buildInterruptionHomeItem(version, pack, behavior) {
-  const icon = version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book";
-  const isPaused = behavior?.interruptionPaused ?? version.interruptionPaused ?? false;
-  return {
-    type: "interruption-version",
-    id: `interruption:${version.id}`,
-    versionId: version.id,
-    pack,
-    representative: {
-      id: `interruption:${version.id}`,
-      dashboardTitle: pack.name,
-      promptText: pack.name ?? `${version.name} interruptions`,
-      theme: "Minimal",
-      icon,
-      paused: Boolean(isPaused),
-      timingWindows: ["morning", "day", "evening", "night"],
-      frequency: "multi_daily",
-      createdAt: "",
-    },
-  };
-}
-
-function buildInterruptionCardHomeItem(version, pack, card, index) {
-  const icon = version.id === "instagram" ? "heart" : version.id === "youtube" ? "star" : "book";
-  return {
-    type: "interruption-card",
-    id: `${pack.id}:${card.id}`,
-    versionId: version.id,
-    packId: pack.id,
-    cardIndex: index,
-    representative: {
-      id: card.id,
-      dashboardTitle: card.text,
-      promptText: card.text,
-      theme: "Minimal",
-      icon,
-      paused: false,
-      timingWindows: ["morning", "day", "evening"],
-      frequency: "multi_daily",
-      createdAt: card.createdAt ?? "",
-    },
-  };
-}
-
 function App() {
   const initialState = useMemo(() => {
     const base = buildInitialState();
@@ -757,14 +483,15 @@ function App() {
     [homeScreenVersions, launcherBehaviorSettings, route.kind, route.versionId],
   );
   const fakeLauncherVersions = useMemo(
-    () =>
-      INTERRUPTION_LAUNCHER_CONTEXTS.map((versionId) =>
-        resolveVersionConfig(
-          homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
-          launcherBehaviorSettings[versionId]
-        ),
-      ).filter((version) => Boolean(version?.realAppLabel)),
-    [homeScreenVersions, launcherBehaviorSettings],
+    () => {
+      if (launcherContext === NORMAL_LAUNCHER_CONTEXT) return [];
+      const version = resolveVersionConfig(
+        homeScreenVersions[launcherContext] ?? DEFAULT_HOME_SCREEN_VERSIONS[launcherContext],
+        launcherBehaviorSettings[launcherContext]
+      );
+      return version?.realAppLabel ? [version] : [];
+    },
+    [homeScreenVersions, launcherBehaviorSettings, launcherContext],
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
@@ -2170,28 +1897,6 @@ function App() {
         />
       ) : null}
     </>
-  );
-}
-
-function FakeAppLauncherBar({ versions, raised = false }) {
-  return (
-    <div className={`fake-launcher-bar ${raised ? "raised" : ""}`} aria-label="Fake app launchers">
-      {versions.map((version) => (
-        <a
-          key={version.id}
-          className="fake-launcher-button"
-          href={getVersionOpenHref(version)}
-          aria-label={`Open ${version.realAppLabel}`}
-        >
-          {version.customIconSrc || version.iconSrc ? (
-            <img src={version.customIconSrc || version.iconSrc} alt="" aria-hidden="true" />
-          ) : (
-            <SafariGlyph />
-          )}
-          <span>{version.realAppLabel}</span>
-        </a>
-      ))}
-    </div>
   );
 }
 
@@ -4319,16 +4024,6 @@ function SettingsGlyph() {
       <path d="M22.3 22.3l2.2 2.2" />
       <path d="M24.5 7.5l-2.2 2.2" />
       <path d="M9.7 22.3l-2.2 2.2" />
-    </svg>
-  );
-}
-
-function SafariGlyph() {
-  return (
-    <svg viewBox="0 0 32 32" className="safari-glyph" aria-hidden="true">
-      <circle cx="16" cy="16" r="10.5" />
-      <path d="M16 10l3 7-7 3 4-10z" />
-      <path d="M16 16l-3 7 7-3-4-4z" />
     </svg>
   );
 }
