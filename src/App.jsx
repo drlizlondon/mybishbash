@@ -3217,6 +3217,7 @@ function SettingsPanel({
   onResetSharedState,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [previewVersionId, setPreviewVersionId] = useState(selectedHomeScreenVersion || "bishbash");
 
   return (
     <section className="panel-section">
@@ -3267,32 +3268,39 @@ function SettingsPanel({
           <p>Mood</p>
           <span>Choose the overall feeling of BishBash.</span>
         </div>
-        <div className="theme-showcase settings-theme-showcase">
+        <div className="theme-showcase settings-theme-showcase" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           {THEMES.map((theme) => (
-            <article
+            <button
               key={theme}
+              type="button"
               className={`theme-showcase-card theme-${getThemeClass(theme)} ${mood === theme ? "selected-mood" : ""}`}
+              onClick={() => onSelectMood(theme)}
+              style={{ textAlign: "left", cursor: "pointer", padding: "16px", border: mood === theme ? "2px solid currentColor" : "none", borderRadius: "16px" }}
             >
-              <p className="eyebrow">{theme}</p>
-              <h3>have you stretched today?</h3>
-              <button
-                type="button"
-                className={`pack-button ${mood === theme ? "secondary" : ""}`}
-                onClick={() => onSelectMood(theme)}
-              >
-                {mood === theme ? "Selected" : "Use this mood"}
-              </button>
-            </article>
+              <strong style={{ display: "block", fontSize: "1.1em", marginBottom: "4px" }}>{theme}</strong>
+              <span style={{ fontSize: "0.9em", opacity: 0.9 }}>have you stretched?</span>
+            </button>
           ))}
         </div>
-      </div>
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Home Screen versions</p>
           <span>Choose how this appears on your Home Screen.</span>
         </div>
+        <label className="field" style={{ marginBottom: "16px" }}>
+          <select
+            className="settings-input"
+            value={previewVersionId}
+            onChange={(e) => setPreviewVersionId(e.target.value)}
+          >
+            {Object.values(homeScreenVersions).map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        </label>
         <div className="home-screen-version-list">
-          {Object.values(homeScreenVersions).map((version) => {
+          {(() => {
+            const version = homeScreenVersions[previewVersionId] || homeScreenVersions["bishbash"];
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installPath = DEFAULT_HOME_SCREEN_VERSIONS[version.id]?.installPath || version.installPath;
             const installUrl = getInstallUrl(installPath);
@@ -3362,7 +3370,7 @@ function SettingsPanel({
                 </div>
               </article>
             );
-          })}
+          })()}
         </div>
       </div>
       <div className="settings-card settings-compact">
