@@ -533,39 +533,6 @@ function buildSharedState({
 
 function normalizeSharedState(state, fallback) {
   const source = state && typeof state === "object" ? state : {};
-<<<<<<< HEAD
-  const mergedHomeScreenVersions = Object.fromEntries(
-    Object.entries(DEFAULT_HOME_SCREEN_VERSIONS).map(([id, defaults]) => {
-      const sourceVersion =
-        source.homeScreenVersions && typeof source.homeScreenVersions === "object"
-          ? source.homeScreenVersions[id]
-          : null;
-      const fallbackVersion = fallback.homeScreenVersions?.[id] ?? {};
-      const merged = resolveVersionConfig({
-        ...defaults,
-        ...fallbackVersion,
-        ...(sourceVersion && typeof sourceVersion === "object" ? sourceVersion : {}),
-      });
-
-      return [
-        id,
-        {
-          ...merged,
-          // Keep launcher identity and install routes immutable.
-          id: defaults.id,
-          name: defaults.name,
-          installPath: defaults.installPath,
-          launchPath: defaults.launchPath,
-          iconSrc: defaults.iconSrc,
-        },
-      ];
-    }),
-  );
-  const selectedHomeScreenVersion =
-    typeof source.selectedHomeScreenVersion === "string" && mergedHomeScreenVersions[source.selectedHomeScreenVersion]
-      ? source.selectedHomeScreenVersion
-      : fallback.selectedHomeScreenVersion;
-=======
   
   let normalizedBehavior = fallback.launcherBehaviorSettings;
   if (source.launcherBehaviorSettings && typeof source.launcherBehaviorSettings === "object") {
@@ -580,24 +547,13 @@ function normalizeSharedState(state, fallback) {
       };
     }
   }
->>>>>>> f4c71e3 (Stabilise launcher state sync architecture)
 
   return {
     cards: Array.isArray(source.cards) ? source.cards : fallback.cards,
     setupComplete: typeof source.setupComplete === "boolean" ? source.setupComplete : fallback.setupComplete,
     mood: resolveTheme(source.mood ?? fallback.mood),
     profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
-<<<<<<< HEAD
-    homeScreenVersions: mergedHomeScreenVersions,
-    selectedHomeScreenVersion,
-=======
-    homeScreenVersions:
-      source.homeScreenVersions && typeof source.homeScreenVersions === "object"
-        ? source.homeScreenVersions
-        : fallback.homeScreenVersions,
-    selectedHomeScreenVersion: source.selectedHomeScreenVersion ?? fallback.selectedHomeScreenVersion,
     launcherBehaviorSettings: normalizedBehavior,
->>>>>>> f4c71e3 (Stabilise launcher state sync architecture)
     cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
     hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
     dislikedPackCardIds: Array.isArray(source.dislikedPackCardIds)
@@ -765,19 +721,15 @@ function App() {
         : null,
     [homeScreenVersions, launcherBehaviorSettings, route.kind, route.versionId],
   );
-<<<<<<< HEAD
   const fakeLauncherVersions = useMemo(
     () =>
       INTERRUPTION_LAUNCHER_CONTEXTS.map((versionId) =>
-        resolveVersionConfig(homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId]),
+        resolveVersionConfig(
+          homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+          launcherBehaviorSettings[versionId]
+        ),
       ).filter((version) => Boolean(version?.realAppLabel)),
-    [homeScreenVersions],
-=======
-  const activeLauncherButtonContext = route.kind === "intercept" ? route.versionId : NORMAL_LAUNCHER_CONTEXT;
-  const appLauncher = useMemo(
-    () => getAppLauncherConfig(activeLauncherButtonContext, homeScreenVersions),
-    [activeLauncherButtonContext, homeScreenVersions],
->>>>>>> f4c71e3 (Stabilise launcher state sync architecture)
+    [homeScreenVersions, launcherBehaviorSettings],
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
@@ -851,7 +803,6 @@ function App() {
     window.setTimeout(() => {
       isApplyingSharedStateRef.current = false;
     }, 0);
-  }, [initialState, selectedHomeScreenVersion]);
   }, [initialState]);
 
   useEffect(() => {
@@ -1745,7 +1696,6 @@ function App() {
             launcherBehaviorSettings[overlay.versionId]
           )
         : activeInterceptionVersion,
-    [activeInterceptionVersion, homeScreenVersions, overlay?.type, overlay?.versionId],
     [activeInterceptionVersion, homeScreenVersions, launcherBehaviorSettings, overlay?.type, overlay?.versionId],
   );
 
