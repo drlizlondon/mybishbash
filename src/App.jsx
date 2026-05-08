@@ -61,6 +61,7 @@ import {
   getTodayKey,
 } from "./utils";
 import { getLauncherContextFromRoute } from "./lib/launcherState";
+import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
