@@ -499,6 +499,7 @@ function App() {
   const cloudSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
   const localDirtyRef = useRef(false);
+  const highestKnownCloudTimeRef = useRef(0);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
@@ -673,6 +674,8 @@ function App() {
         if (cancelled) return;
         console.log("LOADED CLOUD STATE", sharedState);
         if (sharedState) {
+          const incomingTime = new Date(sharedState.updatedAt).getTime();
+          if (!isNaN(incomingTime)) highestKnownCloudTimeRef.current = incomingTime;
           applySharedState(sharedState);
         }
         setSyncStatus("ready");
@@ -709,12 +712,17 @@ function App() {
         return;
       }
 
+      const saveTime = new Date(updatedAt).getTime();
+
       console.log("SAVING CLOUD STATE", stateToSave);
 
       saveSharedState(session.user.id, stateToSave)
         .then(() => {
           lastCloudStateStrRef.current = stateStr;
           localDirtyRef.current = false;
+          if (!isNaN(saveTime) && saveTime > highestKnownCloudTimeRef.current) {
+            highestKnownCloudTimeRef.current = saveTime;
+          }
         })
         .catch((error) => {
           console.error("UPSERT ERROR", error);
@@ -747,6 +755,12 @@ function App() {
             return;
           }
 
+          const incomingTime = new Date(sharedState.updatedAt).getTime();
+          if (!isNaN(incomingTime) && incomingTime < highestKnownCloudTimeRef.current) {
+            console.log("[POLLING] Skipped: Cloud state is older than local known state (stale read).");
+            return;
+          }
+
           console.log("POLLING LOADED STATE", sharedState);
 
           const { updatedAt, ...incomingStateContent } = sharedState;
@@ -754,6 +768,10 @@ function App() {
 
           if (incomingStateStr === lastCloudStateStrRef.current) {
             return;
+          }
+
+          if (!isNaN(incomingTime)) {
+            highestKnownCloudTimeRef.current = incomingTime;
           }
 
           applySharedState(sharedState);
