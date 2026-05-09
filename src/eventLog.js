@@ -1,9 +1,8 @@
 import { createId } from "./utils";
+import { supabase } from "./lib/supabaseClient";
 
 const EVENT_LOG_KEY = "bishbash.event-log.v1";
 const USER_ID_KEY = "bishbash.user-id.v1";
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_EVENTS_TABLE = import.meta.env.VITE_SUPABASE_EVENTS_TABLE || "bishbash_events";
 
 function safeParse(rawValue, fallback) {
@@ -56,21 +55,16 @@ export function saveEventLog(events) {
 }
 
 async function postEventToSupabase(event) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+  if (!supabase) return false;
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_EVENTS_TABLE}`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify(event),
-    });
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session?.user?.id) return false;
 
-    return response.ok;
+    const dbEvent = { ...event, user_id: sessionData.session.user.id };
+
+    const { error } = await supabase.from(SUPABASE_EVENTS_TABLE).insert([dbEvent]);
+    return !error;
   } catch {
     return false;
   }

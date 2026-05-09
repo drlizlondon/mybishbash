@@ -35,13 +35,14 @@ import {
   mergeEventsById,
 } from "./eventLog";
 import {
-  clearConnectedProfileForTesting,
-  connectProfileBySyncCode,
-  createNewProfileWithState,
-  getConnectedProfile,
   getSyncErrorMessage,
   loadSharedState,
   saveSharedState,
+  getSession,
+  onAuthStateChange,
+  signUp,
+  logIn,
+  logOut,
 } from "./lib/bishbashSync";
 import {
   PACKS,
@@ -469,8 +470,8 @@ function App() {
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
-  const [syncConnection, setSyncConnection] = useState(() => getConnectedProfile());
-  const [syncStatus, setSyncStatus] = useState(() => (getConnectedProfile() ? "loading" : "needs-connection"));
+  const [session, setSession] = useState(null);
+  const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(null);
@@ -601,16 +602,48 @@ function App() {
   }, [cards, homeScreenVersions, cardPacks]);
 
   useEffect(() => {
-    if (!syncConnection?.profileId) return;
+    let mounted = true;
+
+    getSession()
+      .then((currentSession) => {
+        if (mounted) {
+          setSession(currentSession);
+          if (!currentSession) setSyncStatus("needs-connection");
+        }
+      })
+      .catch(() => {
+        if (mounted) setSyncStatus("needs-connection");
+      });
+
+    const { data: { subscription } } = onAuthStateChange((_event, newSession) => {
+      if (mounted) {
+        setSession(newSession);
+        if (!newSession) setSyncStatus("needs-connection");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id) return undefined;
 
     let cancelled = false;
     setSyncStatus("loading");
     setSyncError("");
 
-    loadSharedState(syncConnection.profileId)
+    console.log("SESSION USER", session.user.id);
+
+    loadSharedState(session.user.id)
       .then((sharedState) => {
         if (cancelled) return;
-        applySharedState(sharedState);
+        console.log("LOADED CLOUD STATE", sharedState);
+        if (sharedState) {
+          applySharedState(sharedState);
+        }
         setSyncStatus("ready");
       })
       .catch((error) => {
@@ -622,10 +655,10 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [syncConnection?.profileId, applySharedState]);
+  }, [session?.user?.id, applySharedState]);
 
   useEffect(() => {
-    if (syncStatus !== "ready" || !syncConnection?.profileId || isApplyingSharedStateRef.current) return undefined;
+    if (syncStatus !== "ready" || !session?.user?.id || isApplyingSharedStateRef.current) return undefined;
 
     if (cloudSaveTimerRef.current) {
       window.clearTimeout(cloudSaveTimerRef.current);
@@ -642,11 +675,14 @@ function App() {
         return;
       }
 
-      saveSharedState(syncConnection.profileId, stateToSave)
+      console.log("SAVING CLOUD STATE", stateToSave);
+
+      saveSharedState(session.user.id, stateToSave)
         .then(() => {
           lastCloudStateStrRef.current = stateStr;
         })
         .catch((error) => {
+          console.error("UPSERT ERROR", error);
           // TODO: queue offline saves instead of only preserving the local mirror.
           console.warn("Could not save BishBash shared state", error);
         });
@@ -657,15 +693,16 @@ function App() {
         window.clearTimeout(cloudSaveTimerRef.current);
       }
     };
-  }, [syncStatus, syncConnection?.profileId, currentSharedState]);
+  }, [syncStatus, session?.user?.id, currentSharedState]);
 
   useEffect(() => {
-    if (syncStatus !== "ready" || !syncConnection?.profileId) return undefined;
+    if (syncStatus !== "ready" || !session?.user?.id) return undefined;
 
     const pollInterval = window.setInterval(() => {
-      loadSharedState(syncConnection.profileId)
+      loadSharedState(session.user.id)
         .then((sharedState) => {
           if (!sharedState) return;
+          console.log("POLLING LOADED STATE", sharedState);
 
           const { updatedAt, ...incomingStateContent } = sharedState;
           const incomingStateStr = JSON.stringify(incomingStateContent);
@@ -682,7 +719,7 @@ function App() {
     }, 5000);
 
     return () => window.clearInterval(pollInterval);
-  }, [syncStatus, syncConnection?.profileId, applySharedState]);
+  }, [syncStatus, session?.user?.id, applySharedState]);
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
@@ -1375,12 +1412,17 @@ function App() {
     });
   }
 
-  function handleResetSharedState() {
-    const confirmed = window.confirm("Clear local development state on this launcher/device? This will not delete the cloud profile.");
+  async function handleResetSharedState() {
+    const confirmed = window.confirm("Clear local development state on this launcher/device? This will log you out locally but not delete your cloud account.");
     if (!confirmed) return;
 
-    clearConnectedProfileForTesting();
-    setSyncConnection(null);
+    try {
+      await logOut();
+    } catch (err) {
+      console.warn(err);
+    }
+
+    setSession(null);
     setSyncStatus("needs-connection");
     setSyncError("");
     clearSharedBishBashState();
@@ -1402,38 +1444,38 @@ function App() {
     navigateTo("/onboarding", { replace: true });
   }
 
-  async function handleStartNewSyncProfile() {
+  async function handleSignUp(email, password) {
     setSyncStatus("loading");
     setSyncError("");
     try {
-      const created = await createNewProfileWithState(currentSharedState());
-      setSyncConnection({ profileId: created.profileId, syncCode: created.syncCode });
-      setSyncStatus("ready");
+      await signUp(email, password);
     } catch (error) {
-      setSyncError(getSyncErrorMessage(error, "Could not create a new BishBash profile."));
+      setSyncError(getSyncErrorMessage(error, "Could not sign up."));
       setSyncStatus("needs-connection");
     }
   }
 
-  async function handleConnectSyncProfile(syncCode) {
+  async function handleLogIn(email, password) {
     setSyncStatus("loading");
     setSyncError("");
     try {
-      const connected = await connectProfileBySyncCode(syncCode);
-      setSyncConnection({ profileId: connected.profileId, syncCode: connected.syncCode });
-      applySharedState(connected.state);
-      setSyncStatus("ready");
+      await logIn(email, password);
     } catch (error) {
-      setSyncError(getSyncErrorMessage(error, "Could not connect that BishBash profile."));
+      setSyncError(getSyncErrorMessage(error, "Could not log in."));
       setSyncStatus("needs-connection");
     }
   }
 
-  function handleDisconnectSyncProfile() {
-    const confirmed = window.confirm("Disconnect this launcher/device from the current BishBash profile?");
+  async function handleLogOut() {
+    const confirmed = window.confirm("Log out of this BishBash profile?");
     if (!confirmed) return;
-    clearConnectedProfileForTesting();
-    setSyncConnection(null);
+    setSyncStatus("loading");
+    try {
+      await logOut();
+    } catch (err) {
+      console.warn(err);
+    }
+    setSession(null);
     setSyncStatus("needs-connection");
     setSyncError("");
   }
@@ -1668,8 +1710,8 @@ function App() {
       <SyncConnectionScreen
         mode="error"
         error={syncError}
-        onStartNew={handleStartNewSyncProfile}
-        onConnect={handleConnectSyncProfile}
+        onSignUp={handleSignUp}
+        onLogIn={handleLogIn}
       />
     );
   }
@@ -1679,8 +1721,8 @@ function App() {
       <SyncConnectionScreen
         mode="connect"
         error={syncError}
-        onStartNew={handleStartNewSyncProfile}
-        onConnect={handleConnectSyncProfile}
+        onSignUp={handleSignUp}
+        onLogIn={handleLogIn}
       />
     );
   }
@@ -1762,8 +1804,8 @@ function App() {
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
                   globalInterruptionMode={globalInterruptionMode}
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
-                  syncConnection={syncConnection}
-                  onDisconnectSyncProfile={handleDisconnectSyncProfile}
+          session={session}
+          onLogOut={handleLogOut}
                   onResetSharedState={handleResetSharedState}
                 />
               ) : null}
@@ -2959,14 +3001,19 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onStartNew, onConnect }) {
-  const [syncCode, setSyncCode] = useState("");
-  const [showConnect, setShowConnect] = useState(false);
+function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLogin, setIsLogin] = useState(true);
 
   function submitExisting(event) {
     event.preventDefault();
-    if (!syncCode.trim()) return;
-    onConnect(syncCode);
+    if (!email.trim() || !password.trim()) return;
+    if (isLogin) {
+      onLogIn(email, password);
+    } else {
+      onSignUp(email, password);
+    }
   }
 
   return (
@@ -2980,30 +3027,40 @@ function SyncConnectionScreen({ mode, error, onStartNew, onConnect }) {
           <p>Loading your shared BishBash...</p>
         ) : (
           <>
-            <p>Connect this launcher to your shared BishBash profile.</p>
+            <p>Log in to sync this launcher with your BishBash profile.</p>
             {error ? <p className="sync-error">{error}</p> : null}
-            <button type="button" className="pack-button" onClick={onStartNew}>
-              Start new BishBash
+            
+            <form className="sync-form" onSubmit={submitExisting}>
+              <label className="field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  className="settings-input"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  className="settings-input"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Password"
+                  required
+                />
+              </label>
+              <button type="submit" className="save-button">
+                {isLogin ? "Log In" : "Sign Up"}
+              </button>
+            </form>
+
+            <button type="button" className="text-button" style={{ marginTop: 16 }} onClick={() => setIsLogin(!isLogin)}>
+              {isLogin ? "Need an account? Sign Up" : "Already have an account? Log In"}
             </button>
-            <button type="button" className="pack-button secondary" onClick={() => setShowConnect((current) => !current)}>
-              I already have a BishBash
-            </button>
-            {showConnect || mode === "error" ? (
-              <form className="sync-form" onSubmit={submitExisting}>
-                <label className="field">
-                  <span>Sync code</span>
-                  <input
-                    className="settings-input"
-                    value={syncCode}
-                    onChange={(event) => setSyncCode(event.target.value.toUpperCase())}
-                    placeholder="BISH-7K2M-PQ9A"
-                  />
-                </label>
-                <button type="submit" className="save-button">
-                  Connect BishBash
-                </button>
-              </form>
-            ) : null}
           </>
         )}
       </section>
@@ -3020,8 +3077,8 @@ function SettingsPanel({
   onUpdateHomeScreenIcon,
   globalInterruptionMode,
   onSetGlobalInterruptionMode,
-  syncConnection,
-  onDisconnectSyncProfile,
+  session,
+  onLogOut,
   onResetSharedState,
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -3184,25 +3241,12 @@ function SettingsPanel({
       </div>
       <div className="settings-card settings-compact">
         <div className="settings-version-heading">
-          <p>Sync profile</p>
-          <span>Use this code to connect another home-screen version or another device.</span>
+          <p>Account</p>
+          <span>Logged in as {session?.user?.email ?? "Unknown"}</span>
         </div>
         <div className="sync-profile-row">
-          <strong>{syncConnection?.syncCode ?? "Not connected"}</strong>
-          <button
-            type="button"
-            className="pack-button secondary"
-            onClick={() => {
-              if (syncConnection?.syncCode) {
-                void navigator.clipboard?.writeText(syncConnection.syncCode);
-              }
-            }}
-            disabled={!syncConnection?.syncCode}
-          >
-            Copy sync code
-          </button>
-          <button type="button" className="pack-button secondary" onClick={onDisconnectSyncProfile}>
-            Connect another BishBash
+          <button type="button" className="pack-button secondary" onClick={onLogOut}>
+            Log out
           </button>
         </div>
       </div>
