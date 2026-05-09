@@ -386,6 +386,14 @@ function normalizeSharedState(state, fallback) {
 function mergeEntitiesById(local = [], incoming = []) {
   const map = new Map();
 
+  const getTime = (item) => {
+    if (!item || !item.updatedAt) return 0;
+    const t = new Date(item.updatedAt).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
+  const formatTime = (t) => (t > 0 ? new Date(t).toISOString() : "0");
+
   if (Array.isArray(incoming)) {
     incoming.forEach((item) => {
       if (item?.id) map.set(item.id, item);
@@ -393,21 +401,26 @@ function mergeEntitiesById(local = [], incoming = []) {
   }
 
   if (Array.isArray(local)) {
-    local.forEach((item) => {
-      if (item?.id) {
-        const existing = map.get(item.id);
-        if (existing) {
-          const incomingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
-          const localTime = item.updatedAt ? new Date(item.updatedAt).getTime() : 0;
+    local.forEach((localItem) => {
+      if (localItem?.id) {
+        const cloudItem = map.get(localItem.id);
+        if (cloudItem) {
+          const cloudTime = getTime(cloudItem);
+          const localTime = getTime(localItem);
 
-          if (incomingTime > localTime && incomingTime > 0) {
-            // Keep incoming (already in map)
+          if (cloudTime > localTime) {
+            console.log(`[MERGE] Cloud is newer for ${localItem.id} (${formatTime(cloudTime)} > ${formatTime(localTime)}). Accepting cloud.`);
+          } else if (localTime > cloudTime) {
+            console.log(`[MERGE] Local is newer for ${localItem.id} (${formatTime(localTime)} > ${formatTime(cloudTime)}). Preserving local.`);
+            if (localItem.deletedAt) console.log(`[MERGE] Tombstone preserved for ${localItem.id}`);
+            else if (cloudItem.deletedAt) console.log(`[MERGE] Rejecting stale cloud tombstone for ${localItem.id}`);
+            map.set(localItem.id, localItem);
           } else {
-            // Prefer local for conflicts to avoid losing offline edits
-            map.set(item.id, item);
+            // Times are equal. Prefer local quietly to avoid spam.
+            map.set(localItem.id, localItem);
           }
         } else {
-          map.set(item.id, item);
+          map.set(localItem.id, localItem);
         }
       }
     });
@@ -485,6 +498,7 @@ function App() {
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
+  const localDirtyRef = useRef(false);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
@@ -681,6 +695,8 @@ function App() {
       window.clearTimeout(cloudSaveTimerRef.current);
     }
 
+    localDirtyRef.current = true;
+
     cloudSaveTimerRef.current = window.setTimeout(() => {
       if (isApplyingSharedStateRef.current) return;
 
@@ -689,6 +705,7 @@ function App() {
       const stateStr = JSON.stringify(stateContent);
 
       if (stateStr === lastCloudStateStrRef.current) {
+        localDirtyRef.current = false;
         return;
       }
 
@@ -697,6 +714,7 @@ function App() {
       saveSharedState(session.user.id, stateToSave)
         .then(() => {
           lastCloudStateStrRef.current = stateStr;
+          localDirtyRef.current = false;
         })
         .catch((error) => {
           console.error("UPSERT ERROR", error);
@@ -716,9 +734,19 @@ function App() {
     if (syncStatus !== "ready" || !session?.user?.id) return undefined;
 
     const pollInterval = window.setInterval(() => {
+      if (localDirtyRef.current) {
+        console.log("[POLLING] Skipped: Local state has unsynced changes.");
+        return;
+      }
+
       loadSharedState(session.user.id)
         .then((sharedState) => {
           if (!sharedState) return;
+          if (localDirtyRef.current) {
+            console.log("[POLLING] Aborted: Local state changed during fetch.");
+            return;
+          }
+
           console.log("POLLING LOADED STATE", sharedState);
 
           const { updatedAt, ...incomingStateContent } = sharedState;
