@@ -364,6 +364,19 @@ export function normalizeCards(cards, date = new Date(), timeZone) {
 
   return cards.map((card) => {
     const next = { ...card };
+
+    if (!next.createdAt) {
+      next.createdAt = new Date().toISOString();
+    }
+
+    if (!next.updatedAt) {
+      next.updatedAt = next.createdAt;
+    }
+
+    if (!("deletedAt" in next)) {
+      next.deletedAt = null;
+    }
+
     if (!Array.isArray(next.timingWindows) || next.timingWindows.length === 0) {
       next.timingWindows = ["morning", "day", "evening"];
     }
