@@ -1,146 +1,123 @@
-html,
+:root {
+  --bg-color: #F7F2EE;
+  --card-bg: #FFFFFF;
+  --text-color: #333333;
+  --border-radius: 24px;
+  --button-bg: #E87661;
+  --button-text: #FFFFFF;
+}
+
 body {
   margin: 0;
-  min-height: 100%;
-  background: linear-gradient(180deg, #fcf8f5 0%, #f7f2ee 58%, #f4ece6 100%);
-  color: #2f2a28;
-  font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   display: flex;
   justify-content: center;
-  padding: 28px 20px 40px;
+  align-items: center;
+  min-height: 100vh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-.install-shell {
-  width: min(100%, 360px);
-  display: grid;
-  gap: 18px;
-}
-
-.install-brand {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
+.install-container {
+  width: 100%;
+  max-width: 400px;
+  padding: 24px;
+  box-sizing: border-box;
   text-align: center;
 }
 
-.install-brand h1 {
-  margin: 0;
-  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: 3.1rem;
-  line-height: 0.92;
-  letter-spacing: -0.05em;
-  color: #e9785d;
-}
-
-.install-brand p {
-  margin: 0;
-  max-width: 10ch;
-  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: 1rem;
-  line-height: 1.06;
-  color: rgba(47, 42, 40, 0.9);
-}
-
-.install-heart {
-  width: 26px;
-  color: rgba(233, 120, 93, 0.86);
+.bishbash-branding {
+  margin-bottom: 2rem;
+  font-weight: 600;
+  font-size: 1.2rem;
+  opacity: 0.5;
+  letter-spacing: -0.02em;
 }
 
 .install-card {
-  display: grid;
-  gap: 18px;
-  padding: 22px 18px;
-  border-radius: 30px;
-  background:
-    radial-gradient(circle at 24% 14%, rgba(255, 255, 255, 0.84), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 247, 0.94));
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  box-shadow:
-    0 20px 38px rgba(149, 108, 89, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86);
-}
-
-.install-icon {
-  width: 96px;
-  height: 96px;
-  border-radius: 24px;
-  justify-self: center;
-  object-fit: cover;
-  box-shadow: 0 10px 20px rgba(114, 79, 65, 0.1);
-}
-
-.install-copy {
-  display: grid;
-  gap: 8px;
+  background: var(--card-bg);
+  border-radius: var(--border-radius);
+  padding: 32px 24px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.05);
   text-align: center;
 }
 
-.install-copy h2 {
-  margin: 0;
-  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: 1.85rem;
-  line-height: 1.04;
-  letter-spacing: -0.04em;
+[data-install-icon] {
+  width: 80px;
+  height: 80px;
+  border-radius: 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.install-copy p {
-  margin: 0;
-  color: #5f5651;
-  line-height: 1.38;
+.install-card h1 {
+  margin: 0 0 8px 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.install-description {
+  font-size: 1rem;
+  line-height: 1.5;
+  opacity: 0.8;
+  margin-bottom: 24px;
 }
 
 .install-note {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  margin-bottom: 24px;
+  background: rgba(0,0,0,0.03);
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.install-instructions {
+  text-align: left;
+  background: var(--bg-color);
+  padding: 16px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.install-instructions p {
+  margin: 0 0 8px 0;
   font-size: 0.95rem;
-  color: #6a615c;
+  font-weight: 600;
 }
 
-.install-steps {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 20px;
-  background: rgba(243, 214, 203, 0.26);
+.install-instructions ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
-.install-steps strong {
-  font-size: 0.78rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #81665a;
-}
-
-.install-real-app {
-  position: fixed;
-  right: 18px;
-  bottom: calc(env(safe-area-inset-bottom) + 18px);
-  height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.68);
-  border-radius: 999px;
-  padding: 0 12px 0 10px;
-  background: rgba(255, 251, 248, 0.82);
-  color: #4f4743;
+[data-real-app-button] {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  box-shadow:
-    0 10px 24px rgba(114, 79, 65, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(16px);
+  justify-content: center;
+  background: var(--bg-color);
+  color: var(--text-color);
+  border: none;
+  padding: 14px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 100px;
+  cursor: pointer;
+  text-decoration: none;
+  width: 100%;
+  margin-bottom: 16px;
 }
 
-.install-real-app svg {
-  width: 18px;
-  height: 18px;
-}
-
-.install-real-app span {
-  font-size: 0.84rem;
-  font-weight: 500;
+.install-settings-link {
+  display: block;
+  margin-top: 1rem;
+  text-align: center;
+  color: inherit;
+  text-decoration: underline;
+  opacity: 0.7;
+  font-size: 0.95rem;
 }

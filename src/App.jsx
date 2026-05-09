@@ -11,7 +11,6 @@ import {
   loadLauncherBehaviorSettings,
   loadMood,
   loadProfile,
-  loadSelectedHomeScreenVersion,
   loadSetupComplete,
   saveCards,
   saveCardPacks,
@@ -22,7 +21,6 @@ import {
   saveLauncherBehaviorSettings,
   saveMood,
   saveProfile,
-  saveSelectedHomeScreenVersion,
   saveSetupComplete,
 } from "./storage";
 import {
@@ -462,7 +460,6 @@ function App() {
   const [mood, setMood] = useState(initialState.mood);
   const [profile, setProfile] = useState(initialState.profile);
   const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
-  const [selectedHomeScreenVersion, setSelectedHomeScreenVersion] = useState(() => loadSelectedHomeScreenVersion());
   const [launcherBehaviorSettings, setLauncherBehaviorSettings] = useState(initialState.launcherBehaviorSettings);
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
   const [dislikedPackCardIds, setDislikedPackCardIds] = useState(initialState.dislikedPackCardIds);
@@ -502,14 +499,34 @@ function App() {
   );
   const fakeLauncherVersions = useMemo(
     () => {
-      if (launcherContext === NORMAL_LAUNCHER_CONTEXT) return [];
-      const version = resolveVersionConfig(
-        homeScreenVersions[launcherContext] ?? DEFAULT_HOME_SCREEN_VERSIONS[launcherContext],
-        launcherBehaviorSettings[launcherContext]
-      );
-      return version?.realAppLabel ? [version] : [];
-    },
-    [homeScreenVersions, launcherBehaviorSettings, launcherContext],
+      // Inside installed launcher version
+      if (
+        launcherContext &&
+        launcherContext !== NORMAL_LAUNCHER_CONTEXT
+      ) {
+        const version = resolveVersionConfig(
+          homeScreenVersions[launcherContext] ??
+            DEFAULT_HOME_SCREEN_VERSIONS[launcherContext],
+          launcherBehaviorSettings[launcherContext],
+        );
+        return version?.realAppLabel ? [version] : [];
+      }
+
+      // Normal BishBash app
+      return INTERRUPTION_LAUNCHER_CONTEXTS
+        .map((versionId) =>
+          resolveVersionConfig(
+            homeScreenVersions[versionId] ??
+              DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+            launcherBehaviorSettings[versionId],
+          ),
+        )
+        .filter((version) => Boolean(version?.realAppLabel));
+    }, [
+      launcherContext,
+      homeScreenVersions,
+      launcherBehaviorSettings,
+    ]
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
@@ -736,10 +753,6 @@ function App() {
   useEffect(() => {
     saveHomeScreenVersions(homeScreenVersions);
   }, [homeScreenVersions]);
-
-  useEffect(() => {
-    saveSelectedHomeScreenVersion(selectedHomeScreenVersion);
-  }, [selectedHomeScreenVersion]);
 
   useEffect(() => {
     saveLauncherBehaviorSettings(launcherBehaviorSettings);
@@ -1368,10 +1381,6 @@ function App() {
     setOverlay({ ...buildCustomPackOverlay(pack, activeIndex, "intercept-pack"), versionId });
   }
 
-  function handleSelectHomeScreenVersion(versionId) {
-    setSelectedHomeScreenVersion(versionId);
-  }
-
   function handleUpdateHomeScreenIcon(versionId, imageDataUrl) {
     setHomeScreenVersions((current) => ({
       ...current,
@@ -1430,7 +1439,6 @@ function App() {
     setMood(resolveTheme("Minimal"));
     setProfile({ name: "", timezone: "Europe/London" });
     setHomeScreenVersions(loadHomeScreenVersions());
-    setSelectedHomeScreenVersion("bishbash");
     setLauncherBehaviorSettings(loadLauncherBehaviorSettings());
     setCardPacks([]);
     setDislikedPackCardIds([]);
@@ -1799,8 +1807,6 @@ function App() {
                   mood={mood}
                   onSelectMood={setMood}
                   homeScreenVersions={homeScreenVersions}
-                  selectedHomeScreenVersion={selectedHomeScreenVersion}
-                  onSelectHomeScreenVersion={handleSelectHomeScreenVersion}
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
                   globalInterruptionMode={globalInterruptionMode}
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
@@ -1949,10 +1955,10 @@ function App() {
         />
       ) : null}
 
-      {screen !== "onboarding" && fakeLauncherVersions.length > 0 ? (
+      {session?.user?.id && setupComplete && fakeLauncherVersions.length > 0 ? (
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
-          raised={Boolean(overlay) && overlay.type !== "custom-pack-preview" && overlay.type !== "intercept-pack"}
+          raised={Boolean(overlay)}
         />
       ) : null}
     </>
@@ -3072,8 +3078,6 @@ function SettingsPanel({
   mood,
   onSelectMood,
   homeScreenVersions,
-  selectedHomeScreenVersion,
-  onSelectHomeScreenVersion,
   onUpdateHomeScreenIcon,
   globalInterruptionMode,
   onSetGlobalInterruptionMode,
@@ -3082,7 +3086,7 @@ function SettingsPanel({
   onResetSharedState,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState(selectedHomeScreenVersion || "bishbash");
+  const [previewVersionId, setPreviewVersionId] = useState("safari");
 
   return (
     <section className="panel-section">
@@ -3114,20 +3118,6 @@ function SettingsPanel({
           </div>
         ) : null}
       </div>
-      <div className="settings-card settings-compact">
-        <div className="settings-version-heading">
-          <p>Interruption mode</p>
-          <span>When on, supported launcher contexts can show their matching interruption cards.</span>
-        </div>
-        <label className="timing-option settings-checkbox-row">
-          <input
-            type="checkbox"
-            checked={globalInterruptionMode}
-            onChange={(event) => onSetGlobalInterruptionMode(event.target.checked)}
-          />
-          <span>{globalInterruptionMode ? "Interruption mode is ON" : "Interruption mode is OFF"}</span>
-        </label>
-      </div>
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Mood</p>
@@ -3150,8 +3140,8 @@ function SettingsPanel({
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
-          <p>Home Screen versions</p>
-          <span>Choose how this appears on your Home Screen.</span>
+          <p>Install launchers</p>
+          <span>Install separate home-screen buttons for Safari, Instagram and YouTube. Each launcher shares your BishBash cards and settings, but opens in its own app disguise.</span>
         </div>
         <label className="field" style={{ marginBottom: "16px" }}>
           <select
@@ -3159,23 +3149,27 @@ function SettingsPanel({
             value={previewVersionId}
             onChange={(e) => setPreviewVersionId(e.target.value)}
           >
-            {Object.values(homeScreenVersions).map((v) => (
+            {Object.values(homeScreenVersions)
+              .filter((v) => v.id !== "bishbash")
+              .map((v) => (
               <option key={v.id} value={v.id}>{v.name}</option>
             ))}
           </select>
         </label>
         <div className="home-screen-version-list">
           {(() => {
-            const version = homeScreenVersions[previewVersionId] || homeScreenVersions["bishbash"];
+            const version =
+              homeScreenVersions[previewVersionId] ??
+              DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ??
+              DEFAULT_HOME_SCREEN_VERSIONS.safari;
+
             const previewIcon = version.customIconSrc || version.iconSrc;
-            const installPath = DEFAULT_HOME_SCREEN_VERSIONS[version.id]?.installPath || version.installPath;
-            const installUrl = getInstallUrl(installPath);
-            const isStandardVersion = version.id === "bishbash";
+            const installUrl = getInstallUrl(`${BASE_PATH}/install/${version.id}/index.html`);
 
             return (
               <article
                 key={version.id}
-                className={`home-screen-version-card ${selectedHomeScreenVersion === version.id ? "selected-version-card" : ""}`}
+                className="home-screen-version-card"
               >
                 <img
                   src={previewIcon}
@@ -3185,35 +3179,20 @@ function SettingsPanel({
                 <div className="home-screen-version-copy">
                   <div className="home-screen-version-title">
                     <strong>{version.name}</strong>
-                    {selectedHomeScreenVersion === version.id ? <span>Selected</span> : null}
                   </div>
                   <p>
-                    {isStandardVersion
-                      ? "Launches straight into your standard BishBash home."
-                      : `Uses launcherContext "${version.id}" and shares the same BishBash state.`}
+                    Uses launcherContext "{version.id}" and shares the same BishBash state.
                   </p>
-                  <a
-                    href={installUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="home-screen-install-link"
-                  >
-                    Open install screen
-                  </a>
+                    <a
+                      href={installUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="home-screen-install-link"
+                    >
+                      Open install screen
+                    </a>
                 </div>
                 <div className="home-screen-version-actions">
-                  <button
-                    type="button"
-                    className={`pack-button ${selectedHomeScreenVersion === version.id ? "secondary" : ""}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onSelectHomeScreenVersion(version.id);
-                    }}
-                  >
-                    {selectedHomeScreenVersion === version.id ? "Using this version" : "Use this version"}
-                  </button>
-                  <p className="pack-meta">{isStandardVersion ? "launcherContext: normal" : `launcherContext: ${version.id}`}</p>
                   <label className="icon-upload-button">
                     <input
                       type="file"
@@ -3258,6 +3237,27 @@ function SettingsPanel({
         <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
           Clear local development state
         </button>
+      </div>
+
+      <div className="section-heading solo" style={{ marginTop: "2.5rem" }}>
+        <div>
+          <h2>Advanced</h2>
+          <p>Under the hood configurations.</p>
+        </div>
+      </div>
+      <div className="settings-card settings-compact">
+        <div className="settings-version-heading">
+          <p>Pause before opening apps</p>
+          <span>When this is on, installed launchers show a pause card before opening the real app.</span>
+        </div>
+        <label className="timing-option settings-checkbox-row">
+          <input
+            type="checkbox"
+            checked={globalInterruptionMode}
+            onChange={(event) => onSetGlobalInterruptionMode(event.target.checked)}
+          />
+          <span>{globalInterruptionMode ? "Pause is ON" : "Pause is OFF"}</span>
+        </label>
       </div>
     </section>
   );

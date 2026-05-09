@@ -46,8 +46,11 @@
   };
 
   const pathParts = window.location.pathname.split("/").filter(Boolean);
-  const versionId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || "safari";
-  const baseVersion = defaults[versionId] || defaults.safari;
+  const installIndex = pathParts.indexOf("install");
+  const candidateVersionId =
+    installIndex >= 0 ? pathParts[installIndex + 1] : pathParts[pathParts.length - 1];
+  const versionId = defaults[candidateVersionId] ? candidateVersionId : "safari";
+  const baseVersion = defaults[versionId];
 
   let stored = {};
   try {
@@ -134,4 +137,13 @@
       window.location.href = version.appUrl;
     });
   }
+
+  const appBasePath = pathParts[0] === "bishbash" ? "/bishbash" : "";
+  const settingsHref = `${window.location.origin}${appBasePath}/settings`;
+
+  const settingsLink = document.createElement("a");
+  settingsLink.href = settingsHref;
+  settingsLink.className = "install-settings-link";
+  settingsLink.textContent = "Back to BishBash settings";
+  document.querySelector(".install-card")?.appendChild(settingsLink);
 })();
