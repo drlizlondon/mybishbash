@@ -998,7 +998,7 @@ function App() {
     updateCards((current) =>
       current.map((card) =>
         card.id === cardId
-          ? { ...card, lastShownAt: new Date().toISOString() }
+          ? { ...card, lastShownAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
           : card,
       ),
     );
@@ -1006,7 +1006,7 @@ function App() {
   }
 
   function openPackReveal(packId) {
-    const packCards = cards.filter((card) => card.sourcePackId === packId);
+    const packCards = cards.filter((card) => card.sourcePackId === packId && !card.deletedAt);
     if (packCards.length === 0) return;
 
     const eligiblePackCards = packCards.filter((card) => isEligible(card, new Date(), profile.timezone));
@@ -1075,6 +1075,7 @@ function App() {
                 icon: formData.icon,
                 frequency: formData.frequency,
                 timingWindows: formData.timingWindows,
+                updatedAt: new Date().toISOString(),
               }
             : card,
         ),
@@ -1088,12 +1089,14 @@ function App() {
           icon: formData.icon,
           statusToday: "fresh",
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           lastShownAt: null,
           notYetUntil: null,
           doneDate: null,
           frequency: formData.frequency,
           timingWindows: formData.timingWindows,
           paused: false,
+          deletedAt: null,
         },
         ...current,
       ]);
@@ -1112,7 +1115,13 @@ function App() {
   }
 
   function handleDeleteCard(cardId) {
-    updateCards((current) => current.filter((card) => card.id !== cardId && card.sourcePackId !== cardId));
+    updateCards((current) =>
+      current.map((card) =>
+        card.id === cardId
+          ? { ...card, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+          : card
+      )
+    );
     setMenuOpenId(null);
   }
 
@@ -1133,6 +1142,7 @@ function App() {
           notYetUntil: null,
           lastShownAt: null,
           paused: false,
+          updatedAt: new Date().toISOString(),
         };
       }),
     );
@@ -1152,6 +1162,7 @@ function App() {
         return {
           ...card,
           paused: !card.paused,
+          updatedAt: new Date().toISOString(),
         };
       }),
     );
@@ -1177,6 +1188,7 @@ function App() {
               ...card,
               frequency: formData.frequency,
               timingWindows: formData.timingWindows,
+              updatedAt: new Date().toISOString(),
             }
           : card,
       ),
@@ -1185,14 +1197,22 @@ function App() {
   }
 
   function isPackActive(packId) {
-    return cards.some((card) => card.sourcePackId === packId);
+    return cards.some((card) => card.sourcePackId === packId && !card.deletedAt);
   }
 
   function activatePack(packId) {
     const pack = PACKS.find((item) => item.id === packId);
     if (!pack || isPackActive(packId)) return;
 
-    updateCards((current) => [...buildCardsFromPack(pack), ...current]);
+    updateCards((current) => {
+      const hasOldCards = current.some((c) => c.sourcePackId === packId);
+      if (hasOldCards) {
+        return current.map((c) =>
+          c.sourcePackId === packId ? { ...c, deletedAt: null, updatedAt: new Date().toISOString() } : c
+        );
+      }
+      return [...buildCardsFromPack(pack), ...current];
+    });
     setHiddenLibraryPacks((current) => current.filter((id) => id !== packId));
     void logEvent({
       event_type: "pack_activated",
@@ -1205,7 +1225,11 @@ function App() {
   }
 
   function deactivatePack(packId) {
-    updateCards((current) => current.filter((card) => card.sourcePackId !== packId));
+    updateCards((current) =>
+      current.map((card) =>
+        card.sourcePackId === packId ? { ...card, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : card
+      )
+    );
     const pack = PACKS.find((item) => item.id === packId);
     void logEvent({
       event_type: "pack_deactivated",
@@ -1305,6 +1329,7 @@ function App() {
         title: trimmedText,
         readOnly: false,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       const nextCards = cardId
         ? existingCards.map((card) => (card.id === cardId ? nextCard : card))
@@ -1319,6 +1344,7 @@ function App() {
         editable: true,
         cards: nextCards,
         messages: nextCards.map((card) => card.text),
+        updatedAt: new Date().toISOString(),
       };
 
       if (existing) {
@@ -1342,6 +1368,7 @@ function App() {
         ...existing,
         cards: nextCards,
         messages: nextCards.map((card) => card.text),
+        updatedAt: new Date().toISOString(),
       };
       return current.map((pack) => (pack.id === existing.id ? nextPack : pack));
     });
@@ -1503,6 +1530,7 @@ function App() {
         return text ? { id: `${packId}:${index}`, text, title: text } : null;
       }).filter(Boolean),
       messages: packData.messages.map((item) => item.trim()).filter(Boolean),
+      updatedAt: new Date().toISOString(),
     };
 
     if (!nextPack.name || nextPack.messages.length === 0) return null;
@@ -1581,7 +1609,7 @@ function App() {
 
   const homeItems = useMemo(() => {
     const items = cards
-      .filter((card) => !card.sourcePackId && !card.disliked)
+      .filter((card) => !card.sourcePackId && !card.disliked && !card.deletedAt)
       .map((card) => ({
         type: "single",
         id: card.id,
@@ -1590,7 +1618,7 @@ function App() {
 
     const packMap = new Map();
     cards.forEach((card) => {
-      if (!card.sourcePackId || !isEligible(card, new Date(), profile.timezone)) return;
+      if (!card.sourcePackId || !isEligible(card, new Date(), profile.timezone) || card.deletedAt) return;
       if (!packMap.has(card.sourcePackId)) {
         packMap.set(card.sourcePackId, []);
       }
@@ -1634,6 +1662,7 @@ function App() {
     const seenPackIds = new Set();
 
     cards.forEach((card) => {
+      if (card.deletedAt) return;
       if (card.sourcePackId) {
         if (seenPackIds.has(card.sourcePackId)) return;
         const packHasEligible = cards.some(
@@ -1658,7 +1687,7 @@ function App() {
   const personalLibraryItems = useMemo(
     () =>
       cards
-        .filter((card) => !card.sourcePackId)
+        .filter((card) => !card.sourcePackId && !card.deletedAt)
         .map((card) => ({
           type: "single",
           id: card.id,
@@ -1762,6 +1791,7 @@ function App() {
                   handleResetItem={handleResetItem}
                   handleTogglePause={handleTogglePause}
                   handleDeleteCard={handleDeleteCard}
+                  deactivatePack={deactivatePack}
                   onCreate={() => {
                     setEditingId(null);
                     setIsComposerOpen(true);
@@ -2141,6 +2171,7 @@ function HomePanel({
   handleResetItem,
   handleTogglePause,
   handleDeleteCard,
+  deactivatePack,
   onCreate,
 }) {
   return (
@@ -2263,11 +2294,15 @@ function HomePanel({
                         if (item.type === "interruption-card" || item.type === "interruption-version") {
                           return;
                         }
+                        if (item.type === "pack") {
+                          deactivatePack(item.id);
+                          return;
+                        }
                         handleDeleteCard(item.id);
                       }}
                       disabled={item.type === "interruption-card" || item.type === "interruption-version"}
                     >
-                      Delete
+                      {item.type === "pack" ? "Remove pack" : "Delete"}
                     </button>
                   </div>
                 ) : null}
@@ -2912,7 +2947,7 @@ function PackDetailModal({
                   getPackDislikeKey({ sourcePackId: libraryPack.id, promptText: entry.promptText }),
                 );
                 const activeCard = cards.find(
-                  (card) => card.sourcePackId === libraryPack.id && card.promptText === entry.promptText,
+                  (card) => card.sourcePackId === libraryPack.id && card.promptText === entry.promptText && !card.deletedAt,
                 );
                 return (
                   <article key={`${libraryPack.id}-${index}`} className="home-screen-version-card pack-manager-card">

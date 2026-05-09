@@ -342,6 +342,7 @@ export function isEligible(card, date = new Date(), timeZone) {
   const isPackCard = Boolean(card.sourcePackId);
   if (card.paused) return false;
   if (card.disliked) return false;
+  if (card.deletedAt) return false;
   if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) return false;
   if (
     !isPackCard &&
@@ -372,6 +373,10 @@ export function normalizeCards(cards, date = new Date(), timeZone) {
     if (typeof next.disliked !== "boolean") {
       next.disliked = false;
     }
+    if (next.deleted === true && !next.deletedAt) {
+      next.deletedAt = next.updatedAt || new Date().toISOString();
+    }
+    delete next.deleted;
     if (next.doneDate !== todayKey && next.statusToday === "doneToday") {
       next.statusToday = "fresh";
     }
@@ -453,6 +458,7 @@ export function applyCardAction(card, action, date = new Date(), timeZone) {
   const updated = {
     ...card,
     lastShownAt: date.toISOString(),
+    updatedAt: date.toISOString(),
   };
 
   if (action === "now") {
@@ -501,6 +507,7 @@ export function formatWindowList(windows) {
 }
 
 export function buildCardsFromPack(pack) {
+  const now = new Date().toISOString();
   return pack.entries.map((entry) => ({
     id: createId(),
     promptText: entry.promptText,
@@ -509,7 +516,8 @@ export function buildCardsFromPack(pack) {
     theme: pack.theme,
     icon: pack.icon ?? "heart",
     statusToday: "fresh",
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     lastShownAt: null,
     notYetUntil: null,
     doneDate: null,
@@ -517,6 +525,7 @@ export function buildCardsFromPack(pack) {
     timingWindows: ["morning", "day", "evening"],
     paused: false,
     disliked: false,
+    deletedAt: null,
     sourcePackId: pack.id,
   }));
 }
