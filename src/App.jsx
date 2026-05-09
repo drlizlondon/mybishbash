@@ -434,7 +434,7 @@ function getHomeCardTitle(card) {
 }
 
 function getPackRepresentative(cards, packId) {
-  const packCards = cards.filter((card) => card.sourcePackId === packId);
+  const packCards = cards.filter((card) => card.sourcePackId === packId && !card.deletedAt);
   return packCards.find((card) => !card.paused && !card.disliked) ?? null;
 }
 
@@ -1143,10 +1143,11 @@ function App() {
   }
 
   function handleDeleteCard(cardId) {
+    const now = new Date().toISOString();
     updateCards((current) =>
       current.map((card) =>
         card.id === cardId
-          ? { ...card, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+          ? { ...card, deletedAt: now, updatedAt: now }
           : card
       )
     );
@@ -1158,7 +1159,7 @@ function App() {
       current.map((card) => {
         const matches =
           item.type === "pack"
-            ? card.sourcePackId === item.id
+            ? card.sourcePackId === item.id && !card.deletedAt
             : card.id === item.id;
 
         if (!matches) return card;
@@ -1182,7 +1183,7 @@ function App() {
       current.map((card) => {
         const matches =
           item.type === "pack"
-            ? card.sourcePackId === item.id
+            ? card.sourcePackId === item.id && !card.deletedAt
             : card.id === item.id;
 
         if (!matches) return card;
@@ -1211,7 +1212,7 @@ function App() {
   function handleSavePackSettings(packId, formData) {
     updateCards((current) =>
       current.map((card) =>
-        card.sourcePackId === packId
+        card.sourcePackId === packId && !card.deletedAt
           ? {
               ...card,
               frequency: formData.frequency,
@@ -1253,9 +1254,12 @@ function App() {
   }
 
   function deactivatePack(packId) {
+    const now = new Date().toISOString();
     updateCards((current) =>
       current.map((card) =>
-        card.sourcePackId === packId ? { ...card, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : card
+        card.sourcePackId === packId && !card.deletedAt
+          ? { ...card, deletedAt: now, updatedAt: now }
+          : card
       )
     );
     const pack = PACKS.find((item) => item.id === packId);
@@ -2848,7 +2852,7 @@ function PacksPanel({
         </div>
         <div className="library-pack-stack">
           {libraryPacks.map((pack, index) => {
-            const active = cards.some((card) => card.sourcePackId === pack.id);
+            const active = cards.some((card) => card.sourcePackId === pack.id && !card.deletedAt);
             const canActivate = Array.isArray(pack.entries) && pack.entries.length > 0;
             return (
               <article
@@ -2864,7 +2868,8 @@ function PacksPanel({
                   <button
                     type="button"
                     className={`library-pack-button ${active ? "secondary" : ""}`}
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       if (active) {
                         onDeactivateLibraryPack(pack.id);
                         return;
