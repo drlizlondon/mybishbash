@@ -2052,6 +2052,7 @@ function App() {
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
+                  launcherContext={launcherContext}
                 />
               ) : null}
             </main>
@@ -3568,10 +3569,18 @@ function SettingsPanel({
   actionCards,
   onRestoreActionCards,
   interruptionPacks,
+  launcherContext,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("bishbash");
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+
+  const isInsideFakeLauncher =
+    launcherContext &&
+    INTERRUPTION_LAUNCHER_CONTEXTS.includes(launcherContext);
+
+  const isSelectedCurrentLauncher =
+    isInsideFakeLauncher && previewVersionId === launcherContext;
 
   return (
     <section className="panel-section">
@@ -3696,29 +3705,29 @@ function SettingsPanel({
                     Replace cover icon
                   </label>
                 </div>
-            {INTERRUPTION_LAUNCHER_CONTEXTS.includes(version.id) ? (
-              <div className="launcher-interruption-settings">
-                <div className="launcher-interruption-header">
+            {isSelectedCurrentLauncher ? (
+              <div style={{ gridColumn: "1 / -1", marginTop: "12px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                   <div>
-                    <strong>Interruptions</strong>
-                    <p>Pause before opening this app.</p>
+                    <strong style={{ display: "block", fontSize: "16px", color: "var(--charcoal)" }}>Interruptions</strong>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "14px", color: "var(--ink-muted)" }}>Pause before opening this app.</p>
                   </div>
-                  <label className="launcher-toggle-row">
-                    <span>{interruptionsOn ? "On" : "Off"}</span>
+                  <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: "8px", margin: 0, padding: 0, border: 0, background: "transparent" }}>
                     <input
                       type="checkbox"
                       checked={interruptionsOn}
                       onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
                     />
+                    <span style={{ fontSize: "15px", color: "var(--charcoal)" }}>{interruptionsOn ? "On" : "Off"}</span>
                   </label>
                 </div>
-                <p className="launcher-interruption-description">
+                <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
                   {interruptionsOn
                     ? "You’ll see interruption cards before continuing."
                     : "You’ll see normal BishBash cards instead."}
                 </p>
                 {pack ? (
-                  <p className="launcher-linked-pack">
+                  <p className="tiny-note" style={{ margin: 0 }}>
                     Linked pack: {pack.name}
                   </p>
                 ) : null}
