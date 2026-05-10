@@ -1,5 +1,3 @@
-import { getVersionOpenHref } from "./launcherState";
-
 function SafariGlyph() {
   return (
     <svg viewBox="0 0 32 32" className="safari-glyph" aria-hidden="true">
@@ -10,15 +8,16 @@ function SafariGlyph() {
   );
 }
 
-export default function FakeLauncherBar({ versions, raised = false }) {
+export default function FakeLauncherBar({ versions, raised = false, onLaunch }) {
   return (
     <div className={`fake-launcher-bar ${raised ? "raised" : ""}`} aria-label="Fake app launchers">
       {versions.map((version) => (
-        <a
+        <button
           key={version.id}
+          type="button"
           className="fake-launcher-button"
-          href={getVersionOpenHref(version)}
-          aria-label={`Open ${version.realAppLabel}`}
+          onClick={() => onLaunch?.(version.id)}
+          aria-label={`Launch ${version.realAppLabel}`}
         >
           {version.customIconSrc || version.iconSrc ? (
             <img src={version.customIconSrc || version.iconSrc} alt="" aria-hidden="true" />
@@ -26,7 +25,7 @@ export default function FakeLauncherBar({ versions, raised = false }) {
             <SafariGlyph />
           )}
           <span>{version.realAppLabel}</span>
-        </a>
+        </button>
       ))}
     </div>
   );

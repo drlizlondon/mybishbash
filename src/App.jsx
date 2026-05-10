@@ -906,27 +906,21 @@ function App() {
 
     if (route.kind === "intercept") {
       setLauncherContext(route.versionId);
-      const version = resolveVersionConfig(
-        homeScreenVersions[route.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[route.versionId],
-        launcherBehaviorSettings[route.versionId]
-      );
       const pack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
       });
-      if (!pack) {
-        setScreen("library");
-        setShouldLaunchOverlay(true);
-        navigateTo("/home", { replace: true });
+      if (!pack || pack.messages.length === 0) {
+        setScreen("interception");
+        setOverlay((current) => (current?.type === "empty" ? current : { type: "empty" }));
         return;
       }
 
       setScreen("interception");
-      setOverlay(
-        pack?.messages?.length
-          ? { ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"), versionId: route.versionId }
-          : { type: "empty", message: "No interruption cards available." },
-      );
+      setOverlay({
+        ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
+        versionId: route.versionId
+      });
       return;
     }
 
@@ -1000,6 +994,31 @@ function App() {
     const url = `${BASE_PATH}${normalized === "/" ? "" : normalized}`;
     window.history[replace ? "replaceState" : "pushState"]({}, "", url);
     setRoutePath(normalized);
+  }
+
+  function startInterceptionFlow(versionId) {
+    suppressNextHomeAutoLaunchRef.current = false;
+    setShouldLaunchOverlay(false);
+    setLauncherContext(versionId);
+
+    const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
+      hiddenCardIds: dislikedPackCardIds,
+      globalEnabled: globalInterruptionMode,
+    });
+
+    if (!pack || pack.messages.length === 0) {
+      setScreen("interception");
+      setOverlay({ type: "empty" });
+      navigateTo(`/intercept/${versionId}`, { replace: true });
+      return;
+    }
+
+    setScreen("interception");
+    setOverlay({
+      ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
+      versionId
+    });
+    navigateTo(`/intercept/${versionId}`, { replace: true });
   }
 
   function updateCards(updater) {
@@ -2085,6 +2104,7 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={Boolean(overlay)}
+          onLaunch={startInterceptionFlow}
         />
       ) : null}
     </>
