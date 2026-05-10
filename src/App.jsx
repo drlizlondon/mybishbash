@@ -1038,7 +1038,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -2052,7 +2052,6 @@ function App() {
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
-                  launcherContext={launcherContext}
                 />
               ) : null}
             </main>
@@ -2200,6 +2199,16 @@ function App() {
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
+            void logEvent({
+              event_type: "intercept_do_something_else",
+              source_type: "interruption",
+              card_source: "interruption",
+              app_id: activeOverlayVersion?.id,
+              app_name: activeOverlayVersion?.name,
+              launcher_context: activeOverlayVersion?.id,
+              action_taken: "chose_something_else",
+            });
+            console.log("[ACTION CARDS] onChooseElse fired");
             const available = actionCards.filter((c) => !c.hidden && !c.deletedAt);
             if (available.length === 0) {
               setOverlay(buildActionCardEmptyOverlay(overlay?.versionId));
@@ -3569,18 +3578,10 @@ function SettingsPanel({
   actionCards,
   onRestoreActionCards,
   interruptionPacks,
-  launcherContext,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
-
-  const isInsideFakeLauncher =
-    launcherContext &&
-    INTERRUPTION_LAUNCHER_CONTEXTS.includes(launcherContext);
-
-  const isSelectedCurrentLauncher =
-    isInsideFakeLauncher && previewVersionId === launcherContext;
+  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
 
   return (
     <section className="panel-section">
@@ -3705,29 +3706,27 @@ function SettingsPanel({
                     Replace cover icon
                   </label>
                 </div>
-            {isSelectedCurrentLauncher ? (
-              <div style={{ gridColumn: "1 / -1", marginTop: "12px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                  <div>
-                    <strong style={{ display: "block", fontSize: "16px", color: "var(--charcoal)" }}>Interruptions</strong>
-                    <p style={{ margin: "2px 0 0 0", fontSize: "14px", color: "var(--ink-muted)" }}>Pause before opening this app.</p>
-                  </div>
-                  <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: "8px", margin: 0, padding: 0, border: 0, background: "transparent" }}>
-                    <input
-                      type="checkbox"
-                      checked={interruptionsOn}
-                      onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
-                    />
-                    <span style={{ fontSize: "15px", color: "var(--charcoal)" }}>{interruptionsOn ? "On" : "Off"}</span>
-                  </label>
+            {INTERRUPTION_LAUNCHER_CONTEXTS.includes(version.id) ? (
+              <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                <div style={{ marginBottom: "12px" }}>
+                  <strong style={{ display: "block" }}>Interruptions</strong>
+                  <span style={{ fontSize: "14px", opacity: 0.8 }}>Pause before opening this app.</span>
                 </div>
-                <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
+                <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
+                  <input
+                    type="checkbox"
+                    checked={interruptionsOn}
+                    onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
+                  />
+                  <span>{interruptionsOn ? "On" : "Off"}</span>
+                </label>
+                <p className="tiny-note" style={{ margin: 0 }}>
                   {interruptionsOn
                     ? "You’ll see interruption cards before continuing."
                     : "You’ll see normal BishBash cards instead."}
                 </p>
                 {pack ? (
-                  <p className="tiny-note" style={{ margin: 0 }}>
+                  <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
                     Linked pack: {pack.name}
                   </p>
                 ) : null}
@@ -3952,6 +3951,8 @@ function Overlay({
   fakeLauncherVersions,
   onFakeLauncherLaunch,
 }) {
+  console.log("[OVERLAY TYPE]", overlay?.type);
+
   if (overlay.type === "empty") {
     return (
       <div className="overlay-screen empty-state">
@@ -4053,6 +4054,8 @@ function Overlay({
 }
 
 function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent }) {
+  console.log("[ACTION CARD OVERLAY RENDERED]");
+
   const available = useMemo(() => actionCards.filter((c) => !c.hidden && !c.deletedAt), [actionCards]);
   const [recentlyShown, setRecentlyShown] = useState([]);
   const [currentCard, setCurrentCard] = useState(null);
@@ -4353,37 +4356,19 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
 
   function handleContinueToApp() {
     if (!version) return;
-    setShowFallbackLink(false);
+
     void onLogEvent({
       event_type: "intercept_continue_to_app",
-      source_type: "interruption",
-      card_source: "interruption",
-      card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
-      card_title: messages[activeIndex] ?? null,
-      card_text: messages[activeIndex] ?? null,
       app_id: version.id,
       app_name: version.name,
       launcher_context: version.id,
-      target_app: overlay.targetApp ?? version.id,
-      pack_id: overlay.packId,
-      message_id: `${overlay.packId}:${activeIndex}`,
       action_taken: "continued_to_app",
-      metadata: {
-        packTitle: overlay.name,
-        message: messages[activeIndex] ?? null,
-      },
     });
 
-      const href = getVersionOpenHref(version);
-      if (href) {
-        window.location.href = href;
-      }
-
-    fallbackTimerRef.current = window.setTimeout(() => {
-      if (document.visibilityState === "visible") {
-        setShowFallbackLink(true);
-      }
-    }, 3200);
+    const href = getVersionOpenHref(version);
+    if (href) {
+      window.location.href = href;
+    }
   }
 
   return (
@@ -4430,28 +4415,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
         <ActionButton
           label="I'll do something else"
           tone="solid"
-          onClick={() => {
-            void onLogEvent({
-              event_type: "intercept_do_something_else",
-              source_type: "interruption",
-              card_source: "interruption",
-              card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
-              card_title: messages[activeIndex] ?? null,
-              card_text: messages[activeIndex] ?? null,
-              app_id: version?.id ?? null,
-              app_name: version?.name ?? null,
-              launcher_context: version?.id ?? NORMAL_LAUNCHER_CONTEXT,
-              target_app: overlay.targetApp ?? version?.id ?? null,
-              pack_id: overlay.packId,
-              message_id: `${overlay.packId}:${activeIndex}`,
-              action_taken: "chose_something_else",
-              metadata: {
-                packTitle: overlay.name,
-                message: messages[activeIndex] ?? null,
-              },
-            });
-            onChooseElse();
-          }}
+          onClick={onChooseElse}
         />
         <ActionButton
           label={`Continue to ${version?.name ?? "app"}`}
