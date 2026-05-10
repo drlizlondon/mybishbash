@@ -658,7 +658,7 @@ function App() {
       })
       .catch(() => {
         if (mounted) setSyncStatus("needs-connection");
-      });
+      })
       .finally(() => {
         if (mounted) setAuthReady(true);
       });
