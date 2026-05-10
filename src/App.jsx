@@ -324,7 +324,6 @@ function buildSharedState({
   setupComplete,
   mood,
   profile,
-  launcherBehaviorSettings,
   cardPacks,
   hiddenLibraryPacks,
   dislikedPackCardIds,
@@ -337,7 +336,6 @@ function buildSharedState({
     setupComplete,
     mood,
     profile,
-    launcherBehaviorSettings,
     cardPacks,
     hiddenLibraryPacks,
     dislikedPackCardIds,
@@ -350,26 +348,11 @@ function buildSharedState({
 function normalizeSharedState(state, fallback) {
   const source = state && typeof state === "object" ? state : {};
 
-  let normalizedBehavior = fallback.launcherBehaviorSettings;
-  if (source.launcherBehaviorSettings && typeof source.launcherBehaviorSettings === "object") {
-    normalizedBehavior = source.launcherBehaviorSettings;
-  } else if (source.homeScreenVersions && typeof source.homeScreenVersions === "object") {
-    normalizedBehavior = {};
-    for (const [id, version] of Object.entries(source.homeScreenVersions)) {
-      normalizedBehavior[id] = {
-        useInterruptionPack: version.useInterruptionPack,
-        interruptionPaused: version.interruptionPaused,
-        interruptionPackId: version.interruptionPackId,
-      };
-    }
-  }
-
   return {
     cards: Array.isArray(source.cards) ? source.cards : fallback.cards,
     setupComplete: typeof source.setupComplete === "boolean" ? source.setupComplete : fallback.setupComplete,
     mood: resolveTheme(source.mood ?? fallback.mood),
     profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
-    launcherBehaviorSettings: normalizedBehavior,
     cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
     hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
     dislikedPackCardIds: Array.isArray(source.dislikedPackCardIds)
@@ -557,7 +540,6 @@ function App() {
         setupComplete,
         mood,
         profile,
-        launcherBehaviorSettings,
         cardPacks,
         hiddenLibraryPacks,
         dislikedPackCardIds,
@@ -569,7 +551,6 @@ function App() {
       setupComplete,
       mood,
       profile,
-      launcherBehaviorSettings,
       cardPacks,
       hiddenLibraryPacks,
       dislikedPackCardIds,
@@ -587,7 +568,6 @@ function App() {
       setupComplete: initialState.setupComplete,
       mood: initialState.mood,
       profile: initialState.profile,
-      launcherBehaviorSettings: initialState.launcherBehaviorSettings,
       cardPacks: initialState.cardPacks,
       hiddenLibraryPacks: initialState.hiddenLibraryPacks,
       dislikedPackCardIds: initialState.dislikedPackCardIds,
@@ -611,7 +591,6 @@ function App() {
       name: next.profile?.name ?? "",
       timezone: next.profile?.timezone ?? "Europe/London",
     });
-    setLauncherBehaviorSettings(next.launcherBehaviorSettings);
     setCardPacks((currentPacks) => mergeEntitiesById(currentPacks, next.cardPacks));
     setHiddenLibraryPacks(next.hiddenLibraryPacks);
     setDislikedPackCardIds(next.dislikedPackCardIds);
