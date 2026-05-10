@@ -3570,7 +3570,6 @@ function SettingsPanel({
   interruptionPacks,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
   return (
@@ -3628,25 +3627,8 @@ function SettingsPanel({
           <p>Install launchers</p>
           <span>Install separate home-screen buttons for Safari, Instagram and YouTube. Each launcher shares your BishBash cards and settings, but opens in its own app disguise.</span>
         </div>
-        <label className="field" style={{ marginBottom: "16px" }}>
-          <select
-            className="settings-input"
-            value={previewVersionId}
-            onChange={(e) => setPreviewVersionId(e.target.value)}
-          >
-            {Object.values(homeScreenVersions)
-              .map((v) => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </select>
-        </label>
         <div className="home-screen-version-list">
-          {(() => {
-            const version =
-              homeScreenVersions[previewVersionId] ??
-              DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ??
-              DEFAULT_HOME_SCREEN_VERSIONS.safari;
-
+          {Object.values(homeScreenVersions).map((version) => {
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(`${BASE_PATH}/install/${version.id}/index.html`);
             const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
@@ -3701,7 +3683,7 @@ function SettingsPanel({
                     Replace cover icon
                   </label>
                 </div>
-            {version.id !== "bishbash" ? (
+            {INTERRUPTION_LAUNCHER_CONTEXTS.includes(version.id) ? (
               <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
                 <div style={{ marginBottom: "12px" }}>
                   <strong style={{ display: "block" }}>Interruptions</strong>
@@ -3729,7 +3711,7 @@ function SettingsPanel({
             ) : null}
               </article>
             );
-          })()}
+          })}
         </div>
       </div>
       <div className="settings-card settings-compact">
