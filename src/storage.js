@@ -98,6 +98,8 @@ export const DEFAULT_ACTION_CARDS = [
     category: "Connection",
     launchUrl: "",
     hidden: false,
+    source: "starter",
+    deletedAt: null,
     createdAt: DEFAULT_ACTION_CARD_TIMESTAMP,
     updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
   },
@@ -108,6 +110,8 @@ export const DEFAULT_ACTION_CARDS = [
     category: "Physical reset",
     launchUrl: "",
     hidden: false,
+    source: "starter",
+    deletedAt: null,
     createdAt: DEFAULT_ACTION_CARD_TIMESTAMP,
     updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
   },
@@ -118,6 +122,8 @@ export const DEFAULT_ACTION_CARDS = [
     category: "Intentional browsing",
     launchUrl: "https://www.ft.com",
     hidden: false,
+    source: "starter",
+    deletedAt: null,
     createdAt: DEFAULT_ACTION_CARD_TIMESTAMP,
     updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
   },
@@ -353,7 +359,7 @@ export function loadActionCards() {
     const storedArray = Array.isArray(stored) ? stored : [];
     
     const map = new Map();
-    DEFAULT_ACTION_CARDS.forEach((card) => map.set(card.id, card));
+    DEFAULT_ACTION_CARDS.forEach((card) => map.set(card.id, { ...card }));
     
     storedArray.forEach((card) => {
       if (card?.id) {

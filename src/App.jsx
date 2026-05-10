@@ -444,6 +444,26 @@ function buildLibraryPackHomeItem(packId, packCards) {
   };
 }
 
+function buildRevealOverlay(cardId, versionId = null) {
+  return { type: "reveal", cardId, versionId };
+}
+
+function buildEmptyOverlay(versionId = null) {
+  return { type: "empty", versionId };
+}
+
+function buildActionCardOverlay(versionId = null) {
+  return { type: "action-card", versionId };
+}
+
+function buildActionCardEmptyOverlay(versionId = null) {
+  return { type: "action-card-empty", versionId };
+}
+
+function buildActionSuccessOverlay(versionId = null) {
+  return { type: "action-success", versionId };
+}
+
 function App() {
   const initialState = useMemo(() => {
     const base = buildInitialState();
@@ -922,27 +942,40 @@ function App() {
 
     if (route.kind === "intercept") {
       setLauncherContext(route.versionId);
-      const pack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-        hiddenCardIds: dislikedPackCardIds,
-        globalEnabled: globalInterruptionMode,
-      });
-      if (!pack || pack.messages.length === 0) {
+      const { selected, interruption } = pickRandomHomeCardForDisplay(
+        cards,
+        profile.timezone,
+        route.versionId,
+        homeScreenVersions,
+        launcherBehaviorSettings,
+        cardPacks,
+        dislikedPackCardIds,
+        globalInterruptionMode,
+        events,
+      );
+
+      if (interruption) {
         setScreen("interception");
-        setOverlay((current) => (current?.type === "empty" ? current : { type: "empty" }));
+        setOverlay({
+          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
+          versionId: interruption.versionId,
+        });
         return;
       }
 
-      setScreen("interception");
-      setOverlay({
-        ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
-        versionId: route.versionId
-      });
+      setScreen("library");
+      if (selected) {
+        setOverlay(buildRevealOverlay(selected.id, route.versionId));
+        return;
+      }
+
+      setOverlay(buildEmptyOverlay(route.versionId));
       return;
     }
 
     if (route.kind === "caught-up") {
       setScreen("library");
-      setOverlay({ type: "empty" });
+      setOverlay(buildEmptyOverlay());
       return;
     }
 
@@ -952,10 +985,7 @@ function App() {
       if (overlay?.type === "reveal" && overlay.cardId === route.cardId) {
         return;
       }
-      setOverlay({
-        type: "reveal",
-        cardId: route.cardId,
-      });
+      setOverlay(buildRevealOverlay(route.cardId));
       return;
     }
 
@@ -987,14 +1017,11 @@ function App() {
         return;
       }
       if (selected) {
-        setOverlay({
-          type: "reveal",
-          cardId: selected.id,
-        });
+        setOverlay(buildRevealOverlay(selected.id));
         return;
       }
 
-      setOverlay({ type: "empty" });
+      setOverlay(buildEmptyOverlay());
       return;
     }
 
@@ -1017,23 +1044,34 @@ function App() {
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
 
-    const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-      hiddenCardIds: dislikedPackCardIds,
-      globalEnabled: globalInterruptionMode,
-    });
+    const { selected, interruption } = pickRandomHomeCardForDisplay(
+      cards,
+      profile.timezone,
+      versionId,
+      homeScreenVersions,
+      launcherBehaviorSettings,
+      cardPacks,
+      dislikedPackCardIds,
+      globalInterruptionMode,
+      events,
+    );
 
-    if (!pack || pack.messages.length === 0) {
+    if (interruption) {
       setScreen("interception");
-      setOverlay({ type: "empty" });
+      setOverlay({
+        ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
+        versionId: interruption.versionId,
+      });
       navigateTo(`/intercept/${versionId}`, { replace: true });
       return;
     }
 
-    setScreen("interception");
-    setOverlay({
-      ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
-      versionId
-    });
+    setScreen("library");
+    if (selected) {
+      setOverlay(buildRevealOverlay(selected.id, versionId));
+    } else {
+      setOverlay(buildEmptyOverlay(versionId));
+    }
     navigateTo(`/intercept/${versionId}`, { replace: true });
   }
 
@@ -1703,6 +1741,8 @@ function App() {
       id: createId(),
       ...cardData,
       hidden: false,
+      source: "user",
+      deletedAt: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1712,6 +1752,11 @@ function App() {
 
   function handleToggleActionCardHidden(cardId, hidden) {
     setActionCards((current) => current.map((c) => c.id === cardId ? { ...c, hidden, updatedAt: new Date().toISOString() } : c));
+  }
+
+  function handleDeleteActionCard(cardId) {
+    const now = new Date().toISOString();
+    setActionCards((current) => current.map((c) => c.id === cardId ? { ...c, deletedAt: now, updatedAt: now } : c));
   }
 
   function openCustomPackPreview(packId) {
@@ -1741,13 +1786,13 @@ function App() {
     : null;
   const activeOverlayVersion = useMemo(
     () =>
-      overlay?.type === "intercept-pack" && overlay?.versionId
+      overlay?.versionId
         ? resolveVersionConfig(
             homeScreenVersions[overlay.versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[overlay.versionId],
             launcherBehaviorSettings[overlay.versionId]
           )
         : activeInterceptionVersion,
-    [activeInterceptionVersion, homeScreenVersions, launcherBehaviorSettings, overlay?.type, overlay?.versionId],
+    [activeInterceptionVersion, homeScreenVersions, launcherBehaviorSettings, overlay?.versionId],
   );
 
   const homeItems = useMemo(() => {
@@ -1977,6 +2022,7 @@ function App() {
                   onDeactivateLibraryPack={deactivatePack}
                   onOpenPack={setSelectedPackDetail}
                   onToggleActionCardHidden={handleToggleActionCardHidden}
+                  onDeleteActionCard={handleDeleteActionCard}
                   onCreateActionCard={() => setIsActionCardEditorOpen(true)}
                 />
               ) : null}
@@ -2113,7 +2159,7 @@ function App() {
           onAction={handleAction}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
-            setOverlay((current) => ({ ...current, type: "action-success" }));
+            setOverlay(buildActionSuccessOverlay(overlay?.versionId));
             if (card.launchUrl) {
               window.location.href = card.launchUrl;
             }
@@ -2140,9 +2186,20 @@ function App() {
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
-            setOverlay((current) => ({ type: "action-card", versionId: current?.versionId }));
+            const available = actionCards.filter((c) => !c.hidden && !c.deletedAt);
+            if (available.length === 0) {
+              setOverlay(buildActionCardEmptyOverlay(overlay?.versionId));
+            } else {
+              setOverlay(buildActionCardOverlay(overlay?.versionId));
+            }
           }}
           onLogEvent={logEvent}
+          onCreateActionCard={() => {
+            setOverlay(null);
+            setIsActionCardEditorOpen(true);
+          }}
+          fakeLauncherVersions={fakeLauncherVersions}
+          onFakeLauncherLaunch={startInterceptionFlow}
         />
       ) : null}
 
@@ -3158,18 +3215,26 @@ function PacksPanel({
           </div>
         </div>
         <div className="packs-list-card">
-          {actionCards.map((card) => (
+          {actionCards.filter((c) => !c.deletedAt).map((card) => (
             <article key={card.id} className="home-screen-version-card pack-manager-card">
               <div className="home-screen-version-copy pack-manager-copy">
                 <div className="home-screen-version-title">
                   <strong>{card.title}</strong>
-                  <span>{card.hidden ? "Hidden" : "Visible"}</span>
+                  <span>{card.source === "starter" ? (card.hidden ? "Hidden" : "Visible") : "User created"}</span>
                 </div>
                 <p>{card.body}</p>
               </div>
-              <button type="button" className="pack-button secondary" onClick={() => onToggleActionCardHidden(card.id, !card.hidden)}>
-                {card.hidden ? "Restore" : "Hide"}
-              </button>
+              <div className="home-screen-version-actions">
+                {card.source === "starter" ? (
+                  <button type="button" className="pack-button secondary" onClick={() => onToggleActionCardHidden(card.id, !card.hidden)}>
+                    {card.hidden ? "Restore" : "Hide"}
+                  </button>
+                ) : (
+                  <button type="button" className="pack-button secondary danger-soft-button" onClick={() => onDeleteActionCard(card.id)}>
+                    Delete
+                  </button>
+                )}
+              </div>
             </article>
           ))}
         </div>
@@ -3436,7 +3501,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
           <>
             <p>Log in to sync this launcher with your BishBash profile.</p>
             {error ? <p className="sync-error">{error}</p> : null}
-            
+
             <form className="sync-form" onSubmit={submitExisting}>
               <label className="field">
                 <span>Email</span>
@@ -3764,18 +3829,10 @@ function Overlay({
   onLogEvent,
   actionCards,
   onAcceptActionCard,
+  onCreateActionCard,
+  fakeLauncherVersions,
+  onFakeLauncherLaunch,
 }) {
-  if (overlay.type === "empty" && route.kind === "intercept") {
-    return (
-      <div className="overlay-screen empty-state interception-screen" onClick={onClose}>
-        <div className="floating floating-heart" />
-        <p className="eyebrow">BishBash</p>
-        <h2>No interruption pack is linked yet.</h2>
-        <p>Open Settings and connect one to this Home Screen version.</p>
-      </div>
-    );
-  }
-
   if (overlay.type === "empty") {
     return (
       <div className="overlay-screen empty-state">
@@ -3822,7 +3879,11 @@ function Overlay({
   }
 
   if (overlay.type === "action-card") {
-    return <ActionCardOverlay overlay={overlay} actionCards={actionCards} onAccept={onAcceptActionCard} onClose={onClose} />;
+    return <ActionCardOverlay overlay={overlay} actionCards={actionCards} onAccept={onAcceptActionCard} onClose={onClose} onLogEvent={onLogEvent} />;
+  }
+
+  if (overlay.type === "action-card-empty") {
+    return <ActionCardEmptyOverlay overlay={overlay} version={version} onClose={onClose} onLogEvent={onLogEvent} onCreateActionCard={onCreateActionCard} />;
   }
 
   if (overlay.type === "action-success") {
@@ -3872,41 +3933,79 @@ function Overlay({
   );
 }
 
-function ActionCardOverlay({ overlay, actionCards, onAccept, onClose }) {
-  const available = useMemo(() => actionCards.filter((c) => !c.hidden), [actionCards]);
+function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent }) {
+  const available = useMemo(() => actionCards.filter((c) => !c.hidden && !c.deletedAt), [actionCards]);
   const [recentlyShown, setRecentlyShown] = useState([]);
   const [currentCard, setCurrentCard] = useState(null);
 
   useEffect(() => {
-    if (!currentCard) {
-      if (available.length === 0) {
-        onClose();
-      } else {
-        const nextCard = available[Math.floor(Math.random() * available.length)];
-        setCurrentCard(nextCard);
-        setRecentlyShown([nextCard.id]);
-      }
-    }
+    if (currentCard || available.length === 0) return;
+
+    const nextCard = available[Math.floor(Math.random() * available.length)];
+    setCurrentCard(nextCard);
+    setRecentlyShown([nextCard.id]);
+    logActionCardViewed(nextCard);
   }, [available, currentCard]);
 
+  function logActionCardViewed(card) {
+    if (!card) return;
+    void onLogEvent({
+      event_type: "action_card_viewed",
+      source_type: "action_card",
+      card_source: "action_card",
+      card_id: card.id,
+      card_title: card.title,
+      action_taken: "viewed",
+    });
+  }
+
   function pickNext() {
+    if (currentCard) {
+      void onLogEvent({
+        event_type: "action_card_skipped",
+        source_type: "action_card",
+        card_source: "action_card",
+        card_id: currentCard.id,
+        card_title: currentCard.title,
+        action_taken: "skipped",
+      });
+    }
+
     let pool = available.filter((c) => !recentlyShown.includes(c.id));
 
     if (pool.length === 0) {
-      const fallbackPool = available.filter((c) => currentCard ? c.id !== currentCard.id : true);
+      const fallbackPool = available.filter((c) =>
+        currentCard ? c.id !== currentCard.id : true
+      );
       pool = fallbackPool.length > 0 ? fallbackPool : available;
     }
 
-    if (pool.length === 0) {
-      onClose();
-      return;
-    }
+    if (pool.length === 0) return;
+
     const nextCard = pool[Math.floor(Math.random() * pool.length)];
+
     setCurrentCard(nextCard);
+
     setRecentlyShown((prev) => {
       const updated = [nextCard.id, ...prev.filter((id) => id !== nextCard.id)];
       return updated.slice(0, 3);
     });
+
+    logActionCardViewed(nextCard);
+  }
+
+  function handleAccept() {
+    if (currentCard) {
+      void onLogEvent({
+        event_type: "action_card_accepted",
+        source_type: "action_card",
+        card_source: "action_card",
+        card_id: currentCard.id,
+        card_title: currentCard.title,
+        action_taken: "accepted",
+      });
+      onAccept(currentCard);
+    }
   }
 
   if (!currentCard) return null;
@@ -3928,7 +4027,49 @@ function ActionCardOverlay({ overlay, actionCards, onAccept, onClose }) {
       </div>
       <div className="action-row">
         <ActionButton label="Another idea" onClick={pickNext} />
-        <ActionButton label="I'll do this" tone="solid" onClick={() => onAccept(currentCard)} />
+        <ActionButton label="I'll do this" tone="solid" onClick={handleAccept} />
+      </div>
+    </div>
+  );
+}
+
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard }) {
+  function handleContinueToApp() {
+    if (!version) return;
+
+    void onLogEvent({
+      event_type: "intercept_continue_to_app",
+      source_type: "action_card_empty",
+      card_source: "action_card_empty",
+      app_id: version.id,
+      app_name: version.name,
+      launcher_context: version.id,
+      action_taken: "continued_to_app",
+    });
+
+    const href = getVersionOpenHref(version);
+    if (href) {
+      window.location.href = href;
+    }
+  }
+
+  return (
+    <div className="overlay-screen empty-state">
+      <div className="floating floating-heart" />
+      <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
+        <BookGlyph />
+      </button>
+      <div className="caught-up-content">
+        <p className="eyebrow">Action Cards</p>
+        <h2>No action ideas yet.</h2>
+        <p className="caught-up-copy">Make one for yourself.</p>
+        <div className="caught-up-actions" style={{ flexDirection: "column", gap: "12px", display: "flex", alignItems: "center" }}>
+          <ActionButton label="Create action card" tone="solid" onClick={onCreateActionCard} />
+          <ActionButton label="Back home" onClick={onClose} />
+          {version ? (
+            <ActionButton label={`Continue to ${version.name}`} onClick={handleContinueToApp} />
+          ) : null}
+        </div>
       </div>
     </div>
   );
