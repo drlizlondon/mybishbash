@@ -281,6 +281,7 @@ const storageForReadyApp = {
   "bishbash.home-screen-selected.v1": "safari",
   "bishbash.card-packs.v1": cardPacks,
   "bishbash.global-interruption-mode.v1": "true",
+  "BISHBASH_DEMO_MODE": "true",
 };
 
 const storageForOnboarding = {
@@ -292,6 +293,7 @@ const storageForOnboarding = {
   "bishbash.home-screen-selected.v1": "safari",
   "bishbash.card-packs.v1": cardPacks,
   "bishbash.global-interruption-mode.v1": "true",
+  "BISHBASH_DEMO_MODE": "true",
 };
 
 const storageForEmpty = {
@@ -337,7 +339,7 @@ async function seed(page, storage, targetUrl = baseUrl) {
       window.localStorage.setItem(key, stringValue);
     }
   }, storage);
-  await page.goto(targetUrl, { waitUntil: "networkidle" });
+  await page.goto(targetUrl, { waitUntil: "load" });
   await page.waitForTimeout(900);
 }
 
@@ -418,6 +420,8 @@ async function main() {
         window.scrollTo({ top: document.body.scrollHeight * 0.55, behavior: "instant" }),
       );
       await page.waitForTimeout(400);
+      await page.locator('select.settings-input').selectOption('instagram');
+      await page.waitForTimeout(400);
       await shot(page, "06-settings-launchers.png");
       await context.close();
     }
@@ -453,7 +457,7 @@ async function main() {
     {
       const { context, page } = await createPage(browser);
       await page.goto("http://127.0.0.1:4173/bishbash/install/safari/", {
-        waitUntil: "networkidle",
+        waitUntil: "load",
       });
       await page.waitForTimeout(500);
       await shot(page, "11-install-safari.png");
@@ -463,7 +467,7 @@ async function main() {
     {
       const { context, page } = await createPage(browser);
       await page.goto("http://127.0.0.1:4173/bishbash/install/youtube/", {
-        waitUntil: "networkidle",
+        waitUntil: "load",
       });
       await page.waitForTimeout(500);
       await shot(page, "12-install-youtube.png");
@@ -473,10 +477,20 @@ async function main() {
     {
       const { context, page } = await createPage(browser);
       await page.goto("http://127.0.0.1:4173/bishbash/install/instagram/", {
-        waitUntil: "networkidle",
+        waitUntil: "load",
       });
       await page.waitForTimeout(500);
       await shot(page, "13-install-instagram.png");
+      await context.close();
+    }
+
+    {
+      const { context, page } = await createPage(browser);
+      await seed(page, storageForReadyApp, `${baseUrl}?disguise=instagram`);
+      await page.waitForTimeout(500);
+      await page.getByRole("button", { name: "I'll do something else" }).click();
+      await page.waitForTimeout(500);
+      await shot(page, "14-action-card.png");
       await context.close();
     }
 

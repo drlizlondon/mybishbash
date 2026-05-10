@@ -3571,6 +3571,7 @@ function SettingsPanel({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
 
   return (
     <section className="panel-section">
@@ -3627,8 +3628,20 @@ function SettingsPanel({
           <p>Install launchers</p>
           <span>Install separate home-screen buttons for Safari, Instagram and YouTube. Each launcher shares your BishBash cards and settings, but opens in its own app disguise.</span>
         </div>
+        <label className="field" style={{ marginBottom: "16px" }}>
+          <select
+            className="settings-input"
+            value={previewVersionId}
+            onChange={(e) => setPreviewVersionId(e.target.value)}
+          >
+            {Object.values(homeScreenVersions).map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        </label>
         <div className="home-screen-version-list">
-          {Object.values(homeScreenVersions).map((version) => {
+          {(() => {
+            const version = homeScreenVersions[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.safari;
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(`${BASE_PATH}/install/${version.id}/index.html`);
             const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
@@ -3711,7 +3724,7 @@ function SettingsPanel({
             ) : null}
               </article>
             );
-          })}
+          })()}
         </div>
       </div>
       <div className="settings-card settings-compact">

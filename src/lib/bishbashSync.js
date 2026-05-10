@@ -21,6 +21,7 @@ export function getSyncErrorMessage(error, fallback = "Could not sync your BishB
 }
 
 export async function loadSharedState(userId) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return null;
   const client = requireSupabase();
   const { data, error } = await client
     .from("bishbash_state")
@@ -36,6 +37,7 @@ export async function loadSharedState(userId) {
 }
 
 export async function saveSharedState(userId, state) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
   const client = requireSupabase();
   const { error } = await client
     .from("bishbash_state")
@@ -55,6 +57,9 @@ export async function saveSharedState(userId, state) {
 }
 
 export async function getSession() {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") {
+    return { user: { id: "demo-user", email: "demo@example.com" } };
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.getSession();
   if (error) throw error;
@@ -62,6 +67,9 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") {
+    return { data: { subscription: { unsubscribe: () => {} } } };
+  }
   const client = requireSupabase();
   return client.auth.onAuthStateChange(callback);
 }
