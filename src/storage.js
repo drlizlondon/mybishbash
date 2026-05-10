@@ -48,7 +48,7 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "",
     manualUrl: "x-safari-https://www.google.com",
     interruptionPackId: "",
-    useInterruptionPack: true,
+    useInterruptionPack: false,
     interruptionPaused: false,
   },
   youtube: {
@@ -61,7 +61,7 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "youtube://",
     manualUrl: "https://www.youtube.com",
     interruptionPackId: "",
-    useInterruptionPack: true,
+    useInterruptionPack: false,
     interruptionPaused: false,
   },
   instagram: {
@@ -74,16 +74,16 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "instagram://app",
     manualUrl: "https://www.instagram.com",
     interruptionPackId: "",
-    useInterruptionPack: true,
+    useInterruptionPack: false,
     interruptionPaused: false,
   },
 };
 
 export const DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS = {
   bishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
-  safari: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
-  youtube: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
-  instagram: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+  safari: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
+  youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
+  instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
 };
 
 function safeParse(rawValue) {
@@ -154,7 +154,7 @@ export function loadLauncherBehaviorSettings() {
       const migrated = {};
       for (const [id, version] of Object.entries(legacyVersions)) {
         migrated[id] = {
-          useInterruptionPack: version.useInterruptionPack ?? DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS[id]?.useInterruptionPack ?? true,
+          useInterruptionPack: version.useInterruptionPack ?? DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS[id]?.useInterruptionPack ?? false,
           interruptionPaused: version.interruptionPaused ?? false,
           interruptionPackId: version.interruptionPackId ?? "",
         };

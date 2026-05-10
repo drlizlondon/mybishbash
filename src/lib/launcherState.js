@@ -82,7 +82,7 @@ export function normalizeInterruptionPack(pack, targetApp, version, behavior, { 
   const rawCards = Array.isArray(pack.cards)
     ? pack.cards
     : (pack.messages ?? []).map((message, index) => ({ id: `${pack.id}:${index}`, text: message, title: message }));
-  const usePack = behavior?.useInterruptionPack ?? version?.useInterruptionPack ?? true;
+  const usePack = behavior?.useInterruptionPack ?? version?.useInterruptionPack ?? false;
   const cards = rawCards
     .map((card, index) => {
       const text = getInterruptionCardText(card).trim();
@@ -187,7 +187,7 @@ export function resolveVersionConfig(version, behavior = {}) {
     launchPath: "/home",
     interruptionPackId: "",
     ...version,
-    useInterruptionPack: behavior.useInterruptionPack ?? version?.useInterruptionPack ?? true,
+    useInterruptionPack: behavior.useInterruptionPack ?? version?.useInterruptionPack ?? false,
     interruptionPaused: behavior.interruptionPaused ?? version?.interruptionPaused ?? false,
     interruptionPackId: behavior.interruptionPackId ?? version?.interruptionPackId ?? "",
   };

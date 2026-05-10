@@ -75,6 +75,7 @@ import {
   pickInterruptionCardIndex,
   getVersionOpenHref,
 } from "./lib/launcherState";
+import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 
 function resolveTheme(theme) {
@@ -1084,6 +1085,44 @@ function App() {
   }
 
   function handleSaveCard(formData) {
+    if (Array.isArray(formData.bulkTexts) && formData.bulkTexts.length > 0) {
+      const now = new Date().toISOString();
+      const newCards = formData.bulkTexts.map((text) => ({
+        id: createId(),
+        promptText: text,
+        dashboardTitle: text,
+        theme: formData.theme,
+        icon: formData.icon,
+        statusToday: "fresh",
+        createdAt: now,
+        updatedAt: now,
+        lastShownAt: null,
+        notYetUntil: null,
+        doneDate: null,
+        frequency: formData.frequency,
+        timingWindows: formData.timingWindows,
+        paused: false,
+        disliked: false,
+        deletedAt: null,
+      }));
+
+      const isFirstCard = !setupComplete && !editingId;
+
+      updateCards((current) => [...newCards, ...current]);
+
+      setEditingId(null);
+      setIsComposerOpen(false);
+
+      if (isFirstCard) {
+        setSetupComplete(true);
+        navigateTo("/home", { replace: true });
+        return;
+      }
+
+      navigateTo("/home");
+      return;
+    }
+
     const trimmedText = formData.promptText.trim();
     if (!trimmedText) return;
 
@@ -1148,6 +1187,30 @@ function App() {
           : card
       )
     );
+    setMenuOpenId(null);
+  }
+
+  function handleDuplicateCard(cardId) {
+    const cardToDuplicate = cards.find((c) => c.id === cardId);
+    if (!cardToDuplicate) return;
+
+    const now = new Date().toISOString();
+    updateCards((current) => [
+      {
+        ...cardToDuplicate,
+        id: createId(),
+        createdAt: now,
+        updatedAt: now,
+        statusToday: "fresh",
+        lastShownAt: null,
+        notYetUntil: null,
+        doneDate: null,
+        paused: false,
+        deletedAt: null,
+        sourcePackId: null,
+      },
+      ...current,
+    ]);
     setMenuOpenId(null);
   }
 
@@ -1820,6 +1883,7 @@ function App() {
                   handleResetItem={handleResetItem}
                   handleTogglePause={handleTogglePause}
                   handleDeleteCard={handleDeleteCard}
+                  handleDuplicateCard={handleDuplicateCard}
                   deactivatePack={deactivatePack}
                   onCreate={() => {
                     setEditingId(null);
@@ -1838,6 +1902,7 @@ function App() {
                   handleResetItem={handleResetItem}
                   handleTogglePause={handleTogglePause}
                   handleDeleteCard={handleDeleteCard}
+                  handleDuplicateCard={handleDuplicateCard}
                   openSpecificReveal={openSpecificReveal}
                 />
               ) : null}
@@ -2024,23 +2089,58 @@ function App() {
   );
 }
 
+function parseBulkCards(text) {
+  const lines = text.split(/\r?\n/);
+  const cards = [];
+  const seen = new Set();
+
+  for (const line of lines) {
+    let clean = line.trim();
+    if (!clean) continue;
+
+    clean = clean.replace(/^[-•*]\s+/, "");
+    clean = clean.replace(/^\d+[.)]\s+/, "");
+    clean = clean.trim();
+
+    if (clean && !seen.has(clean)) {
+      seen.add(clean);
+      cards.push(clean);
+    }
+  }
+
+  return cards;
+}
+
 function Composer({ initialCard, onClose, onSave }) {
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
+  const [bulkText, setBulkText] = useState("");
+  const [isBulkMode, setIsBulkMode] = useState(false);
   const [theme, setTheme] = useState(resolveTheme(initialCard?.theme));
   const [icon, setIcon] = useState(initialCard?.icon ?? "heart");
   const [frequency, setFrequency] = useState(initialCard?.frequency ?? "once_daily");
   const [timingWindows, setTimingWindows] = useState(initialCard?.timingWindows ?? ["morning", "day", "evening"]);
   const [showValidation, setShowValidation] = useState(false);
 
+  const bulkCardsCount = isBulkMode ? parseBulkCards(bulkText).length : 0;
+
   function handleSubmit(event) {
     event.preventDefault();
-    const trimmed = promptText.trim();
-    if (!trimmed) {
-      setShowValidation(true);
-      return;
-    }
+    if (isBulkMode) {
+      const parsed = parseBulkCards(bulkText);
+      if (parsed.length === 0) {
+        setShowValidation(true);
+        return;
+      }
+      onSave({ bulkTexts: parsed, theme, icon: "heart", frequency: "once_daily", timingWindows: ["day"] });
+    } else {
+      const trimmed = promptText.trim();
+      if (!trimmed) {
+        setShowValidation(true);
+        return;
+      }
 
-    onSave({ promptText: trimmed, theme, icon, frequency, timingWindows });
+      onSave({ promptText: trimmed, theme, icon, frequency, timingWindows });
+    }
   }
 
   return (
@@ -2052,117 +2152,170 @@ function Composer({ initialCard, onClose, onSave }) {
             Close
           </button>
         </div>
-        <label className="field">
-          <span>What does future-you need nudging towards?</span>
-          <textarea
-            value={promptText}
-            onChange={(event) => {
-              setPromptText(event.target.value);
-              if (showValidation && event.target.value.trim()) {
-                setShowValidation(false);
-              }
-            }}
-            placeholder="Have you stretched today? Drink some water. Go outside for a minute."
-            rows={5}
-          />
-          {showValidation ? (
-            <span className="field-hint">Add one gentle BishBash before saving.</span>
-          ) : null}
-        </label>
-        <div className="field">
-          <span>Choose the mood</span>
-          <div className="theme-grid">
-            {THEMES.map((themeName) => (
+        {!initialCard ? (
+          <div className="field" style={{ marginBottom: "24px" }}>
+            <div className="frequency-grid">
               <button
-                key={themeName}
                 type="button"
-                className={`theme-option ${themeName === theme ? "selected" : ""} theme-${getThemeClass(themeName)}`}
-                onClick={() => setTheme(themeName)}
+                className={`frequency-option ${!isBulkMode ? "selected" : ""}`}
+                onClick={() => setIsBulkMode(false)}
               >
-                {themeName}
+                Single card
               </button>
-            ))}
-          </div>
-        </div>
-        <div className={`composer-preview theme-${getThemeClass(theme)}`}>
-          <p className="eyebrow">{getGreeting(new Date())}</p>
-          <span className="composer-mini-heart" aria-hidden="true">
-            <HeartGlyph />
-          </span>
-          <div className="composer-preview-copy">
-            <h3>{promptText.trim() || "Have you stretched today?"}</h3>
-            <p>a gentle nudge from your future self</p>
-          </div>
-          <div className="composer-preview-scene" aria-hidden="true">
-            <div className="composer-preview-tile">
-              <CardIcon icon={icon} />
+              <button
+                type="button"
+                className={`frequency-option ${isBulkMode ? "selected" : ""}`}
+                onClick={() => setIsBulkMode(true)}
+              >
+                Multiple cards
+              </button>
             </div>
-            <span className="composer-sparkle composer-sparkle-one" />
-            <span className="composer-sparkle composer-sparkle-two" />
-            <span className="composer-sun" />
-            <span className="composer-horizon" />
           </div>
-        </div>
-        <div className="field">
-          <span>Choose an icon</span>
-          <div className="icon-grid">
-            {ICON_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`icon-option ${icon === option.id ? "selected" : ""}`}
-                onClick={() => setIcon(option.id)}
-              >
-                <CardIcon icon={option.id} />
-                <span>{option.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <span>How often can this show up?</span>
-          <div className="frequency-grid">
-            {FREQUENCY_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`frequency-option ${frequency === option.id ? "selected" : ""}`}
-                onClick={() => setFrequency(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <span>When should this BishBash appear?</span>
-          <div className="timing-grid">
-            {TIME_WINDOWS.map((windowOption) => (
-              <label key={windowOption.id} className="timing-option">
-                <input
-                  type="checkbox"
-                  checked={timingWindows.includes(windowOption.id)}
-                  onChange={() => {
-                    setTimingWindows((current) => {
-                      if (current.includes(windowOption.id)) {
-                        const next = current.filter((item) => item !== windowOption.id);
-                        return next.length === 0 ? current : next;
-                      }
-                      return [...current, windowOption.id];
-                    });
-                  }}
-                />
-                <span>{windowOption.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <button
-          type="submit"
-          className="save-button"
-        >
-          Save BishBash
-        </button>
+        ) : null}
+        {isBulkMode ? (
+          <>
+            <label className="field">
+              <span>Paste one card per line</span>
+              <textarea
+                value={bulkText}
+                onChange={(event) => {
+                  setBulkText(event.target.value);
+                  if (showValidation && event.target.value.trim()) {
+                    setShowValidation(false);
+                  }
+                }}
+                placeholder="Drink some water&#10;Go outside for a minute&#10;Stretch your neck"
+                rows={8}
+              />
+              {bulkCardsCount > 0 ? (
+                <span className="field-hint">{bulkCardsCount} {bulkCardsCount === 1 ? "card" : "cards"} ready</span>
+              ) : showValidation ? (
+                <span className="field-hint">Add at least one BishBash before saving.</span>
+              ) : null}
+            </label>
+            <button
+              type="submit"
+              className="save-button"
+              disabled={bulkCardsCount === 0}
+            >
+              Create {bulkCardsCount || "0"} {bulkCardsCount === 1 ? "card" : "cards"}
+            </button>
+          </>
+        ) : (
+          <>
+            <label className="field">
+              <span>What does future-you need nudging towards?</span>
+              <textarea
+                value={promptText}
+                onChange={(event) => {
+                  setPromptText(event.target.value);
+                  if (showValidation && event.target.value.trim()) {
+                    setShowValidation(false);
+                  }
+                }}
+                placeholder="Have you stretched today? Drink some water. Go outside for a minute."
+                rows={5}
+              />
+              {showValidation ? (
+                <span className="field-hint">Add one gentle BishBash before saving.</span>
+              ) : null}
+            </label>
+            <div className="field">
+              <span>Choose the mood</span>
+              <div className="theme-grid">
+                {THEMES.map((themeName) => (
+                  <button
+                    key={themeName}
+                    type="button"
+                    className={`theme-option ${themeName === theme ? "selected" : ""} theme-${getThemeClass(themeName)}`}
+                    onClick={() => setTheme(themeName)}
+                  >
+                    {themeName}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`composer-preview theme-${getThemeClass(theme)}`}>
+              <p className="eyebrow">{getGreeting(new Date())}</p>
+              <span className="composer-mini-heart" aria-hidden="true">
+                <HeartGlyph />
+              </span>
+              <div className="composer-preview-copy">
+                <h3>{promptText.trim() || "Have you stretched today?"}</h3>
+                <p>a gentle nudge from your future self</p>
+              </div>
+              <div className="composer-preview-scene" aria-hidden="true">
+                <div className="composer-preview-tile">
+                  <CardIcon icon={icon} />
+                </div>
+                <span className="composer-sparkle composer-sparkle-one" />
+                <span className="composer-sparkle composer-sparkle-two" />
+                <span className="composer-sun" />
+                <span className="composer-horizon" />
+              </div>
+            </div>
+            <div className="field">
+              <span>Choose an icon</span>
+              <div className="icon-grid">
+                {ICON_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`icon-option ${icon === option.id ? "selected" : ""}`}
+                    onClick={() => setIcon(option.id)}
+                  >
+                    <CardIcon icon={option.id} />
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <span>How often can this show up?</span>
+              <div className="frequency-grid">
+                {FREQUENCY_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`frequency-option ${frequency === option.id ? "selected" : ""}`}
+                    onClick={() => setFrequency(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <span>When should this BishBash appear?</span>
+              <div className="timing-grid">
+                {TIME_WINDOWS.map((windowOption) => (
+                  <label key={windowOption.id} className="timing-option">
+                    <input
+                      type="checkbox"
+                      checked={timingWindows.includes(windowOption.id)}
+                      onChange={() => {
+                        setTimingWindows((current) => {
+                          if (current.includes(windowOption.id)) {
+                            const next = current.filter((item) => item !== windowOption.id);
+                            return next.length === 0 ? current : next;
+                          }
+                          return [...current, windowOption.id];
+                        });
+                      }}
+                    />
+                    <span>{windowOption.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="save-button"
+            >
+              Save BishBash
+            </button>
+          </>
+        )}
       </form>
     </div>
   );
@@ -2200,6 +2353,7 @@ function HomePanel({
   handleResetItem,
   handleTogglePause,
   handleDeleteCard,
+  handleDuplicateCard,
   deactivatePack,
   onCreate,
 }) {
@@ -2293,6 +2447,19 @@ function HomePanel({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
+                        if (item.type === "interruption-card" || item.type === "interruption-version" || item.type === "pack") {
+                          return;
+                        }
+                        handleDuplicateCard(item.id);
+                      }}
+                      disabled={item.type === "interruption-card" || item.type === "interruption-version" || item.type === "pack"}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
                         if (item.type === "interruption-card" || item.type === "interruption-version") {
                           return;
                         }
@@ -2356,6 +2523,7 @@ function HomeReminderCard({
   handleResetItem,
   handleTogglePause,
   handleDeleteCard,
+  handleDuplicateCard,
   deactivatePack,
 }) {
   const status = getStatusMeta(item.representative, new Date(), timezone);
@@ -2415,6 +2583,17 @@ function HomeReminderCard({
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (item.type === "pack") return;
+                  handleDuplicateCard(item.id);
+                }}
+                disabled={item.type === "pack"}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
                   handleResetItem(item);
                 }}
               >
@@ -2462,6 +2641,7 @@ function StandardLibraryPanel({
   handleResetItem,
   handleTogglePause,
   handleDeleteCard,
+  handleDuplicateCard,
   openSpecificReveal,
 }) {
   return (
@@ -2520,6 +2700,15 @@ function StandardLibraryPanel({
                       }}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDuplicateCard(item.id);
+                      }}
+                    >
+                      Duplicate
                     </button>
                     <button
                       type="button"
@@ -3790,135 +3979,6 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   );
 }
 
-function Onboarding({ onCreate }) {
-  const slides = [
-    {
-      id: "future-self",
-      message: "Your earlier self left a quiet note for right now.",
-      support: "BishBash lets a clearer version of you cut through the noise.",
-    },
-    {
-      id: "tiny-actions",
-      message: "Small caring actions are easier to hear than big promises.",
-      support: "Drink water. Stretch. Read your Bible. Tiny nudges still count.",
-    },
-    {
-      id: "one-at-a-time",
-      message: "One gentle interruption. One moment of attention.",
-      support: "Every time BishBash opens, it shows one soft message instead of a pile.",
-    },
-    {
-      id: "private-ritual",
-      message: "Private, synced, and just for future-you.",
-      support: "Use your sync code to connect every launcher, browser, and device to the same BishBash.",
-    },
-  ];
-  const [activeSlide, setActiveSlide] = useState(0);
-  const touchStartX = useRef(null);
-
-  function goToSlide(index) {
-    const total = slides.length;
-    setActiveSlide((index + total) % total);
-  }
-
-  function handleTouchStart(event) {
-    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
-  }
-
-  function handleTouchEnd(event) {
-    if (touchStartX.current == null) return;
-    const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
-    const delta = endX - touchStartX.current;
-    touchStartX.current = null;
-
-    if (Math.abs(delta) < 36) return;
-    if (delta < 0) {
-      goToSlide(activeSlide + 1);
-      return;
-    }
-    goToSlide(activeSlide - 1);
-  }
-
-  return (
-    <div className="overlay-screen onboarding-screen">
-      <div className="onboarding-shell">
-        <header className="onboarding-brand">
-          <span className="onboarding-heart" aria-hidden="true">
-            <HeartGlyph />
-          </span>
-          <h1>BishBash</h1>
-          <p>private little messages from your earlier self</p>
-        </header>
-
-        <div
-          className="onboarding-carousel"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
-          <button
-            type="button"
-            className="onboarding-arrow onboarding-arrow-left"
-            onClick={() => goToSlide(activeSlide - 1)}
-            aria-label="Show previous welcome card"
-          >
-            <ChevronLeftGlyph />
-          </button>
-          <div
-            className="onboarding-track"
-            style={{ transform: `translateX(-${activeSlide * 100}%)` }}
-          >
-            {slides.map((slide) => (
-              <article className="onboarding-feature-card" key={slide.id}>
-                <span className="feature-mini-heart" aria-hidden="true">
-                  <HeartGlyph />
-                </span>
-                <h2>{slide.message}</h2>
-                <p className="feature-support">{slide.support}</p>
-                <div className="feature-scene" aria-hidden="true">
-                  <span className="feature-star feature-star-one" />
-                  <span className="feature-star feature-star-two" />
-                  <span className="feature-star feature-star-three" />
-                  <span className="feature-sun" />
-                  <span className="feature-horizon" />
-                  <span className="feature-reflection" />
-                  <span className="feature-stone" />
-                </div>
-              </article>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="onboarding-arrow onboarding-arrow-right"
-            onClick={() => goToSlide(activeSlide + 1)}
-            aria-label="Show next welcome card"
-          >
-            <ChevronRightGlyph />
-          </button>
-        </div>
-
-        <div className="onboarding-pagination">
-          {slides.map((item, index) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`pagination-dot ${index === activeSlide ? "active" : ""}`}
-              aria-label={`Show onboarding card ${index + 1}`}
-              aria-pressed={index === activeSlide}
-              onClick={() => goToSlide(index)}
-            />
-          ))}
-        </div>
-
-        <div className="onboarding-actions">
-          <button type="button" className="save-button" onClick={onCreate}>
-            Make your first BishBash
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ActionButton({ label, onClick, tone = "ghost", href }) {
   const className = `action-button ${tone}`;
 
@@ -3934,14 +3994,6 @@ function ActionButton({ label, onClick, tone = "ghost", href }) {
     <button type="button" className={className} onClick={onClick}>
       {label}
     </button>
-  );
-}
-
-function ChevronLeftGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M14.5 5.5 8 12l6.5 6.5" />
-    </svg>
   );
 }
 
