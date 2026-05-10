@@ -155,7 +155,7 @@ export function buildInterruptionFolder(targetApp, versions, behaviors, customPa
     type: "interruption",
     targetApp,
     linkedVersionId: targetApp,
-    active: Boolean(globalEnabled),
+    active: Boolean(globalEnabled && version.useInterruptionPack),
     name: `${version.name} Interruptions`,
     description: `Cards shown only when launcherContext is "${targetApp}".`,
     editable: true,

@@ -146,20 +146,25 @@ export function loadLauncherBehaviorSettings() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY));
     if (stored) {
-      return { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS, ...stored };
+      const merged = { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS };
+      for (const [id, behavior] of Object.entries(stored)) {
+        merged[id] = { ...merged[id], ...behavior };
+      }
+      return merged;
     }
 
     const legacyVersions = JSON.parse(window.localStorage.getItem(HOME_SCREEN_VERSIONS_KEY));
     if (legacyVersions) {
-      const migrated = {};
+      const migrated = { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS };
       for (const [id, version] of Object.entries(legacyVersions)) {
         migrated[id] = {
+          ...migrated[id],
           useInterruptionPack: version.useInterruptionPack ?? DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS[id]?.useInterruptionPack ?? false,
           interruptionPaused: version.interruptionPaused ?? false,
           interruptionPackId: version.interruptionPackId ?? "",
         };
       }
-      return { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS, ...migrated };
+      return migrated;
     }
     return DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS;
   } catch {

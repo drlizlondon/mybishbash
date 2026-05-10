@@ -1931,7 +1931,9 @@ function App() {
                   mood={mood}
                   onSelectMood={setMood}
                   homeScreenVersions={homeScreenVersions}
+                  launcherBehaviorSettings={launcherBehaviorSettings}
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
+                  onSaveVersionBehavior={handleSaveVersionBehavior}
                   globalInterruptionMode={globalInterruptionMode}
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
           session={session}
@@ -3332,7 +3334,9 @@ function SettingsPanel({
   mood,
   onSelectMood,
   homeScreenVersions,
+  launcherBehaviorSettings,
   onUpdateHomeScreenIcon,
+  onSaveVersionBehavior,
   globalInterruptionMode,
   onSetGlobalInterruptionMode,
   session,
@@ -3340,7 +3344,7 @@ function SettingsPanel({
   onResetSharedState,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("safari");
+  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
 
   return (
     <section className="panel-section">
@@ -3404,7 +3408,6 @@ function SettingsPanel({
             onChange={(e) => setPreviewVersionId(e.target.value)}
           >
             {Object.values(homeScreenVersions)
-              .filter((v) => v.id !== "bishbash")
               .map((v) => (
               <option key={v.id} value={v.id}>{v.name}</option>
             ))}
@@ -3419,6 +3422,7 @@ function SettingsPanel({
 
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(`${BASE_PATH}/install/${version.id}/index.html`);
+        const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
 
             return (
               <article
@@ -3467,6 +3471,16 @@ function SettingsPanel({
                     Replace cover icon
                   </label>
                 </div>
+            {version.id !== "bishbash" ? (
+              <label className="timing-option settings-checkbox-row" style={{ marginTop: "16px" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(resolvedVersion.useInterruptionPack)}
+                  onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
+                />
+                <span>{resolvedVersion.useInterruptionPack ? "Pause is ON for " + version.name : "Pause is OFF for " + version.name}</span>
+              </label>
+            ) : null}
               </article>
             );
           })()}
@@ -3491,27 +3505,6 @@ function SettingsPanel({
         <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
           Clear local development state
         </button>
-      </div>
-
-      <div className="section-heading solo" style={{ marginTop: "2.5rem" }}>
-        <div>
-          <h2>Advanced</h2>
-          <p>Under the hood configurations.</p>
-        </div>
-      </div>
-      <div className="settings-card settings-compact">
-        <div className="settings-version-heading">
-          <p>Pause before opening apps</p>
-          <span>When this is on, installed launchers show a pause card before opening the real app.</span>
-        </div>
-        <label className="timing-option settings-checkbox-row">
-          <input
-            type="checkbox"
-            checked={globalInterruptionMode}
-            onChange={(event) => onSetGlobalInterruptionMode(event.target.checked)}
-          />
-          <span>{globalInterruptionMode ? "Pause is ON" : "Pause is OFF"}</span>
-        </label>
       </div>
     </section>
   );
