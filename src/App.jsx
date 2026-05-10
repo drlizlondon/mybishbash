@@ -1759,6 +1759,15 @@ function App() {
     setActionCards((current) => current.map((c) => c.id === cardId ? { ...c, deletedAt: now, updatedAt: now } : c));
   }
 
+  function handleRestoreActionCards(cardIds) {
+    const now = new Date().toISOString();
+    setActionCards((current) =>
+      current.map((card) =>
+        cardIds.includes(card.id) ? { ...card, deletedAt: null, updatedAt: now } : card
+      )
+    );
+  }
+
   function openCustomPackPreview(packId) {
     const pack = cardPacks.find((item) => item.id === packId);
     const normalizedPack = normalizeInterruptionPack(pack, pack?.targetApp ?? pack?.linkedVersionId ?? "");
@@ -2039,6 +2048,9 @@ function App() {
           session={session}
           onLogOut={handleLogOut}
                   onResetSharedState={handleResetSharedState}
+                  actionCards={actionCards}
+                  onRestoreActionCards={handleRestoreActionCards}
+                  interruptionPacks={interruptionPacks}
                 />
               ) : null}
             </main>
@@ -3552,9 +3564,13 @@ function SettingsPanel({
   session,
   onLogOut,
   onResetSharedState,
+  actionCards,
+  onRestoreActionCards,
+  interruptionPacks,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("bishbash");
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
   return (
     <section className="panel-section">
@@ -3632,7 +3648,10 @@ function SettingsPanel({
 
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(`${BASE_PATH}/install/${version.id}/index.html`);
-        const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
+            const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
+            const pack = interruptionPacks?.find((p) => p.targetApp === version.id);
+            const behavior = launcherBehaviorSettings[version.id] ?? {};
+            const interruptionsOn = Boolean(behavior.useInterruptionPack);
 
             return (
               <article
@@ -3682,14 +3701,30 @@ function SettingsPanel({
                   </label>
                 </div>
             {version.id !== "bishbash" ? (
-              <label className="timing-option settings-checkbox-row" style={{ marginTop: "16px" }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(resolvedVersion.useInterruptionPack)}
-                  onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
-                />
-                <span>{resolvedVersion.useInterruptionPack ? "Pause is ON for " + version.name : "Pause is OFF for " + version.name}</span>
-              </label>
+              <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                <div style={{ marginBottom: "12px" }}>
+                  <strong style={{ display: "block" }}>Interruptions</strong>
+                  <span style={{ fontSize: "14px", opacity: 0.8 }}>Pause before opening this app.</span>
+                </div>
+                <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
+                  <input
+                    type="checkbox"
+                    checked={interruptionsOn}
+                    onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
+                  />
+                  <span>{interruptionsOn ? "On" : "Off"}</span>
+                </label>
+                <p className="tiny-note" style={{ margin: 0 }}>
+                  {interruptionsOn
+                    ? "You’ll see interruption cards before continuing."
+                    : "You’ll see normal BishBash cards instead."}
+                </p>
+                {pack ? (
+                  <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
+                    Linked pack: {pack.name}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
               </article>
             );
@@ -3709,6 +3744,15 @@ function SettingsPanel({
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
+          <p>Restore deleted actions</p>
+          <span>Bring back action cards you previously deleted.</span>
+        </div>
+        <button type="button" className="pack-button secondary" onClick={() => setIsRestoreModalOpen(true)}>
+          View deleted cards
+        </button>
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
           <p>Development reset</p>
           <span>Clear local development state on this launcher/device. This does not delete the cloud profile.</span>
         </div>
@@ -3716,7 +3760,75 @@ function SettingsPanel({
           Clear local development state
         </button>
       </div>
+
+      {isRestoreModalOpen ? (
+        <RestoreActionCardsModal
+          actionCards={actionCards}
+          onRestore={onRestoreActionCards}
+          onClose={() => setIsRestoreModalOpen(false)}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function RestoreActionCardsModal({ actionCards, onRestore, onClose }) {
+  const deletedUserCards = actionCards.filter((card) => card.source === "user" && card.deletedAt);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  function handleToggle(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleRestore() {
+    onRestore(Array.from(selectedIds));
+    onClose();
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="composer pack-editor" onClick={(e) => e.stopPropagation()}>
+        <div className="composer-heading">
+          <p className="eyebrow">Restore deleted actions</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        {deletedUserCards.length === 0 ? (
+          <div className="field">
+            <p className="pack-editor-copy">No deleted action cards to restore.</p>
+          </div>
+        ) : (
+          <div className="custom-pack-message-grid">
+            {deletedUserCards.map((card) => (
+              <label key={card.id} className="timing-option settings-checkbox-row" style={{ alignItems: "flex-start", padding: "12px", border: "1px solid rgba(0,0,0,0.05)", borderRadius: "12px" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(card.id)}
+                  onChange={() => handleToggle(card.id)}
+                  style={{ marginTop: "4px" }}
+                />
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <strong>{card.title}</strong>
+                  <span style={{ fontSize: "14px", opacity: 0.7 }}>{card.body}</span>
+                  {card.category ? <span className="tiny-note">{card.category}</span> : null}
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+        {deletedUserCards.length > 0 ? (
+          <button type="button" className="save-button" style={{ marginTop: "16px" }} onClick={handleRestore} disabled={selectedIds.size === 0}>
+            Restore selected
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
