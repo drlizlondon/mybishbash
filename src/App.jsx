@@ -1038,7 +1038,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -3570,8 +3570,8 @@ function SettingsPanel({
   interruptionPacks,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("bishbash");
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
   return (
     <section className="panel-section">
@@ -3697,26 +3697,28 @@ function SettingsPanel({
                   </label>
                 </div>
             {INTERRUPTION_LAUNCHER_CONTEXTS.includes(version.id) ? (
-              <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
-                <div style={{ marginBottom: "12px" }}>
-                  <strong style={{ display: "block" }}>Interruptions</strong>
-                  <span style={{ fontSize: "14px", opacity: 0.8 }}>Pause before opening this app.</span>
+              <div className="launcher-interruption-settings">
+                <div className="launcher-interruption-header">
+                  <div>
+                    <strong>Interruptions</strong>
+                    <p>Pause before opening this app.</p>
+                  </div>
+                  <label className="launcher-toggle-row">
+                    <span>{interruptionsOn ? "On" : "Off"}</span>
+                    <input
+                      type="checkbox"
+                      checked={interruptionsOn}
+                      onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
+                    />
+                  </label>
                 </div>
-                <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
-                  <input
-                    type="checkbox"
-                    checked={interruptionsOn}
-                    onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
-                  />
-                  <span>{interruptionsOn ? "On" : "Off"}</span>
-                </label>
-                <p className="tiny-note" style={{ margin: 0 }}>
+                <p className="launcher-interruption-description">
                   {interruptionsOn
                     ? "You’ll see interruption cards before continuing."
                     : "You’ll see normal BishBash cards instead."}
                 </p>
                 {pack ? (
-                  <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
+                  <p className="launcher-linked-pack">
                     Linked pack: {pack.name}
                   </p>
                 ) : null}
@@ -4372,7 +4374,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
       if (document.visibilityState === "visible") {
         setShowFallbackLink(true);
       }
-        }, 900);
+    }, 3200);
   }
 
   return (
