@@ -492,6 +492,7 @@ function App() {
   const [actionCards, setActionCards] = useState(initialState.actionCards);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
@@ -658,11 +659,15 @@ function App() {
       .catch(() => {
         if (mounted) setSyncStatus("needs-connection");
       });
+      .finally(() => {
+        if (mounted) setAuthReady(true);
+      });
 
     const { data: { subscription } } = onAuthStateChange((_event, newSession) => {
       if (mounted) {
         setSession(newSession);
         if (!newSession) setSyncStatus("needs-connection");
+        setAuthReady(true);
       }
     });
 
@@ -921,9 +926,12 @@ function App() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [cards, profile.timezone, route.kind, setupComplete]);
+  }, [cards, profile.timezone, route.kind, setupComplete, authReady, session, syncStatus]);
 
   useEffect(() => {
+    if (!authReady || !session) return;
+    if (syncStatus === "loading") return;
+
     if (!setupComplete && route.kind !== "intercept") {
       setScreen("onboarding");
       setOverlay(null);
@@ -1030,7 +1038,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1935,22 +1943,11 @@ function App() {
   );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
-  if (syncStatus === "loading") {
+  if (!authReady) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (syncStatus === "error") {
-    return (
-      <SyncConnectionScreen
-        mode="error"
-        error={syncError}
-        onSignUp={handleSignUp}
-        onLogIn={handleLogIn}
-      />
-    );
-  }
-
-  if (syncStatus === "needs-connection") {
+  if (!session) {
     return (
       <SyncConnectionScreen
         mode="connect"
@@ -1959,6 +1956,10 @@ function App() {
         onLogIn={handleLogIn}
       />
     );
+  }
+
+  if (syncStatus === "loading") {
+    return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
   return (
