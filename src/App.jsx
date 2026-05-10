@@ -559,7 +559,10 @@ function App() {
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
   const hiddenSinceRef = useRef(null);
-  const suppressNextHomeAutoLaunchRef = useRef(false);
+  const recentViewsRef = useRef({
+    interruptions: {},
+    cards: [],
+  });
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
@@ -950,7 +953,16 @@ function App() {
 
     if (route.kind === "intercept") {
       setLauncherContext(route.versionId);
-      const { selected, interruption } = pickRandomHomeCardForDisplay(
+
+      if (
+        overlay?.versionId === route.versionId &&
+        ["intercept-pack", "action-card", "action-card-empty", "action-success"].includes(overlay.type)
+      ) {
+        console.log("[ROUTE GUARD] preserving overlay", overlay.type);
+        return;
+      }
+
+      const { selected, interruption, actionCardFallback } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
         route.versionId,
@@ -959,7 +971,8 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
-        events,
+        actionCards,
+        recentViewsRef
       );
 
       if (interruption) {
@@ -998,14 +1011,7 @@ function App() {
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
-      if (suppressNextHomeAutoLaunchRef.current) {
-        suppressNextHomeAutoLaunchRef.current = false;
-        setShouldLaunchOverlay(false);
-        setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-        return;
-      }
-
-      const { selected, interruption } = pickRandomHomeCardForDisplay(
+      const { selected, interruption, actionCardFallback } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
         launcherContext,
@@ -1014,7 +1020,8 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
-        events,
+        actionCards,
+        recentViewsRef
       );
       setShouldLaunchOverlay(false);
       if (interruption) {
@@ -1028,6 +1035,10 @@ function App() {
         setOverlay(buildRevealOverlay(selected.id));
         return;
       }
+      if (actionCardFallback) {
+        setOverlay(buildActionCardOverlay(launcherContext));
+        return;
+      }
 
       setOverlay(buildEmptyOverlay());
       return;
@@ -1038,7 +1049,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, authReady, session, syncStatus, overlay?.type, overlay?.versionId, actionCards]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1048,11 +1059,10 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
-    suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
 
-    const { selected, interruption } = pickRandomHomeCardForDisplay(
+    const { selected, interruption, actionCardFallback } = pickRandomHomeCardForDisplay(
       cards,
       profile.timezone,
       versionId,
@@ -1061,7 +1071,8 @@ function App() {
       cardPacks,
       dislikedPackCardIds,
       globalInterruptionMode,
-      events,
+      actionCards,
+      recentViewsRef
     );
 
     if (interruption) {
@@ -1077,6 +1088,8 @@ function App() {
     setScreen("library");
     if (selected) {
       setOverlay(buildRevealOverlay(selected.id, versionId));
+    } else if (actionCardFallback) {
+      setOverlay(buildActionCardOverlay(versionId));
     } else {
       setOverlay(buildEmptyOverlay(versionId));
     }
@@ -1159,7 +1172,6 @@ function App() {
       },
     });
 
-    suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     navigateTo("/home", { replace: true });
     setOverlay(null);
@@ -1460,7 +1472,6 @@ function App() {
       pack_id: card.sourcePackId,
       action_taken: "disliked",
     });
-    suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     setOverlay(null);
     navigateTo("/home");
@@ -2165,7 +2176,6 @@ function App() {
               setOverlay(null);
               return;
             }
-            suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
             navigateTo("/home", { replace: true });
             setOverlay(null);
@@ -2193,13 +2203,22 @@ function App() {
                 action_taken: "liked",
               });
             }
-            suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
             setOverlay(null);
             navigateTo("/home");
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
+            void logEvent({
+              event_type: "intercept_do_something_else",
+              source_type: "interruption",
+              card_source: "interruption",
+              app_id: activeOverlayVersion?.id,
+              app_name: activeOverlayVersion?.name,
+              launcher_context: activeOverlayVersion?.id,
+              action_taken: "chose_something_else",
+            });
+            console.log("[ACTION CARDS] onChooseElse fired");
             const available = actionCards.filter((c) => !c.hidden && !c.deletedAt);
             if (available.length === 0) {
               setOverlay(buildActionCardEmptyOverlay(overlay?.versionId));
@@ -3572,8 +3591,8 @@ function SettingsPanel({
   launcherContext,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
 
   const isInsideFakeLauncher =
     launcherContext &&
@@ -3704,35 +3723,33 @@ function SettingsPanel({
                     />
                     Replace cover icon
                   </label>
-                  {isSelectedCurrentLauncher ? (
-                    <div style={{ marginTop: "12px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: "10px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-                        <div style={{ flex: "1 1 200px" }}>
-                          <strong style={{ display: "block", fontSize: "16px", color: "var(--charcoal)", marginBottom: "4px" }}>Interruptions</strong>
-                          <p style={{ margin: 0, fontSize: "14px", color: "var(--ink-muted)", lineHeight: 1.4 }}>Pause before opening this app.</p>
-                        </div>
-                        <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: "10px", margin: 0, padding: 0, border: 0, background: "transparent", flex: "0 0 auto", cursor: "pointer" }}>
-                          <input
-                            type="checkbox"
-                            checked={interruptionsOn}
-                            onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
-                          />
-                          <span style={{ fontSize: "15px", color: "var(--charcoal)", fontWeight: "500" }}>{interruptionsOn ? "On" : "Off"}</span>
-                        </label>
-                      </div>
-                      <p className="tiny-note" style={{ margin: 0, color: "var(--ink-muted)" }}>
-                        {interruptionsOn
-                          ? "You’ll see interruption cards before continuing."
-                          : "You’ll see normal BishBash cards instead."}
-                      </p>
-                      {pack ? (
-                        <p className="tiny-note" style={{ margin: 0, color: "var(--ink-muted)" }}>
-                          Linked pack: {pack.name}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </div>
+            {isSelectedCurrentLauncher ? (
+              <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                <div style={{ marginBottom: "12px" }}>
+                  <strong style={{ display: "block" }}>Interruptions</strong>
+                  <span style={{ fontSize: "14px", opacity: 0.8 }}>Pause before opening this app.</span>
+                </div>
+                <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
+                  <input
+                    type="checkbox"
+                    checked={interruptionsOn}
+                    onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
+                  />
+                  <span>{interruptionsOn ? "On" : "Off"}</span>
+                </label>
+                <p className="tiny-note" style={{ margin: 0 }}>
+                  {interruptionsOn
+                    ? "You’ll see interruption cards before continuing."
+                    : "You’ll see normal BishBash cards instead."}
+                </p>
+                {pack ? (
+                  <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
+                    Linked pack: {pack.name}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
               </article>
             );
           })()}
@@ -3952,6 +3969,8 @@ function Overlay({
   fakeLauncherVersions,
   onFakeLauncherLaunch,
 }) {
+  console.log("[OVERLAY TYPE]", overlay?.type);
+
   if (overlay.type === "empty") {
     return (
       <div className="overlay-screen empty-state">
@@ -4053,6 +4072,8 @@ function Overlay({
 }
 
 function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent }) {
+  console.log("[ACTION CARD OVERLAY RENDERED]");
+
   const available = useMemo(() => actionCards.filter((c) => !c.hidden && !c.deletedAt), [actionCards]);
   const [recentlyShown, setRecentlyShown] = useState([]);
   const [currentCard, setCurrentCard] = useState(null);
@@ -4132,6 +4153,7 @@ function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent
   return (
     <div className="overlay-screen reveal">
       <div className="floating floating-heart" />
+      <p style={{ background: "yellow", padding: "4px 8px", fontSize: "12px", fontWeight: "bold", position: "absolute", top: "16px", left: "16px", zIndex: 100, color: "black", borderRadius: "4px" }}>ACTION CARD OVERLAY ACTIVE</p>
       <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
         <CloseGlyph />
       </button>
@@ -4353,37 +4375,19 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
 
   function handleContinueToApp() {
     if (!version) return;
-    setShowFallbackLink(false);
+
     void onLogEvent({
       event_type: "intercept_continue_to_app",
-      source_type: "interruption",
-      card_source: "interruption",
-      card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
-      card_title: messages[activeIndex] ?? null,
-      card_text: messages[activeIndex] ?? null,
       app_id: version.id,
       app_name: version.name,
       launcher_context: version.id,
-      target_app: overlay.targetApp ?? version.id,
-      pack_id: overlay.packId,
-      message_id: `${overlay.packId}:${activeIndex}`,
       action_taken: "continued_to_app",
-      metadata: {
-        packTitle: overlay.name,
-        message: messages[activeIndex] ?? null,
-      },
     });
 
-      const href = getVersionOpenHref(version);
-      if (href) {
-        window.location.href = href;
-      }
-
-    fallbackTimerRef.current = window.setTimeout(() => {
-      if (document.visibilityState === "visible") {
-        setShowFallbackLink(true);
-      }
-    }, 3200);
+    const href = getVersionOpenHref(version);
+    if (href) {
+      window.location.href = href;
+    }
   }
 
   return (
@@ -4430,26 +4434,9 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
         <ActionButton
           label="I'll do something else"
           tone="solid"
-          onClick={() => {
-            void onLogEvent({
-              event_type: "intercept_do_something_else",
-              source_type: "interruption",
-              card_source: "interruption",
-              card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
-              card_title: messages[activeIndex] ?? null,
-              card_text: messages[activeIndex] ?? null,
-              app_id: version?.id ?? null,
-              app_name: version?.name ?? null,
-              launcher_context: version?.id ?? NORMAL_LAUNCHER_CONTEXT,
-              target_app: overlay.targetApp ?? version?.id ?? null,
-              pack_id: overlay.packId,
-              message_id: `${overlay.packId}:${activeIndex}`,
-              action_taken: "chose_something_else",
-              metadata: {
-                packTitle: overlay.name,
-                message: messages[activeIndex] ?? null,
-              },
-            });
+          onClick={(event) => {
+            event?.stopPropagation?.();
+            console.log("[INTERRUPTION BUTTON] orange clicked");
             onChooseElse();
           }}
         />
