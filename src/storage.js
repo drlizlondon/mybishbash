@@ -50,7 +50,7 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "",
     manualUrl: "x-safari-https://www.google.com",
     interruptionPackId: "",
-    useInterruptionPack: false,
+    useInterruptionPack: true,
     interruptionPaused: false,
   },
   youtube: {
@@ -63,7 +63,7 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "youtube://",
     manualUrl: "https://www.youtube.com",
     interruptionPackId: "",
-    useInterruptionPack: false,
+    useInterruptionPack: true,
     interruptionPaused: false,
   },
   instagram: {
@@ -76,16 +76,16 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     appUrl: "instagram://app",
     manualUrl: "https://www.instagram.com",
     interruptionPackId: "",
-    useInterruptionPack: false,
+    useInterruptionPack: true,
     interruptionPaused: false,
   },
 };
 
 export const DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS = {
   bishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
-  safari: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
-  youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
-  instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
+  safari: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+  youtube: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+  instagram: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
 };
 
 const DEFAULT_ACTION_CARD_TIMESTAMP = "2026-05-10T00:00:00.000Z";
