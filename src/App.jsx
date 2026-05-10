@@ -11,6 +11,7 @@ import {
   loadLauncherBehaviorSettings,
   loadMood,
   loadProfile,
+  loadActionCards,
   loadSetupComplete,
   saveCards,
   saveCardPacks,
@@ -21,6 +22,7 @@ import {
   saveLauncherBehaviorSettings,
   saveMood,
   saveProfile,
+  saveActionCards,
   saveSetupComplete,
 } from "./storage";
 import {
@@ -330,6 +332,7 @@ function buildSharedState({
   dislikedPackCardIds,
   globalInterruptionMode,
   events,
+  actionCards,
 }) {
   return {
     version: 1,
@@ -342,6 +345,7 @@ function buildSharedState({
     dislikedPackCardIds,
     globalInterruptionMode,
     events,
+    actionCards,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -364,6 +368,7 @@ function normalizeSharedState(state, fallback) {
         ? source.globalInterruptionMode
         : fallback.globalInterruptionMode,
     events: Array.isArray(source.events) ? source.events : fallback.events,
+    actionCards: Array.isArray(source.actionCards) ? source.actionCards : fallback.actionCards,
   };
 }
 
@@ -451,6 +456,7 @@ function App() {
       launcherBehaviorSettings: loadLauncherBehaviorSettings(),
       hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
+      actionCards: loadActionCards(),
     };
   }, []);
   const [cards, setCards] = useState(initialState.cards);
@@ -463,6 +469,7 @@ function App() {
   const [globalInterruptionMode, setGlobalInterruptionMode] = useState(initialState.globalInterruptionMode);
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
+  const [actionCards, setActionCards] = useState(initialState.actionCards);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
   const [syncStatus, setSyncStatus] = useState("loading");
@@ -476,6 +483,7 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [editingPackId, setEditingPackId] = useState(null);
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
+  const [isActionCardEditorOpen, setIsActionCardEditorOpen] = useState(false);
   const [selectedPackDetail, setSelectedPackDetail] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
@@ -546,6 +554,7 @@ function App() {
         dislikedPackCardIds,
         globalInterruptionMode,
         events,
+        actionCards,
       }),
     [
       cards,
@@ -557,6 +566,7 @@ function App() {
       dislikedPackCardIds,
       globalInterruptionMode,
       events,
+      actionCards,
     ],
   );
 
@@ -574,6 +584,7 @@ function App() {
       dislikedPackCardIds: initialState.dislikedPackCardIds,
       globalInterruptionMode: initialState.globalInterruptionMode,
       events: initialState.events,
+      actionCards: initialState.actionCards,
     });
     const next = normalizeSharedState(incomingState, fallback);
 
@@ -600,6 +611,7 @@ function App() {
     // Merge incoming cloud events with current local events to prevent data loss.
     // This ensures offline actions survive sync.
     setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
+    setActionCards((current) => mergeEntitiesById(current, next.actionCards));
 
     setScreen(next.setupComplete ? "library" : "onboarding");
     setRoutePath(getRouteFromLocation(next.setupComplete));
@@ -803,6 +815,10 @@ function App() {
   useEffect(() => {
     saveEventLog(events);
   }, [events]);
+
+  useEffect(() => {
+    saveActionCards(actionCards);
+  }, [actionCards]);
 
   useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
@@ -1682,6 +1698,22 @@ function App() {
     );
   }
 
+  function handleSaveActionCard(cardData) {
+    const newCard = {
+      id: createId(),
+      ...cardData,
+      hidden: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setActionCards((current) => [newCard, ...current]);
+    setIsActionCardEditorOpen(false);
+  }
+
+  function handleToggleActionCardHidden(cardId, hidden) {
+    setActionCards((current) => current.map((c) => c.id === cardId ? { ...c, hidden, updatedAt: new Date().toISOString() } : c));
+  }
+
   function openCustomPackPreview(packId) {
     const pack = cardPacks.find((item) => item.id === packId);
     const normalizedPack = normalizeInterruptionPack(pack, pack?.targetApp ?? pack?.linkedVersionId ?? "");
@@ -1938,11 +1970,14 @@ function App() {
               {activeTab === "packs" ? (
                 <PacksPanel
                   cards={cards}
+                  actionCards={actionCards}
                   interruptionPacks={interruptionPacks}
                   libraryPacks={visibleLibraryPacks}
                   onActivateLibraryPack={activatePack}
                   onDeactivateLibraryPack={deactivatePack}
                   onOpenPack={setSelectedPackDetail}
+                  onToggleActionCardHidden={handleToggleActionCardHidden}
+                  onCreateActionCard={() => setIsActionCardEditorOpen(true)}
                 />
               ) : null}
               {activeTab === "settings" ? (
@@ -2034,6 +2069,13 @@ function App() {
         />
       ) : null}
 
+      {isActionCardEditorOpen ? (
+        <ActionCardEditor
+          onClose={() => setIsActionCardEditorOpen(false)}
+          onSave={handleSaveActionCard}
+        />
+      ) : null}
+
       {selectedPackDetail ? (
         <PackDetailModal
           detail={selectedPackDetail}
@@ -2069,6 +2111,13 @@ function App() {
             setOverlay(null);
           }}
           onAction={handleAction}
+          actionCards={actionCards}
+          onAcceptActionCard={(card) => {
+            setOverlay((current) => ({ ...current, type: "action-success" }));
+            if (card.launchUrl) {
+              window.location.href = card.launchUrl;
+            }
+          }}
           onPackLike={() => {
             if (activeRevealCard?.sourcePackId) {
               void logEvent({
@@ -2091,10 +2140,7 @@ function App() {
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
-            suppressNextHomeAutoLaunchRef.current = true;
-            setShouldLaunchOverlay(false);
-            setOverlay(null);
-            navigateTo("/home", { replace: true });
+            setOverlay((current) => ({ type: "action-card", versionId: current?.versionId }));
           }}
           onLogEvent={logEvent}
         />
@@ -3003,13 +3049,66 @@ function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onS
   );
 }
 
+function ActionCardEditor({ onClose, onSave }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [category, setCategory] = useState("");
+  const [launchUrl, setLaunchUrl] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    if (!title.trim()) return;
+    onSave({
+      title: title.trim(),
+      body: body.trim(),
+      category: category.trim(),
+      launchUrl: launchUrl.trim(),
+    });
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="composer pack-editor" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
+        <div className="composer-heading">
+          <p className="eyebrow">New Action Card</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <label className="field">
+          <span>Title</span>
+          <input className="settings-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Call a family member" required />
+        </label>
+        <label className="field">
+          <span>Body</span>
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="A quick catch-up might feel better..." />
+        </label>
+        <label className="field">
+          <span>Category</span>
+          <input className="settings-input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Connection" />
+        </label>
+        <label className="field">
+          <span>Launch URL (optional)</span>
+          <input type="url" className="settings-input" value={launchUrl} onChange={(e) => setLaunchUrl(e.target.value)} placeholder="https://..." />
+        </label>
+        <button type="submit" className="save-button">
+          Save Action Card
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function PacksPanel({
   cards,
+  actionCards,
   interruptionPacks,
   libraryPacks,
   onActivateLibraryPack,
   onDeactivateLibraryPack,
   onOpenPack,
+  onToggleActionCardHidden,
+  onCreateActionCard,
 }) {
   return (
     <section className="panel-section">
@@ -3049,6 +3148,32 @@ function PacksPanel({
             );
           })}
         </div>
+      </section>
+
+      <section className="packs-section">
+        <div className="home-section-heading packs-heading">
+          <div>
+            <h2>Active Actions</h2>
+            <p>Things you can do instead of opening apps.</p>
+          </div>
+        </div>
+        <div className="packs-list-card">
+          {actionCards.map((card) => (
+            <article key={card.id} className="home-screen-version-card pack-manager-card">
+              <div className="home-screen-version-copy pack-manager-copy">
+                <div className="home-screen-version-title">
+                  <strong>{card.title}</strong>
+                  <span>{card.hidden ? "Hidden" : "Visible"}</span>
+                </div>
+                <p>{card.body}</p>
+              </div>
+              <button type="button" className="pack-button secondary" onClick={() => onToggleActionCardHidden(card.id, !card.hidden)}>
+                {card.hidden ? "Restore" : "Hide"}
+              </button>
+            </article>
+          ))}
+        </div>
+        <button type="button" className="pack-button" style={{ marginTop: "16px" }} onClick={onCreateActionCard}>Create action card</button>
       </section>
 
       <section className="packs-section">
@@ -3637,6 +3762,8 @@ function Overlay({
   onPackDislike,
   onChooseElse,
   onLogEvent,
+  actionCards,
+  onAcceptActionCard,
 }) {
   if (overlay.type === "empty" && route.kind === "intercept") {
     return (
@@ -3694,6 +3821,14 @@ function Overlay({
     return <CustomPackOverlay overlay={overlay} onClose={onClose} />;
   }
 
+  if (overlay.type === "action-card") {
+    return <ActionCardOverlay overlay={overlay} actionCards={actionCards} onAccept={onAcceptActionCard} onClose={onClose} />;
+  }
+
+  if (overlay.type === "action-success") {
+    return <ActionSuccessOverlay onClose={onClose} />;
+  }
+
   if (!card) return null;
 
   return (
@@ -3732,6 +3867,85 @@ function Overlay({
             <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ActionCardOverlay({ overlay, actionCards, onAccept, onClose }) {
+  const available = useMemo(() => actionCards.filter((c) => !c.hidden), [actionCards]);
+  const [recentlyShown, setRecentlyShown] = useState([]);
+  const [currentCard, setCurrentCard] = useState(null);
+
+  useEffect(() => {
+    if (!currentCard) {
+      if (available.length === 0) {
+        onClose();
+      } else {
+        const nextCard = available[Math.floor(Math.random() * available.length)];
+        setCurrentCard(nextCard);
+        setRecentlyShown([nextCard.id]);
+      }
+    }
+  }, [available, currentCard]);
+
+  function pickNext() {
+    let pool = available.filter((c) => !recentlyShown.includes(c.id));
+
+    if (pool.length === 0) {
+      const fallbackPool = available.filter((c) => currentCard ? c.id !== currentCard.id : true);
+      pool = fallbackPool.length > 0 ? fallbackPool : available;
+    }
+
+    if (pool.length === 0) {
+      onClose();
+      return;
+    }
+    const nextCard = pool[Math.floor(Math.random() * pool.length)];
+    setCurrentCard(nextCard);
+    setRecentlyShown((prev) => {
+      const updated = [nextCard.id, ...prev.filter((id) => id !== nextCard.id)];
+      return updated.slice(0, 3);
+    });
+  }
+
+  if (!currentCard) return null;
+
+  return (
+    <div className="overlay-screen reveal">
+      <div className="floating floating-heart" />
+      <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
+        <CloseGlyph />
+      </button>
+      <div className="reveal-copy">
+        <p className="eyebrow">{currentCard.category || "Action"}</p>
+        <span className="mini-glyph" aria-hidden="true">
+          <SparkGlyph />
+        </span>
+        <h2>{currentCard.title}</h2>
+        {currentCard.body ? <p className="card-attribution">{currentCard.body}</p> : null}
+        <p className="tiny-note">an alternative to scrolling</p>
+      </div>
+      <div className="action-row">
+        <ActionButton label="Another idea" onClick={pickNext} />
+        <ActionButton label="I'll do this" tone="solid" onClick={() => onAccept(currentCard)} />
+      </div>
+    </div>
+  );
+}
+
+function ActionSuccessOverlay({ onClose }) {
+  return (
+    <div className="overlay-screen empty-state">
+      <div className="floating floating-heart" />
+      <button type="button" className="overlay-library-button" onClick={onClose}><BookGlyph /></button>
+      <div className="caught-up-content">
+        <p className="eyebrow">Redirect</p>
+        <h2>Nice choice.</h2>
+        <p className="caught-up-copy">take all the time you need</p>
+        <div className="caught-up-actions">
+          <ActionButton label="Back home" tone="solid" onClick={onClose} />
+        </div>
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ const HIDDEN_LIBRARY_PACKS_KEY = "bishbash.hidden-library-packs.v1";
 const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
 const GLOBAL_INTERRUPTION_MODE_KEY = "bishbash.global-interruption-mode.v1";
 const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "bishbash.launcher-behavior-settings.v1";
+const ACTION_CARDS_KEY = "bishbash.action-cards.v1";
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
@@ -20,6 +21,7 @@ const SHARED_STORAGE_KEYS = [
   DISLIKED_PACK_CARD_IDS_KEY,
   GLOBAL_INTERRUPTION_MODE_KEY,
   LAUNCHER_BEHAVIOR_SETTINGS_KEY,
+  ACTION_CARDS_KEY,
   "bishbash.event-log.v1",
   "bishbash.user-id.v1",
 ];
@@ -85,6 +87,41 @@ export const DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS = {
   youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
   instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
 };
+
+const DEFAULT_ACTION_CARD_TIMESTAMP = "2026-05-10T00:00:00.000Z";
+
+export const DEFAULT_ACTION_CARDS = [
+  {
+    id: "ac-1",
+    title: "Call a family member",
+    body: "A quick catch-up might feel better than scrolling right now.",
+    category: "Connection",
+    launchUrl: "",
+    hidden: false,
+    createdAt: DEFAULT_ACTION_CARD_TIMESTAMP,
+    updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
+  },
+  {
+    id: "ac-2",
+    title: "Do some stretching",
+    body: "Reset your body for a minute before opening another app.",
+    category: "Physical reset",
+    launchUrl: "",
+    hidden: false,
+    createdAt: DEFAULT_ACTION_CARD_TIMESTAMP,
+    updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
+  },
+  {
+    id: "ac-3",
+    title: "Read the FT",
+    body: "Swap passive scrolling for something thoughtful.",
+    category: "Intentional browsing",
+    launchUrl: "https://www.ft.com",
+    hidden: false,
+    createdAt: DEFAULT_ACTION_CARD_TIMESTAMP,
+    updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
+  },
+];
 
 function safeParse(rawValue) {
   try {
@@ -308,6 +345,29 @@ export function loadGlobalInterruptionMode() {
 
 export function saveGlobalInterruptionMode(value) {
   window.localStorage.setItem(GLOBAL_INTERRUPTION_MODE_KEY, String(value));
+}
+
+export function loadActionCards() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(ACTION_CARDS_KEY));
+    const storedArray = Array.isArray(stored) ? stored : [];
+    
+    const map = new Map();
+    DEFAULT_ACTION_CARDS.forEach((card) => map.set(card.id, card));
+    
+    storedArray.forEach((card) => {
+      if (card?.id) {
+        map.set(card.id, { ...(map.get(card.id) || {}), ...card });
+      }
+    });
+    return Array.from(map.values());
+  } catch {
+    return DEFAULT_ACTION_CARDS;
+  }
+}
+
+export function saveActionCards(value) {
+  window.localStorage.setItem(ACTION_CARDS_KEY, JSON.stringify(value));
 }
 
 export function clearSharedBishBashState() {
