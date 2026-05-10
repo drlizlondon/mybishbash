@@ -4350,11 +4350,16 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
       },
     });
 
+      const href = getVersionOpenHref(version);
+      if (href) {
+        window.location.href = href;
+      }
+
     fallbackTimerRef.current = window.setTimeout(() => {
       if (document.visibilityState === "visible") {
         setShowFallbackLink(true);
       }
-    }, 3200);
+        }, 900);
   }
 
   return (
@@ -4426,7 +4431,6 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
         />
         <ActionButton
           label={`Continue to ${version?.name ?? "app"}`}
-          href={getVersionOpenHref(version)}
           onClick={handleContinueToApp}
         />
       </div>
