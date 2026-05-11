@@ -1284,24 +1284,70 @@ function App() {
   }
 
   async function requestNotificationPermission() {
+    console.log("[BISHBASH NOTIFICATION] Checking Notification support");
     if (!("Notification" in window)) {
-      alert("This browser does not support notifications.");
+      console.warn("[BISHBASH NOTIFICATION] No Notification support in window");
+      alert("This browser does not support notifications. On iOS, you must install the app to your Home Screen first.");
       return false;
     }
+    console.log("[BISHBASH NOTIFICATION] Current permission:", Notification.permission);
     let permission = Notification.permission;
-    if (permission !== "granted") {
+    if (permission !== "granted" && permission !== "denied") {
+      console.log("[BISHBASH NOTIFICATION] Requesting permission from user...");
       permission = await Notification.requestPermission();
+      console.log("[BISHBASH NOTIFICATION] New permission:", permission);
     }
     if (permission === "granted") {
       void logEvent({ event_type: "notification_permission_granted", source_type: "settings", card_source: "settings", action_taken: "granted" });
       return true;
     }
+    console.warn("[BISHBASH NOTIFICATION] Permission denied by user or system");
     void logEvent({ event_type: "notification_permission_denied", source_type: "settings", card_source: "settings", action_taken: "denied" });
     return false;
   }
 
+  async function handleResetNotifications() {
+    console.log("[BISHBASH PUSH] Reset notification registration triggered");
+    if ("serviceWorker" in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await sub.unsubscribe();
+          console.log("[BISHBASH PUSH] Unsubscribed successfully during reset.");
+        }
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const r of registrations) {
+          await r.unregister();
+        }
+        console.log("[BISHBASH SW] Service workers unregistered during reset.");
+      } catch (err) {
+        console.error("[BISHBASH SW] Error during reset:", err);
+      }
+    }
+    setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+    alert("Notification registration reset. The app will now reload.");
+    window.location.reload();
+  }
+
   async function handleToggleNotifications(enabled) {
     if (enabled) {
+      console.log("[BISHBASH PUSH] Attempting to enable notifications...");
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+      
+      if (isIOS && !isStandalone) {
+        alert("On iOS, you must install BishBash to your Home Screen before enabling notifications.");
+        setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+        return;
+      }
+
+      if ("Notification" in window && Notification.permission === "denied") {
+        alert("Notifications are permanently blocked. On iOS, you must delete this app from your Home Screen and reinstall it to reset permissions.");
+        setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+        return;
+      }
+
       const granted = await requestNotificationPermission();
       if (granted) {
         setNotificationSettings((prev) => ({ ...prev, enabled: true }));
@@ -1309,11 +1355,31 @@ function App() {
 
         if ("serviceWorker" in navigator) {
           try {
+            console.log("[BISHBASH SW] Awaiting service worker ready...");
             const reg = await navigator.serviceWorker.ready;
-            const sub = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
-            });
+            console.log("[BISHBASH SW] Service worker ready:", reg);
+
+            const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+            if (!vapidKey) {
+              console.error("[BISHBASH PUSH] VAPID public key is missing from environment variables.");
+              alert("App configuration error: Missing push notification keys.");
+              setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+              return;
+            }
+
+            console.log("[BISHBASH PUSH] Checking existing subscription...");
+            let sub = await reg.pushManager.getSubscription();
+            if (!sub) {
+              console.log("[BISHBASH PUSH] Creating new subscription...");
+              sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: vapidKey,
+              });
+              console.log("[BISHBASH PUSH] Subscription created successfully:", sub.endpoint);
+            } else {
+              console.log("[BISHBASH PUSH] Existing subscription found:", sub.endpoint);
+            }
+
             if (session?.user?.id) {
               await savePushSubscription(session.user.id, sub, navigator.userAgent);
               await saveNotificationPreferences(session.user.id, {
@@ -1324,20 +1390,24 @@ function App() {
             }
             void logEvent({ event_type: "push_subscription_created", source_type: "settings", card_source: "settings", action_taken: "created" });
           } catch (err) {
-            console.error("Failed to subscribe to push", err);
+            console.error("[BISHBASH PUSH] Failed to subscribe to push:", err);
             setNotificationSettings((prev) => ({ ...prev, enabled: false }));
             if (session?.user?.id) {
               await saveNotificationPreferences(session.user.id, { enabled: false });
             }
             void logEvent({ event_type: "push_subscription_failed", source_type: "settings", card_source: "settings", action_taken: "failed" });
-            alert("Notifications were not enabled. You can turn them on later from device settings.");
+            alert("Notifications could not be enabled. " + (err.message || "Unknown error."));
           }
+        } else {
+          console.error("[BISHBASH SW] Service workers are not supported in this browser environment.");
+          alert("Service workers are not supported in this browser. Please try adding to Home Screen.");
+          setNotificationSettings((prev) => ({ ...prev, enabled: false }));
         }
       } else {
         setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-        alert("Notifications were not enabled. You can turn them on later from device settings.");
       }
     } else {
+      console.log("[BISHBASH PUSH] Disabling notifications...");
       setNotificationSettings((prev) => ({ ...prev, enabled: false }));
       void logEvent({ event_type: "notification_toggle_off", source_type: "settings", card_source: "settings", action_taken: "disabled" });
 
@@ -1350,12 +1420,14 @@ function App() {
           const reg = await navigator.serviceWorker.ready;
           const sub = await reg.pushManager.getSubscription();
           if (sub) {
+            console.log("[BISHBASH PUSH] Unsubscribing from push...");
             await sub.unsubscribe();
             await removePushSubscription(session.user.id, sub.endpoint);
+            console.log("[BISHBASH PUSH] Unsubscribed successfully.");
             void logEvent({ event_type: "push_subscription_disabled", source_type: "settings", card_source: "settings", action_taken: "disabled" });
           }
         } catch (err) {
-          console.error("Failed to unsubscribe", err);
+          console.error("[BISHBASH PUSH] Failed to unsubscribe", err);
         }
       }
     }
@@ -2338,6 +2410,7 @@ function App() {
                   onUpdateApp={handleUpdateApp}
                   notificationSettings={notificationSettings}
                   onToggleNotifications={handleToggleNotifications}
+                  onResetNotifications={handleResetNotifications}
                   onUpdateNotificationSettings={(updates) => {
                     setNotificationSettings((p) => {
                       const next = { ...p, ...updates };
@@ -3880,6 +3953,7 @@ function SettingsPanel({
   onUpdateApp,
   notificationSettings,
   onToggleNotifications,
+  onResetNotifications,
   onUpdateNotificationSettings,
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -3927,6 +4001,7 @@ function SettingsPanel({
               </label>
             ) : null}
             <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>Notifications use your personal cards and active packs.</p>
+            <NotificationDiagnostics onReset={onResetNotifications} />
           </div>
         ) : (
           <div style={{ marginTop: "16px" }}>
@@ -5060,6 +5135,56 @@ function SettingsGlyph() {
       <path d="M24.5 7.5l-2.2 2.2" />
       <path d="M9.7 22.3l-2.2 2.2" />
     </svg>
+  );
+}
+
+function NotificationDiagnostics({ onReset }) {
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    async function check() {
+      const perm = "Notification" in window ? Notification.permission : "unsupported";
+      const swSupported = "serviceWorker" in navigator;
+      let hasActiveSw = false;
+      let hasPushSub = false;
+
+      if (swSupported) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        hasActiveSw = regs.length > 0;
+        const reg = await navigator.serviceWorker.ready.catch(() => null);
+        if (reg) {
+          const sub = await reg.pushManager.getSubscription().catch(() => null);
+          hasPushSub = !!sub;
+        }
+      }
+
+      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      const hasVapid = !!vapidKey;
+      const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+      setStatus({
+        perm, swSupported, hasActiveSw, hasPushSub, hasVapid, isStandalone, isIOS
+      });
+    }
+    check();
+  }, []);
+
+  if (!status) return null;
+
+  return (
+    <div style={{ padding: "12px", background: "rgba(0,0,0,0.03)", borderRadius: "12px", fontSize: "12px", fontFamily: "monospace", color: "var(--charcoal)", border: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}>
+      <strong style={{ display: "block", marginBottom: 6 }}>Push Diagnostics</strong>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Permission:</span> <span>{status.perm}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>SW Status:</span> <span>{status.swSupported ? (status.hasActiveSw ? "Registered" : "None") : "Unsupported"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Push Sub:</span> <span>{status.hasPushSub ? "Active" : "Inactive"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>VAPID Key:</span> <span>{status.hasVapid ? "Loaded" : "Missing"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Standalone:</span> <span>{status.isStandalone ? "True" : "False"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>iOS Detected:</span> <span>{status.isIOS ? "True" : "False"}</span></div>
+      <button type="button" onClick={onReset} style={{ display: "block", width: "100%", marginTop: 10, padding: "8px", borderRadius: 8, border: "1px solid var(--coral)", background: "transparent", cursor: "pointer", color: "var(--coral)", fontWeight: "500", fontSize: "13px" }}>
+        Reset registration
+      </button>
+    </div>
   );
 }
 
