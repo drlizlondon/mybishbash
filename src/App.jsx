@@ -255,7 +255,7 @@ function pickRandomHomeCardForDisplay(
       globalEnabled: globalInterruptionMode,
     },
   );
-
+  
   const singles = normalized
     .filter((card) => !card.sourcePackId && isEligible(card, now, timezone))
     .map((card) => ({ type: "single", card }));
@@ -277,7 +277,6 @@ function pickRandomHomeCardForDisplay(
     packCards,
   }));
 
-  const candidates = [...singles, ...packs];
   const personalBucket = singles;
   const libraryBucket = packs;
   let interruptionBucket = [];
@@ -605,6 +604,7 @@ function App() {
     interruptions: {},
     cards: [],
   });
+  const suppressNextHomeAutoLaunchRef = useRef(false);
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
@@ -1013,7 +1013,7 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
-        events
+        events,
       );
 
       if (interruption) {
@@ -1053,6 +1053,13 @@ function App() {
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
+      if (suppressNextHomeAutoLaunchRef.current) {
+        suppressNextHomeAutoLaunchRef.current = false;
+        setShouldLaunchOverlay(false);
+        setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
+        return;
+      }
+
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
@@ -1062,7 +1069,7 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
-        events
+        events,
       );
       setShouldLaunchOverlay(false);
 
@@ -1091,7 +1098,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, authReady, session, syncStatus, overlay?.type, overlay?.versionId]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1101,6 +1108,7 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
+    suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
 
@@ -1113,7 +1121,7 @@ function App() {
       cardPacks,
       dislikedPackCardIds,
       globalInterruptionMode,
-      events
+      events,
     );
 
     if (interruption) {
@@ -1215,6 +1223,7 @@ function App() {
       },
     });
 
+    suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     navigateTo("/home", { replace: true });
     setOverlay(null);
@@ -1515,6 +1524,7 @@ function App() {
       pack_id: card.sourcePackId,
       action_taken: "disliked",
     });
+    suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     setOverlay(null);
     navigateTo("/home");
@@ -2219,6 +2229,7 @@ function App() {
               setOverlay(null);
               return;
             }
+            suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
             navigateTo("/home", { replace: true });
             setOverlay(null);
@@ -2246,6 +2257,7 @@ function App() {
                 action_taken: "liked",
               });
             }
+            suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
             setOverlay(null);
             navigateTo("/home");
@@ -3634,8 +3646,8 @@ function SettingsPanel({
   launcherContext,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("bishbash");
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
 
   const isInsideFakeLauncher =
     launcherContext &&
@@ -3652,6 +3664,29 @@ function SettingsPanel({
           <p>Personal touches and a quick peek at how BishBash works.</p>
         </div>
       </div>
+
+      {isInsideFakeLauncher ? (() => {
+        const behavior = launcherBehaviorSettings[launcherContext] ?? {};
+        const interruptionsOn = Boolean(behavior.useInterruptionPack);
+        return (
+          <div className="settings-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+              <div>
+                <p style={{ margin: 0, fontWeight: "600", fontSize: "16px", color: "var(--charcoal)" }}>Interruption cards</p>
+                <span style={{ fontSize: "14px", color: "var(--ink-muted)", marginTop: "4px", display: "block" }}>Show pause cards when this fake app opens.</span>
+              </div>
+              <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: "8px", margin: 0, padding: 0, border: 0, background: "transparent" }}>
+                <input
+                  type="checkbox"
+                  checked={interruptionsOn}
+                  onChange={(e) => onSaveVersionBehavior(launcherContext, { useInterruptionPack: e.target.checked })}
+                />
+                <span style={{ fontSize: "15px", color: "var(--charcoal)", fontWeight: "500" }}>{interruptionsOn ? "On" : "Off"}</span>
+              </label>
+            </div>
+          </div>
+        );
+      })() : null}
       <div className="settings-card settings-compact">
         <button
           type="button"
@@ -4419,18 +4454,37 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   function handleContinueToApp() {
     if (!version) return;
 
+    setShowFallbackLink(false);
     void onLogEvent({
       event_type: "intercept_continue_to_app",
+      source_type: "interruption",
+      card_source: "interruption",
+      card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
+      card_title: messages[activeIndex] ?? null,
+      card_text: messages[activeIndex] ?? null,
       app_id: version.id,
       app_name: version.name,
       launcher_context: version.id,
+      target_app: overlay.targetApp ?? version.id,
+      pack_id: overlay.packId,
+      message_id: `${overlay.packId}:${activeIndex}`,
       action_taken: "continued_to_app",
+      metadata: {
+        packTitle: overlay.name,
+        message: messages[activeIndex] ?? null,
+      },
     });
 
     const href = getVersionOpenHref(version);
     if (href) {
       window.location.href = href;
     }
+
+    fallbackTimerRef.current = window.setTimeout(() => {
+      if (document.visibilityState === "visible") {
+        setShowFallbackLink(true);
+      }
+    }, 3200);
   }
 
   return (
