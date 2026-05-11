@@ -26,8 +26,6 @@ import {
   saveSetupComplete,
   loadNotificationSettings,
   saveNotificationSettings,
-  loadNotificationSchedule,
-  saveNotificationSchedule,
 } from "./storage";
 import {
   createEventRecord,
@@ -385,6 +383,7 @@ function buildSharedState({
   globalInterruptionMode,
   events,
   actionCards,
+  notificationSettings,
 }) {
   return {
     version: 1,
@@ -628,6 +627,15 @@ function App() {
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
+  const logEvent = useCallback(async (input) => {
+    const record = createEventRecord({
+      launcher_context: launcherContext,
+      ...input,
+    });
+    const next = await persistEventRecord(record);
+    setEvents(next);
+  }, [launcherContext]);
+
   const currentSharedState = useCallback(
     () =>
       buildSharedState({
@@ -641,6 +649,7 @@ function App() {
         globalInterruptionMode,
         events,
         actionCards,
+        notificationSettings,
       }),
     [
       cards,
@@ -1365,15 +1374,6 @@ function App() {
       normalizeCards(typeof updater === "function" ? updater(current) : updater, new Date(), profile.timezone),
     );
   }
-
-  const logEvent = useCallback(async (input) => {
-    const record = createEventRecord({
-      launcher_context: launcherContext,
-      ...input,
-    });
-    const next = await persistEventRecord(record);
-    setEvents(next);
-  }, [launcherContext]);
 
   function openSpecificReveal(cardId) {
     const selected = cards.find((card) => card.id === cardId);
