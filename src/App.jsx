@@ -75,6 +75,7 @@ import {
   buildCustomPackOverlay,
   buildInterruptionHomeItem,
   pickInterruptionCardIndex,
+  getRecentInterruptionCardKeys,
   getVersionOpenHref,
 } from "./lib/launcherState";
 import Onboarding from "./Onboarding";
@@ -241,21 +242,33 @@ function pickRandomHomeCardForDisplay(
   globalInterruptionMode,
   events,
 ) {
-  const normalized = normalizeCards(currentCards, new Date(), timezone);
-  const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, behaviors, customPacks, {
-    hiddenCardIds,
-    globalEnabled: globalInterruptionMode,
-  });
+  const now = new Date();
+  const normalized = normalizeCards(currentCards, now, timezone);
+
+  const interruptionPack = getInterruptionPackForLauncher(
+    launcherContext,
+    versions,
+    behaviors,
+    customPacks,
+    {
+      hiddenCardIds,
+      globalEnabled: globalInterruptionMode,
+    },
+  );
+
   const singles = normalized
-    .filter((card) => !card.sourcePackId && isEligible(card, new Date(), timezone))
+    .filter((card) => !card.sourcePackId && isEligible(card, now, timezone))
     .map((card) => ({ type: "single", card }));
 
   const packMap = new Map();
+
   normalized.forEach((card) => {
-    if (!card.sourcePackId || !isEligible(card, new Date(), timezone)) return;
+    if (!card.sourcePackId || !isEligible(card, now, timezone)) return;
+
     if (!packMap.has(card.sourcePackId)) {
       packMap.set(card.sourcePackId, []);
     }
+
     packMap.get(card.sourcePackId).push(card);
   });
 
@@ -264,35 +277,64 @@ function pickRandomHomeCardForDisplay(
     packCards,
   }));
 
-  const candidates = [...singles];
+  const candidates = [...singles, ...packs];
+  const personalBucket = singles;
+  const libraryBucket = packs;
+  let interruptionBucket = [];
 
-  if (interruptionPack) {
-    return {
-      normalized,
-      selected: null,
-      interruption: {
+  if (interruptionPack?.cards?.length > 0) {
+    const recentKeys = getRecentInterruptionCardKeys(
+      events,
+      interruptionPack.id,
+      now,
+    );
+
+    const availableInterruptionCards = interruptionPack.cards
+      .map((card, index) => ({ card, index }))
+      .filter(({ card, index }) => {
+        return (
+          !recentKeys.has(card.id) &&
+          !recentKeys.has(`${interruptionPack.id}:${index}`)
+        );
+      });
+
+    if (availableInterruptionCards.length > 0) {
+      interruptionBucket = availableInterruptionCards.map((chosenInterruption) => ({
         type: "interruption",
         pack: interruptionPack,
         versionId: launcherContext,
-        activeIndex: pickInterruptionCardIndex(interruptionPack, events),
-      },
-    };
+        activeIndex: chosenInterruption.index,
+      }));
+    }
   }
 
-  candidates.push(...packs);
+  const availableBuckets = [];
+  if (personalBucket.length > 0) availableBuckets.push(personalBucket);
+  if (libraryBucket.length > 0) availableBuckets.push(libraryBucket);
+  if (interruptionBucket.length > 0) availableBuckets.push(interruptionBucket);
 
-  if (candidates.length === 0) {
+  if (availableBuckets.length === 0) {
     return { normalized, selected: null };
   }
 
-  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  const chosenBucket = availableBuckets[Math.floor(Math.random() * availableBuckets.length)];
+  const chosen = chosenBucket[Math.floor(Math.random() * chosenBucket.length)];
+
   if (chosen.type === "single") {
     return { normalized, selected: chosen.card };
   }
+
   if (chosen.type === "interruption") {
-    return { normalized, selected: null, interruption: chosen };
+    return {
+      normalized,
+      selected: null,
+      interruption: chosen,
+    };
   }
-  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
+
+  const selected =
+    chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
+
   return { normalized, selected };
 }
 
@@ -962,7 +1004,7 @@ function App() {
         return;
       }
 
-      const { selected, interruption, actionCardFallback } = pickRandomHomeCardForDisplay(
+      const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
         route.versionId,
@@ -971,8 +1013,7 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
-        actionCards,
-        recentViewsRef
+        events
       );
 
       if (interruption) {
@@ -985,6 +1026,7 @@ function App() {
       }
 
       setScreen("library");
+
       if (selected) {
         setOverlay(buildRevealOverlay(selected.id, route.versionId));
         return;
@@ -1011,7 +1053,7 @@ function App() {
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
-      const { selected, interruption, actionCardFallback } = pickRandomHomeCardForDisplay(
+      const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
         launcherContext,
@@ -1020,23 +1062,23 @@ function App() {
         cardPacks,
         dislikedPackCardIds,
         globalInterruptionMode,
-        actionCards,
-        recentViewsRef
+        events
       );
       setShouldLaunchOverlay(false);
+
       if (interruption) {
+        setScreen("interception");
         setOverlay({
           ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
           versionId: interruption.versionId,
         });
         return;
       }
+
+      setScreen("library");
+
       if (selected) {
         setOverlay(buildRevealOverlay(selected.id));
-        return;
-      }
-      if (actionCardFallback) {
-        setOverlay(buildActionCardOverlay(launcherContext));
         return;
       }
 
@@ -1049,7 +1091,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, authReady, session, syncStatus, overlay?.type, overlay?.versionId, actionCards]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, authReady, session, syncStatus, overlay?.type, overlay?.versionId]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1062,7 +1104,7 @@ function App() {
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
 
-    const { selected, interruption, actionCardFallback } = pickRandomHomeCardForDisplay(
+    const { selected, interruption } = pickRandomHomeCardForDisplay(
       cards,
       profile.timezone,
       versionId,
@@ -1071,8 +1113,7 @@ function App() {
       cardPacks,
       dislikedPackCardIds,
       globalInterruptionMode,
-      actionCards,
-      recentViewsRef
+      events
     );
 
     if (interruption) {
@@ -1086,14 +1127,16 @@ function App() {
     }
 
     setScreen("library");
+
     if (selected) {
       setOverlay(buildRevealOverlay(selected.id, versionId));
-    } else if (actionCardFallback) {
-      setOverlay(buildActionCardOverlay(versionId));
-    } else {
-      setOverlay(buildEmptyOverlay(versionId));
+      navigateTo(`/intercept/${versionId}`, { replace: true });
+      return;
     }
+
+    setOverlay(buildEmptyOverlay(versionId));
     navigateTo(`/intercept/${versionId}`, { replace: true });
+    return;
   }
 
   function updateCards(updater) {
