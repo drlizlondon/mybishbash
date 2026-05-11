@@ -1033,6 +1033,33 @@ function App() {
   }, [route.kind, route.cardId, logEvent]);
 
   useEffect(() => {
+    if (!notificationSettings.enabled) return;
+    let isMounted = true;
+    async function validatePushState() {
+      const perm = "Notification" in window ? Notification.permission : "unsupported";
+      if (perm !== "granted") {
+        if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
+        return;
+      }
+      if ("serviceWorker" in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (!sub) {
+            if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
+          }
+        } catch (e) {
+          if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
+        }
+      } else {
+        if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
+      }
+    }
+    validatePushState();
+    return () => { isMounted = false; };
+  }, [notificationSettings.enabled]);
+
+  useEffect(() => {
     if (!authReady || !session) return;
     if (syncStatus === "loading") return;
 
@@ -1314,6 +1341,9 @@ function App() {
         const sub = await reg.pushManager.getSubscription();
         if (sub) {
           await sub.unsubscribe();
+          if (session?.user?.id) {
+            await removePushSubscription(session.user.id, sub.endpoint);
+          }
           console.log("[BISHBASH PUSH] Unsubscribed successfully during reset.");
         }
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -1326,6 +1356,9 @@ function App() {
       }
     }
     setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+    if (session?.user?.id) {
+      await saveNotificationPreferences(session.user.id, { enabled: false });
+    }
     alert("Notification registration reset. The app will now reload.");
     window.location.reload();
   }
@@ -1416,22 +1449,6 @@ function App() {
 
       if (session?.user?.id) {
         await saveNotificationPreferences(session.user.id, { enabled: false });
-      }
-
-      if ("serviceWorker" in navigator) {
-        try {
-          const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) {
-            console.log("[BISHBASH PUSH] Unsubscribing from push...");
-            await sub.unsubscribe();
-            await removePushSubscription(session.user.id, sub.endpoint);
-            console.log("[BISHBASH PUSH] Unsubscribed successfully.");
-            void logEvent({ event_type: "push_subscription_disabled", source_type: "settings", card_source: "settings", action_taken: "disabled" });
-          }
-        } catch (err) {
-          console.error("[BISHBASH PUSH] Failed to unsubscribe", err);
-        }
       }
     }
   }
@@ -4004,7 +4021,7 @@ function SettingsPanel({
               </label>
             ) : null}
             <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>Notifications use your personal cards and active packs.</p>
-            <NotificationDiagnostics onReset={onResetNotifications} />
+            <NotificationDiagnostics onReset={onResetNotifications} notificationSettings={notificationSettings} />
           </div>
         ) : (
           <div style={{ marginTop: "16px" }}>
@@ -5141,11 +5158,12 @@ function SettingsGlyph() {
   );
 }
 
-function NotificationDiagnostics({ onReset }) {
+function NotificationDiagnostics({ onReset, notificationSettings }) {
   const [status, setStatus] = useState(null);
 
   useEffect(() => {
-    async function check() {
+    let isMounted = true;
+    async function refreshStatus() {
       const perm = "Notification" in window ? Notification.permission : "unsupported";
       const swSupported = "serviceWorker" in navigator;
       let hasActiveSw = false;
@@ -5167,18 +5185,28 @@ function NotificationDiagnostics({ onReset }) {
       const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-      setStatus({
-        perm, swSupported, hasActiveSw, hasPushSub, hasVapid, vapidPrefix, isStandalone, isIOS
-      });
+      if (isMounted) {
+        setStatus({
+          perm, swSupported, hasActiveSw, hasPushSub, hasVapid, vapidPrefix, isStandalone, isIOS
+        });
+      }
     }
-    check();
+    refreshStatus();
+    return () => { isMounted = false; };
   }, []);
 
-  if (!status) return null;
+  if (!status) {
+    return (
+      <div style={{ padding: "12px", background: "rgba(0,0,0,0.03)", borderRadius: "12px", fontSize: "12px", fontFamily: "monospace", color: "var(--charcoal)", border: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}>
+        Checking...
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "12px", background: "rgba(0,0,0,0.03)", borderRadius: "12px", fontSize: "12px", fontFamily: "monospace", color: "var(--charcoal)", border: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}>
       <strong style={{ display: "block", marginBottom: 6 }}>Push Diagnostics</strong>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Random cards enabled:</span> <span>{notificationSettings?.enabled ? "True" : "False"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Permission:</span> <span>{status.perm}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>SW Status:</span> <span>{status.swSupported ? (status.hasActiveSw ? "Registered" : "None") : "Unsupported"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Push Sub:</span> <span>{status.hasPushSub ? "Active" : "Inactive"}</span></div>
