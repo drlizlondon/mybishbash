@@ -605,6 +605,8 @@ function App() {
     cards: [],
   });
   const suppressNextHomeAutoLaunchRef = useRef(false);
+  const launchSessionIdRef = useRef(createId());
+  const hasSelectedCardForCurrentLaunchRef = useRef(false);
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
@@ -994,15 +996,34 @@ function App() {
     }
 
     if (route.kind === "intercept") {
-      setLauncherContext(route.versionId);
+      if (launcherContext !== route.versionId) {
+        console.log("[SUPPRESSION CLEARED] launcherContext changed");
+        suppressNextHomeAutoLaunchRef.current = false;
+        hasSelectedCardForCurrentLaunchRef.current = false;
+        launchSessionIdRef.current = createId();
+        setLauncherContext(route.versionId);
+      } else if (suppressNextHomeAutoLaunchRef.current) {
+        console.log("[SUPPRESSION CLEARED] intercept route entry");
+        suppressNextHomeAutoLaunchRef.current = false;
+      }
 
       if (
         overlay?.versionId === route.versionId &&
-        ["intercept-pack", "action-card", "action-card-empty", "action-success"].includes(overlay.type)
+        ["intercept-pack", "action-card", "action-card-empty", "action-success", "reveal", "empty"].includes(overlay.type)
       ) {
         console.log("[ROUTE GUARD] preserving overlay", overlay.type);
+        console.log("[REVEAL CARD LOCKED]");
         return;
       }
+
+      if (hasSelectedCardForCurrentLaunchRef.current) {
+        console.log("[CARD SELECTION SKIPPED] already selected");
+        return;
+      }
+
+      console.log("[LAUNCH START]");
+      console.log("[CARD SELECT ONCE]");
+      hasSelectedCardForCurrentLaunchRef.current = true;
 
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
@@ -1053,12 +1074,24 @@ function App() {
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
+      console.log("[HOME AUTO LAUNCH]");
       if (suppressNextHomeAutoLaunchRef.current) {
+        console.log("[SUPPRESSION SET] skipping home auto launch");
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
         return;
       }
+
+      if (hasSelectedCardForCurrentLaunchRef.current) {
+        console.log("[CARD SELECTION SKIPPED] already selected");
+        setShouldLaunchOverlay(false);
+        return;
+      }
+
+      console.log("[LAUNCH START]");
+      console.log("[CARD SELECT ONCE]");
+      hasSelectedCardForCurrentLaunchRef.current = true;
 
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
@@ -1108,9 +1141,17 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
+    console.log("[SUPPRESSION CLEARED] startInterceptionFlow");
     suppressNextHomeAutoLaunchRef.current = false;
+    hasSelectedCardForCurrentLaunchRef.current = false;
+    launchSessionIdRef.current = createId();
+
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
+
+    console.log("[LAUNCH START]");
+    console.log("[CARD SELECT ONCE]");
+    hasSelectedCardForCurrentLaunchRef.current = true;
 
     const { selected, interruption } = pickRandomHomeCardForDisplay(
       cards,
@@ -1223,7 +1264,9 @@ function App() {
       },
     });
 
+    console.log("[SUPPRESSION SET] handleAction");
     suppressNextHomeAutoLaunchRef.current = true;
+    hasSelectedCardForCurrentLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     navigateTo("/home", { replace: true });
     setOverlay(null);
@@ -1524,7 +1567,9 @@ function App() {
       pack_id: card.sourcePackId,
       action_taken: "disliked",
     });
+    console.log("[SUPPRESSION SET] dislikePackCard");
     suppressNextHomeAutoLaunchRef.current = true;
+    hasSelectedCardForCurrentLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setOverlay(null);
     navigateTo("/home");
@@ -2229,7 +2274,9 @@ function App() {
               setOverlay(null);
               return;
             }
+            console.log("[SUPPRESSION SET] onClose");
             suppressNextHomeAutoLaunchRef.current = true;
+            hasSelectedCardForCurrentLaunchRef.current = false;
             setShouldLaunchOverlay(false);
             navigateTo("/home", { replace: true });
             setOverlay(null);
@@ -2257,7 +2304,9 @@ function App() {
                 action_taken: "liked",
               });
             }
+            console.log("[SUPPRESSION SET] onPackLike");
             suppressNextHomeAutoLaunchRef.current = true;
+            hasSelectedCardForCurrentLaunchRef.current = false;
             setShouldLaunchOverlay(false);
             setOverlay(null);
             navigateTo("/home");
