@@ -93,3 +93,48 @@ export async function logOut() {
   const { error } = await client.auth.signOut();
   if (error) throw error;
 }
+
+export async function savePushSubscription(userId, subscription, userAgent) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  const client = requireSupabase();
+  const sub = JSON.parse(JSON.stringify(subscription));
+  const { error } = await client.from("push_subscriptions").upsert({
+    user_id: userId,
+    endpoint: sub.endpoint,
+    p256dh: sub.keys.p256dh,
+    auth: sub.keys.auth,
+    user_agent: userAgent,
+    enabled: true,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id, endpoint" });
+  
+  if (error) console.error("Error saving push subscription:", error);
+}
+
+export async function removePushSubscription(userId, endpoint) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  const client = requireSupabase();
+  const { error } = await client.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", endpoint);
+  
+  if (error) console.error("Error removing push subscription:", error);
+}
+
+export async function saveNotificationPreferences(userId, prefs) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  const client = requireSupabase();
+  const { error } = await client.from("notification_preferences").upsert({
+    user_id: userId,
+    ...prefs,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  
+  if (error) console.error("Error saving notification preferences:", error);
+}
+
+export async function markNotificationOpened(deliveryId) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  const client = requireSupabase();
+  const { error } = await client.from("notification_delivery_log").update({ opened_at: new Date().toISOString() }).eq("id", deliveryId);
+  
+  if (error) console.error("Error marking notification opened:", error);
+}

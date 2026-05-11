@@ -24,6 +24,10 @@ import {
   saveProfile,
   saveActionCards,
   saveSetupComplete,
+  loadNotificationSettings,
+  saveNotificationSettings,
+  loadNotificationSchedule,
+  saveNotificationSchedule,
 } from "./storage";
 import {
   createEventRecord,
@@ -43,6 +47,10 @@ import {
   signUp,
   logIn,
   logOut,
+  savePushSubscription,
+  removePushSubscription,
+  saveNotificationPreferences,
+  markNotificationOpened,
 } from "./lib/bishbashSync";
 import {
   PACKS,
@@ -390,6 +398,7 @@ function buildSharedState({
     globalInterruptionMode,
     events,
     actionCards,
+    notificationSettings,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -413,6 +422,9 @@ function normalizeSharedState(state, fallback) {
         : fallback.globalInterruptionMode,
     events: Array.isArray(source.events) ? source.events : fallback.events,
     actionCards: Array.isArray(source.actionCards) ? source.actionCards : fallback.actionCards,
+    notificationSettings: source.notificationSettings && typeof source.notificationSettings === "object"
+      ? { ...fallback.notificationSettings, ...source.notificationSettings }
+      : fallback.notificationSettings,
   };
 }
 
@@ -521,6 +533,7 @@ function App() {
       hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
       actionCards: loadActionCards(),
+      notificationSettings: loadNotificationSettings(),
     };
   }, []);
   const [cards, setCards] = useState(initialState.cards);
@@ -534,6 +547,7 @@ function App() {
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
+  const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -639,6 +653,7 @@ function App() {
       globalInterruptionMode,
       events,
       actionCards,
+      notificationSettings,
     ],
   );
 
@@ -657,6 +672,7 @@ function App() {
       globalInterruptionMode: initialState.globalInterruptionMode,
       events: initialState.events,
       actionCards: initialState.actionCards,
+      notificationSettings: initialState.notificationSettings,
     });
     const next = normalizeSharedState(incomingState, fallback);
 
@@ -684,6 +700,7 @@ function App() {
     // This ensures offline actions survive sync.
     setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
     setActionCards((current) => mergeEntitiesById(current, next.actionCards));
+    setNotificationSettings(next.notificationSettings);
 
     setScreen(next.setupComplete ? "library" : "onboarding");
     setRoutePath(getRouteFromLocation(next.setupComplete));
@@ -897,6 +914,10 @@ function App() {
   }, [actionCards]);
 
   useEffect(() => {
+    saveNotificationSettings(notificationSettings);
+  }, [notificationSettings]);
+
+  useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
     if (JSON.stringify(normalized) !== JSON.stringify(cards)) {
       setCards(normalized);
@@ -978,6 +999,29 @@ function App() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [cards, profile.timezone, route.kind, setupComplete, authReady, session, syncStatus]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("source") === "notification" && route.kind === "card") {
+      void logEvent({
+        event_type: "notification_card_opened",
+        source_type: "notification",
+        card_source: "notification",
+        card_id: route.cardId,
+        action_taken: "opened",
+      });
+
+      const deliveryId = searchParams.get("deliveryId");
+      if (deliveryId) {
+        markNotificationOpened(deliveryId).catch(console.error);
+      }
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("source");
+      url.searchParams.delete("deliveryId");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [route.kind, route.cardId, logEvent]);
 
   useEffect(() => {
     if (!authReady || !session) return;
@@ -1227,6 +1271,84 @@ function App() {
     } catch (error) {
       console.error("Update failed:", error);
       setIsUpdatingApp(false);
+    }
+  }
+
+  async function requestNotificationPermission() {
+    if (!("Notification" in window)) {
+      alert("This browser does not support notifications.");
+      return false;
+    }
+    let permission = Notification.permission;
+    if (permission !== "granted") {
+      permission = await Notification.requestPermission();
+    }
+    if (permission === "granted") {
+      void logEvent({ event_type: "notification_permission_granted", source_type: "settings", card_source: "settings", action_taken: "granted" });
+      return true;
+    }
+    void logEvent({ event_type: "notification_permission_denied", source_type: "settings", card_source: "settings", action_taken: "denied" });
+    return false;
+  }
+
+  async function handleToggleNotifications(enabled) {
+    if (enabled) {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        setNotificationSettings((prev) => ({ ...prev, enabled: true }));
+        void logEvent({ event_type: "notification_toggle_on", source_type: "settings", card_source: "settings", action_taken: "enabled" });
+
+        if ("serviceWorker" in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+            });
+            if (session?.user?.id) {
+              await savePushSubscription(session.user.id, sub, navigator.userAgent);
+              await saveNotificationPreferences(session.user.id, {
+                enabled: true,
+                notifications_per_day: notificationSettings.notificationsPerDay,
+                timezone: profile.timezone
+              });
+            }
+            void logEvent({ event_type: "push_subscription_created", source_type: "settings", card_source: "settings", action_taken: "created" });
+          } catch (err) {
+            console.error("Failed to subscribe to push", err);
+            setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+            if (session?.user?.id) {
+              await saveNotificationPreferences(session.user.id, { enabled: false });
+            }
+            void logEvent({ event_type: "push_subscription_failed", source_type: "settings", card_source: "settings", action_taken: "failed" });
+            alert("Notifications were not enabled. You can turn them on later from device settings.");
+          }
+        }
+      } else {
+        setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+        alert("Notifications were not enabled. You can turn them on later from device settings.");
+      }
+    } else {
+      setNotificationSettings((prev) => ({ ...prev, enabled: false }));
+      void logEvent({ event_type: "notification_toggle_off", source_type: "settings", card_source: "settings", action_taken: "disabled" });
+
+      if (session?.user?.id) {
+        await saveNotificationPreferences(session.user.id, { enabled: false });
+      }
+
+      if ("serviceWorker" in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            await sub.unsubscribe();
+            await removePushSubscription(session.user.id, sub.endpoint);
+            void logEvent({ event_type: "push_subscription_disabled", source_type: "settings", card_source: "settings", action_taken: "disabled" });
+          }
+        } catch (err) {
+          console.error("Failed to unsubscribe", err);
+        }
+      }
     }
   }
 
@@ -2214,6 +2336,15 @@ function App() {
                   launcherContext={launcherContext}
                   isUpdatingApp={isUpdatingApp}
                   onUpdateApp={handleUpdateApp}
+                  notificationSettings={notificationSettings}
+                  onToggleNotifications={handleToggleNotifications}
+                  onUpdateNotificationSettings={(updates) => {
+                    setNotificationSettings((p) => {
+                      const next = { ...p, ...updates };
+                      if (session?.user?.id) saveNotificationPreferences(session.user.id, { enabled: next.enabled, notifications_per_day: next.notificationsPerDay, timezone: profile.timezone });
+                      return next;
+                    });
+                  }}
                 />
               ) : null}
             </main>
@@ -3747,6 +3878,9 @@ function SettingsPanel({
   launcherContext,
   isUpdatingApp,
   onUpdateApp,
+  notificationSettings,
+  onToggleNotifications,
+  onUpdateNotificationSettings,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("bishbash");
@@ -3766,6 +3900,41 @@ function SettingsPanel({
           <h2>Settings</h2>
           <p>Personal touches and a quick peek at how BishBash works.</p>
         </div>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>BishBash notifications</p>
+          <span>Random reminders of the life you actually want.</span>
+        </div>
+        
+        {launcherContext === NORMAL_LAUNCHER_CONTEXT ? (
+          <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", margin: 0, padding: 0, border: 0, background: "transparent" }}>
+              <input
+                type="checkbox"
+                checked={notificationSettings.enabled}
+                onChange={(e) => onToggleNotifications(e.target.checked)}
+              />
+              <span style={{ fontSize: "15px", color: "var(--charcoal)", fontWeight: "500" }}>Enable random BishBash cards</span>
+            </label>
+            {notificationSettings.enabled ? (
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                <span style={{ fontSize: "14px", color: "var(--charcoal)" }}>Cards per day</span>
+                <select className="settings-input" style={{ width: "auto", minHeight: "36px", padding: "6px 12px" }} value={notificationSettings.notificationsPerDay} onChange={(e) => onUpdateNotificationSettings({ notificationsPerDay: parseInt(e.target.value, 10) })}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            ) : null}
+            <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>Notifications use your personal cards and active packs.</p>
+          </div>
+        ) : (
+          <div style={{ marginTop: "16px" }}>
+            <span style={{ fontSize: "13px", padding: "4px 10px", background: "rgba(0,0,0,0.05)", borderRadius: "999px", color: "var(--ink-muted)", display: "inline-block" }}>
+              Notifications are managed from BishBash.
+            </span>
+          </div>
+        )}
       </div>
 
       {isInsideFakeLauncher ? (() => {

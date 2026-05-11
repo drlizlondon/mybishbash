@@ -10,6 +10,8 @@ const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
 const GLOBAL_INTERRUPTION_MODE_KEY = "bishbash.global-interruption-mode.v1";
 const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "bishbash.launcher-behavior-settings.v1";
 const ACTION_CARDS_KEY = "bishbash.action-cards.v1";
+const NOTIFICATIONS_KEY = "bishbash.notifications.v1";
+const NOTIFICATION_SCHEDULE_KEY = "bishbash.notification-schedule.v1";
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
@@ -22,6 +24,7 @@ const SHARED_STORAGE_KEYS = [
   GLOBAL_INTERRUPTION_MODE_KEY,
   LAUNCHER_BEHAVIOR_SETTINGS_KEY,
   ACTION_CARDS_KEY,
+  NOTIFICATIONS_KEY,
   "bishbash.event-log.v1",
   "bishbash.user-id.v1",
 ];
@@ -128,6 +131,8 @@ export const DEFAULT_ACTION_CARDS = [
     updatedAt: DEFAULT_ACTION_CARD_TIMESTAMP,
   },
 ];
+
+export const DEFAULT_NOTIFICATIONS = { enabled: false, notificationsPerDay: 3 };
 
 function safeParse(rawValue) {
   try {
@@ -374,6 +379,32 @@ export function loadActionCards() {
 
 export function saveActionCards(value) {
   window.localStorage.setItem(ACTION_CARDS_KEY, JSON.stringify(value));
+}
+
+export function loadNotificationSettings() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(NOTIFICATIONS_KEY));
+    return stored ? { ...DEFAULT_NOTIFICATIONS, ...stored } : DEFAULT_NOTIFICATIONS;
+  } catch {
+    return DEFAULT_NOTIFICATIONS;
+  }
+}
+
+export function saveNotificationSettings(value) {
+  window.localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(value));
+}
+
+export function loadNotificationSchedule() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(NOTIFICATION_SCHEDULE_KEY));
+    return stored || { date: "", targets: [], sentCount: 0, lastSentAt: null };
+  } catch {
+    return { date: "", targets: [], sentCount: 0, lastSentAt: null };
+  }
+}
+
+export function saveNotificationSchedule(value) {
+  window.localStorage.setItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(value));
 }
 
 export function clearSharedBishBashState() {
