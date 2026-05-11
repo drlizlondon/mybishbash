@@ -1141,6 +1141,7 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
+    console.log("[INTERCEPTION START]");
     console.log("[SUPPRESSION CLEARED] startInterceptionFlow");
     suppressNextHomeAutoLaunchRef.current = false;
     hasSelectedCardForCurrentLaunchRef.current = false;
@@ -1186,6 +1187,27 @@ function App() {
     setOverlay(buildEmptyOverlay(versionId));
     navigateTo(`/intercept/${versionId}`, { replace: true });
     return;
+  }
+
+  function openRealApp(versionId) {
+    console.log("[FAKE APP BUTTON OPEN REAL APP]");
+    const version = resolveVersionConfig(
+      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+      launcherBehaviorSettings[versionId]
+    );
+    const href = getVersionOpenHref(version);
+    console.log("[FAKE APP BUTTON HREF]", href);
+    if (href) {
+      window.location.href = href;
+    }
+  }
+
+  function handleFakeAppLaunch(versionId) {
+    if (launcherContext === NORMAL_LAUNCHER_CONTEXT) {
+      startInterceptionFlow(versionId);
+    } else {
+      openRealApp(versionId);
+    }
   }
 
   function updateCards(updater) {
@@ -2336,7 +2358,7 @@ function App() {
             setIsActionCardEditorOpen(true);
           }}
           fakeLauncherVersions={fakeLauncherVersions}
-          onFakeLauncherLaunch={startInterceptionFlow}
+          onFakeLauncherLaunch={handleFakeAppLaunch}
         />
       ) : null}
 
@@ -2344,7 +2366,7 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={Boolean(overlay)}
-          onLaunch={startInterceptionFlow}
+          onLaunch={handleFakeAppLaunch}
         />
       ) : null}
     </>
