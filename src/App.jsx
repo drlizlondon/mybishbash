@@ -1336,8 +1336,9 @@ function App() {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
       const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
       
-      if (isIOS && !isStandalone) {
-        alert("On iOS, you must install BishBash to your Home Screen before enabling notifications.");
+      if (!isStandalone) {
+        console.warn("[BISHBASH PUSH] Not in standalone mode. Aborting push subscription.");
+        alert("You must install BishBash to your Home Screen before enabling notifications.");
         setNotificationSettings((prev) => ({ ...prev, enabled: false }));
         return;
       }
@@ -1361,11 +1362,13 @@ function App() {
 
             const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
             if (!vapidKey) {
-              console.error("[BISHBASH PUSH] VAPID public key is missing from environment variables.");
+              console.error("[BISHBASH PUSH] VAPID key missing");
               alert("App configuration error: Missing push notification keys.");
               setNotificationSettings((prev) => ({ ...prev, enabled: false }));
               return;
             }
+
+            console.log("[BISHBASH PUSH] VAPID key loaded");
 
             console.log("[BISHBASH PUSH] Checking existing subscription...");
             let sub = await reg.pushManager.getSubscription();
@@ -5160,11 +5163,12 @@ function NotificationDiagnostics({ onReset }) {
 
       const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
       const hasVapid = !!vapidKey;
+      const vapidPrefix = hasVapid ? vapidKey.substring(0, 12) : "";
       const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
       setStatus({
-        perm, swSupported, hasActiveSw, hasPushSub, hasVapid, isStandalone, isIOS
+        perm, swSupported, hasActiveSw, hasPushSub, hasVapid, vapidPrefix, isStandalone, isIOS
       });
     }
     check();
@@ -5178,7 +5182,7 @@ function NotificationDiagnostics({ onReset }) {
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Permission:</span> <span>{status.perm}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>SW Status:</span> <span>{status.swSupported ? (status.hasActiveSw ? "Registered" : "None") : "Unsupported"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Push Sub:</span> <span>{status.hasPushSub ? "Active" : "Inactive"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>VAPID Key:</span> <span>{status.hasVapid ? "Loaded" : "Missing"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>VAPID Key:</span> <span>{status.hasVapid ? `Loaded (${status.vapidPrefix}...)` : "Missing"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Standalone:</span> <span>{status.isStandalone ? "True" : "False"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>iOS Detected:</span> <span>{status.isIOS ? "True" : "False"}</span></div>
       <button type="button" onClick={onReset} style={{ display: "block", width: "100%", marginTop: 10, padding: "8px", borderRadius: 8, border: "1px solid var(--coral)", background: "transparent", cursor: "pointer", color: "var(--coral)", fontWeight: "500", fontSize: "13px" }}>
