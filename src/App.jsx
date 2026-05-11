@@ -81,6 +81,9 @@ import {
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 
+export const APP_BUILD_VERSION = "2026.05.11.1";
+console.log("[APP BUILD VERSION]", APP_BUILD_VERSION);
+
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
   return THEMES.includes(theme) ? theme : THEMES[0];
@@ -534,6 +537,7 @@ function App() {
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isUpdatingApp, setIsUpdatingApp] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
@@ -1199,6 +1203,30 @@ function App() {
     console.log("[FAKE APP BUTTON HREF]", href);
     if (href) {
       window.location.href = href;
+    }
+  }
+
+  async function handleUpdateApp() {
+    console.log("[UPDATE TO LATEST VERSION STARTED]");
+    setIsUpdatingApp(true);
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        for (const key of keys) {
+          await caches.delete(key);
+        }
+      }
+      console.log("[UPDATE TO LATEST VERSION COMPLETE]");
+      window.location.reload();
+    } catch (error) {
+      console.error("Update failed:", error);
+      setIsUpdatingApp(false);
     }
   }
 
@@ -2184,6 +2212,8 @@ function App() {
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
+                  isUpdatingApp={isUpdatingApp}
+                  onUpdateApp={handleUpdateApp}
                 />
               ) : null}
             </main>
@@ -3715,6 +3745,8 @@ function SettingsPanel({
   onRestoreActionCards,
   interruptionPacks,
   launcherContext,
+  isUpdatingApp,
+  onUpdateApp,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("bishbash");
@@ -3931,6 +3963,16 @@ function SettingsPanel({
         </div>
         <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
           Clear local development state
+        </button>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>App version</p>
+          <span>Current version: {APP_BUILD_VERSION}</span>
+        </div>
+        <button type="button" className="pack-button secondary" onClick={onUpdateApp} disabled={isUpdatingApp}>
+          {isUpdatingApp ? "Updating BishBash..." : "Update to latest version"}
         </button>
       </div>
 
