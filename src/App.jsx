@@ -44,6 +44,7 @@ import {
   signUp,
   logIn,
   logOut,
+  markNotificationOpened,
 } from "./lib/bishbashSync";
 import {
   PACKS,
@@ -165,6 +166,20 @@ function parseRoute(path) {
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
   return { kind: "home", path: "/home", tab: "home" };
+}
+
+function urlBase64ToUint8Array(base64String) {
+  if (!base64String) return new Uint8Array(0);
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 function getInstallUrl(path) {
@@ -970,6 +985,22 @@ function App() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [cards, profile.timezone, route.kind, setupComplete, authReady, session, syncStatus]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const deliveryId = params.get("deliveryId");
+    if (deliveryId) {
+      console.log("[NOTIFICATION] Opened with deliveryId:", deliveryId);
+      void markNotificationOpened(deliveryId);
+
+      // Clean the URL
+      params.delete("deliveryId");
+      params.delete("source");
+      const newSearch = params.toString();
+      const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}`;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
 
   useEffect(() => {
     if (!authReady || !session) return;
