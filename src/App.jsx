@@ -652,6 +652,10 @@ function App() {
 
     getSession()
       .then((currentSession) => {
+        console.log("[AUTH] Session check complete. Found:", !!currentSession);
+        if (currentSession?.user?.email) console.log("[AUTH] Email:", currentSession.user.email);
+        if (typeof window !== "undefined") console.log("[AUTH] Storage key present:", !!window.localStorage.getItem("bishbash.supabase.auth.v1"));
+
         if (mounted) {
           setSession(currentSession);
           if (!currentSession) setSyncStatus("needs-connection");
@@ -808,6 +812,22 @@ function App() {
 
   useEffect(() => {
     saveMood(mood);
+
+    // Map your exact BishBash background hex colors here
+    const themeColors = {
+      "Minimal": "#F6EBCF",
+      "Pop Art": "#F4A261",
+      "Soft Bloom": "#FAD2E1",
+      "Rainbow": "#E2ECE9",
+      "Starry Sky": "#1B263B",
+    };
+    const activeThemeBackground = themeColors[mood] || "#F6EBCF";
+
+    document.documentElement.style.setProperty("--app-bg", activeThemeBackground);
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.setAttribute("content", activeThemeBackground);
+    }
   }, [mood]);
 
   useEffect(() => {
@@ -1711,6 +1731,23 @@ function App() {
     setSyncError("");
   }
 
+  async function handleRefreshSession() {
+    console.log("[AUTH] Refreshing session manually...");
+    try {
+      const currentSession = await getSession();
+      setSession(currentSession);
+      if (!currentSession) {
+        setSyncStatus("needs-connection");
+        alert("No active session found. Please log in again.");
+      } else {
+        alert("Session refreshed successfully.");
+      }
+    } catch (e) {
+      console.error("Session refresh failed", e);
+      alert("Failed to refresh session.");
+    }
+  }
+
   function handleSaveCustomPack(packData) {
     const targetApp = packData.targetApp ?? packData.linkedVersionId ?? "";
     const packId = packData.id ?? createId();
@@ -2071,6 +2108,7 @@ function App() {
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
           session={session}
           onLogOut={handleLogOut}
+                  onRefreshSession={handleRefreshSession}
                   onResetSharedState={handleResetSharedState}
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
@@ -3524,6 +3562,8 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
 
+  const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+
   function submitExisting(event) {
     event.preventDefault();
     if (!email.trim() || !password.trim()) return;
@@ -3546,6 +3586,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
         ) : (
           <>
             <p>Log in to sync this launcher with your BishBash profile.</p>
+            <p>{isStandalone ? "Reconnect BishBash. (iOS Home Screen apps require you to log in once per launcher.)" : "Log in to sync this launcher with your BishBash profile."}</p>
             {error ? <p className="sync-error">{error}</p> : null}
 
             <form className="sync-form" onSubmit={submitExisting}>
@@ -3597,6 +3638,7 @@ function SettingsPanel({
   onSetGlobalInterruptionMode,
   session,
   onLogOut,
+  onRefreshSession,
   onResetSharedState,
   actionCards,
   onRestoreActionCards,
@@ -3777,7 +3819,11 @@ function SettingsPanel({
           <button type="button" className="pack-button secondary" onClick={onLogOut}>
             Log out
           </button>
+          <button type="button" className="pack-button secondary" onClick={onRefreshSession}>
+            Refresh login session
+          </button>
         </div>
+        <AuthDiagnostics session={session} />
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
@@ -4759,6 +4805,36 @@ function SettingsGlyph() {
       <path d="M24.5 7.5l-2.2 2.2" />
       <path d="M9.7 22.3l-2.2 2.2" />
     </svg>
+  );
+}
+
+function AuthDiagnostics({ session }) {
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    const configured = !!import.meta.env.VITE_SUPABASE_URL;
+    const hasKey = typeof window !== "undefined" ? !!window.localStorage.getItem("bishbash.supabase.auth.v1") : false;
+    const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+    const route = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
+    
+    setStatus({
+      configured, hasKey, isStandalone, route
+    });
+  }, [session]);
+
+  if (!status) return null;
+
+  return (
+    <div style={{ padding: "12px", background: "rgba(0,0,0,0.03)", borderRadius: "12px", fontSize: "12px", fontFamily: "monospace", color: "var(--charcoal)", border: "1px solid rgba(0,0,0,0.06)", marginTop: "12px" }}>
+      <strong style={{ display: "block", marginBottom: 6 }}>Auth Diagnostics</strong>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Configured:</span> <span>{status.configured ? "True" : "False"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Session:</span> <span>{session ? "Present" : "Missing"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Email:</span> <span>{session?.user?.email || "N/A"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Storage Key:</span> <span>{status.hasKey ? "Present" : "Missing"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Expires:</span> <span>{session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : "N/A"}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Route:</span> <span>{status.route}</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Standalone:</span> <span>{status.isStandalone ? "True" : "False"}</span></div>
+    </div>
   );
 }
 
