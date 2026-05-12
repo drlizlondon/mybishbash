@@ -45,6 +45,8 @@ import {
   logIn,
   logOut,
   markNotificationOpened,
+  checkIsAdmin,
+  fetchGlobalPacks,
 } from "./lib/bishbashSync";
 import {
   PACKS,
@@ -81,6 +83,7 @@ import {
 } from "./lib/launcherState";
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
+import HQPanel from "./HQPanel";
 
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
@@ -160,6 +163,7 @@ function parseRoute(path) {
   }
 
   if (normalized === "/caught-up") return { kind: "caught-up", path: normalized, tab: "home" };
+  if (normalized === "/hq") return { kind: "hq", path: normalized, tab: null };
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
   if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
   if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
@@ -511,6 +515,8 @@ function App() {
   const [authReady, setAuthReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [globalPacks, setGlobalPacks] = useState([]);
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(null);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
@@ -696,6 +702,22 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      checkIsAdmin(session.user.id).then(setIsAdmin).catch(() => setIsAdmin(false));
+    } else {
+      setIsAdmin(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (authReady) {
+      fetchGlobalPacks()
+        .then(setGlobalPacks)
+        .catch((err) => console.warn("Could not load global packs", err));
+    }
+  }, [authReady]);
 
   useEffect(() => {
     if (!session?.user?.id) return undefined;
@@ -1018,6 +1040,12 @@ function App() {
 
     if (route.kind === "onboarding") {
       setScreen("onboarding");
+      setOverlay(null);
+      return;
+    }
+
+    if (route.kind === "hq") {
+      setScreen("hq");
       setOverlay(null);
       return;
     }
@@ -2001,8 +2029,8 @@ function App() {
     [events],
   );
   const visibleLibraryPacks = useMemo(
-    () => PACKS.filter((pack) => !hiddenLibraryPacks.includes(pack.id)),
-    [hiddenLibraryPacks],
+    () => [...PACKS, ...globalPacks].filter((pack) => !hiddenLibraryPacks.includes(pack.id)),
+    [hiddenLibraryPacks, globalPacks],
   );
   const completionEvents = useMemo(
     () => events.filter(isCompletionEvent).slice(0, 3),
@@ -2051,6 +2079,16 @@ function App() {
 
   if (syncStatus === "loading") {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
+  }
+
+  if (screen === "hq") {
+    return (
+      <HQPanel 
+        isAdmin={isAdmin} 
+        session={session} 
+        onBack={() => navigateTo("/home", { replace: true })} 
+      />
+    );
   }
 
   return (

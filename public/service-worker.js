@@ -39,6 +39,7 @@ self.addEventListener("fetch", (event) => {
       url.pathname === "/bishbash/settings" ||
       url.pathname.startsWith("/bishbash/card/") ||
       url.pathname === "/bishbash/caught-up" ||
+      url.pathname === "/bishbash/hq" ||
       url.pathname.startsWith("/bishbash/intercept/");
 
     if (appRoute) {

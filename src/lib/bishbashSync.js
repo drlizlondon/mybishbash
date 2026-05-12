@@ -138,3 +138,30 @@ export async function markNotificationOpened(deliveryId) {
   
   if (error) console.error("Error marking notification opened:", error);
 }
+
+export async function checkIsAdmin(userId) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return false;
+  const client = requireSupabase();
+  const { data, error } = await client.from("admin_users").select("user_id").eq("user_id", userId).single();
+  if (error) return false;
+  return !!data;
+}
+
+export async function fetchGlobalPacks() {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return [];
+  const client = requireSupabase();
+  const { data: packs, error: packsError } = await client.from("global_packs").select("*").eq("published", true);
+  if (packsError) return [];
+
+  const { data: cards, error: cardsError } = await client.from("global_pack_cards").select("*");
+  if (cardsError) return [];
+
+  return packs.map((pack) => ({
+    id: pack.id,
+    title: pack.title,
+    description: pack.description,
+    theme: pack.theme,
+    entries: cards.filter((c) => c.pack_id === pack.id).map(c => ({ promptText: c.prompt_text, attribution: c.attribution, frequency: c.frequency, timingWindows: c.timing_windows })),
+    isGlobal: true,
+  }));
+}
