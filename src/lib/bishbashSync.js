@@ -143,7 +143,10 @@ export async function checkIsAdmin(userId) {
   if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return false;
   const client = requireSupabase();
   const { data, error } = await client.from("admin_users").select("user_id").eq("user_id", userId).single();
-  if (error) return false;
+  if (error) {
+    console.error("[ADMIN CHECK ERROR]", error);
+    return false;
+  }
   return !!data;
 }
 
