@@ -26,6 +26,7 @@ const SHARED_STORAGE_KEYS = [
   ACTION_CARDS_KEY,
   NOTIFICATIONS_KEY,
   "bishbash.event-log.v1",
+  "bishbash.offline-event-queue.v1",
   "bishbash.user-id.v1",
 ];
 

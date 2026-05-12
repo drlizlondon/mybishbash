@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabaseClient";
 
 const EVENT_LOG_KEY = "bishbash.event-log.v1";
 const USER_ID_KEY = "bishbash.user-id.v1";
+const OFFLINE_QUEUE_KEY = "bishbash.offline-event-queue.v1";
 const SUPABASE_EVENTS_TABLE = import.meta.env.VITE_SUPABASE_EVENTS_TABLE || "bishbash_events";
 
 function safeParse(rawValue, fallback) {
@@ -54,19 +55,53 @@ export function saveEventLog(events) {
   window.localStorage.setItem(EVENT_LOG_KEY, JSON.stringify(events));
 }
 
-async function postEventToSupabase(event) {
-  if (!supabase) return false;
+export function loadOfflineEventQueue() {
+  const stored = safeParse(window.localStorage.getItem(OFFLINE_QUEUE_KEY), []);
+  return Array.isArray(stored) ? stored : [];
+}
 
+export function saveOfflineEventQueue(queue) {
+  window.localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+}
+
+let isProcessingQueue = false;
+
+export async function processEventQueue() {
+  if (isProcessingQueue) return;
+  if (typeof window !== "undefined" && !window.navigator.onLine) return;
+
+  let queue = loadOfflineEventQueue();
+  if (queue.length === 0) return;
+
+  isProcessingQueue = true;
   try {
+    if (!supabase) return;
     const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData?.session?.user?.id) return false;
+    if (!sessionData?.session?.user?.id) return;
 
-    const dbEvent = { ...event, user_id: sessionData.session.user.id };
+    const successfulIds = new Set();
 
-    const { error } = await supabase.from(SUPABASE_EVENTS_TABLE).insert([dbEvent]);
-    return !error;
-  } catch {
-    return false;
+    for (const event of queue) {
+      const dbEvent = { ...event, user_id: sessionData.session.user.id };
+      const { error } = await supabase.from(SUPABASE_EVENTS_TABLE).insert([dbEvent]);
+
+      if (!error || error.code === "23505") {
+        successfulIds.add(event.id);
+      } else {
+        console.warn("[SYNC] Failed to insert event:", error);
+        break;
+      }
+    }
+
+    if (successfulIds.size > 0) {
+      queue = loadOfflineEventQueue();
+      const nextQueue = queue.filter((e) => !successfulIds.has(e.id));
+      saveOfflineEventQueue(nextQueue);
+    }
+  } catch (err) {
+    console.warn("[SYNC] Error processing event queue:", err);
+  } finally {
+    isProcessingQueue = false;
   }
 }
 
@@ -104,7 +139,12 @@ export async function persistEventRecord(event) {
   const current = loadEventLog();
   const next = mergeEventsById(current, [event]);
   saveEventLog(next);
-  void postEventToSupabase(event);
+
+  const queue = loadOfflineEventQueue();
+  queue.push(event);
+  saveOfflineEventQueue(queue);
+
+  void processEventQueue();
   return next;
 }
 

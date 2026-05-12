@@ -24,8 +24,6 @@ import {
   saveProfile,
   saveActionCards,
   saveSetupComplete,
-  loadNotificationSettings,
-  saveNotificationSettings,
 } from "./storage";
 import {
   createEventRecord,
@@ -35,6 +33,7 @@ import {
   persistEventRecord,
   saveEventLog,
   mergeEventsById,
+  processEventQueue,
 } from "./eventLog";
 import {
   getSyncErrorMessage,
@@ -45,10 +44,6 @@ import {
   signUp,
   logIn,
   logOut,
-  savePushSubscription,
-  removePushSubscription,
-  saveNotificationPreferences,
-  markNotificationOpened,
 } from "./lib/bishbashSync";
 import {
   PACKS,
@@ -81,14 +76,10 @@ import {
   buildCustomPackOverlay,
   buildInterruptionHomeItem,
   pickInterruptionCardIndex,
-  getRecentInterruptionCardKeys,
   getVersionOpenHref,
 } from "./lib/launcherState";
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
-
-export const APP_BUILD_VERSION = "2026.05.11.1";
-console.log("[APP BUILD VERSION]", APP_BUILD_VERSION);
 
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
@@ -251,33 +242,21 @@ function pickRandomHomeCardForDisplay(
   globalInterruptionMode,
   events,
 ) {
-  const now = new Date();
-  const normalized = normalizeCards(currentCards, now, timezone);
-
-  const interruptionPack = getInterruptionPackForLauncher(
-    launcherContext,
-    versions,
-    behaviors,
-    customPacks,
-    {
-      hiddenCardIds,
-      globalEnabled: globalInterruptionMode,
-    },
-  );
-  
+  const normalized = normalizeCards(currentCards, new Date(), timezone);
+  const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, behaviors, customPacks, {
+    hiddenCardIds,
+    globalEnabled: globalInterruptionMode,
+  });
   const singles = normalized
-    .filter((card) => !card.sourcePackId && isEligible(card, now, timezone))
+    .filter((card) => !card.sourcePackId && isEligible(card, new Date(), timezone))
     .map((card) => ({ type: "single", card }));
 
   const packMap = new Map();
-
   normalized.forEach((card) => {
-    if (!card.sourcePackId || !isEligible(card, now, timezone)) return;
-
+    if (!card.sourcePackId || !isEligible(card, new Date(), timezone)) return;
     if (!packMap.has(card.sourcePackId)) {
       packMap.set(card.sourcePackId, []);
     }
-
     packMap.get(card.sourcePackId).push(card);
   });
 
@@ -286,63 +265,35 @@ function pickRandomHomeCardForDisplay(
     packCards,
   }));
 
-  const personalBucket = singles;
-  const libraryBucket = packs;
-  let interruptionBucket = [];
+  const candidates = [...singles];
 
-  if (interruptionPack?.cards?.length > 0) {
-    const recentKeys = getRecentInterruptionCardKeys(
-      events,
-      interruptionPack.id,
-      now,
-    );
-
-    const availableInterruptionCards = interruptionPack.cards
-      .map((card, index) => ({ card, index }))
-      .filter(({ card, index }) => {
-        return (
-          !recentKeys.has(card.id) &&
-          !recentKeys.has(`${interruptionPack.id}:${index}`)
-        );
-      });
-
-    if (availableInterruptionCards.length > 0) {
-      interruptionBucket = availableInterruptionCards.map((chosenInterruption) => ({
-        type: "interruption",
-        pack: interruptionPack,
-        versionId: launcherContext,
-        activeIndex: chosenInterruption.index,
-      }));
-    }
-  }
-
-  const availableBuckets = [];
-  if (personalBucket.length > 0) availableBuckets.push(personalBucket);
-  if (libraryBucket.length > 0) availableBuckets.push(libraryBucket);
-  if (interruptionBucket.length > 0) availableBuckets.push(interruptionBucket);
-
-  if (availableBuckets.length === 0) {
-    return { normalized, selected: null };
-  }
-
-  const chosenBucket = availableBuckets[Math.floor(Math.random() * availableBuckets.length)];
-  const chosen = chosenBucket[Math.floor(Math.random() * chosenBucket.length)];
-
-  if (chosen.type === "single") {
-    return { normalized, selected: chosen.card };
-  }
-
-  if (chosen.type === "interruption") {
+  if (interruptionPack) {
     return {
       normalized,
       selected: null,
-      interruption: chosen,
+      interruption: {
+        type: "interruption",
+        pack: interruptionPack,
+        versionId: launcherContext,
+        activeIndex: pickInterruptionCardIndex(interruptionPack, events),
+      },
     };
   }
 
-  const selected =
-    chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
+  candidates.push(...packs);
 
+  if (candidates.length === 0) {
+    return { normalized, selected: null };
+  }
+
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  if (chosen.type === "single") {
+    return { normalized, selected: chosen.card };
+  }
+  if (chosen.type === "interruption") {
+    return { normalized, selected: null, interruption: chosen };
+  }
+  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
   return { normalized, selected };
 }
 
@@ -383,7 +334,6 @@ function buildSharedState({
   globalInterruptionMode,
   events,
   actionCards,
-  notificationSettings,
 }) {
   return {
     version: 1,
@@ -397,7 +347,6 @@ function buildSharedState({
     globalInterruptionMode,
     events,
     actionCards,
-    notificationSettings,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -421,9 +370,6 @@ function normalizeSharedState(state, fallback) {
         : fallback.globalInterruptionMode,
     events: Array.isArray(source.events) ? source.events : fallback.events,
     actionCards: Array.isArray(source.actionCards) ? source.actionCards : fallback.actionCards,
-    notificationSettings: source.notificationSettings && typeof source.notificationSettings === "object"
-      ? { ...fallback.notificationSettings, ...source.notificationSettings }
-      : fallback.notificationSettings,
   };
 }
 
@@ -532,7 +478,6 @@ function App() {
       hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
       actionCards: loadActionCards(),
-      notificationSettings: loadNotificationSettings(),
     };
   }, []);
   const [cards, setCards] = useState(initialState.cards);
@@ -546,11 +491,9 @@ function App() {
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
-  const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
-  const [isUpdatingApp, setIsUpdatingApp] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
@@ -617,24 +560,9 @@ function App() {
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
   const hiddenSinceRef = useRef(null);
-  const recentViewsRef = useRef({
-    interruptions: {},
-    cards: [],
-  });
   const suppressNextHomeAutoLaunchRef = useRef(false);
-  const launchSessionIdRef = useRef(createId());
-  const hasSelectedCardForCurrentLaunchRef = useRef(false);
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
-
-  const logEvent = useCallback(async (input) => {
-    const record = createEventRecord({
-      launcher_context: launcherContext,
-      ...input,
-    });
-    const next = await persistEventRecord(record);
-    setEvents(next);
-  }, [launcherContext]);
 
   const currentSharedState = useCallback(
     () =>
@@ -649,7 +577,6 @@ function App() {
         globalInterruptionMode,
         events,
         actionCards,
-        notificationSettings,
       }),
     [
       cards,
@@ -662,7 +589,6 @@ function App() {
       globalInterruptionMode,
       events,
       actionCards,
-      notificationSettings,
     ],
   );
 
@@ -681,7 +607,6 @@ function App() {
       globalInterruptionMode: initialState.globalInterruptionMode,
       events: initialState.events,
       actionCards: initialState.actionCards,
-      notificationSettings: initialState.notificationSettings,
     });
     const next = normalizeSharedState(incomingState, fallback);
 
@@ -709,7 +634,6 @@ function App() {
     // This ensures offline actions survive sync.
     setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
     setActionCards((current) => mergeEntitiesById(current, next.actionCards));
-    setNotificationSettings(next.notificationSettings);
 
     setScreen(next.setupComplete ? "library" : "onboarding");
     setRoutePath(getRouteFromLocation(next.setupComplete));
@@ -923,10 +847,6 @@ function App() {
   }, [actionCards]);
 
   useEffect(() => {
-    saveNotificationSettings(notificationSettings);
-  }, [notificationSettings]);
-
-  useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
     if (JSON.stringify(normalized) !== JSON.stringify(cards)) {
       setCards(normalized);
@@ -989,6 +909,28 @@ function App() {
   }, [activeTab, route.kind, overlay?.type]);
 
   useEffect(() => {
+    if (route.kind !== "intercept") {
+      setLauncherContext(getLauncherContextFromRoute(initialRoute));
+    }
+  }, [route.kind, initialRoute]);
+
+  useEffect(() => {
+    function handleOnline() {
+      console.log("[NETWORK] App is online. Processing offline event queue...");
+      void processEventQueue();
+    }
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, []);
+
+  useEffect(() => {
+    if (syncStatus === "ready") {
+      void processEventQueue();
+    }
+  }, [syncStatus]);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         hiddenSinceRef.current = Date.now();
@@ -1008,56 +950,6 @@ function App() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [cards, profile.timezone, route.kind, setupComplete, authReady, session, syncStatus]);
-
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get("source") === "notification" && route.kind === "card") {
-      void logEvent({
-        event_type: "notification_card_opened",
-        source_type: "notification",
-        card_source: "notification",
-        card_id: route.cardId,
-        action_taken: "opened",
-      });
-
-      const deliveryId = searchParams.get("deliveryId");
-      if (deliveryId) {
-        markNotificationOpened(deliveryId).catch(console.error);
-      }
-
-      const url = new URL(window.location.href);
-      url.searchParams.delete("source");
-      url.searchParams.delete("deliveryId");
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, [route.kind, route.cardId, logEvent]);
-
-  useEffect(() => {
-    if (!notificationSettings.enabled) return;
-    let isMounted = true;
-    async function validatePushState() {
-      const perm = "Notification" in window ? Notification.permission : "unsupported";
-      if (perm !== "granted") {
-        if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
-        return;
-      }
-      if ("serviceWorker" in navigator) {
-        try {
-          const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
-          if (!sub) {
-            if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
-          }
-        } catch (e) {
-          if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
-        }
-      } else {
-        if (isMounted) setNotificationSettings((p) => ({ ...p, enabled: false }));
-      }
-    }
-    validatePushState();
-    return () => { isMounted = false; };
-  }, [notificationSettings.enabled]);
 
   useEffect(() => {
     if (!authReady || !session) return;
@@ -1080,35 +972,7 @@ function App() {
     }
 
     if (route.kind === "intercept") {
-      if (launcherContext !== route.versionId) {
-        console.log("[SUPPRESSION CLEARED] launcherContext changed");
-        suppressNextHomeAutoLaunchRef.current = false;
-        hasSelectedCardForCurrentLaunchRef.current = false;
-        launchSessionIdRef.current = createId();
-        setLauncherContext(route.versionId);
-      } else if (suppressNextHomeAutoLaunchRef.current) {
-        console.log("[SUPPRESSION CLEARED] intercept route entry");
-        suppressNextHomeAutoLaunchRef.current = false;
-      }
-
-      if (
-        overlay?.versionId === route.versionId &&
-        ["intercept-pack", "action-card", "action-card-empty", "action-success", "reveal", "empty"].includes(overlay.type)
-      ) {
-        console.log("[ROUTE GUARD] preserving overlay", overlay.type);
-        console.log("[REVEAL CARD LOCKED]");
-        return;
-      }
-
-      if (hasSelectedCardForCurrentLaunchRef.current) {
-        console.log("[CARD SELECTION SKIPPED] already selected");
-        return;
-      }
-
-      console.log("[LAUNCH START]");
-      console.log("[CARD SELECT ONCE]");
-      hasSelectedCardForCurrentLaunchRef.current = true;
-
+      setLauncherContext(route.versionId);
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
@@ -1131,7 +995,6 @@ function App() {
       }
 
       setScreen("library");
-
       if (selected) {
         setOverlay(buildRevealOverlay(selected.id, route.versionId));
         return;
@@ -1158,24 +1021,12 @@ function App() {
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
-      console.log("[HOME AUTO LAUNCH]");
       if (suppressNextHomeAutoLaunchRef.current) {
-        console.log("[SUPPRESSION SET] skipping home auto launch");
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
         return;
       }
-
-      if (hasSelectedCardForCurrentLaunchRef.current) {
-        console.log("[CARD SELECTION SKIPPED] already selected");
-        setShouldLaunchOverlay(false);
-        return;
-      }
-
-      console.log("[LAUNCH START]");
-      console.log("[CARD SELECT ONCE]");
-      hasSelectedCardForCurrentLaunchRef.current = true;
 
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
@@ -1189,18 +1040,13 @@ function App() {
         events,
       );
       setShouldLaunchOverlay(false);
-
       if (interruption) {
-        setScreen("interception");
         setOverlay({
           ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
           versionId: interruption.versionId,
         });
         return;
       }
-
-      setScreen("library");
-
       if (selected) {
         setOverlay(buildRevealOverlay(selected.id));
         return;
@@ -1225,18 +1071,9 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
-    console.log("[INTERCEPTION START]");
-    console.log("[SUPPRESSION CLEARED] startInterceptionFlow");
     suppressNextHomeAutoLaunchRef.current = false;
-    hasSelectedCardForCurrentLaunchRef.current = false;
-    launchSessionIdRef.current = createId();
-
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
-
-    console.log("[LAUNCH START]");
-    console.log("[CARD SELECT ONCE]");
-    hasSelectedCardForCurrentLaunchRef.current = true;
 
     const { selected, interruption } = pickRandomHomeCardForDisplay(
       cards,
@@ -1261,204 +1098,12 @@ function App() {
     }
 
     setScreen("library");
-
     if (selected) {
       setOverlay(buildRevealOverlay(selected.id, versionId));
-      navigateTo(`/intercept/${versionId}`, { replace: true });
-      return;
+    } else {
+      setOverlay(buildEmptyOverlay(versionId));
     }
-
-    setOverlay(buildEmptyOverlay(versionId));
     navigateTo(`/intercept/${versionId}`, { replace: true });
-    return;
-  }
-
-  function openRealApp(versionId) {
-    console.log("[FAKE APP BUTTON OPEN REAL APP]");
-    const version = resolveVersionConfig(
-      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
-      launcherBehaviorSettings[versionId]
-    );
-    const href = getVersionOpenHref(version);
-    console.log("[FAKE APP BUTTON HREF]", href);
-    if (href) {
-      window.location.href = href;
-    }
-  }
-
-  async function handleUpdateApp() {
-    console.log("[UPDATE TO LATEST VERSION STARTED]");
-    setIsUpdatingApp(true);
-    try {
-      if ("serviceWorker" in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const registration of registrations) {
-          await registration.unregister();
-        }
-      }
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        for (const key of keys) {
-          await caches.delete(key);
-        }
-      }
-      console.log("[UPDATE TO LATEST VERSION COMPLETE]");
-      window.location.reload();
-    } catch (error) {
-      console.error("Update failed:", error);
-      setIsUpdatingApp(false);
-    }
-  }
-
-  async function requestNotificationPermission() {
-    console.log("[BISHBASH NOTIFICATION] Checking Notification support");
-    if (!("Notification" in window)) {
-      console.warn("[BISHBASH NOTIFICATION] No Notification support in window");
-      alert("This browser does not support notifications. On iOS, you must install the app to your Home Screen first.");
-      return false;
-    }
-    console.log("[BISHBASH NOTIFICATION] Current permission:", Notification.permission);
-    let permission = Notification.permission;
-    if (permission !== "granted" && permission !== "denied") {
-      console.log("[BISHBASH NOTIFICATION] Requesting permission from user...");
-      permission = await Notification.requestPermission();
-      console.log("[BISHBASH NOTIFICATION] New permission:", permission);
-    }
-    if (permission === "granted") {
-      void logEvent({ event_type: "notification_permission_granted", source_type: "settings", card_source: "settings", action_taken: "granted" });
-      return true;
-    }
-    console.warn("[BISHBASH NOTIFICATION] Permission denied by user or system");
-    void logEvent({ event_type: "notification_permission_denied", source_type: "settings", card_source: "settings", action_taken: "denied" });
-    return false;
-  }
-
-  async function handleResetNotifications() {
-    console.log("[BISHBASH PUSH] Reset notification registration triggered");
-    if ("serviceWorker" in navigator) {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
-          await sub.unsubscribe();
-          if (session?.user?.id) {
-            await removePushSubscription(session.user.id, sub.endpoint);
-          }
-          console.log("[BISHBASH PUSH] Unsubscribed successfully during reset.");
-        }
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const r of registrations) {
-          await r.unregister();
-        }
-        console.log("[BISHBASH SW] Service workers unregistered during reset.");
-      } catch (err) {
-        console.error("[BISHBASH SW] Error during reset:", err);
-      }
-    }
-    setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-    if (session?.user?.id) {
-      await saveNotificationPreferences(session.user.id, { enabled: false });
-    }
-    alert("Notification registration reset. The app will now reload.");
-    window.location.reload();
-  }
-
-  async function handleToggleNotifications(enabled) {
-    if (enabled) {
-      console.log("[BISHBASH PUSH] Attempting to enable notifications...");
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-      const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
-      
-      if (!isStandalone) {
-        console.warn("[BISHBASH PUSH] Not in standalone mode. Aborting push subscription.");
-        alert("You must install BishBash to your Home Screen before enabling notifications.");
-        setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-        return;
-      }
-
-      if ("Notification" in window && Notification.permission === "denied") {
-        alert("Notifications are permanently blocked. On iOS, you must delete this app from your Home Screen and reinstall it to reset permissions.");
-        setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-        return;
-      }
-
-      const granted = await requestNotificationPermission();
-      if (granted) {
-        setNotificationSettings((prev) => ({ ...prev, enabled: true }));
-        void logEvent({ event_type: "notification_toggle_on", source_type: "settings", card_source: "settings", action_taken: "enabled" });
-
-        if ("serviceWorker" in navigator) {
-          try {
-            console.log("[BISHBASH SW] Awaiting service worker ready...");
-            const reg = await navigator.serviceWorker.ready;
-            console.log("[BISHBASH SW] Service worker ready:", reg);
-
-            const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-            if (!vapidKey) {
-              console.error("[BISHBASH PUSH] VAPID key missing");
-              alert("App configuration error: Missing push notification keys.");
-              setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-              return;
-            }
-
-            console.log("[BISHBASH PUSH] VAPID key loaded");
-
-            console.log("[BISHBASH PUSH] Checking existing subscription...");
-            let sub = await reg.pushManager.getSubscription();
-            if (!sub) {
-              console.log("[BISHBASH PUSH] Creating new subscription...");
-              sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: vapidKey,
-              });
-              console.log("[BISHBASH PUSH] Subscription created successfully:", sub.endpoint);
-            } else {
-              console.log("[BISHBASH PUSH] Existing subscription found:", sub.endpoint);
-            }
-
-            if (session?.user?.id) {
-              await savePushSubscription(session.user.id, sub, navigator.userAgent);
-              await saveNotificationPreferences(session.user.id, {
-                enabled: true,
-                notifications_per_day: notificationSettings.notificationsPerDay,
-                timezone: profile.timezone
-              });
-            }
-            void logEvent({ event_type: "push_subscription_created", source_type: "settings", card_source: "settings", action_taken: "created" });
-          } catch (err) {
-            console.error("[BISHBASH PUSH] Failed to subscribe to push:", err);
-            setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-            if (session?.user?.id) {
-              await saveNotificationPreferences(session.user.id, { enabled: false });
-            }
-            void logEvent({ event_type: "push_subscription_failed", source_type: "settings", card_source: "settings", action_taken: "failed" });
-            alert("Notifications could not be enabled. " + (err.message || "Unknown error."));
-          }
-        } else {
-          console.error("[BISHBASH SW] Service workers are not supported in this browser environment.");
-          alert("Service workers are not supported in this browser. Please try adding to Home Screen.");
-          setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-        }
-      } else {
-        setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-      }
-    } else {
-      console.log("[BISHBASH PUSH] Disabling notifications...");
-      setNotificationSettings((prev) => ({ ...prev, enabled: false }));
-      void logEvent({ event_type: "notification_toggle_off", source_type: "settings", card_source: "settings", action_taken: "disabled" });
-
-      if (session?.user?.id) {
-        await saveNotificationPreferences(session.user.id, { enabled: false });
-      }
-    }
-  }
-
-  function handleFakeAppLaunch(versionId) {
-    if (launcherContext === NORMAL_LAUNCHER_CONTEXT) {
-      startInterceptionFlow(versionId);
-    } else {
-      openRealApp(versionId);
-    }
   }
 
   function updateCards(updater) {
@@ -1466,6 +1111,15 @@ function App() {
       normalizeCards(typeof updater === "function" ? updater(current) : updater, new Date(), profile.timezone),
     );
   }
+
+  const logEvent = useCallback(async (input) => {
+    const record = createEventRecord({
+      launcher_context: launcherContext,
+      ...input,
+    });
+    const next = await persistEventRecord(record);
+    setEvents(next);
+  }, [launcherContext]);
 
   function openSpecificReveal(cardId) {
     const selected = cards.find((card) => card.id === cardId);
@@ -1528,9 +1182,7 @@ function App() {
       },
     });
 
-    console.log("[SUPPRESSION SET] handleAction");
     suppressNextHomeAutoLaunchRef.current = true;
-    hasSelectedCardForCurrentLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     navigateTo("/home", { replace: true });
     setOverlay(null);
@@ -1831,9 +1483,7 @@ function App() {
       pack_id: card.sourcePackId,
       action_taken: "disliked",
     });
-    console.log("[SUPPRESSION SET] dislikePackCard");
     suppressNextHomeAutoLaunchRef.current = true;
-    hasSelectedCardForCurrentLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setOverlay(null);
     navigateTo("/home");
@@ -2426,18 +2076,6 @@ function App() {
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
-                  isUpdatingApp={isUpdatingApp}
-                  onUpdateApp={handleUpdateApp}
-                  notificationSettings={notificationSettings}
-                  onToggleNotifications={handleToggleNotifications}
-                  onResetNotifications={handleResetNotifications}
-                  onUpdateNotificationSettings={(updates) => {
-                    setNotificationSettings((p) => {
-                      const next = { ...p, ...updates };
-                      if (session?.user?.id) saveNotificationPreferences(session.user.id, { enabled: next.enabled, notifications_per_day: next.notificationsPerDay, timezone: profile.timezone });
-                      return next;
-                    });
-                  }}
                 />
               ) : null}
             </main>
@@ -2550,9 +2188,7 @@ function App() {
               setOverlay(null);
               return;
             }
-            console.log("[SUPPRESSION SET] onClose");
             suppressNextHomeAutoLaunchRef.current = true;
-            hasSelectedCardForCurrentLaunchRef.current = false;
             setShouldLaunchOverlay(false);
             navigateTo("/home", { replace: true });
             setOverlay(null);
@@ -2580,9 +2216,7 @@ function App() {
                 action_taken: "liked",
               });
             }
-            console.log("[SUPPRESSION SET] onPackLike");
             suppressNextHomeAutoLaunchRef.current = true;
-            hasSelectedCardForCurrentLaunchRef.current = false;
             setShouldLaunchOverlay(false);
             setOverlay(null);
             navigateTo("/home");
@@ -2598,7 +2232,6 @@ function App() {
               launcher_context: activeOverlayVersion?.id,
               action_taken: "chose_something_else",
             });
-            console.log("[ACTION CARDS] onChooseElse fired");
             const available = actionCards.filter((c) => !c.hidden && !c.deletedAt);
             if (available.length === 0) {
               setOverlay(buildActionCardEmptyOverlay(overlay?.versionId));
@@ -2612,7 +2245,7 @@ function App() {
             setIsActionCardEditorOpen(true);
           }}
           fakeLauncherVersions={fakeLauncherVersions}
-          onFakeLauncherLaunch={handleFakeAppLaunch}
+          onFakeLauncherLaunch={startInterceptionFlow}
         />
       ) : null}
 
@@ -2620,7 +2253,7 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={Boolean(overlay)}
-          onLaunch={handleFakeAppLaunch}
+          onLaunch={startInterceptionFlow}
         />
       ) : null}
     </>
@@ -3969,16 +3602,10 @@ function SettingsPanel({
   onRestoreActionCards,
   interruptionPacks,
   launcherContext,
-  isUpdatingApp,
-  onUpdateApp,
-  notificationSettings,
-  onToggleNotifications,
-  onResetNotifications,
-  onUpdateNotificationSettings,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
 
   const isInsideFakeLauncher =
     launcherContext &&
@@ -3995,65 +3622,6 @@ function SettingsPanel({
           <p>Personal touches and a quick peek at how BishBash works.</p>
         </div>
       </div>
-
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>BishBash notifications</p>
-          <span>Random reminders of the life you actually want.</span>
-        </div>
-        
-        {launcherContext === NORMAL_LAUNCHER_CONTEXT ? (
-          <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", margin: 0, padding: 0, border: 0, background: "transparent" }}>
-              <input
-                type="checkbox"
-                checked={notificationSettings.enabled}
-                onChange={(e) => onToggleNotifications(e.target.checked)}
-              />
-              <span style={{ fontSize: "15px", color: "var(--charcoal)", fontWeight: "500" }}>Enable random BishBash cards</span>
-            </label>
-            {notificationSettings.enabled ? (
-              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-                <span style={{ fontSize: "14px", color: "var(--charcoal)" }}>Cards per day</span>
-                <select className="settings-input" style={{ width: "auto", minHeight: "36px", padding: "6px 12px" }} value={notificationSettings.notificationsPerDay} onChange={(e) => onUpdateNotificationSettings({ notificationsPerDay: parseInt(e.target.value, 10) })}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-            ) : null}
-            <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>Notifications use your personal cards and active packs.</p>
-            <NotificationDiagnostics onReset={onResetNotifications} notificationSettings={notificationSettings} />
-          </div>
-        ) : (
-          <div style={{ marginTop: "16px" }}>
-            <span style={{ fontSize: "13px", padding: "4px 10px", background: "rgba(0,0,0,0.05)", borderRadius: "999px", color: "var(--ink-muted)", display: "inline-block" }}>
-              Notifications are managed from BishBash.
-            </span>
-          </div>
-        )}
-      </div>
-
-      {isInsideFakeLauncher ? (() => {
-        const behavior = launcherBehaviorSettings[launcherContext] ?? {};
-        const interruptionsOn = Boolean(behavior.useInterruptionPack);
-        return (
-          <div className="settings-card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-              <div>
-                <p style={{ margin: 0, fontWeight: "600", fontSize: "16px", color: "var(--charcoal)" }}>Interruption cards</p>
-                <span style={{ fontSize: "14px", color: "var(--ink-muted)", marginTop: "4px", display: "block" }}>Show pause cards when this fake app opens.</span>
-              </div>
-              <label className="settings-checkbox-row" style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: "8px", margin: 0, padding: 0, border: 0, background: "transparent" }}>
-                <input
-                  type="checkbox"
-                  checked={interruptionsOn}
-                  onChange={(e) => onSaveVersionBehavior(launcherContext, { useInterruptionPack: e.target.checked })}
-                />
-                <span style={{ fontSize: "15px", color: "var(--charcoal)", fontWeight: "500" }}>{interruptionsOn ? "On" : "Off"}</span>
-              </label>
-            </div>
-          </div>
-        );
-      })() : null}
       <div className="settings-card settings-compact">
         <button
           type="button"
@@ -4169,7 +3737,7 @@ function SettingsPanel({
                     Replace cover icon
                   </label>
                 </div>
-            {isSelectedCurrentLauncher ? (
+            {INTERRUPTION_LAUNCHER_CONTEXTS.includes(version.id) ? (
               <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
                 <div style={{ marginBottom: "12px" }}>
                   <strong style={{ display: "block" }}>Interruptions</strong>
@@ -4189,7 +3757,7 @@ function SettingsPanel({
                     : "You’ll see normal BishBash cards instead."}
                 </p>
                 {pack ? (
-                  <p className="tiny-note" style={{ margin: "4px 0 0 0" }}>
+                  <p className="tiny-note" style={{ margin: 0 }}>
                     Linked pack: {pack.name}
                   </p>
                 ) : null}
@@ -4227,16 +3795,6 @@ function SettingsPanel({
         </div>
         <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
           Clear local development state
-        </button>
-      </div>
-
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>App version</p>
-          <span>Current version: {APP_BUILD_VERSION}</span>
-        </div>
-        <button type="button" className="pack-button secondary" onClick={onUpdateApp} disabled={isUpdatingApp}>
-          {isUpdatingApp ? "Updating BishBash..." : "Update to latest version"}
         </button>
       </div>
 
@@ -4472,23 +4030,48 @@ function Overlay({
   }
 
   if (overlay.type === "action-card") {
-    return <ActionCardOverlay overlay={overlay} actionCards={actionCards} onAccept={onAcceptActionCard} onClose={onClose} onLogEvent={onLogEvent} />;
+    return (
+      <ActionCardOverlay
+        overlay={overlay}
+        actionCards={actionCards}
+        onAccept={onAcceptActionCard}
+        onClose={onClose}
+        onLogEvent={onLogEvent}
+        fakeLauncherVersions={fakeLauncherVersions}
+        onFakeLauncherLaunch={onFakeLauncherLaunch}
+      />
+    );
   }
 
   if (overlay.type === "action-card-empty") {
-    return <ActionCardEmptyOverlay overlay={overlay} version={version} onClose={onClose} onLogEvent={onLogEvent} onCreateActionCard={onCreateActionCard} />;
+    return (
+      <ActionCardEmptyOverlay
+        overlay={overlay}
+        version={version}
+        onClose={onClose}
+        onLogEvent={onLogEvent}
+        onCreateActionCard={onCreateActionCard}
+        fakeLauncherVersions={fakeLauncherVersions}
+        onFakeLauncherLaunch={onFakeLauncherLaunch}
+      />
+    );
   }
 
   if (overlay.type === "action-success") {
-    return <ActionSuccessOverlay onClose={onClose} />;
+    return (
+      <ActionSuccessOverlay
+        overlay={overlay}
+        onClose={onClose}
+        fakeLauncherVersions={fakeLauncherVersions}
+        onFakeLauncherLaunch={onFakeLauncherLaunch}
+      />
+    );
   }
 
   if (!card) return null;
 
   return (
-    <div
-      className={`overlay-screen reveal ${overlay.phase === "dissolving" ? "is-dissolving" : ""} theme-${getThemeClass(card.theme)}`}
-    >
+    <div className={`overlay-screen reveal ${overlay.phase === "dissolving" ? "is-dissolving" : ""} theme-${getThemeClass(card.theme)}`}>
       <div className="floating floating-heart" />
       <div className="particle particle-a" />
       <button
@@ -4526,10 +4109,22 @@ function Overlay({
   );
 }
 
-function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent }) {
+function ActionCardOverlay({
+  overlay,
+  actionCards,
+  onAccept,
+  onClose,
+  onLogEvent,
+  fakeLauncherVersions,
+  onFakeLauncherLaunch,
+}) {
   console.log("[ACTION CARD OVERLAY RENDERED]");
 
-  const available = useMemo(() => actionCards.filter((c) => !c.hidden && !c.deletedAt), [actionCards]);
+  const available = useMemo(
+    () => actionCards.filter((c) => !c.hidden && !c.deletedAt),
+    [actionCards]
+  );
+
   const [recentlyShown, setRecentlyShown] = useState([]);
   const [currentCard, setCurrentCard] = useState(null);
 
@@ -4608,7 +4203,22 @@ function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent
   return (
     <div className="overlay-screen reveal">
       <div className="floating floating-heart" />
-      <p style={{ background: "yellow", padding: "4px 8px", fontSize: "12px", fontWeight: "bold", position: "absolute", top: "16px", left: "16px", zIndex: 100, color: "black", borderRadius: "4px" }}>ACTION CARD OVERLAY ACTIVE</p>
+      <p
+        style={{
+          background: "yellow",
+          padding: "4px 8px",
+          fontSize: "12px",
+          fontWeight: "bold",
+          position: "absolute",
+          top: "16px",
+          left: "16px",
+          zIndex: 100,
+          color: "black",
+          borderRadius: "4px"
+        }}
+      >
+        ACTION CARD OVERLAY ACTIVE
+      </p>
       <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
         <CloseGlyph />
       </button>
@@ -4625,11 +4235,18 @@ function ActionCardOverlay({ overlay, actionCards, onAccept, onClose, onLogEvent
         <ActionButton label="Another idea" onClick={pickNext} />
         <ActionButton label="I'll do this" tone="solid" onClick={handleAccept} />
       </div>
+      {fakeLauncherVersions?.length > 0 ? (
+        <FakeAppLauncherBar
+          versions={fakeLauncherVersions}
+          onLaunch={onFakeLauncherLaunch}
+          raised={true}
+        />
+      ) : null}
     </div>
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, fakeLauncherVersions, onFakeLauncherLaunch }) {
   function handleContinueToApp() {
     if (!version) return;
 
@@ -4667,6 +4284,13 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
           ) : null}
         </div>
       </div>
+      {fakeLauncherVersions?.length > 0 ? (
+        <FakeAppLauncherBar
+          versions={fakeLauncherVersions}
+          onLaunch={onFakeLauncherLaunch}
+          raised={true}
+        />
+      ) : null}
     </div>
   );
 }
@@ -4831,37 +4455,18 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   function handleContinueToApp() {
     if (!version) return;
 
-    setShowFallbackLink(false);
     void onLogEvent({
       event_type: "intercept_continue_to_app",
-      source_type: "interruption",
-      card_source: "interruption",
-      card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
-      card_title: messages[activeIndex] ?? null,
-      card_text: messages[activeIndex] ?? null,
       app_id: version.id,
       app_name: version.name,
       launcher_context: version.id,
-      target_app: overlay.targetApp ?? version.id,
-      pack_id: overlay.packId,
-      message_id: `${overlay.packId}:${activeIndex}`,
       action_taken: "continued_to_app",
-      metadata: {
-        packTitle: overlay.name,
-        message: messages[activeIndex] ?? null,
-      },
     });
 
     const href = getVersionOpenHref(version);
     if (href) {
       window.location.href = href;
     }
-
-    fallbackTimerRef.current = window.setTimeout(() => {
-      if (document.visibilityState === "visible") {
-        setShowFallbackLink(true);
-      }
-    }, 3200);
   }
 
   return (
@@ -4910,7 +4515,6 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
           tone="solid"
           onClick={(event) => {
             event?.stopPropagation?.();
-            console.log("[INTERRUPTION BUTTON] orange clicked");
             onChooseElse();
           }}
         />
@@ -4936,14 +4540,14 @@ function ActionButton({ label, onClick, tone = "ghost", href }) {
 
   if (href) {
     return (
-      <a className={className} href={href} onClick={onClick}>
+      <a className={className} href={href} onClick={(e) => onClick?.(e)}>
         {label}
       </a>
     );
   }
 
   return (
-    <button type="button" className={className} onClick={onClick}>
+    <button type="button" className={className} onClick={(e) => onClick?.(e)}>
       {label}
     </button>
   );
@@ -5155,68 +4759,6 @@ function SettingsGlyph() {
       <path d="M24.5 7.5l-2.2 2.2" />
       <path d="M9.7 22.3l-2.2 2.2" />
     </svg>
-  );
-}
-
-function NotificationDiagnostics({ onReset, notificationSettings }) {
-  const [status, setStatus] = useState(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    async function refreshStatus() {
-      const perm = "Notification" in window ? Notification.permission : "unsupported";
-      const swSupported = "serviceWorker" in navigator;
-      let hasActiveSw = false;
-      let hasPushSub = false;
-
-      if (swSupported) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        hasActiveSw = regs.length > 0;
-        const reg = await navigator.serviceWorker.ready.catch(() => null);
-        if (reg) {
-          const sub = await reg.pushManager.getSubscription().catch(() => null);
-          hasPushSub = !!sub;
-        }
-      }
-
-      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-      const hasVapid = !!vapidKey;
-      const vapidPrefix = hasVapid ? vapidKey.substring(0, 12) : "";
-      const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
-      if (isMounted) {
-        setStatus({
-          perm, swSupported, hasActiveSw, hasPushSub, hasVapid, vapidPrefix, isStandalone, isIOS
-        });
-      }
-    }
-    refreshStatus();
-    return () => { isMounted = false; };
-  }, []);
-
-  if (!status) {
-    return (
-      <div style={{ padding: "12px", background: "rgba(0,0,0,0.03)", borderRadius: "12px", fontSize: "12px", fontFamily: "monospace", color: "var(--charcoal)", border: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}>
-        Checking...
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ padding: "12px", background: "rgba(0,0,0,0.03)", borderRadius: "12px", fontSize: "12px", fontFamily: "monospace", color: "var(--charcoal)", border: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}>
-      <strong style={{ display: "block", marginBottom: 6 }}>Push Diagnostics</strong>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Random cards enabled:</span> <span>{notificationSettings?.enabled ? "True" : "False"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Permission:</span> <span>{status.perm}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>SW Status:</span> <span>{status.swSupported ? (status.hasActiveSw ? "Registered" : "None") : "Unsupported"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Push Sub:</span> <span>{status.hasPushSub ? "Active" : "Inactive"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>VAPID Key:</span> <span>{status.hasVapid ? `Loaded (${status.vapidPrefix}...)` : "Missing"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Standalone:</span> <span>{status.isStandalone ? "True" : "False"}</span></div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}><span>iOS Detected:</span> <span>{status.isIOS ? "True" : "False"}</span></div>
-      <button type="button" onClick={onReset} style={{ display: "block", width: "100%", marginTop: 10, padding: "8px", borderRadius: 8, border: "1px solid var(--coral)", background: "transparent", cursor: "pointer", color: "var(--coral)", fontWeight: "500", fontSize: "13px" }}>
-        Reset registration
-      </button>
-    </div>
   );
 }
 
