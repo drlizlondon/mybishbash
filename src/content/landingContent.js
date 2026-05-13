@@ -17,8 +17,11 @@ export const landingContent = {
   },
   "hero": {
     "headline": [
-      "Your phone shapes your attention.",
-      "BishBash helps shape it intentionally."
+      "Your phone",
+      "shapes your",
+      "attention.",
+      "BishBash helps",
+      "shape it intentionally."
     ],
     "copy": [
       "Create pauses, meaningful reminders, and turn everyday phone use into support for the person you want to become",

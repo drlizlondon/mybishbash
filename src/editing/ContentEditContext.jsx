@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { landingContent } from "../content/landingContent";
 
 const ContentEditContext = createContext(null);
-const STORAGE_KEY = "bishbash.landingContentDraft.v3";
+const STORAGE_KEY = "bishbash.landingContentDraft.v6";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));

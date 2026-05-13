@@ -6,6 +6,8 @@ import {
   useContentEdit,
 } from "./editing/ContentEditContext";
 
+const APP_HOME_HREF = `${import.meta.env.BASE_URL}home`;
+
 function BrandMark({ dark = false }) {
   return (
     <span className={`brand-mark${dark ? " is-dark" : ""}`} aria-hidden="true">
@@ -32,7 +34,7 @@ function Header() {
             </a>
           ))}
         </nav>
-        <a className="header-cta" href="/onboarding" onClick={stopEditNavigation}>
+        <a className="header-cta" href={APP_HOME_HREF} onClick={stopEditNavigation}>
           <EditableText path="ctas.primary" />
         </a>
       </div>
@@ -110,8 +112,13 @@ function Hero() {
         <div className="container hero-grid">
           <div className="hero-copy-block">
             <h1 className="hero-title reveal-up">
-              <EditableText path="hero.headline.0" />
-              <EditableText path="hero.headline.1" />
+              {content.hero.headline.map((line, index) => (
+                <EditableText
+                  className={index === 4 ? "gold-line" : "white-line"}
+                  path={`hero.headline.${index}`}
+                  key={`${line}-${index}`}
+                />
+              ))}
             </h1>
             <div className="hero-copy reveal-up delay-1">
               {content.hero.copy.map((line, index) => (
@@ -119,7 +126,7 @@ function Hero() {
               ))}
             </div>
             <div className="hero-actions reveal-up delay-2">
-              <a className="button primary" href="/onboarding" onClick={stopEditNavigation}>
+              <a className="button primary" href={APP_HOME_HREF} onClick={stopEditNavigation}>
                 <EditableText path="ctas.primary" />
                 <span aria-hidden="true">→</span>
               </a>
