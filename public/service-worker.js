@@ -1,4 +1,4 @@
-const CACHE_NAME = "bishbash-cache-v32";
+const CACHE_NAME = "bishbash-cache-v34";
 const APP_SHELL = [
   "/bishbash/",
   "/bishbash/index.html",
@@ -43,7 +43,15 @@ self.addEventListener("fetch", (event) => {
       url.pathname.startsWith("/bishbash/intercept/");
 
     if (appRoute) {
-      event.respondWith(caches.match("/bishbash/index.html"));
+      event.respondWith(
+        fetch(event.request)
+          .then((response) => {
+            const cloned = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("/bishbash/index.html", cloned));
+            return response;
+          })
+          .catch(() => caches.match("/bishbash/index.html")),
+      );
       return;
     }
 
@@ -53,17 +61,30 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const url = new URL(event.request.url);
+
+  if (url.pathname.startsWith("/bishbash/assets/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const cloned = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+          return response;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-
       return fetch(event.request)
         .then((response) => {
           const cloned = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
           return response;
         })
-        .catch(() => caches.match("/bishbash/index.html"));
+        .catch(() => cached || caches.match("/bishbash/index.html"));
     }),
   );
 });

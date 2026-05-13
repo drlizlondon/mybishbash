@@ -47,6 +47,7 @@ import {
   markNotificationOpened,
   checkIsAdmin,
   fetchGlobalPacks,
+  touchUserProfile,
 } from "./lib/bishbashSync";
 import {
   PACKS,
@@ -91,6 +92,10 @@ function resolveTheme(theme) {
 }
 
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 function normalizeRoutePath(path) {
   if (!path) return "/";
@@ -705,11 +710,15 @@ function App() {
 
   useEffect(() => {
     if (session?.user?.id) {
+      if (session.user.email && HQ_ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
+        setIsAdmin(true);
+        return;
+      }
       checkIsAdmin(session.user.id).then(setIsAdmin).catch(() => setIsAdmin(false));
     } else {
       setIsAdmin(false);
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.email, session?.user?.id]);
 
   useEffect(() => {
     if (authReady) {
@@ -718,6 +727,17 @@ function App() {
         .catch((err) => console.warn("Could not load global packs", err));
     }
   }, [authReady]);
+
+  const refreshGlobalPacks = useCallback(() => {
+    return fetchGlobalPacks()
+      .then(setGlobalPacks)
+      .catch((err) => console.warn("Could not refresh global packs", err));
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    touchUserProfile(session.user);
+  }, [session?.user?.email, session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user?.id) return undefined;
@@ -1473,7 +1493,7 @@ function App() {
   }
 
   function activatePack(packId) {
-    const pack = PACKS.find((item) => item.id === packId);
+    const pack = visibleLibraryPacks.find((item) => item.id === packId);
     if (!pack || isPackActive(packId)) return;
 
     updateCards((current) => {
@@ -1505,7 +1525,7 @@ function App() {
           : card
       )
     );
-    const pack = PACKS.find((item) => item.id === packId);
+    const pack = visibleLibraryPacks.find((item) => item.id === packId);
     void logEvent({
       event_type: "pack_deactivated",
       source_type: "library",
@@ -2029,7 +2049,11 @@ function App() {
     [events],
   );
   const visibleLibraryPacks = useMemo(
-    () => [...PACKS, ...globalPacks].filter((pack) => !hiddenLibraryPacks.includes(pack.id)),
+    () => {
+      const databaseSourceKeys = new Set(globalPacks.map((pack) => pack.sourceKey).filter(Boolean));
+      const fallbackPacks = PACKS.filter((pack) => !databaseSourceKeys.has(pack.id));
+      return [...fallbackPacks, ...globalPacks].filter((pack) => !hiddenLibraryPacks.includes(pack.id));
+    },
     [hiddenLibraryPacks, globalPacks],
   );
   const completionEvents = useMemo(
@@ -2086,6 +2110,9 @@ function App() {
       <HQPanel 
         isAdmin={isAdmin} 
         session={session} 
+        libraryPacks={visibleLibraryPacks}
+        interruptionPacks={interruptionPacks}
+        onGlobalPacksChanged={refreshGlobalPacks}
         onBack={() => navigateTo("/home", { replace: true })} 
       />
     );

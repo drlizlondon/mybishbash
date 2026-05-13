@@ -150,21 +150,155 @@ export async function checkIsAdmin(userId) {
   return !!data;
 }
 
-export async function fetchGlobalPacks() {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return [];
-  const client = requireSupabase();
-  const { data: packs, error: packsError } = await client.from("global_packs").select("*").eq("published", true);
-  if (packsError) return [];
-
-  const { data: cards, error: cardsError } = await client.from("global_pack_cards").select("*");
-  if (cardsError) return [];
-
-  return packs.map((pack) => ({
+function mapGlobalPack(pack, cards = []) {
+  return {
     id: pack.id,
     title: pack.title,
     description: pack.description,
     theme: pack.theme,
-    entries: cards.filter((c) => c.pack_id === pack.id).map(c => ({ promptText: c.prompt_text, attribution: c.attribution, frequency: c.frequency, timingWindows: c.timing_windows })),
+    icon: pack.icon,
+    published: pack.published,
+    sourceKey: pack.source_key,
+    entries: cards
+      .filter((card) => card.pack_id === pack.id)
+      .sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
+      .map((card) => ({
+        id: card.id,
+        promptText: card.prompt_text,
+        attribution: card.attribution,
+        sourceTitle: card.source_title,
+        sourceUrl: card.source_url,
+        frequency: card.frequency,
+        timingWindows: card.timing_windows,
+      })),
     isGlobal: true,
-  }));
+  };
+}
+
+export async function fetchGlobalPacks() {
+  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return [];
+  const client = requireSupabase();
+  const { data: packs, error: packsError } = await client
+    .from("global_packs")
+    .select("*")
+    .eq("published", true)
+    .order("created_at", { ascending: false });
+  if (packsError) return [];
+
+  const { data: cards, error: cardsError } = await client
+    .from("global_pack_cards")
+    .select("*")
+    .order("position", { ascending: true });
+  if (cardsError) return [];
+
+  return packs.map((pack) => mapGlobalPack(pack, cards));
+}
+
+export async function touchUserProfile(user) {
+  if (!user?.id || (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true")) return;
+  const client = requireSupabase();
+  const { error } = await client.from("user_profiles").upsert(
+    {
+      user_id: user.id,
+      email: user.email,
+      last_seen_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+  if (error) console.warn("Could not update user profile heartbeat", error);
+}
+
+export async function fetchAdminGlobalPacks() {
+  const client = requireSupabase();
+  const { data: packs, error: packsError } = await client
+    .from("global_packs")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (packsError) throw packsError;
+
+  const { data: cards, error: cardsError } = await client
+    .from("global_pack_cards")
+    .select("*")
+    .order("position", { ascending: true });
+  if (cardsError) throw cardsError;
+
+  return (packs ?? []).map((pack) => mapGlobalPack(pack, cards ?? []));
+}
+
+export async function saveAdminGlobalPack(pack, userId) {
+  const client = requireSupabase();
+  const now = new Date().toISOString();
+  const payload = {
+    title: pack.title,
+    description: pack.description,
+    theme: pack.theme || "Minimal",
+    icon: pack.icon || null,
+    source_key: pack.sourceKey || null,
+    published: Boolean(pack.published),
+    updated_at: now,
+  };
+
+  if (userId) payload.created_by = userId;
+
+  const query = pack.id
+    ? client.from("global_packs").update(payload).eq("id", pack.id).select("*").single()
+    : client.from("global_packs").insert([{ ...payload, created_at: now }]).select("*").single();
+
+  const { data: savedPack, error: packError } = await query;
+  if (packError) throw packError;
+
+  const packId = savedPack.id;
+  const { error: deleteError } = await client.from("global_pack_cards").delete().eq("pack_id", packId);
+  if (deleteError) throw deleteError;
+
+  const cards = (pack.entries ?? [])
+    .map((entry, index) => ({
+      pack_id: packId,
+      prompt_text: entry.promptText?.trim(),
+      attribution: entry.attribution?.trim() || null,
+      source_title: entry.sourceTitle?.trim() || null,
+      source_url: entry.sourceUrl?.trim() || null,
+      frequency: entry.frequency || "once_daily",
+      timing_windows: entry.timingWindows?.length ? entry.timingWindows : ["morning", "day", "evening"],
+      position: index,
+    }))
+    .filter((entry) => entry.prompt_text);
+
+  if (cards.length > 0) {
+    const { error: cardsError } = await client.from("global_pack_cards").insert(cards);
+    if (cardsError) throw cardsError;
+  }
+
+  return savedPack;
+}
+
+export async function deleteAdminGlobalPack(packId) {
+  const client = requireSupabase();
+  const { error } = await client.from("global_packs").delete().eq("id", packId);
+  if (error) throw error;
+}
+
+export async function fetchAdminUsers() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("user_summary")
+    .select("*")
+    .order("last_seen_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAdminAnalytics() {
+  const client = requireSupabase();
+  const [{ data: summary, error: summaryError }, { data: recent, error: recentError }] = await Promise.all([
+    client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
+    client
+      .from("bishbash_events")
+      .select("id,event_type,created_at,card_title,card_text,target_app,launcher_context,action_taken")
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+  if (summaryError) throw summaryError;
+  if (recentError) throw recentError;
+  return { summary: summary ?? [], recent: recent ?? [] };
 }
