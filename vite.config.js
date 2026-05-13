@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,8 +69,18 @@ function appVersionPlugin() {
 
 export default defineConfig({
   base: "/bishbash/",
-  plugins: [react(), landingContentEditorPlugin(), appVersionPlugin()],
+  plugins: [react(), tailwindcss(), landingContentEditorPlugin(), appVersionPlugin()],
   define: {
     __BISHBASH_VERSION__: JSON.stringify(appVersion),
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ["recharts", "framer-motion"],
+          supabase: ["@supabase/supabase-js"],
+        },
+      },
+    },
   },
 });

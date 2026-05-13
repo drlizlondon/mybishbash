@@ -17,8 +17,14 @@
     "@capacitor/core": "^8.3.1",
     "@capacitor/ios": "^8.3.1",
     "@supabase/supabase-js": "^2.105.3",
+    "@tailwindcss/vite": "^4.3.0",
+    "autoprefixer": "^10.5.0",
+    "framer-motion": "^12.38.0",
+    "postcss": "^8.5.14",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

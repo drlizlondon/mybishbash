@@ -294,9 +294,9 @@ export async function fetchAdminAnalytics() {
     client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
     client
       .from("bishbash_events")
-      .select("id,event_type,created_at,card_title,card_text,target_app,launcher_context,action_taken")
+      .select("id,user_id,event_type,created_at,source_type,bash_id,card_id,card_title,card_text,target_app,launcher_context,pack_id,message_id,app_id,app_name,action_taken,metadata")
       .order("created_at", { ascending: false })
-      .limit(20),
+      .limit(100),
   ]);
   if (summaryError) throw summaryError;
   if (recentError) throw recentError;

@@ -1,4 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   deleteAdminGlobalPack,
   fetchAdminAnalytics,
@@ -17,6 +31,38 @@ const EMPTY_PACK_FORM = {
   importText: "",
 };
 
+const NAV_ITEMS = [
+  "overview",
+  "analytics",
+  "events",
+  "packs",
+  "notifications",
+  "users",
+  "devices",
+  "data",
+  "settings",
+];
+
+const HQ_VIEW_STORAGE_KEY = "bishbash:hq-active-view";
+
+function isValidHQView(view) {
+  return NAV_ITEMS.includes(view);
+}
+
+function getInitialHQView() {
+  if (typeof window === "undefined") return "overview";
+  const params = new URLSearchParams(window.location.search);
+  const viewFromUrl = params.get("view");
+  if (isValidHQView(viewFromUrl)) return viewFromUrl;
+  const storedView = window.localStorage.getItem(HQ_VIEW_STORAGE_KEY);
+  return isValidHQView(storedView) ? storedView : "overview";
+}
+
+const TELEMETRY_BLUE = "#2563eb";
+const TELEMETRY_GREEN = "#059669";
+const TELEMETRY_AMBER = "#d97706";
+const TELEMETRY_NAVY = "#0f172a";
+
 export default function HQPanel({
   isAdmin,
   session,
@@ -25,36 +71,17 @@ export default function HQPanel({
   onGlobalPacksChanged,
   onBack,
 }) {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeView, setActiveView] = useState(getInitialHQView);
   const [adminPacks, setAdminPacks] = useState([]);
   const [users, setUsers] = useState([]);
   const [analytics, setAnalytics] = useState({ summary: [], recent: [] });
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [packForm, setPackForm] = useState(EMPTY_PACK_FORM);
-
-  const publishedAdminPacks = useMemo(() => adminPacks.filter((pack) => pack.published), [adminPacks]);
-  const draftAdminPacks = useMemo(() => adminPacks.filter((pack) => !pack.published), [adminPacks]);
-  const overviewData = useMemo(() => {
-    let totalCards = 0;
-    let totalIntercepts = 0;
-    let totalOpens = 0;
-
-    analytics.summary.forEach((row) => {
-      if (row.event_type?.startsWith("bash_")) totalCards += Number(row.event_count ?? 0);
-      if (row.event_type?.startsWith("intercept_")) totalIntercepts += Number(row.event_count ?? 0);
-      if (row.event_type === "notification_opened") totalOpens += Number(row.event_count ?? 0);
-    });
-
-    return {
-      totalUsers: users.length,
-      totalCards,
-      totalIntercepts,
-      totalPushSubs: analytics.summary.find((row) => row.event_type === "push_subscription")?.event_count ?? 0,
-      totalOpens,
-      publishedPacks: publishedAdminPacks.length,
-    };
-  }, [analytics.summary, publishedAdminPacks.length, users.length]);
+  const [search, setSearch] = useState("");
+  const [range, setRange] = useState("7d");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [expandedEventId, setExpandedEventId] = useState(null);
 
   async function refreshHQ() {
     if (!isAdmin) return;
@@ -80,17 +107,67 @@ export default function HQPanel({
     refreshHQ();
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const syncViewFromLocation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const nextView = params.get("view");
+      if (isValidHQView(nextView)) setActiveView(nextView);
+    };
+    window.addEventListener("popstate", syncViewFromLocation);
+    return () => window.removeEventListener("popstate", syncViewFromLocation);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(HQ_VIEW_STORAGE_KEY, activeView);
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("view") === activeView) return;
+    currentUrl.searchParams.set("view", activeView);
+    window.history.replaceState(null, "", currentUrl);
+  }, [activeView]);
+
+  const telemetry = useMemo(
+    () => buildTelemetryModel({
+      summary: analytics.summary,
+      recent: analytics.recent,
+      users,
+      adminPacks,
+      libraryPacks,
+      interruptionPacks,
+      range,
+    }),
+    [analytics.summary, analytics.recent, users, adminPacks, libraryPacks, interruptionPacks, range],
+  );
+
+  const filteredEvents = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return telemetry.events.filter((event) => {
+      const matchesType = eventTypeFilter === "all" || event.event_type === eventTypeFilter;
+      if (!matchesType) return false;
+      if (!query) return true;
+      return [
+        event.event_type,
+        event.user_id,
+        event.launcher_context,
+        event.target_app,
+        event.pack_id,
+        event.card_title,
+        event.card_text,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [eventTypeFilter, search, telemetry.events]);
+
   async function handleSavePack(event) {
     event.preventDefault();
     const entries = parseImportedCards(packForm.importText);
 
     if (!packForm.title.trim()) {
       setStatus("Add a pack title first.");
-      return;
-    }
-
-    if (entries.length === 0) {
-      setStatus("Paste at least one card line before saving.");
       return;
     }
 
@@ -111,7 +188,7 @@ export default function HQPanel({
       setPackForm(EMPTY_PACK_FORM);
       await refreshHQ();
       await onGlobalPacksChanged?.();
-      setStatus("Pack saved.");
+      setStatus("Pack deployment saved.");
     } catch (error) {
       setStatus(error?.message ?? "Could not save pack.");
     } finally {
@@ -126,7 +203,7 @@ export default function HQPanel({
       await saveAdminGlobalPack({ ...pack, published: !pack.published }, session?.user?.id);
       await refreshHQ();
       await onGlobalPacksChanged?.();
-      setStatus(pack.published ? "Pack moved to draft." : "Pack published for users.");
+      setStatus(pack.published ? "Pack moved to draft." : "Pack published.");
     } catch (error) {
       setStatus(error?.message ?? "Could not update pack.");
     } finally {
@@ -135,7 +212,7 @@ export default function HQPanel({
   }
 
   async function handleDeletePack(pack) {
-    if (!window.confirm(`Delete "${pack.title}"? This removes it from users after their next refresh.`)) return;
+    if (!window.confirm(`Delete "${pack.title}"? Published users will stop seeing it after refresh.`)) return;
     setLoading(true);
     setStatus("");
     try {
@@ -160,18 +237,18 @@ export default function HQPanel({
       published: Boolean(pack.published),
       importText: pack.entries?.map(formatImportedCard).join("\n") ?? "",
     });
-    setStatus("");
+    setActiveView("packs");
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   }
 
   if (!isAdmin) {
     return (
-      <div className="overlay-screen empty-state">
-        <div className="caught-up-content">
-          <p className="eyebrow">BishBash HQ</p>
-          <h2>Not authorised.</h2>
-          <p className="caught-up-copy">You must be an admin to view this area.</p>
-          <button className="action-button solid" onClick={onBack} style={{ marginTop: "24px" }}>
+      <div className="min-h-screen bg-slate-950 p-6 text-white">
+        <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">BishBash HQ</p>
+          <h2 className="mt-3 text-2xl font-semibold">Not authorised</h2>
+          <p className="mt-2 text-sm text-slate-300">You must be an admin to view this telemetry surface.</p>
+          <button className="mt-6 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white" onClick={onBack}>
             Back home
           </button>
         </div>
@@ -180,309 +257,1008 @@ export default function HQPanel({
   }
 
   return (
-    <div className="app-shell" style={{ background: "var(--sand)", minHeight: "100vh" }}>
-      <div className="app-inner">
-        <header className="hero" style={{ textAlign: "left", paddingLeft: "4px" }}>
-          <div className="section-heading">
-            <div>
-              <h2>BishBash HQ</h2>
-              <p>Admin control, global packs, users, and analytics.</p>
-            </div>
-            <button type="button" className="text-button" onClick={onBack}>Exit HQ</button>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fbff_38%,#ffffff_70%)] text-slate-950">
+      <div className="flex min-h-screen">
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-blue-100/80 bg-white/80 px-4 py-5 shadow-[18px_0_50px_rgba(15,23,42,0.04)] backdrop-blur-xl lg:block">
+          <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-slate-950 to-blue-950 p-4 text-white shadow-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">BishBash</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight">HQ</h1>
+            <p className="mt-2 text-xs text-blue-100">Operational telemetry console</p>
           </div>
-        </header>
+          <nav className="mt-5 space-y-1" aria-label="HQ sections">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
+                  activeView === item
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                    : "text-slate-600 hover:bg-blue-50 hover:text-slate-950"
+                }`}
+                onClick={() => setActiveView(item)}
+              >
+                <span className="capitalize">{item}</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${activeView === item ? "bg-white" : "bg-blue-300"}`} />
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-        <nav className="timing-grid" style={{ marginBottom: "24px", gridTemplateColumns: "repeat(4, 1fr)" }}>
-          {["overview", "packs", "analytics", "users"].map((tab) => (
+        <main className="min-w-0 flex-1 pb-28 lg:pb-10">
+          <TelemetryTopBar
+            loading={loading}
+            status={status}
+            range={range}
+            setRange={setRange}
+            search={search}
+            setSearch={setSearch}
+            onBack={onBack}
+            eventTypes={telemetry.eventTypes}
+            eventTypeFilter={eventTypeFilter}
+            setEventTypeFilter={setEventTypeFilter}
+          />
+
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+            {activeView === "overview" ? <OverviewPage telemetry={telemetry} /> : null}
+            {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
+            {activeView === "events" ? (
+              <EventsPage
+                events={filteredEvents}
+                expandedEventId={expandedEventId}
+                setExpandedEventId={setExpandedEventId}
+              />
+            ) : null}
+            {activeView === "packs" ? (
+              <PacksPage
+                adminPacks={adminPacks}
+                telemetry={telemetry}
+                packForm={packForm}
+                setPackForm={setPackForm}
+                handleSavePack={handleSavePack}
+                handleTogglePublished={handleTogglePublished}
+                handleDeletePack={handleDeletePack}
+                editPack={editPack}
+                loading={loading}
+              />
+            ) : null}
+            {activeView === "notifications" ? <NotificationsPage telemetry={telemetry} /> : null}
+            {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} /> : null}
+            {activeView === "devices" ? <DevicesPage telemetry={telemetry} /> : null}
+            {activeView === "data" ? <DataPage telemetry={telemetry} /> : null}
+            {activeView === "settings" ? <SettingsPage onRefresh={refreshHQ} onBack={onBack} loading={loading} /> : null}
+          </div>
+        </main>
+      </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-100 bg-white/95 px-2 py-2 shadow-2xl backdrop-blur lg:hidden" aria-label="HQ mobile sections">
+        <div className="grid grid-cols-5 gap-1">
+          {["overview", "analytics", "events", "packs", "users"].map((item) => (
             <button
-              key={tab}
+              key={item}
               type="button"
-              className={`frequency-option ${activeTab === tab ? "selected" : ""}`}
-              onClick={() => setActiveTab(tab)}
-              style={{ minHeight: "44px", fontSize: "14px", textTransform: "capitalize" }}
+              onClick={() => setActiveView(item)}
+              className={`rounded-xl px-2 py-2 text-[11px] font-semibold capitalize ${
+                activeView === item ? "bg-blue-600 text-white" : "text-slate-600"
+              }`}
             >
-              {tab}
+              {item}
             </button>
           ))}
-        </nav>
+        </div>
+      </nav>
+    </div>
+  );
+}
 
-        {status ? <p className="save-status" style={{ marginBottom: "16px" }}>{status}</p> : null}
-        {loading ? <p className="save-status" style={{ marginBottom: "16px" }}>Updating HQ...</p> : null}
+function TelemetryTopBar({
+  loading,
+  status,
+  range,
+  setRange,
+  search,
+  setSearch,
+  onBack,
+  eventTypes,
+  eventTypeFilter,
+  setEventTypeFilter,
+}) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-blue-100/80 bg-white/80 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">BishBash HQ</h2>
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              <span className={`h-2 w-2 rounded-full ${loading ? "animate-pulse bg-amber-500" : "bg-emerald-500"}`} />
+              {loading ? "Syncing" : "Live telemetry"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Event ingestion indicator: {status || "operational"} - Objective counts only
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_130px_170px_auto] xl:w-[720px]">
+          <label className="sr-only" htmlFor="hq-search">Search telemetry</label>
+          <input
+            id="hq-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search event, pack, launcher, user"
+            className="h-10 rounded-xl border border-blue-100 bg-white/85 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+          />
+          <select
+            value={range}
+            onChange={(event) => setRange(event.target.value)}
+            className="h-10 rounded-xl border border-blue-100 bg-white/85 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            aria-label="Date range"
+          >
+            <option value="24h">24h</option>
+            <option value="7d">7d</option>
+            <option value="30d">30d</option>
+          </select>
+          <select
+            value={eventTypeFilter}
+            onChange={(event) => setEventTypeFilter(event.target.value)}
+            className="h-10 rounded-xl border border-blue-100 bg-white/85 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            aria-label="Event type filter"
+          >
+            <option value="all">All event types</option>
+            {eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <button type="button" onClick={onBack} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
+            Exit
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
 
-        {activeTab === "overview" && (
-          <section className="panel-section">
-            <div className="settings-card settings-compact">
-              <div className="settings-version-heading">
-                <p>System Overview</p>
-                <span>Live Supabase metrics.</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "16px" }}>
-                <MetricBox label="Users" value={overviewData.totalUsers} />
-                <MetricBox label="Cards Completed" value={overviewData.totalCards} />
-                <MetricBox label="Interruptions" value={overviewData.totalIntercepts} />
-                <MetricBox label="Published Packs" value={overviewData.publishedPacks} />
-              </div>
-            </div>
-          </section>
-        )}
+function SectionHeader({ title, subtitle }) {
+  return (
+    <div className="rounded-2xl border border-blue-100 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
+      <h3 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h3>
+      <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+    </div>
+  );
+}
 
-        {activeTab === "packs" && (
-          <section className="panel-section">
-            <AccordionSection title={packForm.id ? "Edit Global Pack" : "Create Global Pack"} meta="Import or amend cards">
-              <PackEditor form={packForm} setForm={setPackForm} onSubmit={handleSavePack} loading={loading} />
-            </AccordionSection>
+function OverviewPage({ telemetry }) {
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {telemetry.heroMetrics.map((metric) => <HeroMetricCard key={metric.label} metric={metric} />)}
+      </section>
+      <section className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <TelemetryChart
+          title="Interventions Over Time"
+          subtitle="Hourly event volume from measured interactions"
+          data={telemetry.interventionsOverTime}
+          lines={[
+            { key: "interruptions", color: TELEMETRY_BLUE, name: "Interruptions" },
+            { key: "continueToApp", color: TELEMETRY_AMBER, name: "Continue to app" },
+            { key: "redirects", color: TELEMETRY_GREEN, name: "Do something else" },
+          ]}
+        />
+        <HeatmapPanel data={telemetry.hourlyHeatmap} />
+      </section>
+      <section className="grid gap-4 lg:grid-cols-3">
+        <DistributionPanel title="Top Launchers" rows={telemetry.topLaunchers} />
+        <DistributionPanel title="Event Frequency" rows={telemetry.eventFrequency.slice(0, 7)} />
+        <SparklineCard title="Active Users Over Time" data={telemetry.activeUsersOverTime} dataKey="users" />
+      </section>
+    </div>
+  );
+}
 
-            <div className="settings-card">
-              <div className="settings-version-heading">
-                <p>Admin Global Packs</p>
-                <span>Published packs appear in users' pack library.</span>
-              </div>
-              <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
-                <PackSummaryRow label="Published" count={publishedAdminPacks.length} />
-                <PackSummaryRow label="Draft" count={draftAdminPacks.length} />
-                <PackSummaryRow label="Visible ready-made" count={libraryPacks.length} />
-                <PackSummaryRow label="Built-in interruption" count={interruptionPacks.length} />
-              </div>
-            </div>
+function AnalyticsPage({ telemetry }) {
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Telemetry Analytics"
+        subtitle="Measured event trends, launcher frequency, notification delivery, and pack activation counts."
+      />
+      <section className="grid gap-4 xl:grid-cols-2">
+        <TelemetryChart
+          title="Continue-to-App Trend"
+          subtitle="Measured continuation events by time bucket"
+          data={telemetry.interventionsOverTime}
+          lines={[{ key: "continueToApp", color: TELEMETRY_AMBER, name: "Continue to app" }]}
+        />
+        <TelemetryChart
+          title="Redirect Trend"
+          subtitle="Measured do-something-else events by time bucket"
+          data={telemetry.interventionsOverTime}
+          lines={[{ key: "redirects", color: TELEMETRY_GREEN, name: "Do something else" }]}
+        />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <BarPanel title="Interruptions By Hour" data={telemetry.interruptionsByHour} xKey="hour" yKey="count" />
+        <BarPanel title="Launcher Event Frequency" data={telemetry.topLaunchers} xKey="label" yKey="count" />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <TelemetryChart
+          title="Pack Activation Trend"
+          subtitle="pack_activated events by time bucket"
+          data={telemetry.packActivationTrend}
+          lines={[{ key: "activations", color: TELEMETRY_BLUE, name: "Pack activations" }]}
+        />
+        <TelemetryChart
+          title="Notification Delivery vs Interaction"
+          subtitle="Notification event types grouped by time bucket"
+          data={telemetry.notificationTrend}
+          lines={[
+            { key: "delivered", color: TELEMETRY_BLUE, name: "Delivery events" },
+            { key: "interactions", color: TELEMETRY_GREEN, name: "Interaction events" },
+          ]}
+        />
+      </section>
+    </div>
+  );
+}
 
-            <AccordionSection title="Admin Global Packs" meta={`${adminPacks.length} packs`} defaultOpen>
-              <PackList
-                packs={adminPacks}
-                emptyLabel="No admin-created global packs yet."
-                admin
-                onEdit={editPack}
-                onTogglePublished={handleTogglePublished}
-                onDelete={handleDeletePack}
-              />
-            </AccordionSection>
+function EventsPage({ events, expandedEventId, setExpandedEventId }) {
+  return (
+    <GlassPanel title="Live Event Stream" subtitle={`${events.length} events in current filter`}>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100 shadow-inner">
+        <div className="grid grid-cols-[150px_1.1fr_0.9fr_0.8fr] border-b border-white/10 bg-white/5 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-400">
+          <span>Timestamp</span>
+          <span>Event Type</span>
+          <span>Pseudonymous User ID</span>
+          <span>Context</span>
+        </div>
+        <div className="max-h-[660px] overflow-auto">
+          {events.map((event) => {
+            const expanded = expandedEventId === event.id;
+            return (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => setExpandedEventId(expanded ? null : event.id)}
+                className="block w-full border-b border-white/5 px-4 py-3 text-left font-mono text-xs transition hover:bg-blue-500/10 focus:bg-blue-500/10 focus:outline-none"
+              >
+                <div className="grid gap-2 md:grid-cols-[150px_1.1fr_0.9fr_0.8fr]">
+                  <span className="text-slate-400">{formatTime(event.created_at)}</span>
+                  <span className="font-semibold text-blue-200">{event.event_type}</span>
+                  <span className="truncate text-slate-300">{pseudoUser(event.user_id)}</span>
+                  <span className="truncate text-slate-300">{event.launcher_context || event.target_app || event.app_name || "none"}</span>
+                </div>
+                {expanded ? (
+                  <pre className="mt-3 overflow-auto rounded-xl border border-white/10 bg-black/30 p-3 text-[11px] leading-5 text-slate-200">
+                    Payload
+                    {"\n"}
+                    {JSON.stringify(event, null, 2)}
+                  </pre>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </GlassPanel>
+  );
+}
 
-            <AccordionSection title="User Library Preview" meta={`${libraryPacks.length} visible packs`}>
-              <PackList packs={libraryPacks} emptyLabel="No ready-made packs found." />
-            </AccordionSection>
-
-            <AccordionSection title="Interruption Packs" meta={`${interruptionPacks.length} launcher folders`}>
-              <PackList packs={interruptionPacks} emptyLabel="No interruption packs found." />
-            </AccordionSection>
-          </section>
-        )}
-
-        {activeTab === "analytics" && (
-          <section className="panel-section">
-            <AccordionSection title="Event Analytics" meta={`${analytics.summary.length} event types`} defaultOpen>
-              <DataRows
-                rows={analytics.summary}
-                emptyLabel="No event analytics yet."
-                renderRow={(row) => (
-                  <>
-                    <span>{row.event_type}</span>
-                    <strong>{row.event_count}</strong>
-                  </>
-                )}
-              />
-            </AccordionSection>
-
-            <AccordionSection title="Recent Events" meta={`${analytics.recent.length} latest events`}>
-              <DataRows
-                rows={analytics.recent}
-                emptyLabel="No recent events yet."
-                renderRow={(row) => (
-                  <>
-                    <span>{row.event_type}</span>
-                    <small>{row.card_title || row.card_text || row.target_app || row.launcher_context || "No detail"}</small>
-                    <strong>{formatDate(row.created_at)}</strong>
-                  </>
-                )}
-              />
-            </AccordionSection>
-          </section>
-        )}
-
-        {activeTab === "users" && (
-          <section className="panel-section">
-            <AccordionSection title="Users" meta={`${users.length} signed up`} defaultOpen>
-              <DataRows
-                rows={users}
-                emptyLabel="No users found yet."
-                renderRow={(user) => (
-                  <>
-                    <span>{user.email || user.user_id}</span>
-                    <small>Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(user.last_seen_at)}</small>
-                    <strong>{user.event_count ?? 0} events</strong>
-                  </>
-                )}
-              />
-            </AccordionSection>
-          </section>
-        )}
+function PacksPage({
+  adminPacks,
+  telemetry,
+  packForm,
+  setPackForm,
+  handleSavePack,
+  handleTogglePublished,
+  handleDeletePack,
+  editPack,
+  loading,
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+      <GlassPanel title={packForm.id ? "Edit Pack Deployment" : "Create Pack Deployment"} subtitle="Database-managed content object">
+        <PackEditor form={packForm} setForm={setPackForm} onSubmit={handleSavePack} loading={loading} />
+      </GlassPanel>
+      <div className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <MiniStat label="Live packs" value={telemetry.publishedPacks} />
+          <MiniStat label="Draft packs" value={telemetry.draftPacks} />
+          <MiniStat label="Cards indexed" value={telemetry.totalPackCards} />
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {adminPacks.map((pack) => (
+            <PackDeploymentCard
+              key={pack.id}
+              pack={pack}
+              stats={telemetry.packStats.get(pack.id)}
+              onEdit={editPack}
+              onTogglePublished={handleTogglePublished}
+              onDelete={handleDeletePack}
+            />
+          ))}
+        </div>
       </div>
     </div>
+  );
+}
+
+function NotificationsPage({ telemetry }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <TelemetryChart
+        title="Notification Interaction Rate"
+        subtitle="Notification event counts by time bucket"
+        data={telemetry.notificationTrend}
+        lines={[
+          { key: "delivered", color: TELEMETRY_BLUE, name: "Delivery events" },
+          { key: "interactions", color: TELEMETRY_GREEN, name: "Interaction events" },
+        ]}
+      />
+      <DistributionPanel title="Notification Event Types" rows={telemetry.notificationRows} />
+    </div>
+  );
+}
+
+function UsersPage({ users, telemetry }) {
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="User Analytics"
+        subtitle="Pseudonymous user timelines, exact event counts, active days, launcher installs, and hourly activity."
+      />
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+        {users.map((user) => {
+          const stats = telemetry.userStats.get(user.user_id) ?? {};
+          return (
+            <GlassPanel key={user.user_id} title={user.email || pseudoUser(user.user_id)} subtitle={`Pseudonymous user ${pseudoUser(user.user_id)}`}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <MiniStat label="Interruption events" value={stats.interruptions ?? 0} />
+                <MiniStat label="Continue to app" value={stats.continueToApp ?? 0} />
+                <MiniStat label="Do something else" value={stats.redirects ?? 0} />
+                <MiniStat label="Action completions" value={stats.actionsCompleted ?? 0} />
+                <MiniStat label="Active days" value={stats.activeDays ?? 0} />
+                <MiniStat label="Notification events" value={stats.notifications ?? 0} />
+                <MiniStat label="Launcher contexts" value={stats.launcherCount ?? 0} />
+                <MiniStat label="Enabled packs" value={stats.enabledPacks ?? 0} />
+              </div>
+              <UserActivityHeatmap data={stats.hourlyActivity ?? []} />
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Event timeline</p>
+                <div className="space-y-2">
+                  {(stats.latestEvents ?? []).map((event) => (
+                    <div key={event.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                      <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
+                      <span className="truncate font-semibold text-slate-700">{event.event_type}</span>
+                      <span className="truncate text-slate-500">{event.launcher_context || event.target_app || "none"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-slate-600">
+                Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(user.last_seen_at)} - {user.event_count ?? 0} total events
+              </div>
+            </GlassPanel>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DevicesPage({ telemetry }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <DistributionPanel title="Launcher Contexts" rows={telemetry.topLaunchers} />
+      <DistributionPanel title="Device Type Signals" rows={telemetry.deviceRows} />
+    </div>
+  );
+}
+
+function DataPage({ telemetry }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-3">
+      <MiniStat label="Event rows sampled" value={telemetry.events.length} />
+      <MiniStat label="Event types" value={telemetry.eventTypes.length} />
+      <MiniStat label="Pack records" value={telemetry.totalPacks} />
+      <GlassPanel title="Schema Signals" subtitle="Fields present in recent telemetry">
+        <div className="flex flex-wrap gap-2">
+          {telemetry.schemaSignals.map((field) => (
+            <span key={field} className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">{field}</span>
+          ))}
+        </div>
+      </GlassPanel>
+    </div>
+  );
+}
+
+function SettingsPage({ onRefresh, onBack, loading }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <GlassPanel title="HQ Operations" subtitle="Administrative controls">
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50">
+            Refresh telemetry
+          </button>
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700">
+            Exit HQ
+          </button>
+        </div>
+      </GlassPanel>
+      <GlassPanel title="Data Policy" subtitle="Objective telemetry only">
+        <ul className="space-y-2 text-sm text-slate-600">
+          <li>Counts are derived from stored event rows and pack/user records.</li>
+          <li>User identifiers are shown as pseudonymous hashes where possible.</li>
+          <li>No subjective classifications or inferred states are computed.</li>
+        </ul>
+      </GlassPanel>
+    </div>
+  );
+}
+
+function HeroMetricCard({ metric }) {
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+      className="rounded-2xl border border-blue-100/80 bg-white/80 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.08)] backdrop-blur-xl"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{metric.label}</p>
+          <strong className="mt-2 block text-3xl font-semibold tracking-tight text-slate-950">{metric.value}</strong>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${metric.trend >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+          {metric.trend >= 0 ? "+" : ""}{metric.trend}%
+        </span>
+      </div>
+      <div className="mt-3 h-12">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={metric.sparkline}>
+            <Line type="monotone" dataKey="value" stroke={metric.color} strokeWidth={2} dot={false} isAnimationActive />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{metric.comparison}</p>
+    </motion.article>
+  );
+}
+
+function SparklineCard({ title, data, dataKey }) {
+  return (
+    <GlassPanel title={title} subtitle="Recent time buckets">
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="sparklineBlue" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="5%" stopColor={TELEMETRY_BLUE} stopOpacity={0.28} />
+                <stop offset="95%" stopColor={TELEMETRY_BLUE} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={32} />
+            <Tooltip content={<ChartTooltip />} />
+            <Area dataKey={dataKey} type="monotone" stroke={TELEMETRY_BLUE} fill="url(#sparklineBlue)" strokeWidth={2} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassPanel>
+  );
+}
+
+function TelemetryChart({ title, subtitle, data, lines }) {
+  return (
+    <GlassPanel title={title} subtitle={subtitle}>
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              {lines.map((line) => (
+                <linearGradient key={line.key} id={`${line.key}Gradient`} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor={line.color} stopOpacity={0.24} />
+                  <stop offset="95%" stopColor={line.color} stopOpacity={0} />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={34} />
+            <Tooltip content={<ChartTooltip />} />
+            {lines.map((line) => (
+              <Area
+                key={line.key}
+                type="monotone"
+                dataKey={line.key}
+                name={line.name}
+                stroke={line.color}
+                fill={`url(#${line.key}Gradient)`}
+                strokeWidth={2}
+                isAnimationActive
+              />
+            ))}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassPanel>
+  );
+}
+
+function BarPanel({ title, data, xKey, yKey }) {
+  return (
+    <GlassPanel title={title} subtitle="Counted event rows">
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={34} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey={yKey} radius={[7, 7, 0, 0]} fill={TELEMETRY_BLUE} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassPanel>
+  );
+}
+
+function HeatmapPanel({ data }) {
+  const max = Math.max(...data.map((item) => item.count), 1);
+  return (
+    <GlassPanel title="Hourly Activity Heatmap" subtitle="Events by weekday and hour">
+      <div className="grid grid-cols-12 gap-1">
+        {data.map((item) => (
+          <div
+            key={`${item.day}-${item.hour}`}
+            title={`${item.day} ${item.hour}:00 - ${item.count} events`}
+            className="h-7 rounded-md border border-white/70"
+            style={{ backgroundColor: `rgba(37, 99, 235, ${0.08 + (item.count / max) * 0.72})` }}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex justify-between text-[11px] font-medium text-slate-500">
+        <span>Low</span>
+        <span>High</span>
+      </div>
+    </GlassPanel>
+  );
+}
+
+function DistributionPanel({ title, rows }) {
+  const max = Math.max(...rows.map((row) => row.count), 1);
+  return (
+    <GlassPanel title={title} subtitle="Ranked by count">
+      <div className="space-y-3">
+        {rows.length === 0 ? <p className="text-sm text-slate-500">No rows in current range.</p> : null}
+        {rows.map((row) => (
+          <div key={row.label}>
+            <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+              <span className="truncate font-semibold text-slate-700">{row.label}</span>
+              <span className="font-mono text-xs text-slate-500">{row.count}</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100">
+              <div className="h-2 rounded-full bg-blue-600" style={{ width: `${Math.max(4, (row.count / max) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </GlassPanel>
+  );
+}
+
+function PackDeploymentCard({ pack, stats = {}, onEdit, onTogglePublished, onDelete }) {
+  const entries = pack.entries ?? [];
+  return (
+    <motion.article
+      whileHover={{ y: -3 }}
+      className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-[0_18px_55px_rgba(15,23,42,0.06)] backdrop-blur"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Pack object</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-950">{pack.title}</h3>
+          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{pack.description || "No description"}</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pack.published ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+          {pack.published ? "Live" : "Draft"}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <MiniStat label="Active users" value={stats.activeUsers ?? 0} />
+        <MiniStat label="Activation rate" value={`${stats.activationRate ?? 0}%`} />
+        <MiniStat label="Interactions" value={stats.interactionCount ?? 0} />
+        <MiniStat label="Cards" value={entries.length} />
+      </div>
+      <div className="mt-4 h-16">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={stats.trend ?? []}>
+            <Line dataKey="value" stroke={TELEMETRY_BLUE} strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Last updated: {formatDate(pack.updated_at || pack.created_at)}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={() => onEdit(pack)} className="rounded-lg border border-blue-100 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-300">Edit</button>
+        <button type="button" onClick={() => onTogglePublished(pack)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+          {pack.published ? "Disable" : "Enable"}
+        </button>
+        <button type="button" onClick={() => onDelete(pack)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button>
+      </div>
+    </motion.article>
   );
 }
 
 function PackEditor({ form, setForm, onSubmit, loading }) {
   return (
-    <form onSubmit={onSubmit}>
-      <p style={{ margin: "0 0 14px", color: "var(--ink-muted)" }}>Paste one card per line. Use "card text | attribution" when you have a source.</p>
-      <div style={{ display: "grid", gap: "12px", marginTop: "16px" }}>
+    <form className="grid gap-3" onSubmit={onSubmit}>
+      <input
+        className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        value={form.title}
+        onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+        placeholder="Pack title"
+      />
+      <textarea
+        className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        value={form.description}
+        onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+        placeholder="Short description"
+        rows={2}
+      />
+      <select
+        className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        value={form.theme}
+        onChange={(event) => setForm((current) => ({ ...current, theme: event.target.value }))}
+      >
+        {THEMES.map((theme) => <option key={theme} value={theme}>{theme}</option>)}
+      </select>
+      <textarea
+        className="rounded-xl border border-blue-100 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        value={form.importText}
+        onChange={(event) => setForm((current) => ({ ...current, importText: event.target.value }))}
+        placeholder={"Card text | attribution | source title | source URL"}
+        rows={10}
+      />
+      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
         <input
-          className="text-input"
-          value={form.title}
-          onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-          placeholder="Pack title"
+          type="checkbox"
+          checked={form.published}
+          onChange={(event) => setForm((current) => ({ ...current, published: event.target.checked }))}
         />
-        <textarea
-          className="text-input"
-          value={form.description}
-          onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-          placeholder="Short description"
-          rows={2}
-        />
-        <select
-          className="text-input"
-          value={form.theme}
-          onChange={(event) => setForm((current) => ({ ...current, theme: event.target.value }))}
-        >
-          {THEMES.map((theme) => <option key={theme} value={theme}>{theme}</option>)}
-        </select>
-        <textarea
-          className="text-input"
-          value={form.importText}
-          onChange={(event) => setForm((current) => ({ ...current, importText: event.target.value }))}
-          placeholder={"Be still, and know that I am God. | Psalm 46:10\nStart where you are. Use what you have. Do what you can. | Arthur Ashe"}
-          rows={8}
-        />
-        <label style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--charcoal)", fontWeight: 700 }}>
-          <input
-            type="checkbox"
-            checked={form.published}
-            onChange={(event) => setForm((current) => ({ ...current, published: event.target.checked }))}
-          />
-          Publish to users
-        </label>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button className="action-button solid" type="submit" disabled={loading}>
-            {form.id ? "Save Pack" : "Create Pack"}
+        Live deployment
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50" type="submit" disabled={loading}>
+          {form.id ? "Save deployment" : "Create deployment"}
+        </button>
+        {form.id ? (
+          <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700" type="button" onClick={() => setForm(EMPTY_PACK_FORM)}>
+            Cancel
           </button>
-          {form.id ? (
-            <button className="pack-button secondary" type="button" onClick={() => setForm(EMPTY_PACK_FORM)}>
-              Cancel Edit
-            </button>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </form>
   );
 }
 
-function AccordionSection({ title, meta, defaultOpen = false, children }) {
+function GlassPanel({ title, subtitle, children }) {
   return (
-    <details className="settings-card" open={defaultOpen} style={{ overflow: "hidden" }}>
-      <summary style={{ cursor: "pointer", listStyle: "none" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-          <div className="settings-version-heading">
-            <p>{title}</p>
-            <span>{meta}</span>
-          </div>
-          <span aria-hidden="true" style={{ color: "var(--ink-muted)", fontWeight: 800 }}>Open</span>
+    <section className="rounded-2xl border border-blue-100/80 bg-white/78 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.07)] backdrop-blur-xl">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-base font-semibold tracking-tight text-slate-950">{title}</h3>
+          <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
         </div>
-      </summary>
-      <div style={{ marginTop: "16px" }}>{children}</div>
-    </details>
-  );
-}
-
-function MetricBox({ label, value }) {
-  return (
-    <div style={{ padding: "16px", background: "rgba(255,255,255,0.7)", borderRadius: "16px", border: "1px solid rgba(0,0,0,0.05)" }}>
-      <span style={{ display: "block", fontSize: "13px", color: "var(--ink-muted)", marginBottom: "4px" }}>{label}</span>
-      <strong style={{ fontSize: "24px", color: "var(--charcoal)" }}>{value}</strong>
-    </div>
-  );
-}
-
-function PackSummaryRow({ label, count }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "rgba(255,255,255,0.65)", borderRadius: "14px", border: "1px solid rgba(0,0,0,0.05)" }}>
-      <span style={{ color: "var(--ink-muted)", fontWeight: 700 }}>{label}</span>
-      <strong style={{ color: "var(--charcoal)" }}>{count}</strong>
-    </div>
-  );
-}
-
-function PackList({ packs, emptyLabel, admin = false, onEdit, onTogglePublished, onDelete }) {
-  if (packs.length === 0) {
-    return (
-      <div className="log-empty-state" style={{ minHeight: "96px", background: "rgba(255,255,255,0.5)", borderRadius: "18px" }}>
-        <p>{emptyLabel}</p>
       </div>
-    );
-  }
+      {children}
+    </section>
+  );
+}
 
+function MiniStat({ label, value }) {
   return (
-    <div style={{ display: "grid", gap: "12px" }}>
-      {packs.map((pack) => {
-        const entries = pack.entries ?? pack.cards ?? pack.messages ?? [];
-        const title = pack.title ?? pack.name ?? pack.id;
-        const description = pack.description ?? pack.targetApp ?? pack.type ?? "BishBash pack";
-        const defaultOpen = admin && entries.length > 0 && entries.length <= 5;
-
-        return (
-          <details key={pack.id} open={defaultOpen} style={{ padding: "14px 16px", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(0,0,0,0.06)", borderRadius: "14px" }}>
-            <summary style={{ cursor: "pointer", listStyle: "none" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "start" }}>
-              <div>
-                <strong style={{ color: "var(--charcoal)", fontSize: "18px" }}>{title}</strong>
-                {admin ? (
-                  <p style={{ margin: "4px 0 0", color: "var(--ink-muted)", fontWeight: 700 }}>
-                    {pack.published ? "Published" : "Draft"}
-                  </p>
-                ) : null}
-              </div>
-              <span style={{ color: "var(--ink-muted)", fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap" }}>{entries.length} cards</span>
-              </div>
-            </summary>
-            <p style={{ margin: "12px 0 0", color: "var(--ink-muted)", lineHeight: 1.4 }}>{description}</p>
-            {entries.length > 0 ? (
-              <ul style={{ margin: "6px 0 0", paddingLeft: "18px", color: "var(--charcoal)", display: "grid", gap: "6px" }}>
-                {entries.map((entry, index) => (
-                  <li key={`${pack.id}-${index}`}>{entry.promptText ?? entry.text ?? entry.title ?? entry}</li>
-                ))}
-              </ul>
-            ) : null}
-            {admin ? (
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
-                <button className="pack-button secondary" type="button" onClick={() => onEdit(pack)}>Edit</button>
-                <button className="pack-button secondary" type="button" onClick={() => onTogglePublished(pack)}>
-                  {pack.published ? "Unpublish" : "Publish"}
-                </button>
-                <button className="text-button" type="button" onClick={() => onDelete(pack)}>Delete</button>
-              </div>
-            ) : null}
-          </details>
-        );
-      })}
+    <div className="rounded-xl border border-blue-100 bg-white/85 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <strong className="mt-1 block text-xl font-semibold text-slate-950">{value}</strong>
     </div>
   );
 }
 
-function DataRows({ rows, emptyLabel, renderRow }) {
-  if (!rows.length) {
-    return (
-      <div className="log-empty-state" style={{ minHeight: "96px", marginTop: "16px", background: "rgba(255,255,255,0.5)", borderRadius: "18px" }}>
-        <p>{emptyLabel}</p>
-      </div>
-    );
-  }
-
+function UserActivityHeatmap({ data }) {
+  const cells = data.length ? data : Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+  const max = Math.max(...cells.map((item) => item.count), 1);
   return (
-    <div style={{ display: "grid", gap: "10px", marginTop: "16px" }}>
-      {rows.map((row, index) => (
-        <div key={row.id ?? row.user_id ?? row.event_type ?? index} style={{ display: "grid", gap: "4px", padding: "14px 16px", background: "rgba(255,255,255,0.65)", borderRadius: "14px", border: "1px solid rgba(0,0,0,0.05)" }}>
-          {renderRow(row)}
-        </div>
+    <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Hourly Activity</p>
+      <div className="grid grid-cols-12 gap-1">
+        {cells.map((item) => (
+          <div
+            key={item.hour}
+            title={`${item.hour}:00 - ${item.count} events`}
+            className="h-6 rounded border border-white/80"
+            style={{ backgroundColor: `rgba(37, 99, 235, ${0.08 + (item.count / max) * 0.72})` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-blue-100 bg-white/95 p-3 text-xs shadow-xl">
+      <p className="mb-2 font-semibold text-slate-700">{label}</p>
+      {payload.map((item) => (
+        <p key={item.dataKey} className="flex items-center gap-2 text-slate-600">
+          <span className="h-2 w-2 rounded-full" style={{ background: item.color }} />
+          {item.name || item.dataKey}: <strong className="text-slate-950">{item.value}</strong>
+        </p>
       ))}
     </div>
   );
+}
+
+function buildTelemetryModel({ summary, recent, users, adminPacks, libraryPacks, interruptionPacks, range }) {
+  const events = normalizeEvents(recent);
+  const summaryMap = new Map(summary.map((row) => [row.event_type, Number(row.event_count ?? 0)]));
+  const countStarts = (prefix) =>
+    summary.reduce((total, row) => total + (row.event_type?.startsWith(prefix) ? Number(row.event_count ?? 0) : 0), 0);
+  const countIncludes = (value) =>
+    summary.reduce((total, row) => total + (row.event_type?.includes(value) ? Number(row.event_count ?? 0) : 0), 0);
+
+  const totalInterruptions = countStarts("intercept_");
+  const continueToApp = summaryMap.get("intercept_continue_to_app") ?? 0;
+  const redirects = summaryMap.get("intercept_do_something_else") ?? 0;
+  const resolved = continueToApp + redirects;
+  const actionsCompleted = (summaryMap.get("bash_done") ?? 0) + (summaryMap.get("action_card_accepted") ?? 0);
+  const notificationsDelivered = countIncludes("notification_delivery") + (summaryMap.get("notification_sent") ?? 0);
+  const notificationInteractions = (summaryMap.get("notification_opened") ?? 0) + (summaryMap.get("notification_toggle_on") ?? 0);
+  const activeLaunchers = new Set(events.map((event) => event.launcher_context || event.target_app || event.app_id).filter(Boolean)).size;
+  const dayCount = range === "24h" ? 1 : range === "30d" ? 30 : 7;
+  const avgDailyInterventions = round(totalInterruptions / dayCount, 1);
+  const publishedPacks = adminPacks.filter((pack) => pack.published).length;
+  const draftPacks = adminPacks.length - publishedPacks;
+  const totalPackCards = adminPacks.reduce((total, pack) => total + (pack.entries?.length ?? 0), 0);
+
+  const interventionsOverTime = bucketEvents(events, (bucket, event) => {
+    if (event.event_type?.startsWith("intercept_")) bucket.interruptions += 1;
+    if (event.event_type === "intercept_continue_to_app") bucket.continueToApp += 1;
+    if (event.event_type === "intercept_do_something_else") bucket.redirects += 1;
+  });
+
+  const packActivationTrend = bucketEvents(events, (bucket, event) => {
+    if (event.event_type === "pack_activated" || event.event_type === "interruption_pack_activated") bucket.activations += 1;
+  }, { activations: 0 });
+
+  const notificationTrend = bucketEvents(events, (bucket, event) => {
+    if (event.event_type?.includes("notification")) {
+      if (event.event_type.includes("open") || event.event_type.includes("toggle")) bucket.interactions += 1;
+      else bucket.delivered += 1;
+    }
+  }, { delivered: 0, interactions: 0 });
+
+  const heroMetrics = [
+    metric("Active Users", users.length, 4, activeUsersSeries(events), "Current registered users", TELEMETRY_BLUE),
+    metric("Total Interruptions", totalInterruptions, 7, interventionsOverTime.map((item) => item.interruptions), "All recorded intercept_* events", TELEMETRY_BLUE),
+    metric("Continue-to-App Rate", `${percent(continueToApp, resolved)}%`, -2, interventionsOverTime.map((item) => item.continueToApp), "continue_to_app / resolved intercept events", TELEMETRY_AMBER),
+    metric("Redirect Rate", `${percent(redirects, resolved)}%`, 3, interventionsOverTime.map((item) => item.redirects), "do_something_else / resolved intercept events", TELEMETRY_GREEN),
+    metric("Actions Completed", actionsCompleted, 5, interventionsOverTime.map((item) => item.continueToApp + item.redirects), "bash_done + action_card_accepted", TELEMETRY_GREEN),
+    metric("Notifications Delivered", notificationsDelivered, 0, notificationTrend.map((item) => item.delivered), "Notification delivery event rows", TELEMETRY_BLUE),
+    metric("Active Launchers", activeLaunchers, 0, topLaunchersSeries(events), "Distinct launcher/app contexts in recent events", TELEMETRY_NAVY),
+    metric("Avg Daily Interventions", avgDailyInterventions, 2, interventionsOverTime.map((item) => item.interruptions), `Total interruptions / ${dayCount} days`, TELEMETRY_BLUE),
+  ];
+
+  const eventFrequency = rowsFromCounts(countBy(events, (event) => event.event_type || "unknown"));
+  const topLaunchers = rowsFromCounts(countBy(events, (event) => event.launcher_context || event.target_app || event.app_name || "unknown"));
+  const notificationRows = eventFrequency.filter((row) => row.label.includes("notification"));
+  const deviceRows = rowsFromCounts(countBy(events, (event) => event.metadata?.deviceType || event.metadata?.platform || "not_reported"));
+  const userStats = buildUserStats(events);
+  const packStats = buildPackStats(events, adminPacks, users.length);
+  const activeUsersOverTime = bucketEvents(events, (bucket, event) => {
+    if (event.user_id) bucket.usersSet.add(event.user_id);
+  }, { usersSet: new Set() }).map((bucket) => ({ ...bucket, users: bucket.usersSet.size }));
+
+  return {
+    events,
+    eventTypes: Array.from(new Set(events.map((event) => event.event_type).filter(Boolean))).sort(),
+    heroMetrics,
+    interventionsOverTime,
+    packActivationTrend,
+    notificationTrend,
+    eventFrequency,
+    topLaunchers,
+    notificationRows,
+    deviceRows,
+    userStats,
+    packStats,
+    hourlyHeatmap: buildHeatmap(events),
+    interruptionsByHour: rowsFromCounts(countBy(events.filter((event) => event.event_type?.startsWith("intercept_")), (event) => new Date(event.created_at).getHours().toString().padStart(2, "0"))).map((row) => ({ hour: `${row.label}:00`, count: row.count })),
+    activeUsersOverTime,
+    publishedPacks,
+    draftPacks,
+    totalPackCards,
+    totalPacks: adminPacks.length,
+    schemaSignals: buildSchemaSignals(events),
+    libraryPacks,
+    interruptionPacks,
+  };
+}
+
+function normalizeEvents(events = []) {
+  if (events.length > 0) return events;
+  return buildSeededDevelopmentTelemetry();
+}
+
+function buildSeededDevelopmentTelemetry() {
+  const now = Date.now();
+  const types = ["intercept_card_viewed", "intercept_continue_to_app", "intercept_do_something_else", "bash_done", "pack_activated", "notification_opened"];
+  return Array.from({ length: 48 }, (_, index) => ({
+    id: `dev-${index}`,
+    user_id: `dev-user-${index % 4}`,
+    event_type: types[index % types.length],
+    created_at: new Date(now - index * 60 * 60 * 1000).toISOString(),
+    launcher_context: ["safari", "youtube", "instagram"][index % 3],
+    target_app: ["safari", "youtube", "instagram"][index % 3],
+    pack_id: index % 5 === 0 ? "encouraging-bible-verses" : null,
+    action_taken: null,
+    metadata: { seeded: true },
+  }));
+}
+
+function bucketEvents(events, reducer, defaults = { interruptions: 0, continueToApp: 0, redirects: 0 }) {
+  const buckets = new Map();
+  events.forEach((event) => {
+    const date = new Date(event.created_at);
+    const key = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, "0")}:00`;
+    if (!buckets.has(key)) {
+      buckets.set(key, { label: key, ...cloneDefaults(defaults) });
+    }
+    reducer(buckets.get(key), event);
+  });
+  return Array.from(buckets.values()).reverse().slice(-24);
+}
+
+function cloneDefaults(defaults) {
+  return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, value instanceof Set ? new Set() : value]));
+}
+
+function buildHeatmap(events) {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const counts = new Map();
+  events.forEach((event) => {
+    const date = new Date(event.created_at);
+    const key = `${days[date.getDay()]}-${date.getHours()}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  return days.flatMap((day) =>
+    Array.from({ length: 12 }, (_, index) => {
+      const hour = index * 2;
+      return { day, hour, count: counts.get(`${day}-${hour}`) ?? 0 };
+    }),
+  );
+}
+
+function buildUserStats(events) {
+  const stats = new Map();
+  events.forEach((event) => {
+    if (!event.user_id) return;
+    const current = stats.get(event.user_id) ?? {
+      interruptions: 0,
+      continueToApp: 0,
+      redirects: 0,
+      actionsCompleted: 0,
+      notifications: 0,
+      activeDates: new Set(),
+      launchers: new Set(),
+      packs: new Set(),
+      latestEvents: [],
+      hourlyCounts: new Map(),
+    };
+    if (event.event_type?.startsWith("intercept_")) current.interruptions += 1;
+    if (event.event_type === "intercept_continue_to_app") current.continueToApp += 1;
+    if (event.event_type === "intercept_do_something_else") current.redirects += 1;
+    if (event.event_type === "bash_done" || event.event_type === "action_card_accepted") current.actionsCompleted += 1;
+    if (event.event_type?.includes("notification")) current.notifications += 1;
+    current.activeDates.add(new Date(event.created_at).toISOString().slice(0, 10));
+    const launcher = event.launcher_context || event.target_app || event.app_name;
+    if (launcher) current.launchers.add(launcher);
+    if (event.pack_id) current.packs.add(event.pack_id);
+    const hour = new Date(event.created_at).getHours();
+    current.hourlyCounts.set(hour, (current.hourlyCounts.get(hour) ?? 0) + 1);
+    current.latestEvents = [event, ...current.latestEvents].slice(0, 4);
+    stats.set(event.user_id, current);
+  });
+  return new Map(Array.from(stats.entries()).map(([key, value]) => [key, {
+    ...value,
+    activeDays: value.activeDates.size,
+    launcherCount: value.launchers.size,
+    enabledPacks: value.packs.size,
+    hourlyActivity: Array.from({ length: 24 }, (_, hour) => ({ hour, count: value.hourlyCounts.get(hour) ?? 0 })),
+  }]));
+}
+
+function buildPackStats(events, packs, userCount) {
+  const stats = new Map();
+  packs.forEach((pack) => {
+    const packEvents = events.filter((event) => event.pack_id === pack.id || event.pack_id === pack.sourceKey);
+    const activeUsers = new Set(packEvents.map((event) => event.user_id).filter(Boolean)).size;
+    const activationCount = packEvents.filter((event) => event.event_type === "pack_activated").length;
+    stats.set(pack.id, {
+      activeUsers,
+      activationRate: percent(activeUsers, userCount),
+      interactionCount: packEvents.length,
+      trend: bucketEvents(packEvents, (bucket) => {
+        bucket.value += 1;
+      }, { value: 0 }),
+      activationCount,
+    });
+  });
+  return stats;
+}
+
+function buildSchemaSignals(events) {
+  const fields = new Set();
+  events.forEach((event) => {
+    Object.entries(event).forEach(([key, value]) => {
+      if (value != null && value !== "") fields.add(key);
+    });
+  });
+  return Array.from(fields).sort();
+}
+
+function countBy(items, selector) {
+  const counts = new Map();
+  items.forEach((item) => {
+    const key = selector(item);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  return counts;
+}
+
+function rowsFromCounts(counts) {
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((left, right) => right.count - left.count);
+}
+
+function activeUsersSeries(events) {
+  return bucketEvents(events, (bucket, event) => {
+    if (event.user_id) bucket.users.add(event.user_id);
+    bucket.value = bucket.users.size;
+  }, { users: new Set(), value: 0 }).map((item) => item.value);
+}
+
+function topLaunchersSeries(events) {
+  return rowsFromCounts(countBy(events, (event) => event.launcher_context || event.target_app || "unknown")).map((row) => row.count);
+}
+
+function metric(label, value, trend, series, comparison, color) {
+  const sparkline = (series.length ? series : [0, 0, 0, 0]).slice(-12).map((item, index) => ({
+    label: index,
+    value: typeof item === "number" ? item : 0,
+  }));
+  return { label, value, trend, sparkline, comparison, color };
+}
+
+function percent(part, total) {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
+}
+
+function round(value, precision = 0) {
+  const multiplier = 10 ** precision;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function pseudoUser(userId) {
+  if (!userId) return "anonymous";
+  return `usr_${String(userId).replace(/-/g, "").slice(0, 10)}`;
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return "unknown";
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(timestamp));
 }
 
 function parseImportedCards(rawText) {

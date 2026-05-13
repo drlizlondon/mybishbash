@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   clearSharedBishBashState,
@@ -84,9 +84,10 @@ import {
 } from "./lib/launcherState";
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
-import HQPanel from "./HQPanel";
 import { EditableLandingPage } from "./LandingPage";
 import { checkForAppUpdate, refreshBishBashAppShell } from "./appUpdate";
+
+const HQPanel = lazy(() => import("./HQPanel"));
 
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
@@ -2143,14 +2144,16 @@ function App() {
 
   if (screen === "hq") {
     return (
-      <HQPanel 
-        isAdmin={isAdmin} 
-        session={session} 
-        libraryPacks={visibleLibraryPacks}
-        interruptionPacks={interruptionPacks}
-        onGlobalPacksChanged={refreshGlobalPacks}
-        onBack={() => navigateTo("/home", { replace: true })} 
-      />
+      <Suspense fallback={<SyncConnectionScreen mode="loading" error={syncError} />}>
+        <HQPanel
+          isAdmin={isAdmin}
+          session={session}
+          libraryPacks={visibleLibraryPacks}
+          interruptionPacks={interruptionPacks}
+          onGlobalPacksChanged={refreshGlobalPacks}
+          onBack={() => navigateTo("/home", { replace: true })}
+        />
+      </Suspense>
     );
   }
 
