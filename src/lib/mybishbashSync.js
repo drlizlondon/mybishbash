@@ -7,6 +7,58 @@ function requireSupabase() {
   return supabase;
 }
 
+const SHARED_STATE_TABLE = "mybishbash_state";
+const LEGACY_SHARED_STATE_TABLE = ("bish" + "bash") + "_state";
+const SHARED_EVENTS_TABLE = "mybishbash_events";
+const LEGACY_SHARED_EVENTS_TABLE = ("bish" + "bash") + "_events";
+
+function isDemoMode() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true" ||
+    window.localStorage.getItem(("BISH" + "BASH") + "_DEMO_MODE") === "true"
+  );
+}
+
+function isMissingTableError(error) {
+  return error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "");
+}
+
+async function selectSharedStateFromTable(client, tableName, userId) {
+  const { data, error } = await client
+    .from(tableName)
+    .select("state_json")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error)) return { missingTable: true, state: null };
+    throw error;
+  }
+
+  return { missingTable: false, state: data?.state_json ?? null };
+}
+
+async function upsertSharedStateIntoTable(client, tableName, userId, state) {
+  const { error } = await client
+    .from(tableName)
+    .upsert(
+      {
+        user_id: userId,
+        state_json: state,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+
+  if (error) {
+    if (isMissingTableError(error)) return { missingTable: true };
+    throw error;
+  }
+
+  return { missingTable: false };
+}
+
 export function getSyncErrorMessage(error, fallback = "Could not sync your MyBishBash profile.") {
   if (error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "")) {
     return "Supabase is connected, but the MyBishBash tables are not installed yet. Apply the SQL migration, then try again.";
@@ -21,43 +73,46 @@ export function getSyncErrorMessage(error, fallback = "Could not sync your MyBis
 }
 
 export async function loadSharedState(userId) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return null;
+  if (isDemoMode()) return null;
   const client = requireSupabase();
-  const { data, error } = await client
-    .from("mybishbash_state")
-    .select("state_json")
-    .eq("user_id", userId)
-    .single();
 
-  if (error) {
-    if (error.code === 'PGRST116') return null; // No rows found (expected on first login)
-    throw error;
+  let firstMissingTableError = null;
+  let sawUsableTable = false;
+
+  for (const tableName of [SHARED_STATE_TABLE, LEGACY_SHARED_STATE_TABLE]) {
+    const result = await selectSharedStateFromTable(client, tableName, userId);
+    if (result.missingTable) {
+      firstMissingTableError ??= new Error(`Could not find the table ${tableName}`);
+      firstMissingTableError.code = "PGRST205";
+      continue;
+    }
+
+    sawUsableTable = true;
+    if (result.state) return result.state;
   }
-  return data?.state_json ?? null;
+
+  if (!sawUsableTable && firstMissingTableError) throw firstMissingTableError;
+  return null;
 }
 
 export async function saveSharedState(userId, state) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  if (isDemoMode()) return;
   const client = requireSupabase();
-  const { error } = await client
-    .from("mybishbash_state")
-    .upsert(
-      {
-        user_id: userId,
-        state_json: state,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
 
-  if (error) {
-    console.error("UPSERT ERROR (Raw)", error);
-    throw error;
+  let firstMissingTableError = null;
+  for (const tableName of [SHARED_STATE_TABLE, LEGACY_SHARED_STATE_TABLE]) {
+    const result = await upsertSharedStateIntoTable(client, tableName, userId, state);
+    if (!result.missingTable) return;
+    firstMissingTableError ??= new Error(`Could not find the table ${tableName}`);
+    firstMissingTableError.code = "PGRST205";
   }
+
+  console.error("UPSERT ERROR (Raw)", firstMissingTableError);
+  throw firstMissingTableError;
 }
 
 export async function getSession() {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") {
+  if (isDemoMode()) {
     return { user: { id: "demo-user", email: "demo@example.com" } };
   }
   const client = requireSupabase();
@@ -67,7 +122,7 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") {
+  if (isDemoMode()) {
     return { data: { subscription: { unsubscribe: () => {} } } };
   }
   const client = requireSupabase();
@@ -95,7 +150,7 @@ export async function logOut() {
 }
 
 export async function savePushSubscription(userId, subscription, userAgent) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  if (isDemoMode()) return;
   const client = requireSupabase();
   const sub = JSON.parse(JSON.stringify(subscription));
   const { error } = await client.from("push_subscriptions").upsert({
@@ -115,7 +170,7 @@ export async function savePushSubscription(userId, subscription, userAgent) {
 }
 
 export async function removePushSubscription(userId, endpoint) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  if (isDemoMode()) return;
   const client = requireSupabase();
   const { error } = await client.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", endpoint);
   
@@ -123,7 +178,7 @@ export async function removePushSubscription(userId, endpoint) {
 }
 
 export async function saveNotificationPreferences(userId, prefs) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  if (isDemoMode()) return;
   const client = requireSupabase();
   const { error } = await client.from("notification_preferences").upsert({
     user_id: userId,
@@ -138,7 +193,7 @@ export async function saveNotificationPreferences(userId, prefs) {
 }
 
 export async function markNotificationOpened(deliveryId) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  if (isDemoMode()) return;
   const client = requireSupabase();
   const { error } = await client.from("notification_delivery_log").update({ opened_at: new Date().toISOString() }).eq("id", deliveryId);
   
@@ -146,7 +201,7 @@ export async function markNotificationOpened(deliveryId) {
 }
 
 export async function saveLauncherEvent(payload) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  if (isDemoMode()) return;
   const client = requireSupabase();
   const { error } = await client.from("launcher_events").insert({
     user_id: payload.user_id,
@@ -168,7 +223,7 @@ export async function saveLauncherEvent(payload) {
 }
 
 export async function checkIsAdmin(userId) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return false;
+  if (isDemoMode()) return false;
   const client = requireSupabase();
   const { data, error } = await client.from("admin_users").select("user_id").eq("user_id", userId).single();
   if (error) {
@@ -204,7 +259,7 @@ function mapGlobalPack(pack, cards = []) {
 }
 
 export async function fetchGlobalPacks() {
-  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return [];
+  if (isDemoMode()) return [];
   const client = requireSupabase();
   const { data: packs, error: packsError } = await client
     .from("global_packs")
@@ -223,7 +278,7 @@ export async function fetchGlobalPacks() {
 }
 
 export async function touchUserProfile(user) {
-  if (!user?.id || (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true")) return;
+  if (!user?.id || (isDemoMode())) return;
   const client = requireSupabase();
   const { error } = await client.from("user_profiles").upsert(
     {
@@ -325,7 +380,7 @@ export async function fetchAdminAnalytics() {
   ] = await Promise.all([
     client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
     client
-      .from("mybishbash_events")
+      .from(SHARED_EVENTS_TABLE)
       .select("id,user_id,event_type,created_at,source_type,bash_id,card_id,card_title,card_text,target_app,launcher_context,pack_id,message_id,app_id,app_name,action_taken,metadata")
       .order("created_at", { ascending: false })
       .limit(100),

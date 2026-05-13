@@ -5,6 +5,7 @@ const EVENT_LOG_KEY = "mybishbash.event-log.v1";
 const USER_ID_KEY = "mybishbash.user-id.v1";
 const OFFLINE_QUEUE_KEY = "mybishbash.offline-event-queue.v1";
 const SUPABASE_EVENTS_TABLE = import.meta.env.VITE_SUPABASE_EVENTS_TABLE || "mybishbash_events";
+const LEGACY_SUPABASE_EVENTS_TABLE = ("bish" + "bash") + "_events";
 const STORAGE_PREFIX = "mybishbash";
 const LEGACY_STORAGE_PREFIX = "bish" + "bash";
 
@@ -28,6 +29,26 @@ function getStorageItem(key) {
 
 function setStorageItem(key, value) {
   window.localStorage.setItem(key, value);
+}
+
+function isMissingTableError(error) {
+  return error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "");
+}
+
+async function insertEventWithFallback(event) {
+  let lastError = null;
+
+  for (const tableName of [SUPABASE_EVENTS_TABLE, LEGACY_SUPABASE_EVENTS_TABLE]) {
+    const { error } = await supabase.from(tableName).insert([event]);
+    if (!error || error.code === "23505") return { error: null };
+    if (isMissingTableError(error)) {
+      lastError = error;
+      continue;
+    }
+    return { error };
+  }
+
+  return { error: lastError };
 }
 
 
@@ -108,7 +129,7 @@ export async function processEventQueue() {
 
     for (const event of queue) {
       const dbEvent = { ...event, user_id: sessionData.session.user.id };
-      const { error } = await supabase.from(SUPABASE_EVENTS_TABLE).insert([dbEvent]);
+      const { error } = await insertEventWithFallback(dbEvent);
 
       if (!error || error.code === "23505") {
         successfulIds.add(event.id);

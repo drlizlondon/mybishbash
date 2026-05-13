@@ -15,6 +15,7 @@ serve(async (req) => {
   );
 
   const publicAppUrl = Deno.env.get("PUBLIC_APP_URL") || "https://drlizlondon.github.io/mybishbash";
+  const sharedStateTableNames = ["mybishbash_state", ("bish" + "bash") + "_state"];
 
   // 1. Fetch enabled users
   const { data: users } = await supabase
@@ -60,7 +61,16 @@ serve(async (req) => {
       if (Math.random() > Math.min(probability, 1)) continue;
     }
 
-    const { data: stateData } = await supabase.from("mybishbash_state").select("state_json").eq("user_id", user.user_id).single();
+    let stateData = null;
+    for (const tableName of sharedStateTableNames) {
+      const { data, error } = await supabase.from(tableName).select("state_json").eq("user_id", user.user_id).maybeSingle();
+      if (error?.code === "PGRST205") continue;
+      if (error) throw error;
+      if (data?.state_json) {
+        stateData = data;
+        break;
+      }
+    }
     if (!stateData?.state_json) continue;
 
     const cards = stateData.state_json.cards || [];
