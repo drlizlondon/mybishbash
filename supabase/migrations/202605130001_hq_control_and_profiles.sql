@@ -123,9 +123,9 @@ create policy "admins can delete global pack cards"
     select 1 from public.admin_users admins where admins.user_id = auth.uid()
   ));
 
-drop policy if exists "admins can read all events" on public.bishbash_events;
+drop policy if exists "admins can read all events" on public.mybishbash_events;
 create policy "admins can read all events"
-  on public.bishbash_events for select to authenticated
+  on public.mybishbash_events for select to authenticated
   using (exists (
     select 1 from public.admin_users admins where admins.user_id = auth.uid()
   ));
@@ -144,8 +144,8 @@ select
   count(distinct events.id)::bigint as event_count,
   count(distinct state.user_id)::bigint as has_cloud_state
 from public.user_profiles profiles
-left join public.bishbash_state state on state.user_id = profiles.user_id
-left join public.bishbash_events events on events.user_id = profiles.user_id
+left join public.mybishbash_state state on state.user_id = profiles.user_id
+left join public.mybishbash_events events on events.user_id = profiles.user_id
 group by profiles.user_id, profiles.email, profiles.signed_up_at, profiles.last_seen_at;
 
 grant select on public.user_summary to authenticated;

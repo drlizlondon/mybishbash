@@ -19,7 +19,7 @@ import {
   fetchAdminGlobalPacks,
   fetchAdminUsers,
   saveAdminGlobalPack,
-} from "./lib/bishbashSync";
+} from "./lib/mybishbashSync";
 import { THEMES } from "./utils";
 
 const EMPTY_PACK_FORM = {
@@ -34,6 +34,7 @@ const EMPTY_PACK_FORM = {
 const NAV_ITEMS = [
   "overview",
   "analytics",
+  "launchers",
   "events",
   "packs",
   "notifications",
@@ -43,7 +44,7 @@ const NAV_ITEMS = [
   "settings",
 ];
 
-const HQ_VIEW_STORAGE_KEY = "bishbash:hq-active-view";
+const HQ_VIEW_STORAGE_KEY = "mybishbash:hq-active-view";
 
 function isValidHQView(view) {
   return NAV_ITEMS.includes(view);
@@ -74,7 +75,7 @@ export default function HQPanel({
   const [activeView, setActiveView] = useState(getInitialHQView);
   const [adminPacks, setAdminPacks] = useState([]);
   const [users, setUsers] = useState([]);
-  const [analytics, setAnalytics] = useState({ summary: [], recent: [] });
+  const [analytics, setAnalytics] = useState({ summary: [], recent: [], launcherEvents: [] });
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [packForm, setPackForm] = useState(EMPTY_PACK_FORM);
@@ -131,13 +132,14 @@ export default function HQPanel({
     () => buildTelemetryModel({
       summary: analytics.summary,
       recent: analytics.recent,
+      launcherEvents: analytics.launcherEvents,
       users,
       adminPacks,
       libraryPacks,
       interruptionPacks,
       range,
     }),
-    [analytics.summary, analytics.recent, users, adminPacks, libraryPacks, interruptionPacks, range],
+    [analytics.summary, analytics.recent, analytics.launcherEvents, users, adminPacks, libraryPacks, interruptionPacks, range],
   );
 
   const filteredEvents = useMemo(() => {
@@ -245,7 +247,7 @@ export default function HQPanel({
     return (
       <div className="min-h-screen bg-slate-950 p-6 text-white">
         <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">BishBash HQ</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">MyBishBash HQ</p>
           <h2 className="mt-3 text-2xl font-semibold">Not authorised</h2>
           <p className="mt-2 text-sm text-slate-300">You must be an admin to view this telemetry surface.</p>
           <button className="mt-6 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white" onClick={onBack}>
@@ -261,7 +263,7 @@ export default function HQPanel({
       <div className="flex min-h-screen">
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-blue-100/80 bg-white/80 px-4 py-5 shadow-[18px_0_50px_rgba(15,23,42,0.04)] backdrop-blur-xl lg:block">
           <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-slate-950 to-blue-950 p-4 text-white shadow-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">BishBash</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">MyBishBash</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">HQ</h1>
             <p className="mt-2 text-xs text-blue-100">Operational telemetry console</p>
           </div>
@@ -301,6 +303,7 @@ export default function HQPanel({
           <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
             {activeView === "overview" ? <OverviewPage telemetry={telemetry} /> : null}
             {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
+            {activeView === "launchers" ? <LaunchersPage telemetry={telemetry} /> : null}
             {activeView === "events" ? (
               <EventsPage
                 events={filteredEvents}
@@ -367,7 +370,7 @@ function TelemetryTopBar({
       <div className="mx-auto flex max-w-7xl flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold tracking-tight text-slate-950">BishBash HQ</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">MyBishBash HQ</h2>
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
               <span className={`h-2 w-2 rounded-full ${loading ? "animate-pulse bg-amber-500" : "bg-emerald-500"}`} />
               {loading ? "Syncing" : "Live telemetry"}
@@ -492,6 +495,77 @@ function AnalyticsPage({ telemetry }) {
             { key: "interactions", color: TELEMETRY_GREEN, name: "Interaction events" },
           ]}
         />
+      </section>
+    </div>
+  );
+}
+
+function LaunchersPage({ telemetry }) {
+  const [launcherFilter, setLauncherFilter] = useState("all");
+  const [identityFilter, setIdentityFilter] = useState("all");
+  const [displayFilter, setDisplayFilter] = useState("all");
+  const launcherIds = Array.from(new Set(telemetry.launcherEvents.map((event) => event.launcher_id).filter(Boolean))).sort();
+  const filtered = telemetry.launcherEvents.filter((event) => {
+    if (launcherFilter !== "all" && event.launcher_id !== launcherFilter) return false;
+    if (identityFilter === "logged-in" && !event.user_id) return false;
+    if (identityFilter === "anonymous" && event.user_id) return false;
+    if (displayFilter === "standalone" && !event.is_standalone) return false;
+    if (displayFilter === "browser" && event.is_standalone) return false;
+    return true;
+  });
+  const stats = buildLauncherStats(filtered);
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Launcher Analytics"
+        subtitle="Objective fake launcher usage, install interest, and interruption outcomes."
+      />
+      <div className="grid gap-2 md:grid-cols-3">
+        <select value={launcherFilter} onChange={(event) => setLauncherFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="all">All launchers</option>
+          {launcherIds.map((id) => <option key={id} value={id}>{id}</option>)}
+        </select>
+        <select value={identityFilter} onChange={(event) => setIdentityFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="all">Logged-in and anonymous</option>
+          <option value="logged-in">Logged-in only</option>
+          <option value="anonymous">Anonymous only</option>
+        </select>
+        <select value={displayFilter} onChange={(event) => setDisplayFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="all">Standalone and browser</option>
+          <option value="standalone">Standalone only</option>
+          <option value="browser">Browser only</option>
+        </select>
+      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MiniStat label="Fake launcher opens" value={stats.opens} />
+        <MiniStat label="Install page views" value={stats.installPageViews} />
+        <MiniStat label="Continue to app" value={stats.continueToApp} />
+        <MiniStat label="Do something else" value={stats.doSomethingElse} />
+        <MiniStat label="Interruption conversion" value={`${percent(stats.doSomethingElse, stats.opens)}%`} />
+        <MiniStat label="Continue rate" value={`${percent(stats.continueToApp, stats.opens)}%`} />
+        <MiniStat label="Unique users/devices" value={stats.uniqueActors} />
+        <MiniStat label="Install CTA clicks" value={stats.installCtaClicks} />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-3">
+        <DistributionPanel title="Opens By Launcher" rows={stats.opensByLauncher} />
+        <DistributionPanel title="Active Users By Launcher" rows={stats.activeUsersByLauncher} />
+        <DistributionPanel title="Install Page Views" rows={stats.installViewsByLauncher} />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <DistributionPanel title="Most Used Launcher Versions" rows={stats.mostUsedVersions} />
+        <GlassPanel title="Recent Launcher Events" subtitle={`${filtered.length} rows in current filters`}>
+          <div className="max-h-[460px] overflow-auto rounded-xl border border-slate-200">
+            {filtered.slice(0, 100).map((event) => (
+              <div key={event.id} className="grid gap-2 border-b border-slate-100 px-3 py-2 text-xs md:grid-cols-[120px_1fr_120px_120px]">
+                <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
+                <span className="font-semibold text-slate-800">{event.event_type}</span>
+                <span className="text-slate-600">{event.launcher_id}</span>
+                <span className="text-slate-600">{event.app_display_mode || "unknown"}</span>
+              </div>
+            ))}
+          </div>
+        </GlassPanel>
       </section>
     </div>
   );
@@ -995,8 +1069,9 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
-function buildTelemetryModel({ summary, recent, users, adminPacks, libraryPacks, interruptionPacks, range }) {
+function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, libraryPacks, interruptionPacks, range }) {
   const events = normalizeEvents(recent);
+  const launcherEvents = normalizeLauncherEvents(rawLauncherEvents);
   const summaryMap = new Map(summary.map((row) => [row.event_type, Number(row.event_count ?? 0)]));
   const countStarts = (prefix) =>
     summary.reduce((total, row) => total + (row.event_type?.startsWith(prefix) ? Number(row.event_count ?? 0) : 0), 0);
@@ -1057,6 +1132,8 @@ function buildTelemetryModel({ summary, recent, users, adminPacks, libraryPacks,
 
   return {
     events,
+    launcherEvents,
+    launcherStats: buildLauncherStats(launcherEvents),
     eventTypes: Array.from(new Set(events.map((event) => event.event_type).filter(Boolean))).sort(),
     heroMetrics,
     interventionsOverTime,
@@ -1084,6 +1161,43 @@ function buildTelemetryModel({ summary, recent, users, adminPacks, libraryPacks,
 function normalizeEvents(events = []) {
   if (events.length > 0) return events;
   return buildSeededDevelopmentTelemetry();
+}
+
+function normalizeLauncherEvents(events = []) {
+  return Array.isArray(events) ? events : [];
+}
+
+function buildLauncherStats(events) {
+  const opens = events.filter((event) => event.event_type === "fake_launcher_opened").length;
+  const installPageViews = events.filter((event) => event.event_type === "fake_launcher_install_page_viewed").length;
+  const installCtaClicks = events.filter((event) => event.event_type === "fake_launcher_install_cta_clicked").length;
+  const continueToApp = events.filter((event) => event.event_type === "intercept_continue_to_app").length;
+  const doSomethingElse = events.filter((event) => event.event_type === "intercept_do_something_else").length;
+  const actorIds = new Set(events.map((event) => event.user_id || event.anonymous_device_id).filter(Boolean));
+
+  const activeUsersByLauncher = rowsFromCounts(countBy(events, (event) => {
+    if (!event.launcher_id) return "unknown";
+    return `${event.launcher_id}:${event.user_id || event.anonymous_device_id || event.session_id || event.id}`;
+  })).reduce((rows, row) => {
+    const launcherId = row.label.split(":")[0] || "unknown";
+    const existing = rows.find((item) => item.label === launcherId);
+    if (existing) existing.count += 1;
+    else rows.push({ label: launcherId, count: 1 });
+    return rows;
+  }, []).sort((left, right) => right.count - left.count);
+
+  return {
+    opens,
+    installPageViews,
+    installCtaClicks,
+    continueToApp,
+    doSomethingElse,
+    uniqueActors: actorIds.size,
+    opensByLauncher: rowsFromCounts(countBy(events.filter((event) => event.event_type === "fake_launcher_opened"), (event) => event.launcher_id || "unknown")),
+    activeUsersByLauncher,
+    installViewsByLauncher: rowsFromCounts(countBy(events.filter((event) => event.event_type === "fake_launcher_install_page_viewed"), (event) => event.launcher_id || "unknown")),
+    mostUsedVersions: rowsFromCounts(countBy(events, (event) => event.launcher_name || event.launcher_id || "unknown")),
+  };
 }
 
 function buildSeededDevelopmentTelemetry() {

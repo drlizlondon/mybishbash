@@ -1,7 +1,8 @@
 import { DEFAULT_HOME_SCREEN_VERSIONS } from "../storage";
+import { LAUNCHER_IDS, getLauncherConfig, isKnownLauncher } from "./launcherRegistry";
 
 export const NORMAL_LAUNCHER_CONTEXT = "normal";
-export const INTERRUPTION_LAUNCHER_CONTEXTS = ["safari", "youtube", "instagram"];
+export const INTERRUPTION_LAUNCHER_CONTEXTS = LAUNCHER_IDS;
 export const INTERRUPTION_CARD_COOLDOWN_MS = 10 * 60 * 1000;
 
 export const DEFAULT_INTERRUPTION_PACKS = {
@@ -49,10 +50,9 @@ export const DEFAULT_INTERRUPTION_PACKS = {
 
 export function getVersionOpenHref(version) {
   if (!version) return "";
-  if (version.id === "safari" || version.type === "safari") {
-    return version.manualUrl || "x-safari-https://www.google.com";
-  }
-  return version.appUrl || version.manualUrl || "";
+  const launcher = getLauncherConfig(version.id) ?? getLauncherConfig(version.type);
+  if (launcher?.id === "safari") return version.manualUrl || launcher.webFallbackUrl;
+  return version.appUrl || version.nativeAppUrl || version.manualUrl || version.webFallbackUrl || "";
 }
 
 export function openSafariEscape() {
@@ -60,7 +60,7 @@ export function openSafariEscape() {
 }
 
 export function isInterruptionLauncherContext(value) {
-  return INTERRUPTION_LAUNCHER_CONTEXTS.includes(value);
+  return isKnownLauncher(value);
 }
 
 export function getLauncherContextFromRoute(route) {

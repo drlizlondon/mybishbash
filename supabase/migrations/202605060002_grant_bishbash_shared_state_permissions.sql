@@ -5,5 +5,5 @@ grant select, insert
   to anon;
 
 grant select, insert, update
-  on public.bishbash_state
+  on public.mybishbash_state
   to anon;

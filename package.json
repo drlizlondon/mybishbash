@@ -1,11 +1,13 @@
 {
-  "name": "bishbash",
+  "name": "mybishbash",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/generate-launchers.mjs",
     "dev": "vite",
     "build": "vite build",
+    "test:launchers": "node scripts/validate-launchers.mjs",
     "preview": "vite preview",
     "cap:sync": "npx cap sync",
     "cap:open:ios": "npx cap open ios",

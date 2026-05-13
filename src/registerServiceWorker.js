@@ -24,7 +24,7 @@ export function registerServiceWorker() {
     }
 
     navigator.serviceWorker
-      .register("/bishbash/service-worker.js", { scope: "/bishbash/" })
+      .register("/mybishbash/service-worker.js", { scope: "/mybishbash/" })
       .then((registration) => {
         console.log("[NOTIFICATIONS] Service worker registered", registration.scope);
         registration.update().catch(() => {});

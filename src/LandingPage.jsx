@@ -24,7 +24,7 @@ function Header() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <a className="site-logo" href="/" onClick={stopEditNavigation} aria-label="BishBash home">
+        <a className="site-logo" href="/" onClick={stopEditNavigation} aria-label="MyBishBash home">
           <BrandMark />
           <EditableText path="brand.name" />
         </a>
@@ -47,7 +47,7 @@ function AppPreview() {
   const { content } = useContentEdit();
 
   return (
-    <div className="app-preview-wrap" aria-label="BishBash app homepage preview">
+    <div className="app-preview-wrap" aria-label="MyBishBash app homepage preview">
       <div className="app-screen">
         <div className="app-status">
           <span>9:41</span>
@@ -153,7 +153,7 @@ function ProofStrip() {
   const { content } = useContentEdit();
 
   return (
-    <section className="proof-strip" aria-label="BishBash highlights">
+    <section className="proof-strip" aria-label="MyBishBash highlights">
       <div className="container proof-grid">
         {content.proof.map((item, index) => (
           <article className="proof-item" key={item.title}>

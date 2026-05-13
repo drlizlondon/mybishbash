@@ -3,10 +3,10 @@
   "short_name": "YouTube",
   "id": "https://drlizlondon.github.io/mybishbash/intercept/youtube",
   "start_url": "https://drlizlondon.github.io/mybishbash/intercept/youtube",
+  "scope": "https://drlizlondon.github.io/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
-  "scope": "https://drlizlondon.github.io/mybishbash/",
   "icons": [
     {
       "src": "/mybishbash/icons/youtube-cover.png",

@@ -5,7 +5,7 @@ export default function Onboarding({ onCreate }) {
     {
       id: "future-self",
       message: "Your earlier self left a quiet note for right now.",
-      support: "BishBash lets a clearer version of you cut through the noise.",
+      support: "MyBishBash lets a clearer version of you cut through the noise.",
     },
     {
       id: "tiny-actions",
@@ -15,12 +15,12 @@ export default function Onboarding({ onCreate }) {
     {
       id: "one-at-a-time",
       message: "One gentle interruption. One moment of attention.",
-      support: "Every time BishBash opens, it shows one soft message instead of a pile.",
+      support: "Every time MyBishBash opens, it shows one soft message instead of a pile.",
     },
     {
       id: "private-ritual",
       message: "Private, synced, and just for future-you.",
-      support: "Use your sync code to connect every launcher, browser, and device to the same BishBash.",
+      support: "Use your sync code to connect every launcher, browser, and device to the same MyBishBash.",
     },
   ];
   const [activeSlide, setActiveSlide] = useState(0);
@@ -56,7 +56,7 @@ export default function Onboarding({ onCreate }) {
           <span className="onboarding-heart" aria-hidden="true">
             <HeartGlyph />
           </span>
-          <h1>BishBash</h1>
+          <h1>MyBishBash</h1>
           <p>private little messages from your earlier self</p>
         </header>
 
@@ -121,7 +121,7 @@ export default function Onboarding({ onCreate }) {
 
         <div className="onboarding-actions">
           <button type="button" className="save-button" onClick={onCreate}>
-            Make your first BishBash
+            Make your first MyBishBash
           </button>
         </div>
       </div>

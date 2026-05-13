@@ -1,22 +1,22 @@
 {
-  "name": "BishBash",
-  "short_name": "BishBash",
-  "id": "https://drlizlondon.github.io/bishbash/",
+  "name": "MyBishBash",
+  "short_name": "MyBishBash",
+  "id": "https://drlizlondon.github.io/mybishbash/",
   "description": "Private little reminders from yourself.",
-  "start_url": "https://drlizlondon.github.io/bishbash/home",
-  "scope": "https://drlizlondon.github.io/bishbash/",
+  "start_url": "https://drlizlondon.github.io/mybishbash/home",
+  "scope": "https://drlizlondon.github.io/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/bishbash/icons/bishbash-cover.png",
+      "src": "/mybishbash/icons/mybishbash-cover.png",
       "sizes": "1254x1254",
       "type": "image/png"
     },
     {
-      "src": "/bishbash/icons/bishbash-cover.png",
+      "src": "/mybishbash/icons/mybishbash-cover.png",
       "sizes": "1254x1254",
       "type": "image/png",
       "purpose": "any maskable"

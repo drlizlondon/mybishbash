@@ -2,7 +2,7 @@
 // The edit panel can also copy the current JSON as a manual fallback.
 export const landingContent = {
   "brand": {
-    "name": "BishBash"
+    "name": "MyBishBash"
   },
   "nav": [
     "How it works",
@@ -12,7 +12,7 @@ export const landingContent = {
     "Blog"
   ],
   "ctas": {
-    "primary": "Get BishBash",
+    "primary": "Get MyBishBash",
     "secondary": "See how it works"
   },
   "hero": {
@@ -20,7 +20,7 @@ export const landingContent = {
       "Your phone",
       "shapes your",
       "attention.",
-      "BishBash helps",
+      "MyBishBash helps",
       "shape it intentionally."
     ],
     "copy": [
@@ -76,7 +76,7 @@ export const landingContent = {
       "copy": "See your progress and reclaim your time."
     }
   ],
-  "statement": "BishBash won’t take your phone away. It helps you use it on purpose.",
+  "statement": "MyBishBash won’t take your phone away. It helps you use it on purpose.",
   "footer": {
     "links": [
       "Privacy",

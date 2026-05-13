@@ -2,8 +2,8 @@ import { webkit } from "playwright";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const baseUrl = "http://127.0.0.1:4173/bishbash/";
-const shotsDir = "/Users/lizzie/bishbash/screenshots";
+const baseUrl = "http://127.0.0.1:4173/mybishbash/";
+const shotsDir = "/Users/lizzie/mybishbash/screenshots";
 
 function getTodayKey(date, timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -22,12 +22,12 @@ const todayKey = getTodayKey(now, "Europe/London");
 const allWindows = ["morning", "day", "evening", "night"];
 
 const homeScreenVersions = {
-  bishbash: {
-    id: "bishbash",
-    name: "BishBash",
-    installPath: "/bishbash/install/bishbash/",
+  mybishbash: {
+    id: "mybishbash",
+    name: "MyBishBash",
+    installPath: "/mybishbash/install/mybishbash/",
     launchPath: "/home",
-    iconSrc: "/bishbash/icons/bishbash-cover.png",
+    iconSrc: "/mybishbash/icons/mybishbash-cover.png",
     realAppLabel: "",
     appUrl: "",
     manualUrl: "",
@@ -38,9 +38,9 @@ const homeScreenVersions = {
   safari: {
     id: "safari",
     name: "Safari",
-    installPath: "/bishbash/install/safari/",
+    installPath: "/mybishbash/install/safari/",
     launchPath: "/intercept/safari",
-    iconSrc: "/bishbash/icons/apple-touch-icon.png",
+    iconSrc: "/mybishbash/icons/apple-touch-icon.png",
     realAppLabel: "Safari",
     appUrl: "",
     manualUrl: "x-safari-https://www.google.com",
@@ -51,9 +51,9 @@ const homeScreenVersions = {
   youtube: {
     id: "youtube",
     name: "YouTube",
-    installPath: "/bishbash/install/youtube/",
+    installPath: "/mybishbash/install/youtube/",
     launchPath: "/intercept/youtube",
-    iconSrc: "/bishbash/icons/youtube-cover.png",
+    iconSrc: "/mybishbash/icons/youtube-cover.png",
     realAppLabel: "YouTube",
     appUrl: "youtube://",
     manualUrl: "https://www.youtube.com",
@@ -64,9 +64,9 @@ const homeScreenVersions = {
   instagram: {
     id: "instagram",
     name: "Instagram",
-    installPath: "/bishbash/install/instagram/",
+    installPath: "/mybishbash/install/instagram/",
     launchPath: "/intercept/instagram",
-    iconSrc: "/bishbash/icons/instagram-cover.jpg",
+    iconSrc: "/mybishbash/icons/instagram-cover.jpg",
     realAppLabel: "Instagram",
     appUrl: "instagram://app",
     manualUrl: "https://www.instagram.com",
@@ -273,32 +273,32 @@ const demoCards = [
 ];
 
 const storageForReadyApp = {
-  "bishbash.cards.v1": demoCards.map((card) => ({ ...card, timingWindows: allWindows })),
-  "bishbash.setup-complete.v1": "true",
-  "bishbash.mood.v1": "Soft Bloom",
-  "bishbash.profile.v1": { name: "Liz", timezone: "Europe/London" },
-  "bishbash.home-screen-versions.v1": homeScreenVersions,
-  "bishbash.home-screen-selected.v1": "safari",
-  "bishbash.card-packs.v1": cardPacks,
-  "bishbash.global-interruption-mode.v1": "true",
-  "BISHBASH_DEMO_MODE": "true",
+  "mybishbash.cards.v1": demoCards.map((card) => ({ ...card, timingWindows: allWindows })),
+  "mybishbash.setup-complete.v1": "true",
+  "mybishbash.mood.v1": "Soft Bloom",
+  "mybishbash.profile.v1": { name: "Liz", timezone: "Europe/London" },
+  "mybishbash.home-screen-versions.v1": homeScreenVersions,
+  "mybishbash.home-screen-selected.v1": "safari",
+  "mybishbash.card-packs.v1": cardPacks,
+  "mybishbash.global-interruption-mode.v1": "true",
+  "MYBISHBASH_DEMO_MODE": "true",
 };
 
 const storageForOnboarding = {
-  "bishbash.cards.v1": [],
-  "bishbash.setup-complete.v1": "false",
-  "bishbash.mood.v1": "Soft Bloom",
-  "bishbash.profile.v1": { name: "", timezone: "Europe/London" },
-  "bishbash.home-screen-versions.v1": homeScreenVersions,
-  "bishbash.home-screen-selected.v1": "safari",
-  "bishbash.card-packs.v1": cardPacks,
-  "bishbash.global-interruption-mode.v1": "true",
-  "BISHBASH_DEMO_MODE": "true",
+  "mybishbash.cards.v1": [],
+  "mybishbash.setup-complete.v1": "false",
+  "mybishbash.mood.v1": "Soft Bloom",
+  "mybishbash.profile.v1": { name: "", timezone: "Europe/London" },
+  "mybishbash.home-screen-versions.v1": homeScreenVersions,
+  "mybishbash.home-screen-selected.v1": "safari",
+  "mybishbash.card-packs.v1": cardPacks,
+  "mybishbash.global-interruption-mode.v1": "true",
+  "MYBISHBASH_DEMO_MODE": "true",
 };
 
 const storageForEmpty = {
   ...storageForReadyApp,
-  "bishbash.cards.v1": demoCards.map((card) => ({
+  "mybishbash.cards.v1": demoCards.map((card) => ({
     ...card,
     timingWindows: allWindows,
     paused: !card.sourcePackId,
@@ -456,7 +456,7 @@ async function main() {
 
     {
       const { context, page } = await createPage(browser);
-      await page.goto("http://127.0.0.1:4173/bishbash/install/safari/", {
+      await page.goto("http://127.0.0.1:4173/mybishbash/install/safari/", {
         waitUntil: "load",
       });
       await page.waitForTimeout(500);
@@ -466,7 +466,7 @@ async function main() {
 
     {
       const { context, page } = await createPage(browser);
-      await page.goto("http://127.0.0.1:4173/bishbash/install/youtube/", {
+      await page.goto("http://127.0.0.1:4173/mybishbash/install/youtube/", {
         waitUntil: "load",
       });
       await page.waitForTimeout(500);
@@ -476,7 +476,7 @@ async function main() {
 
     {
       const { context, page } = await createPage(browser);
-      await page.goto("http://127.0.0.1:4173/bishbash/install/instagram/", {
+      await page.goto("http://127.0.0.1:4173/mybishbash/install/instagram/", {
         waitUntil: "load",
       });
       await page.waitForTimeout(500);

@@ -1,9 +1,9 @@
 {
-  "appId": "com.drlizlondon.bishbash",
-  "appName": "BishBash",
+  "appId": "com.drlizlondon.mybishbash",
+  "appName": "MyBishBash",
   "webDir": "dist",
   "server": {
-    "url": "https://drlizlondon.github.io/bishbash/",
+    "url": "https://drlizlondon.github.io/mybishbash/",
     "cleartext": false
   },
   "ios": {

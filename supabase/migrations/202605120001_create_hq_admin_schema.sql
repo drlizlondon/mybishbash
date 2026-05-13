@@ -134,7 +134,7 @@ select
   user_id,
   min(updated_at) as first_seen_at,
   max(updated_at) as last_seen_at
-from public.bishbash_state
+from public.mybishbash_state
 where user_id is not null
 group by user_id;
 
@@ -143,7 +143,7 @@ create view public.analytics_summary as
 select
   event_type,
   count(*)::bigint as event_count
-from public.bishbash_events
+from public.mybishbash_events
 group by event_type;
 
 grant select on public.user_summary to authenticated;

@@ -1,19 +1,46 @@
-const STORAGE_KEY = "bishbash.cards.v1";
-const SETUP_KEY = "bishbash.setup-complete.v1";
-const MOOD_KEY = "bishbash.mood.v1";
-const PROFILE_KEY = "bishbash.profile.v1";
-const HOME_SCREEN_VERSIONS_KEY = "bishbash.home-screen-versions.v1";
-const HOME_SCREEN_SELECTED_KEY = "bishbash.home-screen-selected.v1";
-const CARD_PACKS_KEY = "bishbash.card-packs.v1";
-const HIDDEN_LIBRARY_PACKS_KEY = "bishbash.hidden-library-packs.v1";
-const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
-const GLOBAL_INTERRUPTION_MODE_KEY = "bishbash.global-interruption-mode.v1";
-const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "bishbash.launcher-behavior-settings.v1";
-const ACTION_CARDS_KEY = "bishbash.action-cards.v1";
-const ACTION_CARD_DEFAULTS_VERSION_KEY = "bishbash.action-card-defaults-version.v1";
-const NOTIFICATIONS_KEY = "bishbash.notifications.v1";
-const NOTIFICATION_SCHEDULE_KEY = "bishbash.notification-schedule.v1";
+import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY } from "./lib/launcherRegistry";
+
+const STORAGE_KEY = "mybishbash.cards.v1";
+const SETUP_KEY = "mybishbash.setup-complete.v1";
+const MOOD_KEY = "mybishbash.mood.v1";
+const PROFILE_KEY = "mybishbash.profile.v1";
+const HOME_SCREEN_VERSIONS_KEY = "mybishbash.home-screen-versions.v1";
+const HOME_SCREEN_SELECTED_KEY = "mybishbash.home-screen-selected.v1";
+const CARD_PACKS_KEY = "mybishbash.card-packs.v1";
+const HIDDEN_LIBRARY_PACKS_KEY = "mybishbash.hidden-library-packs.v1";
+const DISLIKED_PACK_CARD_IDS_KEY = "mybishbash.disliked-pack-card-ids.v1";
+const GLOBAL_INTERRUPTION_MODE_KEY = "mybishbash.global-interruption-mode.v1";
+const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
+const ACTION_CARDS_KEY = "mybishbash.action-cards.v1";
+const ACTION_CARD_DEFAULTS_VERSION_KEY = "mybishbash.action-card-defaults-version.v1";
+const NOTIFICATIONS_KEY = "mybishbash.notifications.v1";
+const NOTIFICATION_SCHEDULE_KEY = "mybishbash.notification-schedule.v1";
 const ACTION_CARD_DEFAULTS_VERSION = "2026-05-13";
+const STORAGE_PREFIX = "mybishbash";
+const LEGACY_STORAGE_PREFIX = "bish" + "bash";
+
+function getLegacyStorageKey(key) {
+  return key.startsWith(`${STORAGE_PREFIX}.`) ? key.replace(`${STORAGE_PREFIX}.`, `${LEGACY_STORAGE_PREFIX}.`) : null;
+}
+
+function getStorageItem(key) {
+  const value = window.localStorage.getItem(key);
+  if (value !== null) return value;
+
+  const legacyKey = getLegacyStorageKey(key);
+  if (!legacyKey) return null;
+
+  const legacyValue = window.localStorage.getItem(legacyKey);
+  if (legacyValue !== null) {
+    window.localStorage.setItem(key, legacyValue);
+  }
+  return legacyValue;
+}
+
+function setStorageItem(key, value) {
+  window.localStorage.setItem(key, value);
+}
+
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
@@ -27,18 +54,19 @@ const SHARED_STORAGE_KEYS = [
   LAUNCHER_BEHAVIOR_SETTINGS_KEY,
   ACTION_CARDS_KEY,
   NOTIFICATIONS_KEY,
-  "bishbash.event-log.v1",
-  "bishbash.offline-event-queue.v1",
-  "bishbash.user-id.v1",
+  "mybishbash.event-log.v1",
+  "mybishbash.offline-event-queue.v1",
+  "mybishbash.user-id.v1",
 ];
+const LEGACY_SHARED_STORAGE_KEYS = SHARED_STORAGE_KEYS.map(getLegacyStorageKey).filter(Boolean);
 
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
-  bishbash: {
-    id: "bishbash",
-    name: "BishBash",
-    installPath: "/bishbash/install/bishbash/",
+  mybishbash: {
+    id: "mybishbash",
+    name: "MyBishBash",
+    installPath: "/mybishbash/install/mybishbash/",
     launchPath: "/home",
-    iconSrc: "/bishbash/icons/bishbash-cover.png",
+    iconSrc: "/mybishbash/icons/mybishbash-cover.png",
     realAppLabel: "",
     appUrl: "",
     manualUrl: "",
@@ -46,52 +74,21 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
     useInterruptionPack: false,
     interruptionPaused: false,
   },
-  safari: {
-    id: "safari",
-    name: "Safari",
-    installPath: "/bishbash/install/safari/",
-    launchPath: "/intercept/safari",
-    iconSrc: "/bishbash/icons/apple-touch-icon.png",
-    realAppLabel: "Safari",
-    appUrl: "",
-    manualUrl: "x-safari-https://www.google.com",
-    interruptionPackId: "",
-    useInterruptionPack: true,
-    interruptionPaused: false,
-  },
-  youtube: {
-    id: "youtube",
-    name: "YouTube",
-    installPath: "/bishbash/install/youtube/",
-    launchPath: "/intercept/youtube",
-    iconSrc: "/bishbash/icons/youtube-cover.png",
-    realAppLabel: "YouTube",
-    appUrl: "youtube://",
-    manualUrl: "https://www.youtube.com",
-    interruptionPackId: "",
-    useInterruptionPack: true,
-    interruptionPaused: false,
-  },
-  instagram: {
-    id: "instagram",
-    name: "Instagram",
-    installPath: "/bishbash/install/instagram/",
-    launchPath: "/intercept/instagram",
-    iconSrc: "/bishbash/icons/instagram-cover.jpg",
-    realAppLabel: "Instagram",
-    appUrl: "instagram://app",
-    manualUrl: "https://www.instagram.com",
-    interruptionPackId: "",
-    useInterruptionPack: true,
-    interruptionPaused: false,
-  },
+  ...Object.fromEntries(FAKE_APP_LAUNCHERS.map((launcher) => [launcher.id, launcher])),
 };
 
 export const DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS = {
-  bishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
-  safari: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
-  youtube: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
-  instagram: { useInterruptionPack: true, interruptionPaused: false, interruptionPackId: "" },
+  mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: "" },
+  ...Object.fromEntries(
+    FAKE_APP_LAUNCHERS.map((launcher) => [
+      launcher.id,
+      {
+        useInterruptionPack: launcher.useInterruptionPack,
+        interruptionPaused: launcher.interruptionPaused,
+        interruptionPackId: launcher.interruptionPackId,
+      },
+    ]),
+  ),
 };
 
 const DEFAULT_ACTION_CARD_TIMESTAMP = "2026-05-10T00:00:00.000Z";
@@ -147,7 +144,7 @@ function safeParse(rawValue) {
 }
 
 export function loadCards() {
-  const stored = safeParse(window.localStorage.getItem(STORAGE_KEY));
+  const stored = safeParse(getStorageItem(STORAGE_KEY));
   if (stored && stored.length > 0) {
     return stored;
   }
@@ -155,28 +152,28 @@ export function loadCards() {
 }
 
 export function saveCards(cards) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+  setStorageItem(STORAGE_KEY, JSON.stringify(cards));
 }
 
 export function loadSetupComplete() {
-  return window.localStorage.getItem(SETUP_KEY) === "true";
+  return getStorageItem(SETUP_KEY) === "true";
 }
 
 export function saveSetupComplete(value) {
-  window.localStorage.setItem(SETUP_KEY, String(value));
+  setStorageItem(SETUP_KEY, String(value));
 }
 
 export function loadMood() {
-  return window.localStorage.getItem(MOOD_KEY) || "Minimal";
+  return getStorageItem(MOOD_KEY) || "Minimal";
 }
 
 export function saveMood(value) {
-  window.localStorage.setItem(MOOD_KEY, value);
+  setStorageItem(MOOD_KEY, value);
 }
 
 export function loadProfile() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(PROFILE_KEY) ?? "{}");
+    const stored = JSON.parse(getStorageItem(PROFILE_KEY) ?? "{}");
     return {
       name: stored?.name ?? "",
       timezone: stored?.timezone ?? "Europe/London",
@@ -190,12 +187,12 @@ export function loadProfile() {
 }
 
 export function saveProfile(value) {
-  window.localStorage.setItem(PROFILE_KEY, JSON.stringify(value));
+  setStorageItem(PROFILE_KEY, JSON.stringify(value));
 }
 
 export function loadLauncherBehaviorSettings() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY));
+    const stored = JSON.parse(getStorageItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY));
     if (stored) {
       const merged = { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS };
       for (const [id, behavior] of Object.entries(stored)) {
@@ -204,7 +201,7 @@ export function loadLauncherBehaviorSettings() {
       return merged;
     }
 
-    const legacyVersions = JSON.parse(window.localStorage.getItem(HOME_SCREEN_VERSIONS_KEY));
+    const legacyVersions = JSON.parse(getStorageItem(HOME_SCREEN_VERSIONS_KEY));
     if (legacyVersions) {
       const migrated = { ...DEFAULT_LAUNCHER_BEHAVIOR_SETTINGS };
       for (const [id, version] of Object.entries(legacyVersions)) {
@@ -224,12 +221,12 @@ export function loadLauncherBehaviorSettings() {
 }
 
 export function saveLauncherBehaviorSettings(value) {
-  window.localStorage.setItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY, JSON.stringify(value));
+  setStorageItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY, JSON.stringify(value));
 }
 
 export function loadHomeScreenVersions() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(HOME_SCREEN_VERSIONS_KEY) ?? "{}");
+    const stored = JSON.parse(getStorageItem(HOME_SCREEN_VERSIONS_KEY) ?? "{}");
 
     return Object.fromEntries(
       Object.entries(DEFAULT_HOME_SCREEN_VERSIONS).map(([id, defaults]) => {
@@ -238,7 +235,7 @@ export function loadHomeScreenVersions() {
           ...(stored?.[id] ?? {}),
         };
 
-        if (id === "bishbash") {
+        if (id === "mybishbash") {
           return [
             id,
             {
@@ -258,34 +255,27 @@ export function loadHomeScreenVersions() {
           ];
         }
 
-        if (id === "safari") {
-          return [
-            id,
-            {
-              ...merged,
-              id: defaults.id,
-              name: defaults.name,
-              installPath: defaults.installPath,
-              launchPath: defaults.launchPath,
-              iconSrc: defaults.iconSrc,
-              appUrl: "",
-              manualUrl: "x-safari-https://www.google.com",
-              useInterruptionPack:
-                typeof merged.useInterruptionPack === "boolean" ? merged.useInterruptionPack : defaults.useInterruptionPack,
-              interruptionPaused: Boolean(merged.interruptionPaused),
-            },
-          ];
-        }
+        const registryLauncher = LAUNCHER_REGISTRY[id];
 
         return [
           id,
           {
             ...merged,
             id: defaults.id,
-            name: defaults.name,
-            installPath: defaults.installPath,
-            launchPath: defaults.launchPath,
-            iconSrc: defaults.iconSrc,
+            name: registryLauncher?.displayName ?? defaults.name,
+            displayName: registryLauncher?.displayName ?? defaults.displayName ?? defaults.name,
+            category: registryLauncher?.category ?? defaults.category,
+            installPath: registryLauncher?.installPath ?? defaults.installPath,
+            launchPath: registryLauncher?.launchPath ?? defaults.launchPath,
+            manifestPath: registryLauncher?.manifestPath ?? defaults.manifestPath,
+            iconSrc: registryLauncher?.iconSrc ?? defaults.iconSrc,
+            realAppLabel: registryLauncher?.realAppLabel ?? defaults.realAppLabel,
+            appUrl: registryLauncher?.appUrl ?? defaults.appUrl,
+            manualUrl: registryLauncher?.manualUrl ?? defaults.manualUrl,
+            nativeAppUrl: registryLauncher?.nativeAppUrl ?? defaults.nativeAppUrl,
+            webFallbackUrl: registryLauncher?.webFallbackUrl ?? defaults.webFallbackUrl,
+            enabled: registryLauncher?.enabled ?? defaults.enabled ?? true,
+            hqVisible: registryLauncher?.hqVisible ?? defaults.hqVisible ?? true,
             useInterruptionPack:
               typeof merged.useInterruptionPack === "boolean"
                 ? merged.useInterruptionPack
@@ -301,21 +291,21 @@ export function loadHomeScreenVersions() {
 }
 
 export function saveHomeScreenVersions(value) {
-  window.localStorage.setItem(HOME_SCREEN_VERSIONS_KEY, JSON.stringify(value));
+  setStorageItem(HOME_SCREEN_VERSIONS_KEY, JSON.stringify(value));
 }
 
 export function loadSelectedHomeScreenVersion() {
-  const selected = window.localStorage.getItem(HOME_SCREEN_SELECTED_KEY);
-  return selected && DEFAULT_HOME_SCREEN_VERSIONS[selected] ? selected : "bishbash";
+  const selected = getStorageItem(HOME_SCREEN_SELECTED_KEY);
+  return selected && DEFAULT_HOME_SCREEN_VERSIONS[selected] ? selected : "mybishbash";
 }
 
 export function saveSelectedHomeScreenVersion(value) {
-  window.localStorage.setItem(HOME_SCREEN_SELECTED_KEY, value);
+  setStorageItem(HOME_SCREEN_SELECTED_KEY, value);
 }
 
 export function loadCardPacks() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(CARD_PACKS_KEY) ?? "[]");
+    const stored = JSON.parse(getStorageItem(CARD_PACKS_KEY) ?? "[]");
     return Array.isArray(stored) ? stored : [];
   } catch {
     return [];
@@ -323,12 +313,12 @@ export function loadCardPacks() {
 }
 
 export function saveCardPacks(value) {
-  window.localStorage.setItem(CARD_PACKS_KEY, JSON.stringify(value));
+  setStorageItem(CARD_PACKS_KEY, JSON.stringify(value));
 }
 
 export function loadHiddenLibraryPacks() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(HIDDEN_LIBRARY_PACKS_KEY) ?? "[]");
+    const stored = JSON.parse(getStorageItem(HIDDEN_LIBRARY_PACKS_KEY) ?? "[]");
     return Array.isArray(stored) ? stored : [];
   } catch {
     return [];
@@ -336,12 +326,12 @@ export function loadHiddenLibraryPacks() {
 }
 
 export function saveHiddenLibraryPacks(value) {
-  window.localStorage.setItem(HIDDEN_LIBRARY_PACKS_KEY, JSON.stringify(value));
+  setStorageItem(HIDDEN_LIBRARY_PACKS_KEY, JSON.stringify(value));
 }
 
 export function loadDislikedPackCardIds() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(DISLIKED_PACK_CARD_IDS_KEY) ?? "[]");
+    const stored = JSON.parse(getStorageItem(DISLIKED_PACK_CARD_IDS_KEY) ?? "[]");
     return Array.isArray(stored) ? stored : [];
   } catch {
     return [];
@@ -349,23 +339,23 @@ export function loadDislikedPackCardIds() {
 }
 
 export function saveDislikedPackCardIds(value) {
-  window.localStorage.setItem(DISLIKED_PACK_CARD_IDS_KEY, JSON.stringify(value));
+  setStorageItem(DISLIKED_PACK_CARD_IDS_KEY, JSON.stringify(value));
 }
 
 export function loadGlobalInterruptionMode() {
-  const stored = window.localStorage.getItem(GLOBAL_INTERRUPTION_MODE_KEY);
+  const stored = getStorageItem(GLOBAL_INTERRUPTION_MODE_KEY);
   return stored == null ? true : stored === "true";
 }
 
 export function saveGlobalInterruptionMode(value) {
-  window.localStorage.setItem(GLOBAL_INTERRUPTION_MODE_KEY, String(value));
+  setStorageItem(GLOBAL_INTERRUPTION_MODE_KEY, String(value));
 }
 
 export function loadActionCards() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(ACTION_CARDS_KEY));
+    const stored = JSON.parse(getStorageItem(ACTION_CARDS_KEY));
     const storedArray = Array.isArray(stored) ? stored : [];
-    const defaultsVersion = window.localStorage.getItem(ACTION_CARD_DEFAULTS_VERSION_KEY);
+    const defaultsVersion = getStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY);
     const map = new Map();
     DEFAULT_ACTION_CARDS.forEach((card) => map.set(card.id, { ...card, defaultsVersion: ACTION_CARD_DEFAULTS_VERSION }));
 
@@ -390,21 +380,21 @@ export function loadActionCards() {
         map.set(card.id, { ...card });
       }
     });
-    window.localStorage.setItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
+    setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
     return Array.from(map.values());
   } catch {
-    window.localStorage.setItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
+    setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
     return DEFAULT_ACTION_CARDS;
   }
 }
 
 export function saveActionCards(value) {
-  window.localStorage.setItem(ACTION_CARDS_KEY, JSON.stringify(value));
+  setStorageItem(ACTION_CARDS_KEY, JSON.stringify(value));
 }
 
 export function loadNotificationSettings() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(NOTIFICATIONS_KEY));
+    const stored = JSON.parse(getStorageItem(NOTIFICATIONS_KEY));
     return stored ? { ...DEFAULT_NOTIFICATIONS, ...stored } : DEFAULT_NOTIFICATIONS;
   } catch {
     return DEFAULT_NOTIFICATIONS;
@@ -412,12 +402,12 @@ export function loadNotificationSettings() {
 }
 
 export function saveNotificationSettings(value) {
-  window.localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(value));
+  setStorageItem(NOTIFICATIONS_KEY, JSON.stringify(value));
 }
 
 export function loadNotificationSchedule() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(NOTIFICATION_SCHEDULE_KEY));
+    const stored = JSON.parse(getStorageItem(NOTIFICATION_SCHEDULE_KEY));
     return stored || { date: "", targets: [], sentCount: 0, lastSentAt: null };
   } catch {
     return { date: "", targets: [], sentCount: 0, lastSentAt: null };
@@ -425,9 +415,9 @@ export function loadNotificationSchedule() {
 }
 
 export function saveNotificationSchedule(value) {
-  window.localStorage.setItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(value));
+  setStorageItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(value));
 }
 
-export function clearSharedBishBashState() {
-  SHARED_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+export function clearSharedMyBishBashState() {
+  [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS].forEach((key) => window.localStorage.removeItem(key));
 }

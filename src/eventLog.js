@@ -1,10 +1,35 @@
 import { createId } from "./utils";
 import { supabase } from "./lib/supabaseClient";
 
-const EVENT_LOG_KEY = "bishbash.event-log.v1";
-const USER_ID_KEY = "bishbash.user-id.v1";
-const OFFLINE_QUEUE_KEY = "bishbash.offline-event-queue.v1";
-const SUPABASE_EVENTS_TABLE = import.meta.env.VITE_SUPABASE_EVENTS_TABLE || "bishbash_events";
+const EVENT_LOG_KEY = "mybishbash.event-log.v1";
+const USER_ID_KEY = "mybishbash.user-id.v1";
+const OFFLINE_QUEUE_KEY = "mybishbash.offline-event-queue.v1";
+const SUPABASE_EVENTS_TABLE = import.meta.env.VITE_SUPABASE_EVENTS_TABLE || "mybishbash_events";
+const STORAGE_PREFIX = "mybishbash";
+const LEGACY_STORAGE_PREFIX = "bish" + "bash";
+
+function getLegacyStorageKey(key) {
+  return key.startsWith(`${STORAGE_PREFIX}.`) ? key.replace(`${STORAGE_PREFIX}.`, `${LEGACY_STORAGE_PREFIX}.`) : null;
+}
+
+function getStorageItem(key) {
+  const value = window.localStorage.getItem(key);
+  if (value !== null) return value;
+
+  const legacyKey = getLegacyStorageKey(key);
+  if (!legacyKey) return null;
+
+  const legacyValue = window.localStorage.getItem(legacyKey);
+  if (legacyValue !== null) {
+    window.localStorage.setItem(key, legacyValue);
+  }
+  return legacyValue;
+}
+
+function setStorageItem(key, value) {
+  window.localStorage.setItem(key, value);
+}
+
 
 function safeParse(rawValue, fallback) {
   try {
@@ -39,29 +64,29 @@ export function mergeEventsById(localEvents = [], incomingEvents = []) {
 }
 
 export function getUserId() {
-  const existing = window.localStorage.getItem(USER_ID_KEY);
+  const existing = getStorageItem(USER_ID_KEY);
   if (existing) return existing;
   const next = createId();
-  window.localStorage.setItem(USER_ID_KEY, next);
+  setStorageItem(USER_ID_KEY, next);
   return next;
 }
 
 export function loadEventLog() {
-  const stored = safeParse(window.localStorage.getItem(EVENT_LOG_KEY), []);
+  const stored = safeParse(getStorageItem(EVENT_LOG_KEY), []);
   return Array.isArray(stored) ? stored : [];
 }
 
 export function saveEventLog(events) {
-  window.localStorage.setItem(EVENT_LOG_KEY, JSON.stringify(events));
+  setStorageItem(EVENT_LOG_KEY, JSON.stringify(events));
 }
 
 export function loadOfflineEventQueue() {
-  const stored = safeParse(window.localStorage.getItem(OFFLINE_QUEUE_KEY), []);
+  const stored = safeParse(getStorageItem(OFFLINE_QUEUE_KEY), []);
   return Array.isArray(stored) ? stored : [];
 }
 
 export function saveOfflineEventQueue(queue) {
-  window.localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  setStorageItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
 }
 
 let isProcessingQueue = false;

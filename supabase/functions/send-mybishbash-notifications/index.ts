@@ -14,7 +14,7 @@ serve(async (req) => {
     Deno.env.get("VAPID_PRIVATE_KEY") ?? ""
   );
 
-  const publicAppUrl = Deno.env.get("PUBLIC_APP_URL") || "https://drlizlondon.github.io/bishbash";
+  const publicAppUrl = Deno.env.get("PUBLIC_APP_URL") || "https://drlizlondon.github.io/mybishbash";
 
   // 1. Fetch enabled users
   const { data: users } = await supabase
@@ -60,7 +60,7 @@ serve(async (req) => {
       if (Math.random() > Math.min(probability, 1)) continue;
     }
 
-    const { data: stateData } = await supabase.from("bishbash_state").select("state_json").eq("user_id", user.user_id).single();
+    const { data: stateData } = await supabase.from("mybishbash_state").select("state_json").eq("user_id", user.user_id).single();
     if (!stateData?.state_json) continue;
 
     const cards = stateData.state_json.cards || [];
@@ -76,7 +76,7 @@ serve(async (req) => {
     const chosen = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
 
     const deliveryId = crypto.randomUUID();
-    const titleOptions = ["Tiny BishBash moment?", "Something you said mattered.", "Pause for a second?", "A reminder from yourself."];
+    const titleOptions = ["Tiny MyBishBash moment?", "Something you said mattered.", "Pause for a second?", "A reminder from yourself."];
     const title = titleOptions[Math.floor(Math.random() * titleOptions.length)];
 
     await supabase.from("notification_delivery_log").insert({

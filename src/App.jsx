@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
-  clearSharedBishBashState,
+  clearSharedMyBishBashState,
   loadCards,
   loadCardPacks,
   loadDislikedPackCardIds,
@@ -47,12 +47,13 @@ import {
   logIn,
   logOut,
   markNotificationOpened,
+  saveLauncherEvent,
   saveNotificationPreferences,
   savePushSubscription,
   checkIsAdmin,
   fetchGlobalPacks,
   touchUserProfile,
-} from "./lib/bishbashSync";
+} from "./lib/mybishbashSync";
 import {
   PACKS,
   FREQUENCY_OPTIONS,
@@ -86,11 +87,13 @@ import {
   pickInterruptionCardIndex,
   getVersionOpenHref,
 } from "./lib/launcherState";
+import { getLauncherConfig, isKnownLauncher } from "./lib/launcherRegistry";
+import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { EditableLandingPage } from "./LandingPage";
 import EarlyAccessPage from "./EarlyAccessPage";
-import { checkForAppUpdate, refreshBishBashAppShell } from "./appUpdate";
+import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 
@@ -120,9 +123,7 @@ function getRouteFromLocation(setupComplete) {
   const params = new URLSearchParams(window.location.search);
   const routeParam = params.get("route");
   const disguiseParam = params.get("disguise");
-  const disguisedVersion = /^(instagram|youtube|safari)$/.test(disguiseParam ?? "")
-    ? disguiseParam
-    : null;
+  const disguisedVersion = isKnownLauncher(disguiseParam) ? disguiseParam : null;
   if (disguisedVersion) {
     return `/intercept/${disguisedVersion}`;
   }
@@ -144,11 +145,10 @@ function getRouteFromLocation(setupComplete) {
     return setupComplete ? "/home" : "/onboarding";
   }
 
-  if (
-    !setupComplete &&
-    normalized !== "/onboarding" &&
-    !/^\/intercept\/(instagram|youtube|safari)$/.test(normalized)
-  ) {
+  const interceptMatch = normalized.match(/^\/intercept\/([^/]+)$/);
+  const validInterceptPath = interceptMatch && isKnownLauncher(interceptMatch[1]);
+
+  if (!setupComplete && normalized !== "/onboarding" && !validInterceptPath) {
     return "/onboarding";
   }
 
@@ -162,14 +162,18 @@ function parseRoute(path) {
     return { kind: "onboarding", path: normalized, tab: "home" };
   }
 
-  const interceptMatch = normalized.match(/^\/intercept\/(instagram|youtube|safari)$/);
-  if (interceptMatch) {
+  const interceptMatch = normalized.match(/^\/intercept\/([^/]+)$/);
+  if (interceptMatch && isKnownLauncher(interceptMatch[1])) {
     return {
       kind: "intercept",
       path: normalized,
       tab: null,
       versionId: interceptMatch[1],
     };
+  }
+
+  if (interceptMatch) {
+    return { kind: "invalid-intercept", path: "/home", tab: "home", versionId: interceptMatch[1] };
   }
 
   const cardMatch = normalized.match(/^\/card\/([^/]+)$/);
@@ -271,18 +275,18 @@ function describeLogEvent(event) {
   }
 
   if (event.event_type === "bash_done") {
-    return `You completed: ${event.bash_title || "a BishBash"}`;
+    return `You completed: ${event.bash_title || "a MyBishBash"}`;
   }
 
   if (event.event_type === "bash_do_now") {
-    return `You chose to do: ${event.bash_title || "a BishBash"}`;
+    return `You chose to do: ${event.bash_title || "a MyBishBash"}`;
   }
 
   if (event.event_type === "bash_not_done") {
-    return `You left this BishBash for later: ${event.bash_title || "a BishBash"}`;
+    return `You left this MyBishBash for later: ${event.bash_title || "a MyBishBash"}`;
   }
 
-  return "A little BishBash moment was recorded.";
+  return "A little MyBishBash moment was recorded.";
 }
 
 function isCompletionEvent(event) {
@@ -591,6 +595,7 @@ function App() {
   const [selectedPackDetail, setSelectedPackDetail] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
+  const loggedLauncherOpenRef = useRef("");
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
@@ -623,7 +628,7 @@ function App() {
         return version?.realAppLabel ? [version] : [];
       }
 
-      // Normal BishBash app
+      // Normal MyBishBash app
       return INTERRUPTION_LAUNCHER_CONTEXTS
         .map((versionId) =>
           resolveVersionConfig(
@@ -740,7 +745,7 @@ function App() {
       .then((currentSession) => {
         console.log("[AUTH] Session check complete. Found:", !!currentSession);
         if (currentSession?.user?.email) console.log("[AUTH] Email:", currentSession.user.email);
-        if (typeof window !== "undefined") console.log("[AUTH] Storage key present:", !!window.localStorage.getItem("bishbash.supabase.auth.v1"));
+        if (typeof window !== "undefined") console.log("[AUTH] Storage key present:", !!window.localStorage.getItem("mybishbash.supabase.auth.v1"));
 
         if (mounted) {
           setSession(currentSession);
@@ -802,12 +807,12 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
-    checkForAppUpdate(BASE_PATH || "/bishbash").then((result) => {
+    checkForAppUpdate(BASE_PATH || "/mybishbash").then((result) => {
       if (!cancelled) setAppUpdate({ ...result, checking: false });
     });
 
     const interval = window.setInterval(() => {
-      checkForAppUpdate(BASE_PATH || "/bishbash").then((result) => {
+      checkForAppUpdate(BASE_PATH || "/mybishbash").then((result) => {
         if (!cancelled && result.updateAvailable) setAppUpdate({ ...result, checking: false });
       });
     }, 5 * 60 * 1000);
@@ -819,7 +824,7 @@ function App() {
   }, []);
 
   const refreshAppShell = useCallback(() => {
-    refreshBishBashAppShell(BASE_PATH || "/bishbash");
+    refreshMyBishBashAppShell(BASE_PATH || "/mybishbash");
   }, []);
 
   useEffect(() => {
@@ -844,7 +849,7 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
-        setSyncError(getSyncErrorMessage(error, "Could not load your BishBash profile."));
+        setSyncError(getSyncErrorMessage(error, "Could not load your MyBishBash profile."));
         setSyncStatus("error");
       });
 
@@ -889,7 +894,7 @@ function App() {
         .catch((error) => {
           console.error("UPSERT ERROR", error);
           // TODO: queue offline saves instead of only preserving the local mirror.
-          console.warn("Could not save BishBash shared state", error);
+          console.warn("Could not save MyBishBash shared state", error);
         });
     }, 500);
 
@@ -939,7 +944,7 @@ function App() {
           applySharedState(sharedState);
         })
         .catch((error) => {
-          console.warn("Could not periodically sync BishBash profile", error);
+          console.warn("Could not periodically sync MyBishBash profile", error);
         });
     }, 5000);
 
@@ -953,7 +958,7 @@ function App() {
   useEffect(() => {
     saveMood(mood);
 
-    // Map your exact BishBash background hex colors here
+    // Map your exact MyBishBash background hex colors here
     const themeColors = {
       "Minimal": "#F6EBCF",
       "Pop Art": "#F4A261",
@@ -1079,6 +1084,57 @@ function App() {
     setMenuOpenId(null);
   }, [activeTab, route.kind, overlay?.type]);
 
+  const logEvent = useCallback(async (input) => {
+    const record = createEventRecord({
+      launcher_context: launcherContext,
+      ...input,
+    });
+    const next = await persistEventRecord(record);
+    setEvents(next);
+  }, [launcherContext]);
+
+  const logLauncherEvent = useCallback(
+    async (eventType, launcherId, metadata = {}) => {
+      const launcher = getLauncherConfig(launcherId);
+      if (!launcher) return;
+      const routeValue = metadata.route || window.location.pathname.replace(BASE_PATH || "", "") || "/";
+      const payload = buildLauncherEventPayload({
+        eventType,
+        launcher,
+        route: routeValue,
+        session,
+        metadata,
+      });
+
+      console.log("[INTERCEPT] Launcher event", payload);
+      void saveLauncherEvent(payload);
+      void logEvent({
+        event_type: eventType,
+        source_type: "fake_launcher",
+        card_source: "fake_launcher",
+        launcher_context: launcher.id,
+        target_app: launcher.id,
+        app_id: launcher.id,
+        app_name: launcher.displayName,
+        action_taken: eventType,
+        metadata: {
+          launcher_id: launcher.id,
+          launcher_name: launcher.displayName,
+          launcher_category: launcher.category,
+          route: payload.route,
+          source: "fake_launcher",
+          anonymous_device_id: payload.anonymous_device_id,
+          session_id: payload.session_id,
+          is_standalone: payload.is_standalone,
+          app_display_mode: payload.app_display_mode,
+          platform: payload.platform,
+          ...metadata,
+        },
+      });
+    },
+    [logEvent, session],
+  );
+
   useEffect(() => {
     if (route.kind !== "intercept") {
       setLauncherContext(getLauncherContextFromRoute(initialRoute));
@@ -1164,6 +1220,14 @@ function App() {
       return;
     }
 
+    if (route.kind === "invalid-intercept") {
+      console.warn("[INTERCEPT] Unknown launcher id; returning home", route.versionId);
+      setScreen("library");
+      setOverlay(null);
+      navigateTo("/home", { replace: true });
+      return;
+    }
+
     if (route.kind === "intercept") {
       if (
         ["action-card", "action-card-empty", "action-success"].includes(overlay?.type) &&
@@ -1173,6 +1237,11 @@ function App() {
       }
 
       setLauncherContext(route.versionId);
+      const launcherOpenKey = `${route.versionId}:${route.path}:${session?.user?.id ?? "anon"}`;
+      if (loggedLauncherOpenRef.current !== launcherOpenKey) {
+        loggedLauncherOpenRef.current = launcherOpenKey;
+        void logLauncherEvent("fake_launcher_opened", route.versionId);
+      }
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
@@ -1261,7 +1330,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId, logLauncherEvent]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1275,6 +1344,8 @@ function App() {
     suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
+    loggedLauncherOpenRef.current = `${versionId}:/intercept/${versionId}:${session?.user?.id ?? "anon"}`;
+    void logLauncherEvent("fake_launcher_opened", versionId, { launched_from: "in_app_fake_launcher_bar" });
 
     const { selected, interruption } = pickRandomHomeCardForDisplay(
       cards,
@@ -1305,7 +1376,7 @@ function App() {
 
     setScreen("library");
     if (selected) {
-      console.log("[INTERCEPT] Opening fallback BishBash card", selected.id);
+      console.log("[INTERCEPT] Opening fallback MyBishBash card", selected.id);
       setOverlay(buildRevealOverlay(selected.id, versionId));
     } else {
       console.log("[INTERCEPT] No eligible card; opening empty state", versionId);
@@ -1320,14 +1391,26 @@ function App() {
     );
   }
 
-  const logEvent = useCallback(async (input) => {
-    const record = createEventRecord({
-      launcher_context: launcherContext,
-      ...input,
+  useEffect(() => {
+    if (!authReady) return;
+    let pending = null;
+    try {
+      pending = JSON.parse(window.localStorage.getItem("mybishbash.pending-launcher-install.v1") || "null");
+    } catch {
+      pending = null;
+    }
+    const pendingEvents = Array.isArray(pending) ? pending : [pending].filter(Boolean);
+    if (pendingEvents.length === 0) return;
+    window.localStorage.removeItem("mybishbash.pending-launcher-install.v1");
+    pendingEvents.forEach((event) => {
+      if (!event?.launcher_id || !event?.event_type) return;
+      void logLauncherEvent(event.event_type, event.launcher_id, {
+        route: event.route,
+        install_page_created_at: event.created_at,
+        is_standalone: event.is_standalone,
+      });
     });
-    const next = await persistEventRecord(record);
-    setEvents(next);
-  }, [launcherContext]);
+  }, [authReady, logLauncherEvent]);
 
   const syncNotificationPreferences = useCallback(
     async (nextSettings) => {
@@ -1969,7 +2052,7 @@ function App() {
     setSession(null);
     setSyncStatus("needs-connection");
     setSyncError("");
-    clearSharedBishBashState();
+    clearSharedMyBishBashState();
     setCards([]);
     setMood(resolveTheme("Minimal"));
     setProfile({ name: "", timezone: "Europe/London" });
@@ -2010,7 +2093,7 @@ function App() {
   }
 
   async function handleLogOut() {
-    const confirmed = window.confirm("Log out of this BishBash profile?");
+    const confirmed = window.confirm("Log out of this MyBishBash profile?");
     if (!confirmed) return;
     setSyncStatus("loading");
     try {
@@ -2187,7 +2270,7 @@ function App() {
     });
 
     Object.values(homeScreenVersions).forEach((version) => {
-      if (version.id === "bishbash" || launcherContext === NORMAL_LAUNCHER_CONTEXT) return;
+      if (version.id === "mybishbash" || launcherContext === NORMAL_LAUNCHER_CONTEXT) return;
       const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
       if (resolvedVersion.id !== launcherContext) return;
       const pack = getInterruptionPackForLauncher(resolvedVersion.id, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
@@ -2431,6 +2514,7 @@ function App() {
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
+                  onLogLauncherEvent={logLauncherEvent}
                 />
               ) : null}
             </main>
@@ -2582,6 +2666,11 @@ function App() {
               versionId: overlay?.versionId,
               visibleActionCards: visibleActionCards.length,
             });
+            if (overlay?.versionId) {
+              void logLauncherEvent("intercept_do_something_else", overlay.versionId, {
+                visible_action_cards: visibleActionCards.length,
+              });
+            }
             void logEvent({
               event_type: "intercept_do_something_else",
               source_type: "interruption",
@@ -2600,6 +2689,7 @@ function App() {
             }
           }}
           onLogEvent={logEvent}
+          onLogLauncherEvent={logLauncherEvent}
           onCreateActionCard={() => {
             setOverlay(null);
             setIsActionCardEditorOpen(true);
@@ -2689,7 +2779,7 @@ function Composer({ initialCard, onClose, onSave }) {
     <div className="modal-backdrop" onClick={onClose}>
       <form className="composer" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <div className="composer-heading">
-          <p className="eyebrow">{initialCard ? "Edit your BishBash" : "Make a BishBash"}</p>
+          <p className="eyebrow">{initialCard ? "Edit your MyBishBash" : "Make a MyBishBash"}</p>
           <button type="button" className="text-button" onClick={onClose}>
             Close
           </button>
@@ -2732,7 +2822,7 @@ function Composer({ initialCard, onClose, onSave }) {
               {bulkCardsCount > 0 ? (
                 <span className="field-hint">{bulkCardsCount} {bulkCardsCount === 1 ? "card" : "cards"} ready</span>
               ) : showValidation ? (
-                <span className="field-hint">Add at least one BishBash before saving.</span>
+                <span className="field-hint">Add at least one MyBishBash before saving.</span>
               ) : null}
             </label>
             <button
@@ -2759,7 +2849,7 @@ function Composer({ initialCard, onClose, onSave }) {
                 rows={5}
               />
               {showValidation ? (
-                <span className="field-hint">Add one gentle BishBash before saving.</span>
+                <span className="field-hint">Add one gentle MyBishBash before saving.</span>
               ) : null}
             </label>
             <div className="field">
@@ -2828,7 +2918,7 @@ function Composer({ initialCard, onClose, onSave }) {
               </div>
             </div>
             <div className="field">
-              <span>When should this BishBash appear?</span>
+              <span>When should this MyBishBash appear?</span>
               <div className="timing-grid">
                 {TIME_WINDOWS.map((windowOption) => (
                   <label key={windowOption.id} className="timing-option">
@@ -2854,7 +2944,7 @@ function Composer({ initialCard, onClose, onSave }) {
               type="submit"
               className="save-button"
             >
-              Save BishBash
+              Save MyBishBash
             </button>
           </>
         )}
@@ -2875,7 +2965,7 @@ function Masthead({ onCreate }) {
         type="button"
         className="add-button"
         onClick={onCreate}
-        aria-label="Create a BishBash"
+        aria-label="Create a MyBishBash"
       >
         +
       </button>
@@ -2903,7 +2993,7 @@ function HomePanel({
     <section className="library">
       <div className="section-heading solo">
         <div>
-          <h2>Your BishBash list</h2>
+          <h2>Your MyBishBash list</h2>
           <p>Ready cards and actions for right now.</p>
         </div>
       </div>
@@ -3191,7 +3281,7 @@ function StandardLibraryPanel({
       <div className="section-heading solo">
         <div>
           <h2>Library</h2>
-          <p>Your own BishBashes, gathered in one quiet place.</p>
+          <p>Your own MyBishBashes, gathered in one quiet place.</p>
         </div>
       </div>
       <div className="card-stack">
@@ -3301,7 +3391,7 @@ function LogPanel({ events, timezone, weeklyShiftCount, filter }) {
         <span className="log-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h2>BishBash Log</h2>
+        <h2>MyBishBash Log</h2>
         <p>{filter === "intercepts" ? "the little pauses before the pull." : "tiny choices. real change."}</p>
       </header>
 
@@ -3483,7 +3573,7 @@ function CustomPackEditor({ initialPack, linkedVersionId, versions, onClose, onS
             onChange={(event) => setSelectedVersion(event.target.value)}
           >
             <option value="">Not linked</option>
-            {Object.values(versions).filter((version) => version.id !== "bishbash").map((version) => (
+            {Object.values(versions).filter((version) => version.id !== "mybishbash").map((version) => (
               <option key={version.id} value={version.id}>
                 {version.name}
               </option>
@@ -3589,7 +3679,7 @@ function PacksPanel({
       <div className="section-heading solo">
         <div>
           <h2>Packs</h2>
-          <p>Manage the card content BishBash can draw from.</p>
+          <p>Manage the card content MyBishBash can draw from.</p>
         </div>
       </div>
 
@@ -3662,7 +3752,7 @@ function PacksPanel({
         <div className="home-section-heading packs-heading">
           <div>
             <h2>Library Packs</h2>
-            <p>Ready-made BishBashes you can add into your day.</p>
+            <p>Ready-made MyBishBashes you can add into your day.</p>
           </div>
         </div>
         <div className="library-pack-stack">
@@ -3696,7 +3786,7 @@ function PacksPanel({
                     {canActivate ? (active ? "Deactivate pack" : "Activate pack") : "Coming soon"}
                   </button>
                 </div>
-                {active ? <p className="pack-active-note">Active in your BishBashes</p> : null}
+                {active ? <p className="pack-active-note">Active in your MyBishBashes</p> : null}
               </article>
             );
           })}
@@ -3913,13 +4003,13 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
         <span className="sync-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h1>BishBash</h1>
+        <h1>MyBishBash</h1>
         {mode === "loading" ? (
-          <p>Loading your shared BishBash...</p>
+          <p>Loading your shared MyBishBash...</p>
         ) : (
           <>
-            <p>Log in to sync this launcher with your BishBash profile.</p>
-            <p>{isStandalone ? "Reconnect BishBash. (iOS Home Screen apps require you to log in once per launcher.)" : "Log in to sync this launcher with your BishBash profile."}</p>
+            <p>Log in to sync this launcher with your MyBishBash profile.</p>
+            <p>{isStandalone ? "Reconnect MyBishBash. (iOS Home Screen apps require you to log in once per launcher.)" : "Log in to sync this launcher with your MyBishBash profile."}</p>
             {error ? <p className="sync-error">{error}</p> : null}
 
             <form className="sync-form" onSubmit={submitExisting}>
@@ -3983,10 +4073,11 @@ function SettingsPanel({
   onRestoreActionCards,
   interruptionPacks,
   launcherContext,
+  onLogLauncherEvent,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("bishbash");
+  const [previewVersionId, setPreviewVersionId] = useState("mybishbash");
 
   const isInsideFakeLauncher =
     launcherContext &&
@@ -4000,7 +4091,7 @@ function SettingsPanel({
       <div className="section-heading solo">
         <div>
           <h2>Settings</h2>
-          <p>Personal touches and a quick peek at how BishBash works.</p>
+          <p>Personal touches and a quick peek at how MyBishBash works.</p>
         </div>
       </div>
       <div className="settings-card settings-compact">
@@ -4015,7 +4106,7 @@ function SettingsPanel({
         </button>
         {isOpen ? (
           <div className="settings-dropdown">
-            <p>Each time the app opens, it picks one random eligible BishBash from everything you&apos;ve created or activated.</p>
+            <p>Each time the app opens, it picks one random eligible MyBishBash from everything you&apos;ve created or activated.</p>
             <ul className="settings-list">
               <li>it is not paused</li>
               <li>it has not already been marked done</li>
@@ -4028,7 +4119,7 @@ function SettingsPanel({
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Mood</p>
-          <span>Choose the overall feeling of BishBash.</span>
+          <span>Choose the overall feeling of MyBishBash.</span>
         </div>
         <div className="theme-showcase settings-theme-showcase" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           {THEMES.map((theme) => (
@@ -4048,7 +4139,7 @@ function SettingsPanel({
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Install launchers</p>
-          <span>Install separate home-screen buttons for Safari, Instagram and YouTube. Each launcher shares your BishBash cards and settings, but opens in its own app disguise.</span>
+          <span>Install separate home-screen buttons for Safari, Instagram and YouTube. Each launcher shares your MyBishBash cards and settings, but opens in its own app disguise.</span>
         </div>
         <label className="field" style={{ marginBottom: "16px" }}>
           <select
@@ -4065,7 +4156,7 @@ function SettingsPanel({
           {(() => {
             const version = homeScreenVersions[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.safari;
             const previewIcon = version.customIconSrc || version.iconSrc;
-            const installUrl = getInstallUrl(`${BASE_PATH}/install/${version.id}/index.html`);
+            const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
             const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
             const pack = interruptionPacks?.find((p) => p.targetApp === version.id);
             const behavior = launcherBehaviorSettings[version.id] ?? {};
@@ -4086,13 +4177,18 @@ function SettingsPanel({
                     <strong>{version.name}</strong>
                   </div>
                   <p>
-                    Uses launcherContext "{version.id}" and shares the same BishBash state.
+                    Uses launcherContext "{version.id}" and shares the same MyBishBash state.
                   </p>
                     <a
                       href={installUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="home-screen-install-link"
+                      onClick={() => {
+                        if (version.id !== "mybishbash") {
+                          void onLogLauncherEvent?.("fake_launcher_install_cta_clicked", version.id);
+                        }
+                      }}
                     >
                       Open install screen
                     </a>
@@ -4135,7 +4231,7 @@ function SettingsPanel({
                 <p className="tiny-note" style={{ margin: 0 }}>
                   {interruptionsOn
                     ? "You’ll see interruption cards before continuing."
-                    : "You’ll see normal BishBash cards instead."}
+                    : "You’ll see normal MyBishBash cards instead."}
                 </p>
                 {pack ? (
                   <p className="tiny-note" style={{ margin: 0 }}>
@@ -4167,7 +4263,7 @@ function SettingsPanel({
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Notifications</p>
-          <span>Small BishBash nudges from your saved cards.</span>
+          <span>Small MyBishBash nudges from your saved cards.</span>
         </div>
         <label className="timing-option settings-checkbox-row" style={{ marginBottom: "12px" }}>
           <input
@@ -4200,11 +4296,11 @@ function SettingsPanel({
       </div>
       <div className="settings-card settings-compact">
         <div className="settings-version-heading">
-          <p>Refresh BishBash</p>
+          <p>Refresh MyBishBash</p>
           <span>Reload the latest app shell without deleting login, cards, preferences, or logs.</span>
         </div>
         <button type="button" className="pack-button secondary" onClick={onRefreshAppShell}>
-          Refresh BishBash
+          Refresh MyBishBash
         </button>
       </div>
       <div className="settings-card">
@@ -4355,7 +4451,7 @@ function EventDetailModal({ event, timezone, onClose }) {
             </div>
             {event.bash_title ? (
               <div>
-                <dt>BishBash</dt>
+                <dt>MyBishBash</dt>
                 <dd>{event.bash_title}</dd>
               </div>
             ) : null}
@@ -4404,6 +4500,7 @@ function Overlay({
   onPackDislike,
   onChooseElse,
   onLogEvent,
+  onLogLauncherEvent,
   actionCards,
   onAcceptActionCard,
   onCreateActionCard,
@@ -4425,7 +4522,7 @@ function Overlay({
           <BookGlyph />
         </button>
         <div className="caught-up-content">
-          <p className="eyebrow">BishBash</p>
+          <p className="eyebrow">MyBishBash</p>
           <h2>You&apos;re all caught up for now.</h2>
           <p className="caught-up-copy">see you later</p>
           <div className="caught-up-actions">
@@ -4449,6 +4546,7 @@ function Overlay({
         version={version}
         onChooseElse={onChooseElse}
         onLogEvent={onLogEvent}
+        onLogLauncherEvent={onLogLauncherEvent}
       />
     );
   }
@@ -4806,7 +4904,7 @@ function CustomPackOverlay({ overlay, onClose }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -4863,7 +4961,12 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
         message: activeMessage,
       },
     });
-  }, [activeIndex, cards, messages, onLogEvent, overlay.name, overlay.packId, overlay.targetApp, version]);
+    void onLogLauncherEvent?.("intercept_card_viewed", version.id, {
+      card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
+      card_index: activeIndex,
+      pack_id: overlay.packId,
+    });
+  }, [activeIndex, cards, messages, onLogEvent, onLogLauncherEvent, overlay.name, overlay.packId, overlay.targetApp, version]);
 
   function move(delta) {
     if (messages.length === 0) return;
@@ -4878,6 +4981,8 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent }) {
   function handleContinueToApp() {
     if (!version) return;
 
+    void onLogLauncherEvent?.("intercept_continue_to_app", version.id);
+    void onLogLauncherEvent?.("fake_launcher_real_app_opened", version.id);
     void onLogEvent({
       event_type: "intercept_continue_to_app",
       app_id: version.id,
@@ -5190,7 +5295,7 @@ function AuthDiagnostics({ session }) {
 
   useEffect(() => {
     const configured = !!import.meta.env.VITE_SUPABASE_URL;
-    const hasKey = typeof window !== "undefined" ? !!window.localStorage.getItem("bishbash.supabase.auth.v1") : false;
+    const hasKey = typeof window !== "undefined" ? !!window.localStorage.getItem("mybishbash.supabase.auth.v1") : false;
     const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
     const route = typeof window !== "undefined" ? window.location.pathname + window.location.search : "";
     

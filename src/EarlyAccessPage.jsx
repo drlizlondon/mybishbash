@@ -518,9 +518,9 @@ export default function EarlyAccessPage() {
     <main className="early-page">
       <section className="early-shell" aria-labelledby="early-access-title">
         <header className="early-topbar">
-          <a className="early-logo" href={HOME_HREF} aria-label="BishBash home">
+          <a className="early-logo" href={HOME_HREF} aria-label="MyBishBash home">
             <BrandMark />
-            <span>BishBash</span>
+            <span>MyBishBash</span>
           </a>
           <a className="early-back-link" href={HOME_HREF}>
             ← Back to home
@@ -533,7 +533,7 @@ export default function EarlyAccessPage() {
             <h1 id="early-access-title">
               Help bring
               <br />
-              BishBash to
+              MyBishBash to
               <br />
               <span>your country.</span>
             </h1>
@@ -551,7 +551,7 @@ export default function EarlyAccessPage() {
                 </BenefitIcon>
                 <div>
                   <h2>Help shape the rollout</h2>
-                  <p>Tell us where you are so we can bring BishBash to your country sooner.</p>
+                  <p>Tell us where you are so we can bring MyBishBash to your country sooner.</p>
                 </div>
               </article>
               <article className="early-benefit">
@@ -562,7 +562,7 @@ export default function EarlyAccessPage() {
                 </BenefitIcon>
                 <div>
                   <h2>Be first in your area</h2>
-                  <p>We’ll let you know when BishBash is ready for your country and phone.</p>
+                  <p>We’ll let you know when MyBishBash is ready for your country and phone.</p>
                 </div>
               </article>
               <article className="early-benefit">
@@ -573,7 +573,7 @@ export default function EarlyAccessPage() {
                 </BenefitIcon>
                 <div>
                   <h2>Test early versions</h2>
-                  <p>Opt in if you’d like to help us improve BishBash before wider release.</p>
+                  <p>Opt in if you’d like to help us improve MyBishBash before wider release.</p>
                 </div>
               </article>
             </div>
@@ -586,14 +586,14 @@ export default function EarlyAccessPage() {
             <div className="early-success" role="status">
               <span className="early-success-mark">✓</span>
               <h2>You’re on the list.</h2>
-              <p>We’ll let you know when BishBash is ready for your country and phone.</p>
+              <p>We’ll let you know when MyBishBash is ready for your country and phone.</p>
               <small>Thank you for helping shape the rollout.</small>
             </div>
           ) : (
             <>
               <h2>Join the early list</h2>
               <p className="early-form-intro">
-                Tell us a little about you and we’ll let you know when BishBash launches in your area.
+                Tell us a little about you and we’ll let you know when MyBishBash launches in your area.
               </p>
               <form className="early-form" onSubmit={handleSubmit}>
                 <div className="early-field">
@@ -698,7 +698,7 @@ export default function EarlyAccessPage() {
                     onChange={(event) => updateField("consent_launch_updates", event.target.checked)}
                   />
                   <span>
-                    I agree to receive BishBash updates about the launch, early access and news. You can
+                    I agree to receive MyBishBash updates about the launch, early access and news. You can
                     unsubscribe anytime.
                   </span>
                 </label>

@@ -49,7 +49,7 @@ export const landingContent = ${JSON.stringify(content, null, 2)};
 
 function appVersionPlugin() {
   return {
-    name: "bishbash-version",
+    name: "mybishbash-version",
     generateBundle() {
       this.emitFile({
         type: "asset",
@@ -68,10 +68,10 @@ function appVersionPlugin() {
 }
 
 export default defineConfig({
-  base: "/bishbash/",
+  base: "/mybishbash/",
   plugins: [react(), tailwindcss(), landingContentEditorPlugin(), appVersionPlugin()],
   define: {
-    __BISHBASH_VERSION__: JSON.stringify(appVersion),
+    __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },
   build: {
     rollupOptions: {

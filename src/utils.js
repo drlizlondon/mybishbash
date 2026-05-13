@@ -14,7 +14,7 @@ export const PACKS = [
   {
     id: "encouraging-bible-verses",
     title: "Bible Verse",
-    description: "Gentle scripture-based BishBashes for the day.",
+    description: "Gentle scripture-based MyBishBashes for the day.",
     theme: "Soft Bloom",
     icon: "book",
     entries: [
@@ -511,7 +511,7 @@ export function createId() {
     return globalThis.crypto.randomUUID();
   }
 
-  return `bishbash-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `mybishbash-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function formatWindowList(windows) {

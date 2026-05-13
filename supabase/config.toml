@@ -1,11 +1,11 @@
 
-[functions.send-bishbash-notifications]
+[functions.send-mybishbash-notifications]
 enabled = true
 verify_jwt = true
-import_map = "./functions/send-bishbash-notifications/deno.json"
+import_map = "./functions/send-mybishbash-notifications/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/send-bishbash-notifications/index.ts"
+entrypoint = "./functions/send-mybishbash-notifications/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/send-bishbash-notifications/*.html" ]
+# static_files = [ "./functions/send-mybishbash-notifications/*.html" ]

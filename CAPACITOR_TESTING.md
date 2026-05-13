@@ -1,17 +1,17 @@
-# BishBash Mobile App Wrapper
+# MyBishBash Mobile App Wrapper
 
-This project now includes a Capacitor wrapper around the live BishBash web app:
+This project now includes a Capacitor wrapper around the live MyBishBash web app:
 
-- Live web app: `https://drlizlondon.github.io/bishbash/`
-- App name: `BishBash`
-- App ID: `com.drlizlondon.bishbash`
+- Live web app: `https://drlizlondon.github.io/mybishbash/`
+- App name: `MyBishBash`
+- App ID: `com.drlizlondon.mybishbash`
 
 ## What this does
 
-The native app shell loads the existing hosted BishBash site. That means:
+The native app shell loads the existing hosted MyBishBash site. That means:
 
 - the GitHub Pages version keeps working
-- the native app always shows the live BishBash app
+- the native app always shows the live MyBishBash app
 - you do not need to rebuild the web app just to see content updates
 
 ## One-time setup
@@ -46,7 +46,7 @@ That opens the iOS project in Xcode.
 8. If Xcode asks to fix signing issues, allow it.
 9. Press the Run button in Xcode.
 
-Xcode will install BishBash onto your iPhone.
+Xcode will install MyBishBash onto your iPhone.
 
 ## Test in the iPhone simulator
 
@@ -67,7 +67,7 @@ npx cap sync
 ## iOS notes
 
 - The app is portrait-first.
-- The wrapper loads the public BishBash site.
+- The wrapper loads the public MyBishBash site.
 - External links should leave the app and open in the system browser.
 
 ## Android
@@ -84,6 +84,6 @@ npm run cap:open:android
 
 The web app still lives here:
 
-`https://drlizlondon.github.io/bishbash/`
+`https://drlizlondon.github.io/mybishbash/`
 
 The Capacitor wrapper does not replace or break the GitHub Pages version.

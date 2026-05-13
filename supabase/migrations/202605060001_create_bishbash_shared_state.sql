@@ -7,17 +7,17 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.bishbash_state (
+create table if not exists public.mybishbash_state (
   profile_id uuid primary key references public.profiles(id) on delete cascade,
   state_json jsonb not null,
   updated_at timestamptz not null default now()
 );
 
 alter table public.profiles enable row level security;
-alter table public.bishbash_state enable row level security;
+alter table public.mybishbash_state enable row level security;
 
 -- MVP policy note:
--- BishBash uses a human sync code instead of Supabase Auth for this first shared-state pass.
+-- MyBishBash uses a human sync code instead of Supabase Auth for this first shared-state pass.
 -- That means the anon client must be able to create profiles, look up profiles by sync_code,
 -- and read/write a state row once the profile id is known. This is not as strong as an
 -- authenticated per-user policy; tighten this when Supabase Auth or one-time profile tokens
@@ -36,23 +36,23 @@ create policy "profiles can be found by sync code"
   to anon
   using (true);
 
-drop policy if exists "state can be created by connected profile" on public.bishbash_state;
+drop policy if exists "state can be created by connected profile" on public.mybishbash_state;
 create policy "state can be created by connected profile"
-  on public.bishbash_state
+  on public.mybishbash_state
   for insert
   to anon
   with check (true);
 
-drop policy if exists "state can be read by connected profile" on public.bishbash_state;
+drop policy if exists "state can be read by connected profile" on public.mybishbash_state;
 create policy "state can be read by connected profile"
-  on public.bishbash_state
+  on public.mybishbash_state
   for select
   to anon
   using (true);
 
-drop policy if exists "state can be updated by connected profile" on public.bishbash_state;
+drop policy if exists "state can be updated by connected profile" on public.mybishbash_state;
 create policy "state can be updated by connected profile"
-  on public.bishbash_state
+  on public.mybishbash_state
   for update
   to anon
   using (true)

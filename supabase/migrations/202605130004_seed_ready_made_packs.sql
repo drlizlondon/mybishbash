@@ -17,7 +17,7 @@ end $$;
 
 insert into public.global_packs (source_key, title, description, theme, icon, published)
 values
-  ('encouraging-bible-verses', 'Bible Verse', 'Gentle scripture-based BishBashes for the day.', 'Soft Bloom', 'book', true),
+  ('encouraging-bible-verses', 'Bible Verse', 'Gentle scripture-based MyBishBashes for the day.', 'Soft Bloom', 'book', true),
   ('motivational-quotes', 'Motivational Quote', 'Soft little pushes when energy dips.', 'Pop Art', 'quote', true),
   ('extraordinary-lives', 'Extraordinary Lives', 'Real lives, real sources, small moments that widen the day.', 'Soft Bloom', 'star', true),
   ('missionary-stories', 'Missionary Stories', 'True fragments of distance, service, doubt, and resolve.', 'Starry Sky', null, true),

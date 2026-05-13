@@ -1,9 +1,11 @@
-const CACHE_PREFIX = "bishbash-";
+const CACHE_PREFIX = "mybishbash-";
+const LEGACY_CACHE_PREFIX = "bish" + "bash-";
+const LEGACY_APP_BASE = "/" + "bish" + "bash/";
 const HTML_CACHE = `${CACHE_PREFIX}html-v1`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v1`;
 const MEDIA_CACHE = `${CACHE_PREFIX}media-v1`;
-const APP_BASE = "/bishbash/";
-const INDEX_URL = "/bishbash/index.html";
+const APP_BASE = "/mybishbash/";
+const INDEX_URL = "/mybishbash/index.html";
 
 const MEDIA_EXTENSIONS = [
   ".avif",
@@ -54,8 +56,8 @@ self.addEventListener("message", (event) => {
     return;
   }
 
-  if (event.data?.type === "CLEAR_BISHBASH_CACHES") {
-    event.waitUntil(clearBishBashCaches());
+  if (event.data?.type === "CLEAR_MYBISHBASH_CACHES") {
+    event.waitUntil(clearMyBishBashCaches());
   }
 });
 
@@ -90,10 +92,10 @@ self.addEventListener("push", (event) => {
   console.log("[NOTIFICATIONS] Push received", data);
 
   event.waitUntil(
-    self.registration.showNotification(data.title || "Tiny BishBash moment?", {
+    self.registration.showNotification(data.title || "Tiny MyBishBash moment?", {
       body: data.body || "Something you said mattered.",
-      icon: "/bishbash/icons/icon-192.svg",
-      badge: "/bishbash/icons/icon-192.svg",
+      icon: "/mybishbash/icons/icon-192.svg",
+      badge: "/mybishbash/icons/icon-192.svg",
       data,
     }),
   );
@@ -126,22 +128,26 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 function normalizeNotificationUrl(rawUrl) {
-  const fallback = new URL("/bishbash/home", self.location.origin);
+  const fallback = new URL("/mybishbash/home", self.location.origin);
 
   try {
     const url = new URL(rawUrl || fallback.toString(), self.location.origin);
     if (url.origin !== self.location.origin) return fallback.toString();
 
-    if (url.pathname === "/bishbash/" || url.pathname === "/bishbash/index.html") {
+    if (url.pathname === "/mybishbash/" || url.pathname === "/mybishbash/index.html") {
       const route = url.searchParams.get("route");
       if (route) {
         const normalizedRoute = route.startsWith("/") ? route : `/${route}`;
-        url.pathname = `/bishbash${normalizedRoute}`;
+        url.pathname = `/mybishbash${normalizedRoute}`;
         url.searchParams.delete("route");
       }
     }
 
-    if (!url.pathname.startsWith("/bishbash/")) return fallback.toString();
+    if (url.pathname.startsWith(LEGACY_APP_BASE)) {
+      url.pathname = url.pathname.replace(LEGACY_APP_BASE, "/mybishbash/");
+    }
+
+    if (!url.pathname.startsWith("/mybishbash/")) return fallback.toString();
     return url.toString();
   } catch (error) {
     console.warn("[NOTIFICATIONS] Invalid notification URL", rawUrl, error);
@@ -189,9 +195,9 @@ async function cacheFirst(request, cacheName) {
   return response;
 }
 
-async function clearBishBashCaches() {
+async function clearMyBishBashCaches() {
   const keys = await caches.keys();
-  await Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX)).map((key) => caches.delete(key)));
+  await Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) || key.startsWith(LEGACY_CACHE_PREFIX)).map((key) => caches.delete(key)));
 }
 
 function acceptsHtml(request) {

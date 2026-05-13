@@ -7,13 +7,13 @@ function requireSupabase() {
   return supabase;
 }
 
-export function getSyncErrorMessage(error, fallback = "Could not sync your BishBash profile.") {
+export function getSyncErrorMessage(error, fallback = "Could not sync your MyBishBash profile.") {
   if (error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "")) {
-    return "Supabase is connected, but the BishBash tables are not installed yet. Apply the SQL migration, then try again.";
+    return "Supabase is connected, but the MyBishBash tables are not installed yet. Apply the SQL migration, then try again.";
   }
 
   if (error?.code === "42501" || /permission denied/i.test(error?.message ?? "")) {
-    return "Supabase is connected, but BishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
+    return "Supabase is connected, but MyBishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
   }
 
   if (error?.message) return error.message;
@@ -21,10 +21,10 @@ export function getSyncErrorMessage(error, fallback = "Could not sync your BishB
 }
 
 export async function loadSharedState(userId) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return null;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return null;
   const client = requireSupabase();
   const { data, error } = await client
-    .from("bishbash_state")
+    .from("mybishbash_state")
     .select("state_json")
     .eq("user_id", userId)
     .single();
@@ -37,10 +37,10 @@ export async function loadSharedState(userId) {
 }
 
 export async function saveSharedState(userId, state) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
   const client = requireSupabase();
   const { error } = await client
-    .from("bishbash_state")
+    .from("mybishbash_state")
     .upsert(
       {
         user_id: userId,
@@ -57,7 +57,7 @@ export async function saveSharedState(userId, state) {
 }
 
 export async function getSession() {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") {
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") {
     return { user: { id: "demo-user", email: "demo@example.com" } };
   }
   const client = requireSupabase();
@@ -67,7 +67,7 @@ export async function getSession() {
 }
 
 export function onAuthStateChange(callback) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") {
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") {
     return { data: { subscription: { unsubscribe: () => {} } } };
   }
   const client = requireSupabase();
@@ -95,7 +95,7 @@ export async function logOut() {
 }
 
 export async function savePushSubscription(userId, subscription, userAgent) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
   const client = requireSupabase();
   const sub = JSON.parse(JSON.stringify(subscription));
   const { error } = await client.from("push_subscriptions").upsert({
@@ -115,7 +115,7 @@ export async function savePushSubscription(userId, subscription, userAgent) {
 }
 
 export async function removePushSubscription(userId, endpoint) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
   const client = requireSupabase();
   const { error } = await client.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", endpoint);
   
@@ -123,7 +123,7 @@ export async function removePushSubscription(userId, endpoint) {
 }
 
 export async function saveNotificationPreferences(userId, prefs) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
   const client = requireSupabase();
   const { error } = await client.from("notification_preferences").upsert({
     user_id: userId,
@@ -138,15 +138,37 @@ export async function saveNotificationPreferences(userId, prefs) {
 }
 
 export async function markNotificationOpened(deliveryId) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
   const client = requireSupabase();
   const { error } = await client.from("notification_delivery_log").update({ opened_at: new Date().toISOString() }).eq("id", deliveryId);
   
   if (error) console.error("[NOTIFICATIONS] Error marking notification opened:", error);
 }
 
+export async function saveLauncherEvent(payload) {
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return;
+  const client = requireSupabase();
+  const { error } = await client.from("launcher_events").insert({
+    user_id: payload.user_id,
+    anonymous_device_id: payload.anonymous_device_id,
+    session_id: payload.session_id,
+    event_type: payload.event_type,
+    launcher_id: payload.launcher_id,
+    launcher_name: payload.launcher_name,
+    launcher_category: payload.launcher_category,
+    route: payload.route,
+    source: payload.source,
+    is_standalone: payload.is_standalone,
+    app_display_mode: payload.app_display_mode,
+    platform: payload.platform,
+    metadata: payload.metadata ?? {},
+  });
+
+  if (error) console.error("[INTERCEPT] Error saving launcher event:", error);
+}
+
 export async function checkIsAdmin(userId) {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return false;
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return false;
   const client = requireSupabase();
   const { data, error } = await client.from("admin_users").select("user_id").eq("user_id", userId).single();
   if (error) {
@@ -182,7 +204,7 @@ function mapGlobalPack(pack, cards = []) {
 }
 
 export async function fetchGlobalPacks() {
-  if (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true") return [];
+  if (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true") return [];
   const client = requireSupabase();
   const { data: packs, error: packsError } = await client
     .from("global_packs")
@@ -201,7 +223,7 @@ export async function fetchGlobalPacks() {
 }
 
 export async function touchUserProfile(user) {
-  if (!user?.id || (typeof window !== "undefined" && window.localStorage.getItem("BISHBASH_DEMO_MODE") === "true")) return;
+  if (!user?.id || (typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true")) return;
   const client = requireSupabase();
   const { error } = await client.from("user_profiles").upsert(
     {
@@ -296,15 +318,25 @@ export async function fetchAdminUsers() {
 
 export async function fetchAdminAnalytics() {
   const client = requireSupabase();
-  const [{ data: summary, error: summaryError }, { data: recent, error: recentError }] = await Promise.all([
+  const [
+    { data: summary, error: summaryError },
+    { data: recent, error: recentError },
+    { data: launcherEvents, error: launcherEventsError },
+  ] = await Promise.all([
     client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
     client
-      .from("bishbash_events")
+      .from("mybishbash_events")
       .select("id,user_id,event_type,created_at,source_type,bash_id,card_id,card_title,card_text,target_app,launcher_context,pack_id,message_id,app_id,app_name,action_taken,metadata")
       .order("created_at", { ascending: false })
       .limit(100),
+    client
+      .from("launcher_events")
+      .select("id,user_id,anonymous_device_id,session_id,event_type,launcher_id,launcher_name,launcher_category,route,source,is_standalone,app_display_mode,platform,metadata,created_at")
+      .order("created_at", { ascending: false })
+      .limit(500),
   ]);
   if (summaryError) throw summaryError;
   if (recentError) throw recentError;
-  return { summary: summary ?? [], recent: recent ?? [] };
+  if (launcherEventsError && launcherEventsError.code !== "PGRST205") throw launcherEventsError;
+  return { summary: summary ?? [], recent: recent ?? [], launcherEvents: launcherEvents ?? [] };
 }

@@ -1,4 +1,4 @@
-package com.drlizlondon.bishbash;
+package com.drlizlondon.mybishbash;
 
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -16,13 +16,13 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         if (bridge != null) {
-            bridge.setWebViewClient(new BishBashWebViewClient(bridge));
+            bridge.setWebViewClient(new MyBishBashWebViewClient(bridge));
             bridge.getWebView().setWebViewClient(bridge.getWebViewClient());
         }
     }
 
-    private class BishBashWebViewClient extends BridgeWebViewClient {
-        BishBashWebViewClient(com.getcapacitor.Bridge bridge) {
+    private class MyBishBashWebViewClient extends BridgeWebViewClient {
+        MyBishBashWebViewClient(com.getcapacitor.Bridge bridge) {
             super(bridge);
         }
 
@@ -34,7 +34,7 @@ public class MainActivity extends BridgeActivity {
 
             if (
                 "drlizlondon.github.io".equals(host) &&
-                ("/bishbash".equals(path) || (path != null && path.startsWith("/bishbash/")))
+                ("/mybishbash".equals(path) || (path != null && path.startsWith("/mybishbash/")))
             ) {
                 return false;
             }

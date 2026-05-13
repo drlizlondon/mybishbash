@@ -1,6 +1,7 @@
-const CURRENT_VERSION = typeof __BISHBASH_VERSION__ === "string" ? __BISHBASH_VERSION__ : "dev";
+const CURRENT_VERSION = typeof __MYBISHBASH_VERSION__ === "string" ? __MYBISHBASH_VERSION__ : "dev";
+const LEGACY_CACHE_PREFIX = "bish" + "bash-";
 
-export async function checkForAppUpdate(basePath = "/bishbash") {
+export async function checkForAppUpdate(basePath = "/mybishbash") {
   if (!basePath) return { updateAvailable: false, currentVersion: CURRENT_VERSION };
 
   try {
@@ -28,17 +29,17 @@ export async function checkForAppUpdate(basePath = "/bishbash") {
   }
 }
 
-export async function refreshBishBashAppShell(basePath = "/bishbash") {
-  await clearBishBashCaches();
+export async function refreshMyBishBashAppShell(basePath = "/mybishbash") {
+  await clearMyBishBashCaches();
   await updateServiceWorkers(basePath);
   window.location.reload();
 }
 
-export async function clearBishBashCaches() {
+export async function clearMyBishBashCaches() {
   if (!("caches" in window)) return;
 
   const keys = await caches.keys();
-  await Promise.all(keys.filter((key) => key.startsWith("bishbash-")).map((key) => caches.delete(key)));
+  await Promise.all(keys.filter((key) => key.startsWith("mybishbash-") || key.startsWith(LEGACY_CACHE_PREFIX)).map((key) => caches.delete(key)));
 }
 
 async function updateServiceWorkers(basePath) {
@@ -54,7 +55,7 @@ async function updateServiceWorkers(basePath) {
       try {
         await registration.update();
         registration.waiting?.postMessage({ type: "SKIP_WAITING" });
-        registration.active?.postMessage({ type: "CLEAR_BISHBASH_CACHES" });
+        registration.active?.postMessage({ type: "CLEAR_MYBISHBASH_CACHES" });
       } catch {
         await registration.unregister().catch(() => {});
       }
