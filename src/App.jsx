@@ -4156,7 +4156,7 @@ function SettingsPanel({
         </label>
         <div className="home-screen-version-list">
           {(() => {
-            const version = homeScreenVersions[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.safari;
+            const version = homeScreenVersions[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.mybishbash;
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
             const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);

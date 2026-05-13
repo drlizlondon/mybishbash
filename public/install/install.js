@@ -1,11 +1,19 @@
 (async function () {
   const appBasePath = "/mybishbash";
-  const registry = await loadRegistry();
+  const NORMAL_APP_LAUNCHER = {
+    id: "mybishbash",
+    displayName: "MyBishBash",
+    name: "MyBishBash",
+    iconSrc: "/mybishbash/icons/mybishbash-cover.png",
+    manifestPath: "/mybishbash/manifest.webmanifest",
+    launchPath: "/home",
+  };
+  const registry = await loadRegistry(NORMAL_APP_LAUNCHER);
   const pathParts = window.location.pathname.split("/").filter(Boolean);
   const installIndex = pathParts.indexOf("install");
   const legacyLauncherId = pathParts[0] === "mybishbash" ? pathParts[1] : pathParts[0];
   const launcherId = installIndex >= 0 ? pathParts[installIndex + 1] : legacyLauncherId;
-  const launcher = registry.launchers.find((item) => item.id === launcherId) ?? registry.launchers[0];
+  const launcher = registry.launchers.find((item) => item.id === launcherId) ?? NORMAL_APP_LAUNCHER;
 
   if (!launcher) return;
 
@@ -23,7 +31,7 @@
   const version = { ...launcher, ...storedLauncher };
   const iconSrc = version.customIconSrc || version.iconSrc;
 
-  document.title = `${version.displayName || version.name} · MyBishBash`;
+  document.title = version.id === "mybishbash" ? "MyBishBash" : `${version.displayName || version.name} · MyBishBash`;
 
   const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   if (appleTitle) appleTitle.setAttribute("content", version.displayName || version.name);
@@ -89,25 +97,19 @@
   );
 })();
 
-async function loadRegistry() {
+async function loadRegistry(normalAppLauncher) {
   try {
     const response = await fetch("/mybishbash/launchers/registry.json", { cache: "no-store" });
-    if (response.ok) return response.json();
+    if (response.ok) {
+      const registry = await response.json();
+      const fakeLaunchers = Array.isArray(registry.launchers) ? registry.launchers : [];
+      return { launchers: [normalAppLauncher, ...fakeLaunchers.filter((item) => item.id !== normalAppLauncher.id)] };
+    }
   } catch {
     // Fall through to a minimal hardcoded fallback so install pages still render offline.
   }
 
-  return {
-    launchers: [
-      {
-        id: "safari",
-        displayName: "Safari",
-        iconSrc: "/mybishbash/icons/apple-touch-icon.png",
-        manifestPath: "/mybishbash/launchers/safari/manifest.webmanifest",
-        launchPath: "/intercept/safari",
-      },
-    ],
-  };
+  return { launchers: [normalAppLauncher] };
 }
 
 function loadStoredVersions() {
