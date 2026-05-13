@@ -112,13 +112,13 @@ function Hero() {
         <div className="container hero-grid">
           <div className="hero-copy-block">
             <h1 className="hero-title reveal-up">
-              {content.hero.headline.map((line, index) => (
-                <EditableText
-                  className={index === 4 ? "gold-line" : "white-line"}
-                  path={`hero.headline.${index}`}
-                  key={`${line}-${index}`}
-                />
-              ))}
+              <EditableText className="hero-title-line" path="hero.headline.0" />
+              <EditableText className="hero-title-line" path="hero.headline.1" />
+              <EditableText className="hero-title-line" path="hero.headline.2" />
+              <EditableText className="hero-title-line" path="hero.headline.3" />
+              <span className="hero-title-line hero-gold-line">
+                <EditableText className="hero-gold-phrase" path="hero.headline.4" />
+              </span>
             </h1>
             <div className="hero-copy reveal-up delay-1">
               {content.hero.copy.map((line, index) => (

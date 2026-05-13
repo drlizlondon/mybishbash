@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { landingContent } from "../content/landingContent";
 
 const ContentEditContext = createContext(null);
-const STORAGE_KEY = "bishbash.landingContentDraft.v6";
+const STORAGE_KEY = "bishbash.landingContentDraft.v8";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -23,6 +23,14 @@ function setAtPath(source, path, value) {
 
   current[keys.at(-1)] = value;
   return next;
+}
+
+function isLandingContentCompatible(value) {
+  return (
+    Array.isArray(value?.hero?.headline) &&
+    value.hero.headline.length === landingContent.hero.headline.length &&
+    value.hero.headline[4] === landingContent.hero.headline[4]
+  );
 }
 
 async function copyToClipboard(text) {
@@ -48,7 +56,10 @@ export function ContentEditProvider({ children }) {
 
     try {
       const draft = window.localStorage.getItem(STORAGE_KEY);
-      return draft ? JSON.parse(draft) : landingContent;
+      if (!draft) return landingContent;
+
+      const parsed = JSON.parse(draft);
+      return isLandingContentCompatible(parsed) ? parsed : landingContent;
     } catch {
       return landingContent;
     }
@@ -58,6 +69,12 @@ export function ContentEditProvider({ children }) {
 
   useEffect(() => {
     if (!isDev) return;
+    if (!isLandingContentCompatible(content)) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      setContent(landingContent);
+      return;
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(content));
   }, [content, isDev]);
 
