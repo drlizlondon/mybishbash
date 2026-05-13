@@ -315,6 +315,7 @@ body:has(.landing-page)::after {
 }
 
 .button {
+  position: relative;
   height: 52px;
   min-height: 52px;
   padding: 0 24px;
@@ -326,6 +327,8 @@ body:has(.landing-page)::after {
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.01em;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .button.primary {
@@ -336,13 +339,22 @@ body:has(.landing-page)::after {
 
 .button.secondary {
   border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.04);
+  background: rgba(7,9,10,0.88);
   color: rgba(255,255,255,0.86);
   backdrop-filter: blur(18px);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.22);
 }
 
-.button.secondary:hover {
-  background: rgba(255,255,255,0.08);
+.button.secondary:hover,
+.button.secondary:focus-visible {
+  border-color: rgba(255,255,255,0.30);
+  background: rgba(12,15,18,0.94);
+  box-shadow: 0 16px 42px rgba(0,0,0,0.30), 0 0 0 1px rgba(233,201,127,0.10) inset;
+}
+
+.button.secondary:focus-visible {
+  outline: 2px solid rgba(233,201,127,0.72);
+  outline-offset: 4px;
 }
 
 .play-dot {
@@ -351,6 +363,8 @@ body:has(.landing-page)::after {
   border: 1px solid rgba(233,201,127,0.72);
   border-radius: 50%;
   position: relative;
+  flex: 0 0 auto;
+  background: rgba(7,9,10,0.36);
 }
 
 .play-dot::after {
