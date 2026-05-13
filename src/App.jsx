@@ -85,6 +85,7 @@ import {
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import HQPanel from "./HQPanel";
+import { EditableLandingPage } from "./LandingPage";
 import { checkForAppUpdate, refreshBishBashAppShell } from "./appUpdate";
 
 function resolveTheme(theme) {
@@ -491,6 +492,16 @@ function buildActionSuccessOverlay(versionId = null) {
 }
 
 function App() {
+  if (typeof window !== "undefined") {
+    const rawPath = window.location.pathname.replace(BASE_PATH || "", "") || "/";
+    const normalizedPath = normalizeRoutePath(rawPath);
+    const hasAppRouteParam = new URLSearchParams(window.location.search).has("route");
+
+    if (!hasAppRouteParam && (normalizedPath === "/" || normalizedPath === "/index.html")) {
+      return <EditableLandingPage />;
+    }
+  }
+
   const initialState = useMemo(() => {
     const base = buildInitialState();
     return {
