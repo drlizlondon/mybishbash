@@ -52,7 +52,9 @@ function buildInstallHtml(launcher) {
         <p>private little messages from your earlier self</p>
       </header>
       <section class="install-card">
-        <img data-install-icon class="install-icon" src="${launcher.iconSrc}" alt="${escapeHtml(launcher.displayName)} icon" />
+        <a data-launch-link class="install-icon-link" href="/mybishbash${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} launcher">
+          <img data-install-icon class="install-icon" src="${launcher.iconSrc}" alt="${escapeHtml(launcher.displayName)} icon" />
+        </a>
         <div class="install-copy">
           <h2 data-version-name>${escapeHtml(launcher.displayName)}</h2>
           <p>Tap Share, then Add to Home Screen.</p>

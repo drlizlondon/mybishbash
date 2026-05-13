@@ -68,11 +68,19 @@ body {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.04);
 }
 
-.install-icon {
+.install-icon-link {
+  display: inline-flex;
   width: 80px;
   height: 80px;
   border-radius: 20px;
   margin-bottom: 24px;
+  flex: 0 0 auto;
+}
+
+.install-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
   object-fit: cover;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }

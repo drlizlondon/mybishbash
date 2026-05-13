@@ -40,6 +40,23 @@
     iconImage.alt = `${version.displayName || version.name} icon`;
   }
 
+  const launchLink = document.querySelector("[data-launch-link]");
+  if (launchLink && version.launchPath) {
+    launchLink.href = `${window.location.origin}${appBasePath}${version.launchPath}`;
+    launchLink.addEventListener("click", () => {
+      const pendingEvents = loadPendingEvents();
+      pendingEvents.push({
+        event_type: "fake_launcher_opened",
+        launcher_id: version.id,
+        route: version.launchPath,
+        created_at: new Date().toISOString(),
+        is_standalone: isStandalone,
+        opened_from: "install_icon",
+      });
+      window.localStorage.setItem("mybishbash.pending-launcher-install.v1", JSON.stringify(pendingEvents.slice(-20)));
+    });
+  }
+
   const versionName = document.querySelector("[data-version-name]");
   if (versionName) versionName.textContent = version.displayName || version.name;
 

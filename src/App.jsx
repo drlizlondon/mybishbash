@@ -533,16 +533,18 @@ function buildActionSuccessOverlay(versionId = null) {
 
 function App() {
   if (typeof window !== "undefined") {
-    const rawPath = window.location.pathname.replace(BASE_PATH || "", "") || "/";
+    const params = new URLSearchParams(window.location.search);
+    const routeParam = params.get("route");
+    const rawPath = routeParam || window.location.pathname.replace(BASE_PATH || "", "") || "/";
     const normalizedPath = normalizeRoutePath(rawPath);
-    const hasAppRouteParam = new URLSearchParams(window.location.search).has("route");
+    const hasAppRouteParam = params.has("route");
+
+    if (normalizedPath === "/early-access") {
+      return <EarlyAccessPage />;
+    }
 
     if (!hasAppRouteParam && (normalizedPath === "/" || normalizedPath === "/index.html")) {
       return <EditableLandingPage />;
-    }
-
-    if (!hasAppRouteParam && normalizedPath === "/early-access") {
-      return <EarlyAccessPage />;
     }
   }
 
@@ -1195,8 +1197,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!authReady || !session) return;
-    if (syncStatus === "loading") return;
+    if (!authReady) return;
+    if (session && syncStatus === "loading") return;
 
     if (!setupComplete && route.kind !== "intercept") {
       setScreen("onboarding");
@@ -2386,7 +2388,7 @@ function App() {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (!session) {
+  if (!session && route.kind !== "intercept") {
     return (
       <SyncConnectionScreen
         mode="connect"
@@ -2397,7 +2399,7 @@ function App() {
     );
   }
 
-  if (syncStatus === "loading") {
+  if (session && syncStatus === "loading") {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
@@ -4167,11 +4169,29 @@ function SettingsPanel({
                 key={version.id}
                 className="home-screen-version-card"
               >
-                <img
-                  src={previewIcon}
-                  alt={`${version.name} cover icon`}
-                  className="home-screen-version-icon"
-                />
+                {version.id !== "mybishbash" ? (
+                  <a
+                    href={`${BASE_PATH}/intercept/${version.id}`}
+                    className="home-screen-version-icon-link"
+                    aria-label={`Open ${version.name} launcher`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onFakeLauncherLaunch?.(version.id);
+                    }}
+                  >
+                    <img
+                      src={previewIcon}
+                      alt={`${version.name} cover icon`}
+                      className="home-screen-version-icon"
+                    />
+                  </a>
+                ) : (
+                  <img
+                    src={previewIcon}
+                    alt={`${version.name} cover icon`}
+                    className="home-screen-version-icon"
+                  />
+                )}
                 <div className="home-screen-version-copy">
                   <div className="home-screen-version-title">
                     <strong>{version.name}</strong>
