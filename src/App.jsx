@@ -10,6 +10,7 @@ import {
   loadHomeScreenVersions,
   loadLauncherBehaviorSettings,
   loadMood,
+  loadNotificationSettings,
   loadProfile,
   loadActionCards,
   loadSetupComplete,
@@ -21,6 +22,7 @@ import {
   saveHomeScreenVersions,
   saveLauncherBehaviorSettings,
   saveMood,
+  saveNotificationSettings,
   saveProfile,
   saveActionCards,
   saveSetupComplete,
@@ -45,6 +47,8 @@ import {
   logIn,
   logOut,
   markNotificationOpened,
+  saveNotificationPreferences,
+  savePushSubscription,
   checkIsAdmin,
   fetchGlobalPacks,
   touchUserProfile,
@@ -95,6 +99,7 @@ function resolveTheme(theme) {
 }
 
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
@@ -125,7 +130,13 @@ function getRouteFromLocation(setupComplete) {
   const normalized = normalizeRoutePath(rawPath);
 
   if (routeParam) {
-    window.history.replaceState({}, "", `${BASE_PATH}${normalized}`);
+    params.delete("route");
+    const remainingSearch = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      `${BASE_PATH}${normalized}${remainingSearch ? `?${remainingSearch}` : ""}`,
+    );
   }
 
   if (normalized === "/" || normalized === "/index.html") {
@@ -192,6 +203,29 @@ function urlBase64ToUint8Array(base64String) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
+}
+
+function getNotificationPermission() {
+  if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+  return Notification.permission;
+}
+
+async function getPushRegistration() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    throw new Error("Service workers are not supported in this browser.");
+  }
+
+  const registration =
+    (await navigator.serviceWorker.getRegistration(`${BASE_PATH || ""}/`)) ??
+    (import.meta.env.PROD
+      ? await navigator.serviceWorker.register(`${BASE_PATH}/service-worker.js`, { scope: `${BASE_PATH}/` })
+      : null);
+
+  if (registration) return registration;
+  if (!import.meta.env.PROD) {
+    throw new Error("Push notifications require the production service worker. Run a production preview to test them.");
+  }
+  return navigator.serviceWorker.ready;
 }
 
 function getInstallUrl(path) {
@@ -515,6 +549,7 @@ function App() {
       hiddenLibraryPacks: loadHiddenLibraryPacks(),
       events: loadEventLog(),
       actionCards: loadActionCards(),
+      notificationSettings: loadNotificationSettings(),
     };
   }, []);
   const [cards, setCards] = useState(initialState.cards);
@@ -528,6 +563,8 @@ function App() {
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
+  const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
+  const [notificationStatus, setNotificationStatus] = useState(() => getNotificationPermission());
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -601,6 +638,10 @@ function App() {
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
   const hiddenSinceRef = useRef(null);
   const suppressNextHomeAutoLaunchRef = useRef(false);
+  const visibleActionCards = useMemo(
+    () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
+    [actionCards],
+  );
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
 
@@ -961,6 +1002,17 @@ function App() {
   }, [actionCards]);
 
   useEffect(() => {
+    if (overlay?.type === "action-card" && visibleActionCards.length === 0) {
+      console.log("[ACTION CARDS] No visible action cards; switching to empty fallback.");
+      setOverlay(buildActionCardEmptyOverlay(overlay.versionId));
+    }
+  }, [overlay?.type, overlay?.versionId, visibleActionCards.length]);
+
+  useEffect(() => {
+    saveNotificationSettings(notificationSettings);
+  }, [notificationSettings]);
+
+  useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
     if (JSON.stringify(normalized) !== JSON.stringify(cards)) {
       setCards(normalized);
@@ -1069,7 +1121,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const deliveryId = params.get("deliveryId");
     if (deliveryId) {
-      console.log("[NOTIFICATION] Opened with deliveryId:", deliveryId);
+      console.log("[NOTIFICATIONS] Opened with deliveryId:", deliveryId);
       void markNotificationOpened(deliveryId);
 
       // Clean the URL
@@ -1108,6 +1160,13 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      if (
+        ["action-card", "action-card-empty", "action-success"].includes(overlay?.type) &&
+        overlay?.versionId === route.versionId
+      ) {
+        return;
+      }
+
       setLauncherContext(route.versionId);
       const { selected, interruption } = pickRandomHomeCardForDisplay(
         cards,
@@ -1207,6 +1266,7 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
+    console.log("[INTERCEPT] Starting interception flow", versionId);
     suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
@@ -1224,6 +1284,11 @@ function App() {
     );
 
     if (interruption) {
+      console.log("[INTERCEPT] Opening interruption pack", {
+        versionId: interruption.versionId,
+        packId: interruption.pack.id,
+        activeIndex: interruption.activeIndex ?? 0,
+      });
       setScreen("interception");
       setOverlay({
         ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
@@ -1235,8 +1300,10 @@ function App() {
 
     setScreen("library");
     if (selected) {
+      console.log("[INTERCEPT] Opening fallback BishBash card", selected.id);
       setOverlay(buildRevealOverlay(selected.id, versionId));
     } else {
+      console.log("[INTERCEPT] No eligible card; opening empty state", versionId);
       setOverlay(buildEmptyOverlay(versionId));
     }
     navigateTo(`/intercept/${versionId}`, { replace: true });
@@ -1256,6 +1323,110 @@ function App() {
     const next = await persistEventRecord(record);
     setEvents(next);
   }, [launcherContext]);
+
+  const syncNotificationPreferences = useCallback(
+    async (nextSettings) => {
+      if (!session?.user?.id) return;
+
+      console.log("[NOTIFICATIONS] Saving notification preferences", nextSettings);
+      await saveNotificationPreferences(session.user.id, {
+        enabled: Boolean(nextSettings.enabled),
+        notifications_per_day: Number(nextSettings.notificationsPerDay) || 3,
+        timezone: profile.timezone,
+      });
+    },
+    [profile.timezone, session?.user?.id],
+  );
+
+  const enableNotifications = useCallback(async () => {
+    console.log("[NOTIFICATIONS] Enable requested");
+
+    if (!session?.user?.id) {
+      setNotificationStatus("needs-login");
+      console.warn("[NOTIFICATIONS] Cannot enable without a logged-in user.");
+      return;
+    }
+
+    if (!("Notification" in window) || !("PushManager" in window)) {
+      setNotificationStatus("unsupported");
+      console.warn("[NOTIFICATIONS] Browser does not support Notification or PushManager.");
+      return;
+    }
+
+    if (!VAPID_PUBLIC_KEY) {
+      setNotificationStatus("missing-vapid-key");
+      console.warn("[NOTIFICATIONS] Missing VITE_VAPID_PUBLIC_KEY.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationStatus(permission);
+    console.log("[NOTIFICATIONS] Permission result", permission);
+
+    if (permission !== "granted") {
+      const nextSettings = { ...notificationSettings, enabled: false };
+      setNotificationSettings(nextSettings);
+      await syncNotificationPreferences(nextSettings);
+      return;
+    }
+
+    try {
+      const registration = await getPushRegistration();
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+
+      await savePushSubscription(session.user.id, subscription, navigator.userAgent);
+      const nextSettings = { ...notificationSettings, enabled: true };
+      setNotificationSettings(nextSettings);
+      await syncNotificationPreferences(nextSettings);
+      void logEvent({
+        event_type: "notification_toggle_on",
+        source_type: "notification",
+        card_source: "notification",
+        action_taken: "enabled",
+      });
+      console.log("[NOTIFICATIONS] Push subscription saved");
+    } catch (error) {
+      setNotificationStatus("error");
+      console.error("[NOTIFICATIONS] Could not enable push notifications", error);
+    }
+  }, [logEvent, notificationSettings, session?.user?.id, syncNotificationPreferences]);
+
+  const disableNotifications = useCallback(async () => {
+    const nextSettings = { ...notificationSettings, enabled: false };
+    setNotificationSettings(nextSettings);
+    await syncNotificationPreferences(nextSettings);
+    void logEvent({
+      event_type: "notification_toggle_off",
+      source_type: "notification",
+      card_source: "notification",
+      action_taken: "disabled",
+    });
+    console.log("[NOTIFICATIONS] Disabled");
+  }, [logEvent, notificationSettings, syncNotificationPreferences]);
+
+  const updateNotificationsPerDay = useCallback(
+    async (value) => {
+      const nextSettings = {
+        ...notificationSettings,
+        notificationsPerDay: Math.max(1, Math.min(6, Number(value) || 3)),
+      };
+      setNotificationSettings(nextSettings);
+      await syncNotificationPreferences(nextSettings);
+    },
+    [notificationSettings, syncNotificationPreferences],
+  );
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    void syncNotificationPreferences(notificationSettings);
+  }, [notificationSettings, session?.user?.id, syncNotificationPreferences]);
 
   function openSpecificReveal(cardId) {
     const selected = cards.find((card) => card.id === cardId);
@@ -2246,6 +2417,11 @@ function App() {
                   onRefreshSession={handleRefreshSession}
                   onRefreshAppShell={refreshAppShell}
                   onResetSharedState={handleResetSharedState}
+                  notificationSettings={notificationSettings}
+                  notificationStatus={notificationStatus}
+                  onEnableNotifications={enableNotifications}
+                  onDisableNotifications={disableNotifications}
+                  onUpdateNotificationsPerDay={updateNotificationsPerDay}
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
@@ -2397,6 +2573,10 @@ function App() {
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
+            console.log("[INTERCEPT] Choose something else", {
+              versionId: overlay?.versionId,
+              visibleActionCards: visibleActionCards.length,
+            });
             void logEvent({
               event_type: "intercept_do_something_else",
               source_type: "interruption",
@@ -2406,10 +2586,11 @@ function App() {
               launcher_context: activeOverlayVersion?.id,
               action_taken: "chose_something_else",
             });
-            const available = actionCards.filter((c) => !c.hidden && !c.deletedAt);
-            if (available.length === 0) {
+            if (visibleActionCards.length === 0) {
+              console.log("[ACTION CARDS] Opening empty fallback.");
               setOverlay(buildActionCardEmptyOverlay(overlay?.versionId));
             } else {
+              console.log("[ACTION CARDS] Opening overlay.");
               setOverlay(buildActionCardOverlay(overlay?.versionId));
             }
           }}
@@ -3788,6 +3969,11 @@ function SettingsPanel({
   onRefreshSession,
   onRefreshAppShell,
   onResetSharedState,
+  notificationSettings,
+  notificationStatus,
+  onEnableNotifications,
+  onDisableNotifications,
+  onUpdateNotificationsPerDay,
   actionCards,
   onRestoreActionCards,
   interruptionPacks,
@@ -3972,6 +4158,40 @@ function SettingsPanel({
           </button>
         </div>
         <AuthDiagnostics session={session} />
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Notifications</p>
+          <span>Small BishBash nudges from your saved cards.</span>
+        </div>
+        <label className="timing-option settings-checkbox-row" style={{ marginBottom: "12px" }}>
+          <input
+            type="checkbox"
+            checked={Boolean(notificationSettings?.enabled)}
+            onChange={(event) => {
+              if (event.target.checked) {
+                void onEnableNotifications();
+              } else {
+                void onDisableNotifications();
+              }
+            }}
+          />
+          <span>{notificationSettings?.enabled ? "On" : "Off"}</span>
+        </label>
+        <label className="field" style={{ marginBottom: "12px" }}>
+          <span>Per day</span>
+          <input
+            type="number"
+            min="1"
+            max="6"
+            className="settings-input"
+            value={notificationSettings?.notificationsPerDay ?? 3}
+            onChange={(event) => void onUpdateNotificationsPerDay(event.target.value)}
+          />
+        </label>
+        <p className="tiny-note" style={{ margin: 0 }}>
+          Status: {notificationStatus || "unknown"}
+        </p>
       </div>
       <div className="settings-card settings-compact">
         <div className="settings-version-heading">
@@ -4321,7 +4541,7 @@ function ActionCardOverlay({
   fakeLauncherVersions,
   onFakeLauncherLaunch,
 }) {
-  console.log("[ACTION CARD OVERLAY RENDERED]");
+  console.log("[ACTION CARDS] Overlay rendered");
 
   const available = useMemo(
     () => actionCards.filter((c) => !c.hidden && !c.deletedAt),
@@ -4338,6 +4558,13 @@ function ActionCardOverlay({
     setCurrentCard(nextCard);
     setRecentlyShown([nextCard.id]);
     logActionCardViewed(nextCard);
+  }, [available, currentCard]);
+
+  useEffect(() => {
+    if (!currentCard) return;
+    if (available.some((card) => card.id === currentCard.id)) return;
+    console.log("[ACTION CARDS] Current card is no longer visible; rotating.");
+    setCurrentCard(null);
   }, [available, currentCard]);
 
   function logActionCardViewed(card) {
@@ -4377,6 +4604,10 @@ function ActionCardOverlay({
 
     const nextCard = pool[Math.floor(Math.random() * pool.length)];
 
+    console.log("[ACTION CARDS] Rotating action card", {
+      from: currentCard?.id,
+      to: nextCard.id,
+    });
     setCurrentCard(nextCard);
 
     setRecentlyShown((prev) => {
@@ -4406,22 +4637,6 @@ function ActionCardOverlay({
   return (
     <div className="overlay-screen reveal">
       <div className="floating floating-heart" />
-      <p
-        style={{
-          background: "yellow",
-          padding: "4px 8px",
-          fontSize: "12px",
-          fontWeight: "bold",
-          position: "absolute",
-          top: "16px",
-          left: "16px",
-          zIndex: 100,
-          color: "black",
-          borderRadius: "4px"
-        }}
-      >
-        ACTION CARD OVERLAY ACTIVE
-      </p>
       <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
         <CloseGlyph />
       </button>

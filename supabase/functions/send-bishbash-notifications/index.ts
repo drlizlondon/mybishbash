@@ -86,7 +86,11 @@ serve(async (req) => {
       card_source: chosen.sourcePackId ? "library" : "personal",
       title,
       body: chosen.promptText || chosen.text,
-      delivery_status: "pending"
+      delivery_status: "pending",
+      metadata: {
+        source: "notification",
+        cardId: chosen.id,
+      },
     });
 
     const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", user.user_id);
@@ -101,7 +105,12 @@ serve(async (req) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify({ title, body: chosen.promptText || chosen.text, url: `${publicAppUrl}/?route=/card/${encodeURIComponent(chosen.id)}&source=notification&deliveryId=${deliveryId}` })
+          JSON.stringify({
+            title,
+            body: chosen.promptText || chosen.text,
+            url: `${publicAppUrl}/card/${encodeURIComponent(chosen.id)}?source=notification&deliveryId=${deliveryId}`,
+            deliveryId,
+          })
         );
         anySuccess = true;
       } catch (e: any) {

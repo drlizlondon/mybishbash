@@ -108,7 +108,10 @@ export async function savePushSubscription(userId, subscription, userAgent) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id, endpoint" });
   
-  if (error) console.error("Error saving push subscription:", error);
+  if (error) {
+    console.error("[NOTIFICATIONS] Error saving push subscription:", error);
+    throw error;
+  }
 }
 
 export async function removePushSubscription(userId, endpoint) {
@@ -128,7 +131,10 @@ export async function saveNotificationPreferences(userId, prefs) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
   
-  if (error) console.error("Error saving notification preferences:", error);
+  if (error) {
+    console.error("[NOTIFICATIONS] Error saving notification preferences:", error);
+    throw error;
+  }
 }
 
 export async function markNotificationOpened(deliveryId) {
@@ -136,7 +142,7 @@ export async function markNotificationOpened(deliveryId) {
   const client = requireSupabase();
   const { error } = await client.from("notification_delivery_log").update({ opened_at: new Date().toISOString() }).eq("id", deliveryId);
   
-  if (error) console.error("Error marking notification opened:", error);
+  if (error) console.error("[NOTIFICATIONS] Error marking notification opened:", error);
 }
 
 export async function checkIsAdmin(userId) {

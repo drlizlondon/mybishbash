@@ -1,5 +1,8 @@
 export function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
+  if (!("serviceWorker" in navigator)) {
+    console.warn("[NOTIFICATIONS] Service workers are not supported.");
+    return;
+  }
 
   window.addEventListener("load", () => {
     if (!import.meta.env.PROD) {
@@ -23,8 +26,11 @@ export function registerServiceWorker() {
     navigator.serviceWorker
       .register("/bishbash/service-worker.js", { scope: "/bishbash/" })
       .then((registration) => {
+        console.log("[NOTIFICATIONS] Service worker registered", registration.scope);
         registration.update().catch(() => {});
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.error("[NOTIFICATIONS] Service worker registration failed", error);
+      });
   });
 }

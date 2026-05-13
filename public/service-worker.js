@@ -87,6 +87,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
+  console.log("[NOTIFICATIONS] Push received", data);
 
   event.waitUntil(
     self.registration.showNotification(data.title || "Tiny BishBash moment?", {
@@ -101,7 +102,8 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || "/bishbash/";
+  const urlToOpen = normalizeNotificationUrl(event.notification.data?.url);
+  console.log("[NOTIFICATIONS] Notification clicked", urlToOpen);
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
@@ -122,6 +124,30 @@ self.addEventListener("notificationclick", (event) => {
     }),
   );
 });
+
+function normalizeNotificationUrl(rawUrl) {
+  const fallback = new URL("/bishbash/home", self.location.origin);
+
+  try {
+    const url = new URL(rawUrl || fallback.toString(), self.location.origin);
+    if (url.origin !== self.location.origin) return fallback.toString();
+
+    if (url.pathname === "/bishbash/" || url.pathname === "/bishbash/index.html") {
+      const route = url.searchParams.get("route");
+      if (route) {
+        const normalizedRoute = route.startsWith("/") ? route : `/${route}`;
+        url.pathname = `/bishbash${normalizedRoute}`;
+        url.searchParams.delete("route");
+      }
+    }
+
+    if (!url.pathname.startsWith("/bishbash/")) return fallback.toString();
+    return url.toString();
+  } catch (error) {
+    console.warn("[NOTIFICATIONS] Invalid notification URL", rawUrl, error);
+    return fallback.toString();
+  }
+}
 
 async function networkFirstHtml(request) {
   const cache = await caches.open(HTML_CACHE);
