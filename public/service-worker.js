@@ -1,92 +1,88 @@
-const CACHE_NAME = "bishbash-cache-v34";
-const APP_SHELL = [
-  "/bishbash/",
-  "/bishbash/index.html",
-  "/bishbash/manifest.webmanifest",
-  "/bishbash/icons/apple-touch-icon.png",
-  "/bishbash/icons/icon-192.svg",
-  "/bishbash/icons/icon-512.svg",
-  "/bishbash/icons/icon-maskable-512.svg",
-  "/bishbash/assets/index.js",
-  "/bishbash/assets/index.css",
+const CACHE_PREFIX = "bishbash-";
+const HTML_CACHE = `${CACHE_PREFIX}html-v1`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v1`;
+const MEDIA_CACHE = `${CACHE_PREFIX}media-v1`;
+const APP_BASE = "/bishbash/";
+const INDEX_URL = "/bishbash/index.html";
+
+const MEDIA_EXTENSIONS = [
+  ".avif",
+  ".gif",
+  ".ico",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".svg",
+  ".webp",
+  ".webmanifest",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+  event.waitUntil(
+    caches
+      .open(HTML_CACHE)
+      .then((cache) =>
+        fetch(INDEX_URL, { cache: "no-store" })
+          .then((response) => {
+            if (response.ok) return cache.put(INDEX_URL, response);
+            return undefined;
+          })
+          .catch(() => undefined),
+      )
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
-    ),
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(CACHE_PREFIX) && ![HTML_CACHE, RUNTIME_CACHE, MEDIA_CACHE].includes(key))
+            .map((key) => caches.delete(key)),
+        ),
+      )
+      .then(() => self.clients.claim()),
   );
-  self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
+  if (event.data?.type === "CLEAR_BISHBASH_CACHES") {
+    event.waitUntil(clearBishBashCaches());
+  }
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  if (event.request.mode === "navigate") {
-    const url = new URL(event.request.url);
-    const appRoute =
-      url.pathname === "/bishbash/home" ||
-      url.pathname === "/bishbash/library" ||
-      url.pathname === "/bishbash/log" ||
-      url.pathname === "/bishbash/packs" ||
-      url.pathname === "/bishbash/mood" ||
-      url.pathname === "/bishbash/settings" ||
-      url.pathname.startsWith("/bishbash/card/") ||
-      url.pathname === "/bishbash/caught-up" ||
-      url.pathname === "/bishbash/hq" ||
-      url.pathname.startsWith("/bishbash/intercept/");
-
-    if (appRoute) {
-      event.respondWith(
-        fetch(event.request)
-          .then((response) => {
-            const cloned = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put("/bishbash/index.html", cloned));
-            return response;
-          })
-          .catch(() => caches.match("/bishbash/index.html")),
-      );
-      return;
-    }
-
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match("/bishbash/index.html")),
-    );
-    return;
-  }
-
   const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin || !url.pathname.startsWith(APP_BASE)) return;
 
-  if (url.pathname.startsWith("/bishbash/assets/")) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-          return response;
-        })
-        .catch(() => caches.match(event.request)),
-    );
+  if (event.request.mode === "navigate" || acceptsHtml(event.request)) {
+    event.respondWith(networkFirstHtml(event.request));
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-          return response;
-        })
-        .catch(() => cached || caches.match("/bishbash/index.html"));
-    }),
-  );
+  if (url.pathname.endsWith("/version.json")) {
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
+    return;
+  }
+
+  if (isScriptOrStyle(event.request)) {
+    event.respondWith(networkFirst(event.request, RUNTIME_CACHE));
+    return;
+  }
+
+  if (isCacheableMedia(url.pathname)) {
+    event.respondWith(cacheFirst(event.request, MEDIA_CACHE));
+  }
 });
 
 self.addEventListener("push", (event) => {
@@ -97,8 +93,8 @@ self.addEventListener("push", (event) => {
       body: data.body || "Something you said mattered.",
       icon: "/bishbash/icons/icon-192.svg",
       badge: "/bishbash/icons/icon-192.svg",
-      data
-    })
+      data,
+    }),
   );
 });
 
@@ -109,7 +105,7 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      for (let i = 0; i < windowClients.length; i++) {
+      for (let i = 0; i < windowClients.length; i += 1) {
         const client = windowClients[i];
 
         if ("focus" in client) {
@@ -121,6 +117,65 @@ self.addEventListener("notificationclick", (event) => {
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
-    })
+
+      return undefined;
+    }),
   );
 });
+
+async function networkFirstHtml(request) {
+  const cache = await caches.open(HTML_CACHE);
+
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response.ok) {
+      await cache.put(INDEX_URL, response.clone());
+    }
+    return response;
+  } catch {
+    return (await cache.match(INDEX_URL)) || Response.error();
+  }
+}
+
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return (await cache.match(request)) || Response.error();
+  }
+}
+
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (response.ok) {
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+async function clearBishBashCaches() {
+  const keys = await caches.keys();
+  await Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX)).map((key) => caches.delete(key)));
+}
+
+function acceptsHtml(request) {
+  return request.headers.get("accept")?.includes("text/html");
+}
+
+function isScriptOrStyle(request) {
+  return request.destination === "script" || request.destination === "style";
+}
+
+function isCacheableMedia(pathname) {
+  return MEDIA_EXTENSIONS.some((extension) => pathname.endsWith(extension));
+}

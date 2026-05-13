@@ -22,6 +22,9 @@ export function registerServiceWorker() {
 
     navigator.serviceWorker
       .register("/bishbash/service-worker.js", { scope: "/bishbash/" })
+      .then((registration) => {
+        registration.update().catch(() => {});
+      })
       .catch(() => {});
   });
 }

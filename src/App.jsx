@@ -85,6 +85,7 @@ import {
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import HQPanel from "./HQPanel";
+import { checkForAppUpdate, refreshBishBashAppShell } from "./appUpdate";
 
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
@@ -522,6 +523,7 @@ function App() {
   const [syncError, setSyncError] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [globalPacks, setGlobalPacks] = useState([]);
+  const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(null);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
@@ -738,6 +740,29 @@ function App() {
     if (!session?.user) return;
     touchUserProfile(session.user);
   }, [session?.user?.email, session?.user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    checkForAppUpdate(BASE_PATH || "/bishbash").then((result) => {
+      if (!cancelled) setAppUpdate({ ...result, checking: false });
+    });
+
+    const interval = window.setInterval(() => {
+      checkForAppUpdate(BASE_PATH || "/bishbash").then((result) => {
+        if (!cancelled && result.updateAvailable) setAppUpdate({ ...result, checking: false });
+      });
+    }, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const refreshAppShell = useCallback(() => {
+    refreshBishBashAppShell(BASE_PATH || "/bishbash");
+  }, []);
 
   useEffect(() => {
     if (!session?.user?.id) return undefined;
@@ -2203,8 +2228,9 @@ function App() {
                   globalInterruptionMode={globalInterruptionMode}
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
           session={session}
-          onLogOut={handleLogOut}
+                  onLogOut={handleLogOut}
                   onRefreshSession={handleRefreshSession}
+                  onRefreshAppShell={refreshAppShell}
                   onResetSharedState={handleResetSharedState}
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
@@ -2389,6 +2415,17 @@ function App() {
           raised={Boolean(overlay)}
           onLaunch={startInterceptionFlow}
         />
+      ) : null}
+
+      {appUpdate.updateAvailable ? (
+        <div style={{ position: "fixed", left: "16px", right: "16px", bottom: "calc(16px + env(safe-area-inset-bottom))", zIndex: 80, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", maxWidth: "420px", width: "100%", padding: "12px 14px", borderRadius: "16px", background: "rgba(255,255,255,0.96)", boxShadow: "0 14px 40px rgba(0,0,0,0.18)", pointerEvents: "auto" }}>
+            <span style={{ flex: 1, color: "var(--charcoal)", fontWeight: 700 }}>Update available</span>
+            <button type="button" className="pack-button" onClick={refreshAppShell}>
+              Update
+            </button>
+          </div>
+        </div>
       ) : null}
     </>
   );
@@ -3735,6 +3772,7 @@ function SettingsPanel({
   session,
   onLogOut,
   onRefreshSession,
+  onRefreshAppShell,
   onResetSharedState,
   actionCards,
   onRestoreActionCards,
@@ -3920,6 +3958,15 @@ function SettingsPanel({
           </button>
         </div>
         <AuthDiagnostics session={session} />
+      </div>
+      <div className="settings-card settings-compact">
+        <div className="settings-version-heading">
+          <p>Refresh BishBash</p>
+          <span>Reload the latest app shell without deleting login, cards, preferences, or logs.</span>
+        </div>
+        <button type="button" className="pack-button secondary" onClick={onRefreshAppShell}>
+          Refresh BishBash
+        </button>
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">

@@ -10,8 +10,10 @@ const DISLIKED_PACK_CARD_IDS_KEY = "bishbash.disliked-pack-card-ids.v1";
 const GLOBAL_INTERRUPTION_MODE_KEY = "bishbash.global-interruption-mode.v1";
 const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "bishbash.launcher-behavior-settings.v1";
 const ACTION_CARDS_KEY = "bishbash.action-cards.v1";
+const ACTION_CARD_DEFAULTS_VERSION_KEY = "bishbash.action-card-defaults-version.v1";
 const NOTIFICATIONS_KEY = "bishbash.notifications.v1";
 const NOTIFICATION_SCHEDULE_KEY = "bishbash.notification-schedule.v1";
+const ACTION_CARD_DEFAULTS_VERSION = "2026-05-13";
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
@@ -363,17 +365,35 @@ export function loadActionCards() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(ACTION_CARDS_KEY));
     const storedArray = Array.isArray(stored) ? stored : [];
-    
+    const defaultsVersion = window.localStorage.getItem(ACTION_CARD_DEFAULTS_VERSION_KEY);
     const map = new Map();
-    DEFAULT_ACTION_CARDS.forEach((card) => map.set(card.id, { ...card }));
-    
+    DEFAULT_ACTION_CARDS.forEach((card) => map.set(card.id, { ...card, defaultsVersion: ACTION_CARD_DEFAULTS_VERSION }));
+
     storedArray.forEach((card) => {
       if (card?.id) {
-        map.set(card.id, { ...(map.get(card.id) || {}), ...card });
+        const defaultCard = map.get(card.id);
+        if (card.source === "starter" && defaultCard) {
+          const userChangedStarter =
+            card.deletedAt ||
+            card.hidden ||
+            (card.updatedAt && card.updatedAt !== DEFAULT_ACTION_CARD_TIMESTAMP);
+
+          map.set(card.id, {
+            ...(userChangedStarter || defaultsVersion === ACTION_CARD_DEFAULTS_VERSION ? card : defaultCard),
+            hidden: Boolean(card.hidden),
+            deletedAt: card.deletedAt ?? null,
+            defaultsVersion: ACTION_CARD_DEFAULTS_VERSION,
+          });
+          return;
+        }
+
+        map.set(card.id, { ...card });
       }
     });
+    window.localStorage.setItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
     return Array.from(map.values());
   } catch {
+    window.localStorage.setItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
     return DEFAULT_ACTION_CARDS;
   }
 }
