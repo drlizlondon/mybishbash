@@ -89,6 +89,7 @@ import {
 import Onboarding from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { EditableLandingPage } from "./LandingPage";
+import EarlyAccessPage from "./EarlyAccessPage";
 import { checkForAppUpdate, refreshBishBashAppShell } from "./appUpdate";
 
 const HQPanel = lazy(() => import("./HQPanel"));
@@ -534,6 +535,10 @@ function App() {
 
     if (!hasAppRouteParam && (normalizedPath === "/" || normalizedPath === "/index.html")) {
       return <EditableLandingPage />;
+    }
+
+    if (!hasAppRouteParam && normalizedPath === "/early-access") {
+      return <EarlyAccessPage />;
     }
   }
 

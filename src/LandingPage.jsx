@@ -7,6 +7,7 @@ import {
 } from "./editing/ContentEditContext";
 
 const APP_HOME_HREF = `${import.meta.env.BASE_URL}home`;
+const EARLY_ACCESS_HREF = `${import.meta.env.BASE_URL}early-access`;
 
 function BrandMark({ dark = false }) {
   return (
@@ -128,6 +129,10 @@ function Hero() {
             <div className="hero-actions reveal-up delay-2">
               <a className="button primary" href={APP_HOME_HREF} onClick={stopEditNavigation}>
                 <EditableText path="ctas.primary" />
+                <span aria-hidden="true">→</span>
+              </a>
+              <a className="button launch-list" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
+                Join early access
                 <span aria-hidden="true">→</span>
               </a>
               <a className="button secondary" href="/" onClick={stopEditNavigation}>
