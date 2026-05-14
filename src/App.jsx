@@ -1339,6 +1339,28 @@ function App() {
     if (!authReady) return;
     if (session && syncStatus === "loading") return;
 
+    const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
+    const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
+    const eligiblePackCount = normalizedDiagCards.filter((c) => c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
+    const diagInterruptionPack = getInterruptionPackForLauncher(launcherContext, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
+      hiddenCardIds: dislikedPackCardIds,
+      globalEnabled: globalInterruptionMode,
+    });
+
+    console.log("[LAUNCH_DIAG_ROUTE]", {
+      routeKind: route.kind,
+      routePath: route.path,
+      launcherContext,
+      isPersonalRoute,
+      shouldLaunchOverlay,
+      overlayType: overlay?.type,
+    });
+    console.log("[LAUNCH_DIAG_ELIGIBLE]", {
+      eligiblePersonalCount,
+      eligiblePackCount,
+      isInterruptionPackActive: (diagInterruptionPack?.cards?.length ?? 0) > 0,
+    });
+
     if (route.kind !== "intercept" && interceptActivationRef.current) {
       interceptActivationRef.current = null;
     }
@@ -1427,6 +1449,7 @@ function App() {
 
       setScreen("library");
       if (selected) {
+        console.log("[LAUNCH_DIAG_DECISION] intercept -> reveal");
         setOverlay({
           ...buildRevealOverlay(selected.id, route.versionId),
           activationKey: activeActivation.activationKey,
@@ -1434,6 +1457,7 @@ function App() {
         return;
       }
 
+      console.log("[LAUNCH_DIAG_DECISION] intercept -> empty");
       setOverlay({
         ...buildEmptyOverlay(route.versionId),
         activationKey: activeActivation.activationKey,
@@ -1515,10 +1539,12 @@ function App() {
         fallbackReason: null,
       });
       if (selected) {
+        console.log("[LAUNCH_DIAG_DECISION] personal -> reveal");
         setOverlay(buildRevealOverlay(selected.id));
         return;
       }
 
+      console.log("[LAUNCH_DIAG_DECISION] personal -> empty");
       setOverlay(buildEmptyOverlay());
       return;
     }
