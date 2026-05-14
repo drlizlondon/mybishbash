@@ -598,6 +598,8 @@ function App() {
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
   const loggedLauncherOpenRef = useRef("");
+  const interceptActivationRef = useRef(null);
+  const interceptActivationCounterRef = useRef(0);
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
@@ -1137,6 +1139,62 @@ function App() {
     [logEvent, session],
   );
 
+  function createInterceptActivation(versionId, source = "route") {
+    interceptActivationCounterRef.current += 1;
+    return `${versionId}:${source}:${Date.now()}:${interceptActivationCounterRef.current}`;
+  }
+
+  function selectLauncherActivationCard(versionId, source = "route") {
+    const activationKey = createInterceptActivation(versionId, source);
+    console.log("[INTERCEPT] activation started", { versionId, activationKey, source });
+    const selectionEvents =
+      overlay?.type === "intercept-pack" && overlay?.versionId === versionId
+        ? [
+            ...events,
+            {
+              event_type: "intercept_card_viewed",
+              created_at: new Date().toISOString(),
+              source_type: "interruption",
+              card_source: "interruption",
+              pack_id: overlay.packId,
+              card_id: overlay.cards?.[overlay.activeIndex ?? 0]?.id ?? `${overlay.packId}:${overlay.activeIndex ?? 0}`,
+              message_id: `${overlay.packId}:${overlay.activeIndex ?? 0}`,
+            },
+          ]
+        : events;
+    const { selected, interruption } = pickRandomHomeCardForDisplay(
+      cards,
+      profile.timezone,
+      versionId,
+      homeScreenVersions,
+      launcherBehaviorSettings,
+      cardPacks,
+      dislikedPackCardIds,
+      globalInterruptionMode,
+      selectionEvents,
+    );
+    const selectedCard = interruption
+      ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
+      : selected;
+    console.log("[INTERCEPT] selected card", {
+      versionId,
+      activationKey,
+      source,
+      overlayType: interruption ? "intercept-pack" : selected ? "reveal" : "empty",
+      packId: interruption?.pack?.id ?? null,
+      cardId: selectedCard?.id ?? null,
+      activeIndex: interruption?.activeIndex ?? null,
+    });
+    interceptActivationRef.current = {
+      activationKey,
+      versionId,
+      source,
+      selected,
+      interruption,
+    };
+    return interceptActivationRef.current;
+  }
+
   useEffect(() => {
     if (route.kind !== "intercept") {
       setLauncherContext(getLauncherContextFromRoute(initialRoute));
@@ -1200,6 +1258,10 @@ function App() {
     if (!authReady) return;
     if (session && syncStatus === "loading") return;
 
+    if (route.kind !== "intercept" && interceptActivationRef.current) {
+      interceptActivationRef.current = null;
+    }
+
     if (!setupComplete && route.kind !== "intercept") {
       setScreen("onboarding");
       setOverlay(null);
@@ -1238,23 +1300,30 @@ function App() {
         return;
       }
 
+      if (overlay?.type === "intercept-pack" && overlay?.versionId === route.versionId) {
+        console.log("[INTERCEPT] skipped rebuild because overlay already active", {
+          versionId: route.versionId,
+          activationKey: interceptActivationRef.current?.activationKey ?? null,
+        });
+        setScreen("interception");
+        return;
+      }
+
+      if (["reveal", "empty"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
+        return;
+      }
+
       setLauncherContext(route.versionId);
       const launcherOpenKey = `${route.versionId}:${route.path}:${session?.user?.id ?? "anon"}`;
       if (loggedLauncherOpenRef.current !== launcherOpenKey) {
         loggedLauncherOpenRef.current = launcherOpenKey;
         void logLauncherEvent("fake_launcher_opened", route.versionId);
       }
-      const { selected, interruption } = pickRandomHomeCardForDisplay(
-        cards,
-        profile.timezone,
-        route.versionId,
-        homeScreenVersions,
-        launcherBehaviorSettings,
-        cardPacks,
-        dislikedPackCardIds,
-        globalInterruptionMode,
-        events,
-      );
+      const activeActivation =
+        interceptActivationRef.current?.versionId === route.versionId
+          ? interceptActivationRef.current
+          : selectLauncherActivationCard(route.versionId, "route");
+      const { selected, interruption } = activeActivation;
 
       if (interruption) {
         setScreen("interception");
@@ -1349,17 +1418,7 @@ function App() {
     loggedLauncherOpenRef.current = `${versionId}:/intercept/${versionId}:${session?.user?.id ?? "anon"}`;
     void logLauncherEvent("fake_launcher_opened", versionId, { launched_from: "in_app_fake_launcher_bar" });
 
-    const { selected, interruption } = pickRandomHomeCardForDisplay(
-      cards,
-      profile.timezone,
-      versionId,
-      homeScreenVersions,
-      launcherBehaviorSettings,
-      cardPacks,
-      dislikedPackCardIds,
-      globalInterruptionMode,
-      events,
-    );
+    const { selected, interruption } = selectLauncherActivationCard(versionId, "in_app_fake_launcher_bar");
 
     if (interruption) {
       console.log("[INTERCEPT] Opening interruption pack", {
@@ -5001,6 +5060,13 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         packTitle: overlay.name,
         message: activeMessage,
       },
+    });
+    console.log("[INTERCEPT] viewed event logged", {
+      versionId: version.id,
+      packId: overlay.packId,
+      cardId: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
+      messageId: `${overlay.packId}:${activeIndex}`,
+      cardIndex: activeIndex,
     });
     void onLogLauncherEvent?.("intercept_card_viewed", version.id, {
       card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
