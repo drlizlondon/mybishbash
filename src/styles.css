@@ -2504,6 +2504,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  pointer-events: none;
 }
 
 .fake-launcher-button {
@@ -2521,6 +2522,8 @@ textarea {
     0 10px 24px rgba(114, 79, 65, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(16px);
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .fake-launcher-button span {

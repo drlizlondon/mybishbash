@@ -1,3 +1,5 @@
+import { getVersionOpenHref } from "./launcherState";
+
 function SafariGlyph() {
   return (
     <svg viewBox="0 0 32 32" className="safari-glyph" aria-hidden="true">
@@ -11,22 +13,33 @@ function SafariGlyph() {
 export default function FakeLauncherBar({ versions, raised = false, onLaunch }) {
   return (
     <div className={`fake-launcher-bar ${raised ? "raised" : ""}`} aria-label="Fake app launchers">
-      {versions.map((version) => (
-        <button
-          key={version.id}
-          type="button"
-          className="fake-launcher-button"
-          onClick={() => onLaunch?.(version.id)}
-          aria-label={`Launch ${version.realAppLabel}`}
-        >
-          {version.customIconSrc || version.iconSrc ? (
-            <img src={version.customIconSrc || version.iconSrc} alt="" aria-hidden="true" />
-          ) : (
-            <SafariGlyph />
-          )}
-          <span>{version.realAppLabel}</span>
-        </button>
-      ))}
+      {versions.map((version) => {
+        const href = getVersionOpenHref(version);
+
+        return (
+          <button
+            key={version.id}
+            type="button"
+            className="fake-launcher-button"
+            onClick={() => {
+              console.log("[LAUNCHER] clicked", version.id, href);
+              if (href) {
+                console.log("[LAUNCHER] opening", href);
+                window.location.assign(href);
+              }
+              onLaunch?.(version.id, { href, opened: Boolean(href) });
+            }}
+            aria-label={`Launch ${version.realAppLabel}`}
+          >
+            {version.customIconSrc || version.iconSrc ? (
+              <img src={version.customIconSrc || version.iconSrc} alt="" aria-hidden="true" />
+            ) : (
+              <SafariGlyph />
+            )}
+            <span>{version.realAppLabel}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

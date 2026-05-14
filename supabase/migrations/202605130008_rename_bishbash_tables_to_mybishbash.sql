@@ -11,9 +11,32 @@ begin
   end if;
 end $$;
 
-alter table if exists public.mybishbash_state rename constraint bishbash_state_pkey to mybishbash_state_pkey;
-alter table if exists public.mybishbash_state rename constraint bishbash_state_profile_id_key to mybishbash_state_profile_id_key;
-alter table if exists public.mybishbash_state rename constraint bishbash_state_user_id_key to mybishbash_state_user_id_key;
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.mybishbash_state'::regclass
+      and conname = 'bishbash_state_pkey'
+  ) then
+    alter table public.mybishbash_state rename constraint bishbash_state_pkey to mybishbash_state_pkey;
+  end if;
+
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.mybishbash_state'::regclass
+      and conname = 'bishbash_state_profile_id_key'
+  ) then
+    alter table public.mybishbash_state rename constraint bishbash_state_profile_id_key to mybishbash_state_profile_id_key;
+  end if;
+
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.mybishbash_state'::regclass
+      and conname = 'bishbash_state_user_id_key'
+  ) then
+    alter table public.mybishbash_state rename constraint bishbash_state_user_id_key to mybishbash_state_user_id_key;
+  end if;
+end $$;
 
 alter index if exists public.bishbash_events_created_at_idx rename to mybishbash_events_created_at_idx;
 alter index if exists public.bishbash_events_user_created_at_idx rename to mybishbash_events_user_created_at_idx;

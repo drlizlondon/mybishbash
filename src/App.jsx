@@ -1387,6 +1387,25 @@ function App() {
     navigateTo(`/intercept/${versionId}`, { replace: true });
   }
 
+  function handleFakeLauncherLaunch(versionId, launch = {}) {
+    const version = resolveVersionConfig(
+      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+      launcherBehaviorSettings[versionId],
+    );
+    const href = launch.href || getVersionOpenHref(version);
+
+    if (!launch.opened && href) {
+      console.log("[LAUNCHER] clicked", versionId, href);
+      console.log("[LAUNCHER] opening", href);
+      window.location.assign(href);
+    }
+
+    void logLauncherEvent("fake_launcher_real_app_opened", versionId, {
+      launched_from: "in_app_fake_launcher_bar",
+      href,
+    });
+  }
+
   function updateCards(updater) {
     setCards((current) =>
       normalizeCards(typeof updater === "function" ? updater(current) : updater, new Date(), profile.timezone),
@@ -2697,7 +2716,7 @@ function App() {
             setIsActionCardEditorOpen(true);
           }}
           fakeLauncherVersions={fakeLauncherVersions}
-          onFakeLauncherLaunch={startInterceptionFlow}
+          onFakeLauncherLaunch={handleFakeLauncherLaunch}
         />
       ) : null}
 
@@ -2705,7 +2724,7 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={Boolean(overlay)}
-          onLaunch={startInterceptionFlow}
+          onLaunch={handleFakeLauncherLaunch}
         />
       ) : null}
 
@@ -4791,6 +4810,13 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
   function handleContinueToApp() {
     if (!version) return;
 
+    const href = getVersionOpenHref(version);
+    console.log("[LAUNCHER] clicked", version.id, href);
+    if (href) {
+      console.log("[LAUNCHER] opening", href);
+      window.location.assign(href);
+    }
+
     void onLogEvent({
       event_type: "intercept_continue_to_app",
       source_type: "action_card_empty",
@@ -4800,11 +4826,6 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
       launcher_context: version.id,
       action_taken: "continued_to_app",
     });
-
-    const href = getVersionOpenHref(version);
-    if (href) {
-      window.location.href = href;
-    }
   }
 
   return (
@@ -5001,20 +5022,23 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
   function handleContinueToApp() {
     if (!version) return;
 
-    void onLogLauncherEvent?.("intercept_continue_to_app", version.id);
-    void onLogLauncherEvent?.("fake_launcher_real_app_opened", version.id);
+    const href = getVersionOpenHref(version);
+    console.log("[LAUNCHER] clicked", version.id, href);
+    if (href) {
+      console.log("[LAUNCHER] opening", href);
+      window.location.assign(href);
+    }
+
+    void onLogLauncherEvent?.("intercept_continue_to_app", version.id, { href });
+    void onLogLauncherEvent?.("fake_launcher_real_app_opened", version.id, { href });
     void onLogEvent({
       event_type: "intercept_continue_to_app",
       app_id: version.id,
       app_name: version.name,
       launcher_context: version.id,
       action_taken: "continued_to_app",
+      metadata: { href },
     });
-
-    const href = getVersionOpenHref(version);
-    if (href) {
-      window.location.href = href;
-    }
   }
 
   return (
