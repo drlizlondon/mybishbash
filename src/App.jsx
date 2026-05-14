@@ -544,12 +544,14 @@ function App() {
     const rawPath = routeParam || window.location.pathname.replace(BASE_PATH || "", "") || "/";
     const normalizedPath = normalizeRoutePath(rawPath);
     const hasAppRouteParam = params.has("route");
+    const isStandaloneMode = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone || !!window.Capacitor;
 
     if (normalizedPath === "/early-access") {
       return <EarlyAccessPage />;
     }
 
     if (!hasAppRouteParam && (normalizedPath === "/" || normalizedPath === "/index.html")) {
+    if (!hasAppRouteParam && !isStandaloneMode && (normalizedPath === "/" || normalizedPath === "/index.html")) {
       return <EditableLandingPage />;
     }
   }
@@ -665,8 +667,10 @@ function App() {
     () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
     [actionCards],
   );
+  const isPersonalRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
   const isLaunchingHomeOverlay =
     screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
+    screen === "library" && isPersonalRoute && shouldLaunchOverlay && overlay == null;
 
   const currentSharedState = useCallback(
     () =>
@@ -1253,27 +1257,6 @@ function App() {
         setRoutePath(resumeRoute.path);
       }
 
-      if (resumeRoute.kind === "home") {
-        const launchAttemptId = createLaunchAttemptId("home", source);
-        suppressNextHomeAutoLaunchRef.current = false;
-        interceptActivationRef.current = null;
-        setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
-        setShouldLaunchOverlay(true);
-        setOverlay(null);
-        console.log("[LAUNCH_ATTEMPT] home resume", {
-          route: resumeRoute.path,
-          launcherContext: NORMAL_LAUNCHER_CONTEXT,
-          launchAttemptId,
-          source,
-          eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
-          selectedCardId: null,
-          caughtUpReason: null,
-          fallbackReason: null,
-        });
-        navigateTo("/home", { replace: true });
-        return;
-      }
-
       if (resumeRoute.kind === "intercept") {
         interceptActivationRef.current = null;
         loggedLauncherOpenRef.current = "";
@@ -1292,7 +1275,14 @@ function App() {
           fallbackReason: null,
         });
         navigateTo(`/intercept/${resumeRoute.versionId}`, { replace: true });
+        return;
       }
+
+      suppressNextHomeAutoLaunchRef.current = false;
+      interceptActivationRef.current = null;
+      setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
+      setShouldLaunchOverlay(true);
+      setOverlay(null);
     };
 
     const handleHidden = () => {
@@ -1471,14 +1461,17 @@ function App() {
     }
 
     if (route.kind === "home" && shouldLaunchOverlay) {
+    if (isPersonalRoute && shouldLaunchOverlay) {
       if (suppressNextHomeAutoLaunchRef.current) {
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
         console.log("[LAUNCH_ATTEMPT] home suppressed", {
+        console.log("[LAUNCH_ATTEMPT] personal suppressed", {
           route: route.path,
           launcherContext: NORMAL_LAUNCHER_CONTEXT,
           launchAttemptId: createLaunchAttemptId("home", "suppressed"),
+          launchAttemptId: createLaunchAttemptId("personal", "suppressed"),
           eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
           selectedCardId: null,
           caughtUpReason: null,
@@ -1488,6 +1481,7 @@ function App() {
       }
 
       const launchAttemptId = createLaunchAttemptId("home", "route");
+      const launchAttemptId = createLaunchAttemptId("personal", "route");
       const { selected } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
@@ -1501,6 +1495,7 @@ function App() {
       );
       setShouldLaunchOverlay(false);
       console.log("[LAUNCH_ATTEMPT] home resolved", {
+      console.log("[LAUNCH_ATTEMPT] personal resolved", {
         route: route.path,
         launcherContext: NORMAL_LAUNCHER_CONTEXT,
         launchAttemptId,
@@ -1519,6 +1514,11 @@ function App() {
     }
 
     if (route.kind === "home") {
+    if (isPersonalRoute) {
+      if (overlay?.type === "reveal" || overlay?.type === "empty") {
+        return;
+      }
+      setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
       return;
     }
 
@@ -1782,6 +1782,9 @@ function App() {
     suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     navigateTo("/home", { replace: true });
+    if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
+      navigateTo("/home", { replace: true });
+    }
     setOverlay(null);
   }
 
@@ -2082,8 +2085,10 @@ function App() {
     });
     suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
+    if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
+      navigateTo("/home", { replace: true });
+    }
     setOverlay(null);
-    navigateTo("/home");
   }
 
   function dislikeInterruptionPackCard(packId, card) {
@@ -2833,6 +2838,9 @@ function App() {
             suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
             navigateTo("/home", { replace: true });
+            if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
+              navigateTo("/home", { replace: true });
+            }
             setOverlay(null);
           }}
           onAction={handleAction}
@@ -2860,8 +2868,10 @@ function App() {
             }
             suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
+            if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
+              navigateTo("/home", { replace: true });
+            }
             setOverlay(null);
-            navigateTo("/home");
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
