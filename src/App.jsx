@@ -667,8 +667,7 @@ function App() {
     [actionCards],
   );
   const isPersonalRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
-  const isLaunchingHomeOverlay =
-    screen === "library" && isPersonalRoute && shouldLaunchOverlay && overlay == null;
+  const isLaunchingHomeOverlay = isPersonalRoute && shouldLaunchOverlay && overlay == null;
 
   const currentSharedState = useCallback(
     () =>
@@ -1475,6 +1474,13 @@ function App() {
         return;
       }
 
+      console.log("[LAUNCH_CHECK] evaluating personal route launch", {
+        route: route.path,
+        shouldLaunchOverlay,
+        overlayType: overlay?.type,
+        isPersonalRoute
+      });
+
       const launchAttemptId = createLaunchAttemptId("personal", "route");
       const { selected } = pickRandomHomeCardForDisplay(
         cards,
@@ -1487,12 +1493,23 @@ function App() {
         globalInterruptionMode,
         events,
       );
+
+      const eligibleCount = countEligibleGeneralCards(cards, profile.timezone);
+      console.log("[ELIGIBLE_COUNTS]", {
+        totalCards: cards.length,
+        eligible: eligibleCount,
+      });
+
       setShouldLaunchOverlay(false);
+
+      console.log("[SELECTED_CARD]", selected);
+      console.log("[EMPTY_REASON]", selected ? null : "No eligible cards found at launch check.");
+
       console.log("[LAUNCH_ATTEMPT] personal resolved", {
         route: route.path,
         launcherContext: NORMAL_LAUNCHER_CONTEXT,
         launchAttemptId,
-        eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
+        eligibleCardCount: eligibleCount,
         selectedCardId: selected?.id ?? null,
         caughtUpReason: selected ? null : "no eligible general bash cards",
         fallbackReason: null,
