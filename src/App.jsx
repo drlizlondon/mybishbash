@@ -550,7 +550,6 @@ function App() {
       return <EarlyAccessPage />;
     }
 
-    if (!hasAppRouteParam && (normalizedPath === "/" || normalizedPath === "/index.html")) {
     if (!hasAppRouteParam && !isStandaloneMode && (normalizedPath === "/" || normalizedPath === "/index.html")) {
       return <EditableLandingPage />;
     }
@@ -669,7 +668,6 @@ function App() {
   );
   const isPersonalRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
   const isLaunchingHomeOverlay =
-    screen === "library" && route.kind === "home" && shouldLaunchOverlay && overlay == null;
     screen === "library" && isPersonalRoute && shouldLaunchOverlay && overlay == null;
 
   const currentSharedState = useCallback(
@@ -1460,17 +1458,14 @@ function App() {
       return;
     }
 
-    if (route.kind === "home" && shouldLaunchOverlay) {
     if (isPersonalRoute && shouldLaunchOverlay) {
       if (suppressNextHomeAutoLaunchRef.current) {
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-        console.log("[LAUNCH_ATTEMPT] home suppressed", {
         console.log("[LAUNCH_ATTEMPT] personal suppressed", {
           route: route.path,
           launcherContext: NORMAL_LAUNCHER_CONTEXT,
-          launchAttemptId: createLaunchAttemptId("home", "suppressed"),
           launchAttemptId: createLaunchAttemptId("personal", "suppressed"),
           eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
           selectedCardId: null,
@@ -1480,7 +1475,6 @@ function App() {
         return;
       }
 
-      const launchAttemptId = createLaunchAttemptId("home", "route");
       const launchAttemptId = createLaunchAttemptId("personal", "route");
       const { selected } = pickRandomHomeCardForDisplay(
         cards,
@@ -1494,7 +1488,6 @@ function App() {
         events,
       );
       setShouldLaunchOverlay(false);
-      console.log("[LAUNCH_ATTEMPT] home resolved", {
       console.log("[LAUNCH_ATTEMPT] personal resolved", {
         route: route.path,
         launcherContext: NORMAL_LAUNCHER_CONTEXT,
@@ -1513,7 +1506,6 @@ function App() {
       return;
     }
 
-    if (route.kind === "home") {
     if (isPersonalRoute) {
       if (overlay?.type === "reveal" || overlay?.type === "empty") {
         return;
