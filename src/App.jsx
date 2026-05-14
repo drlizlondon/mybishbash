@@ -333,7 +333,7 @@ function pickRandomHomeCardForDisplay(
 
   const candidates = [...singles];
 
-  if (interruptionPack) {
+  if (interruptionPack?.cards?.length > 0) {
     return {
       normalized,
       selected: null,
@@ -650,7 +650,9 @@ function App() {
   );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
+  const [resumeLaunchNonce, setResumeLaunchNonce] = useState(0);
   const hiddenSinceRef = useRef(null);
+  const handledResumeLaunchNonceRef = useRef(0);
   const suppressNextHomeAutoLaunchRef = useRef(false);
   const visibleActionCards = useMemo(
     () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
@@ -1227,16 +1229,29 @@ function App() {
       if (document.visibilityState === "visible") {
         const hiddenFor = hiddenSinceRef.current ? Date.now() - hiddenSinceRef.current : 0;
         hiddenSinceRef.current = null;
-        if (hiddenFor > 1000 && route.kind === "home" && setupComplete) {
+        if (hiddenFor <= 1000 || !setupComplete) return;
+
+        if (route.kind === "home") {
           setShouldLaunchOverlay(true);
+          setOverlay(null);
           navigateTo("/home", { replace: true });
+          return;
+        }
+
+        if (route.kind === "intercept") {
+          interceptActivationRef.current = null;
+          loggedLauncherOpenRef.current = "";
+          setShouldLaunchOverlay(false);
+          setLauncherContext(route.versionId);
+          setResumeLaunchNonce((current) => current + 1);
+          navigateTo(`/intercept/${route.versionId}`, { replace: true });
         }
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [cards, profile.timezone, route.kind, setupComplete, authReady, session, syncStatus]);
+  }, [cards, profile.timezone, route.kind, route.versionId, setupComplete, authReady, session, syncStatus]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1293,14 +1308,17 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      const isResumeInterceptLaunch = resumeLaunchNonce !== handledResumeLaunchNonceRef.current;
+
       if (
+        !isResumeInterceptLaunch &&
         ["action-card", "action-card-empty", "action-success"].includes(overlay?.type) &&
         overlay?.versionId === route.versionId
       ) {
         return;
       }
 
-      if (overlay?.type === "intercept-pack" && overlay?.versionId === route.versionId) {
+      if (!isResumeInterceptLaunch && overlay?.type === "intercept-pack" && overlay?.versionId === route.versionId) {
         console.log("[INTERCEPT] skipped rebuild because overlay already active", {
           versionId: route.versionId,
           activationKey: interceptActivationRef.current?.activationKey ?? null,
@@ -1309,20 +1327,26 @@ function App() {
         return;
       }
 
-      if (["reveal", "empty"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
+      if (!isResumeInterceptLaunch && ["reveal", "empty"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
         return;
       }
 
       setLauncherContext(route.versionId);
+      if (isResumeInterceptLaunch) {
+        handledResumeLaunchNonceRef.current = resumeLaunchNonce;
+        interceptActivationRef.current = null;
+      }
       const launcherOpenKey = `${route.versionId}:${route.path}:${session?.user?.id ?? "anon"}`;
       if (loggedLauncherOpenRef.current !== launcherOpenKey) {
         loggedLauncherOpenRef.current = launcherOpenKey;
-        void logLauncherEvent("fake_launcher_opened", route.versionId);
+        void logLauncherEvent("fake_launcher_opened", route.versionId, {
+          launched_from: isResumeInterceptLaunch ? "home_screen_resume" : "route",
+        });
       }
       const activeActivation =
-        interceptActivationRef.current?.versionId === route.versionId
+        !isResumeInterceptLaunch && interceptActivationRef.current?.versionId === route.versionId
           ? interceptActivationRef.current
-          : selectLauncherActivationCard(route.versionId, "route");
+          : selectLauncherActivationCard(route.versionId, isResumeInterceptLaunch ? "resume" : "route");
       const { selected, interruption } = activeActivation;
 
       if (interruption) {
@@ -1330,17 +1354,24 @@ function App() {
         setOverlay({
           ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
           versionId: interruption.versionId,
+          activationKey: activeActivation.activationKey,
         });
         return;
       }
 
       setScreen("library");
       if (selected) {
-        setOverlay(buildRevealOverlay(selected.id, route.versionId));
+        setOverlay({
+          ...buildRevealOverlay(selected.id, route.versionId),
+          activationKey: activeActivation.activationKey,
+        });
         return;
       }
 
-      setOverlay(buildEmptyOverlay(route.versionId));
+      setOverlay({
+        ...buildEmptyOverlay(route.versionId),
+        activationKey: activeActivation.activationKey,
+      });
       return;
     }
 
@@ -1401,7 +1432,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, overlay?.type, overlay?.versionId, overlay?.cardId, logLauncherEvent]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, overlay?.type, overlay?.versionId, overlay?.cardId, logLauncherEvent]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -2697,6 +2728,7 @@ function App() {
 
       {overlay ? (
         <Overlay
+          key={overlay.activationKey ?? `${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}`}
           overlay={overlay}
           card={activeRevealCard}
           route={route}
