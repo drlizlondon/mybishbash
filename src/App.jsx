@@ -363,6 +363,12 @@ function pickRandomHomeCardForDisplay(
   return { normalized, selected };
 }
 
+function countEligibleGeneralCards(currentCards, timezone) {
+  return normalizeCards(currentCards, new Date(), timezone).filter((card) =>
+    isEligible(card, new Date(), timezone) && !card.deletedAt
+  ).length;
+}
+
 function buildInitialState() {
   const profile = loadProfile();
   const setupComplete = loadSetupComplete();
@@ -600,6 +606,7 @@ function App() {
   const loggedLauncherOpenRef = useRef("");
   const interceptActivationRef = useRef(null);
   const interceptActivationCounterRef = useRef(0);
+  const launchAttemptCounterRef = useRef(0);
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
@@ -1146,9 +1153,19 @@ function App() {
     return `${versionId}:${source}:${Date.now()}:${interceptActivationCounterRef.current}`;
   }
 
+  function createLaunchAttemptId(routeKind, source = "route") {
+    launchAttemptCounterRef.current += 1;
+    return `${routeKind}:${source}:${Date.now()}:${launchAttemptCounterRef.current}`;
+  }
+
   function selectLauncherActivationCard(versionId, source = "route") {
     const activationKey = createInterceptActivation(versionId, source);
-    console.log("[INTERCEPT] activation started", { versionId, activationKey, source });
+    console.log("[LAUNCH_ATTEMPT] intercept started", {
+      route: route.path,
+      launcherContext: versionId,
+      launchAttemptId: activationKey,
+      source,
+    });
     const selectionEvents =
       overlay?.type === "intercept-pack" && overlay?.versionId === versionId
         ? [
@@ -1164,28 +1181,37 @@ function App() {
             },
           ]
         : events;
-    const { selected, interruption } = pickRandomHomeCardForDisplay(
-      cards,
-      profile.timezone,
-      versionId,
-      homeScreenVersions,
-      launcherBehaviorSettings,
-      cardPacks,
-      dislikedPackCardIds,
-      globalInterruptionMode,
-      selectionEvents,
-    );
+    const interruptionPack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
+      hiddenCardIds: dislikedPackCardIds,
+      globalEnabled: globalInterruptionMode,
+    });
+    const eligibleCardCount = interruptionPack?.cards?.length ?? 0;
+    const interruption = eligibleCardCount > 0
+      ? {
+          type: "interruption",
+          pack: interruptionPack,
+          versionId,
+          activeIndex: pickInterruptionCardIndex(interruptionPack, selectionEvents),
+        }
+      : null;
+    const selected = null;
     const selectedCard = interruption
       ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
       : selected;
-    console.log("[INTERCEPT] selected card", {
+    console.log("[LAUNCH_ATTEMPT] intercept resolved", {
+      route: route.path,
+      launcherContext: versionId,
+      launchAttemptId: activationKey,
       versionId,
-      activationKey,
       source,
+      eligibleCardCount,
       overlayType: interruption ? "intercept-pack" : selected ? "reveal" : "empty",
       packId: interruption?.pack?.id ?? null,
       cardId: selectedCard?.id ?? null,
+      selectedCardId: selectedCard?.id ?? null,
       activeIndex: interruption?.activeIndex ?? null,
+      caughtUpReason: interruption ? null : "no eligible interrupter cards",
+      fallbackReason: null,
     });
     interceptActivationRef.current = {
       activationKey,
@@ -1199,9 +1225,9 @@ function App() {
 
   useEffect(() => {
     if (route.kind !== "intercept") {
-      setLauncherContext(getLauncherContextFromRoute(initialRoute));
+      setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
     }
-  }, [route.kind, initialRoute]);
+  }, [route.kind]);
 
   useEffect(() => {
     function handleOnline() {
@@ -1220,38 +1246,91 @@ function App() {
   }, [syncStatus]);
 
   useEffect(() => {
+    const handleLauncherResume = (source, hiddenFor) => {
+      if (hiddenFor <= 1000 || !setupComplete) return;
+      const resumeRoute = parseRoute(getRouteFromLocation(setupComplete));
+      if (resumeRoute.path !== route.path) {
+        setRoutePath(resumeRoute.path);
+      }
+
+      if (resumeRoute.kind === "home") {
+        const launchAttemptId = createLaunchAttemptId("home", source);
+        suppressNextHomeAutoLaunchRef.current = false;
+        interceptActivationRef.current = null;
+        setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
+        setShouldLaunchOverlay(true);
+        setOverlay(null);
+        console.log("[LAUNCH_ATTEMPT] home resume", {
+          route: resumeRoute.path,
+          launcherContext: NORMAL_LAUNCHER_CONTEXT,
+          launchAttemptId,
+          source,
+          eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
+          selectedCardId: null,
+          caughtUpReason: null,
+          fallbackReason: null,
+        });
+        navigateTo("/home", { replace: true });
+        return;
+      }
+
+      if (resumeRoute.kind === "intercept") {
+        interceptActivationRef.current = null;
+        loggedLauncherOpenRef.current = "";
+        suppressNextHomeAutoLaunchRef.current = false;
+        setShouldLaunchOverlay(false);
+        setLauncherContext(resumeRoute.versionId);
+        setResumeLaunchNonce((current) => current + 1);
+        console.log("[LAUNCH_ATTEMPT] intercept resume", {
+          route: resumeRoute.path,
+          launcherContext: resumeRoute.versionId,
+          launchAttemptId: `${resumeRoute.versionId}:${source}:${Date.now()}`,
+          source,
+          eligibleCardCount: null,
+          selectedCardId: null,
+          caughtUpReason: null,
+          fallbackReason: null,
+        });
+        navigateTo(`/intercept/${resumeRoute.versionId}`, { replace: true });
+      }
+    };
+
+    const handleHidden = () => {
+      hiddenSinceRef.current = Date.now();
+    };
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        hiddenSinceRef.current = Date.now();
+        handleHidden();
         return;
       }
 
       if (document.visibilityState === "visible") {
         const hiddenFor = hiddenSinceRef.current ? Date.now() - hiddenSinceRef.current : 0;
         hiddenSinceRef.current = null;
-        if (hiddenFor <= 1000 || !setupComplete) return;
-
-        if (route.kind === "home") {
-          setShouldLaunchOverlay(true);
-          setOverlay(null);
-          navigateTo("/home", { replace: true });
-          return;
-        }
-
-        if (route.kind === "intercept") {
-          interceptActivationRef.current = null;
-          loggedLauncherOpenRef.current = "";
-          setShouldLaunchOverlay(false);
-          setLauncherContext(route.versionId);
-          setResumeLaunchNonce((current) => current + 1);
-          navigateTo(`/intercept/${route.versionId}`, { replace: true });
-        }
+        handleLauncherResume("visibilitychange", hiddenFor);
       }
     };
 
+    const handlePageShow = () => {
+      const hiddenFor = hiddenSinceRef.current ? Date.now() - hiddenSinceRef.current : 0;
+      hiddenSinceRef.current = null;
+      handleLauncherResume("pageshow", hiddenFor);
+    };
+
+    const handlePageHide = () => {
+      handleHidden();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [cards, profile.timezone, route.kind, route.versionId, setupComplete, authReady, session, syncStatus]);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [cards, profile.timezone, route.kind, route.path, route.versionId, setupComplete, authReady, session, syncStatus]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1396,13 +1475,23 @@ function App() {
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
+        console.log("[LAUNCH_ATTEMPT] home suppressed", {
+          route: route.path,
+          launcherContext: NORMAL_LAUNCHER_CONTEXT,
+          launchAttemptId: createLaunchAttemptId("home", "suppressed"),
+          eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
+          selectedCardId: null,
+          caughtUpReason: null,
+          fallbackReason: "suppression ref was set by an intentional in-app action",
+        });
         return;
       }
 
-      const { selected, interruption } = pickRandomHomeCardForDisplay(
+      const launchAttemptId = createLaunchAttemptId("home", "route");
+      const { selected } = pickRandomHomeCardForDisplay(
         cards,
         profile.timezone,
-        launcherContext,
+        NORMAL_LAUNCHER_CONTEXT,
         homeScreenVersions,
         launcherBehaviorSettings,
         cardPacks,
@@ -1411,13 +1500,15 @@ function App() {
         events,
       );
       setShouldLaunchOverlay(false);
-      if (interruption) {
-        setOverlay({
-          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
-          versionId: interruption.versionId,
-        });
-        return;
-      }
+      console.log("[LAUNCH_ATTEMPT] home resolved", {
+        route: route.path,
+        launcherContext: NORMAL_LAUNCHER_CONTEXT,
+        launchAttemptId,
+        eligibleCardCount: countEligibleGeneralCards(cards, profile.timezone),
+        selectedCardId: selected?.id ?? null,
+        caughtUpReason: selected ? null : "no eligible general bash cards",
+        fallbackReason: null,
+      });
       if (selected) {
         setOverlay(buildRevealOverlay(selected.id));
         return;
