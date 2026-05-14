@@ -1336,8 +1336,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!authReady) return;
-    if (session && syncStatus === "loading") return;
+    if (!authReady) {
+      console.log("[COLD_START_LOADING_BLOCK] Waiting for authReady");
+      return;
+    }
+    if (syncStatus === "loading") {
+      console.log("[COLD_START_LOADING_BLOCK] Waiting for syncStatus");
+      if (shouldLaunchOverlay && overlay == null) {
+        console.log("[COLD_START_EMPTY_SUPPRESSED] Preventing empty overlay before sync settles");
+      }
+      return;
+    }
 
     const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
     const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
@@ -1540,6 +1549,7 @@ function App() {
       });
       if (selected) {
         console.log("[LAUNCH_DIAG_DECISION] personal -> reveal");
+        console.log("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
         setOverlay(buildRevealOverlay(selected.id));
         return;
       }
