@@ -74,10 +74,12 @@ export default defineConfig({
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
-          charts: ["recharts", "framer-motion"],
+          recharts: ["recharts"],
+          motion: ["framer-motion"],
           supabase: ["@supabase/supabase-js"],
         },
       },

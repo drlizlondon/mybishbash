@@ -1215,7 +1215,23 @@ function App() {
           activeIndex: pickInterruptionCardIndex(interruptionPack, selectionEvents),
         }
       : null;
-    const selected = null;
+    
+    let selected = null;
+    if (!interruption) {
+      const fallbackDisplay = pickRandomHomeCardForDisplay(
+        cards,
+        profile.timezone,
+        NORMAL_LAUNCHER_CONTEXT,
+        homeScreenVersions,
+        launcherBehaviorSettings,
+        cardPacks,
+        dislikedPackCardIds,
+        globalInterruptionMode,
+        events,
+      );
+      selected = fallbackDisplay.selected;
+    }
+
     const selectedCard = interruption
       ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
       : selected;
@@ -1357,12 +1373,15 @@ function App() {
 
   useEffect(() => {
     if (!authReady) {
+      console.log("[COLD_START_LOADING_BLOCK] Waiting for authReady");
       debugLaunch("[COLD_START_LOADING_BLOCK]", "Waiting for authReady");
       return;
     }
     if (syncStatus === "loading") {
+      console.log("[COLD_START_LOADING_BLOCK] Waiting for syncStatus");
       debugLaunch("[COLD_START_LOADING_BLOCK]", "Waiting for syncStatus");
       if (shouldLaunchOverlay && overlay == null) {
+        console.log("[COLD_START_EMPTY_SUPPRESSED] Preventing empty overlay before sync settles");
         debugLaunch("[COLD_START_EMPTY_SUPPRESSED]", "Preventing empty overlay before sync settles");
       }
       return;
@@ -1477,7 +1496,15 @@ function App() {
       }
 
       setScreen("library");
+
+      const eligibleCount = countEligibleGeneralCards(cards, profile.timezone);
+      if (eligibleCount > 0) {
+        console.log("[INTERCEPT_FALLBACK_AVAILABLE]", { eligibleCount });
+      }
+
       if (selected) {
+        console.log("[INTERCEPT_FALLBACK_SELECTED_CARD]", selected.id);
+        console.log("[LAUNCH_DIAG_DECISION] intercept -> reveal");
         debugLaunch("[LAUNCH_DECISION]", "intercept -> reveal");
         setOverlay({
           ...buildRevealOverlay(selected.id, route.versionId),
@@ -1486,6 +1513,8 @@ function App() {
         return;
       }
 
+      console.log("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
+      console.log("[LAUNCH_DIAG_DECISION] intercept -> empty");
       debugLaunch("[LAUNCH_DECISION]", "intercept -> empty");
       setOverlay({
         ...buildEmptyOverlay(route.versionId),
@@ -1568,12 +1597,15 @@ function App() {
         fallbackReason: null,
       });
       if (selected) {
+        console.log("[LAUNCH_DIAG_DECISION] personal -> reveal");
+        console.log("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
         debugLaunch("[LAUNCH_DECISION]", "personal -> reveal");
         debugLaunch("[REVEAL_SELECTED_AFTER_SYNC]", { cardId: selected.id });
         setOverlay(buildRevealOverlay(selected.id));
         return;
       }
 
+      console.log("[LAUNCH_DIAG_DECISION] personal -> empty");
       debugLaunch("[LAUNCH_DECISION]", "personal -> empty");
       setOverlay(buildEmptyOverlay());
       return;
