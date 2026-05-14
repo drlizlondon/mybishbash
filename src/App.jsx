@@ -109,6 +109,26 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 
+function debugLaunch(label, payload) {
+  console.log(label, payload);
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const stored = JSON.parse(window.localStorage.getItem("bishbash.launchDebug.v1") || "[]");
+      stored.push({ label, payload, at: new Date().toISOString() });
+      if (stored.length > 100) {
+        stored.splice(0, stored.length - 100);
+      }
+      window.localStorage.setItem("bishbash.launchDebug.v1", JSON.stringify(stored));
+    }
+  } catch (e) {
+    // ignore storage errors
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__bishbashLaunchDebug = () => JSON.parse(window.localStorage.getItem("bishbash.launchDebug.v1") || "[]");
+}
+
 function normalizeRoutePath(path) {
   if (!path) return "/";
   const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
@@ -1337,13 +1357,13 @@ function App() {
 
   useEffect(() => {
     if (!authReady) {
-      console.log("[COLD_START_LOADING_BLOCK] Waiting for authReady");
+      debugLaunch("[COLD_START_LOADING_BLOCK]", "Waiting for authReady");
       return;
     }
     if (syncStatus === "loading") {
-      console.log("[COLD_START_LOADING_BLOCK] Waiting for syncStatus");
+      debugLaunch("[COLD_START_LOADING_BLOCK]", "Waiting for syncStatus");
       if (shouldLaunchOverlay && overlay == null) {
-        console.log("[COLD_START_EMPTY_SUPPRESSED] Preventing empty overlay before sync settles");
+        debugLaunch("[COLD_START_EMPTY_SUPPRESSED]", "Preventing empty overlay before sync settles");
       }
       return;
     }
@@ -1458,7 +1478,7 @@ function App() {
 
       setScreen("library");
       if (selected) {
-        console.log("[LAUNCH_DIAG_DECISION] intercept -> reveal");
+        debugLaunch("[LAUNCH_DECISION]", "intercept -> reveal");
         setOverlay({
           ...buildRevealOverlay(selected.id, route.versionId),
           activationKey: activeActivation.activationKey,
@@ -1466,7 +1486,7 @@ function App() {
         return;
       }
 
-      console.log("[LAUNCH_DIAG_DECISION] intercept -> empty");
+      debugLaunch("[LAUNCH_DECISION]", "intercept -> empty");
       setOverlay({
         ...buildEmptyOverlay(route.versionId),
         activationKey: activeActivation.activationKey,
@@ -1528,7 +1548,7 @@ function App() {
       );
 
       const eligibleCount = countEligibleGeneralCards(cards, profile.timezone);
-      console.log("[ELIGIBLE_COUNTS]", {
+      debugLaunch("[ELIGIBLE_COUNTS]", {
         totalCards: cards.length,
         eligible: eligibleCount,
       });
@@ -1548,13 +1568,13 @@ function App() {
         fallbackReason: null,
       });
       if (selected) {
-        console.log("[LAUNCH_DIAG_DECISION] personal -> reveal");
-        console.log("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
+        debugLaunch("[LAUNCH_DECISION]", "personal -> reveal");
+        debugLaunch("[REVEAL_SELECTED_AFTER_SYNC]", { cardId: selected.id });
         setOverlay(buildRevealOverlay(selected.id));
         return;
       }
 
-      console.log("[LAUNCH_DIAG_DECISION] personal -> empty");
+      debugLaunch("[LAUNCH_DECISION]", "personal -> empty");
       setOverlay(buildEmptyOverlay());
       return;
     }
