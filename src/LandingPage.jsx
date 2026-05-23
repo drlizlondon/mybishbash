@@ -5,6 +5,7 @@ import {
   EditPanel,
   useContentEdit,
 } from "./editing/ContentEditContext";
+import AnimatedFeatureSection from "./AnimatedFeatureSection";
 
 const APP_HOME_HREF = `${import.meta.env.BASE_URL}home`;
 const EARLY_ACCESS_HREF = `${import.meta.env.BASE_URL}early-access`;
@@ -203,6 +204,7 @@ function LandingPage() {
     <div className="landing-page">
       <Hero />
       <Statement />
+      <AnimatedFeatureSection />
       <Footer />
       <EditPanel />
     </div>
