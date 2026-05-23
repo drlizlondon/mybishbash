@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState, useCallback, useRef, memo } from "react";
 import {
   Area,
   AreaChart,
@@ -64,6 +63,66 @@ const TELEMETRY_GREEN = "#059669";
 const TELEMETRY_AMBER = "#d97706";
 const TELEMETRY_NAVY = "#0f172a";
 
+function useRenderDiagnostics(componentName) {
+  const renderCount = useRef(0);
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      renderCount.current += 1;
+      console.log(`[Diagnostics] ${componentName} rendered ${renderCount.current} times`);
+    }
+  });
+}
+
+function useLiveTelemetry(isAdmin, range, setStatus) {
+  const [analytics, setAnalytics] = useState({ summary: [], recent: [], launcherEvents: [] });
+  const [isPolling, setIsPolling] = useState(false);
+
+  const refreshAnalytics = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setIsPolling(true);
+      const analyticsResult = await fetchAdminAnalytics();
+      
+      setAnalytics((current) => {
+        const newSummary = analyticsResult.summary || [];
+        
+        const recentMap = new Map(current.recent.map((e) => [e.id, e]));
+        (analyticsResult.recent || []).forEach((e) => recentMap.set(e.id, e));
+        const mergedRecent = Array.from(recentMap.values())
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 500);
+        
+        const launcherEventsMap = new Map(current.launcherEvents.map((e) => [e.id, e]));
+        (analyticsResult.launcherEvents || []).forEach((e) => launcherEventsMap.set(e.id, e));
+        const mergedLauncherEvents = Array.from(launcherEventsMap.values())
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 1000);
+
+        const next = { summary: newSummary, recent: mergedRecent, launcherEvents: mergedLauncherEvents };
+        
+        if (JSON.stringify(current) === JSON.stringify(next)) {
+          return current;
+        }
+        return next;
+      });
+      setStatus("live");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not load telemetry.");
+    } finally {
+      setIsPolling(false);
+    }
+  }, [isAdmin, setStatus]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    refreshAnalytics();
+    const intervalId = window.setInterval(refreshAnalytics, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [refreshAnalytics, isAdmin]);
+
+  return { analytics, refreshAnalytics, isPolling };
+}
+
 export default function HQPanel({
   isAdmin,
   session,
@@ -73,40 +132,6 @@ export default function HQPanel({
   onBack,
 }) {
   const [activeView, setActiveView] = useState(getInitialHQView);
-  const [adminPacks, setAdminPacks] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [analytics, setAnalytics] = useState({ summary: [], recent: [], launcherEvents: [] });
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [packForm, setPackForm] = useState(EMPTY_PACK_FORM);
-  const [search, setSearch] = useState("");
-  const [range, setRange] = useState("7d");
-  const [eventTypeFilter, setEventTypeFilter] = useState("all");
-  const [expandedEventId, setExpandedEventId] = useState(null);
-
-  async function refreshHQ() {
-    if (!isAdmin) return;
-    setLoading(true);
-    setStatus("");
-    try {
-      const [packsResult, usersResult, analyticsResult] = await Promise.all([
-        fetchAdminGlobalPacks(),
-        fetchAdminUsers(),
-        fetchAdminAnalytics(),
-      ]);
-      setAdminPacks(packsResult);
-      setUsers(usersResult);
-      setAnalytics(analyticsResult);
-    } catch (error) {
-      setStatus(error?.message ?? "Could not load HQ data.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    refreshHQ();
-  }, [isAdmin]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -127,6 +152,87 @@ export default function HQPanel({
     currentUrl.searchParams.set("view", activeView);
     window.history.replaceState(null, "", currentUrl);
   }, [activeView]);
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 p-6 text-white">
+        <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">MyBishBash HQ</p>
+          <h2 className="mt-3 text-2xl font-semibold">Not authorised</h2>
+          <p className="mt-2 text-sm text-slate-300">You must be an admin to view this telemetry surface.</p>
+          <button className="mt-6 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white" onClick={onBack}>
+            Back home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fbff_38%,#ffffff_70%)] text-slate-950">
+      <div className="flex min-h-screen">
+        <HQSidebar activeView={activeView} onNavigate={setActiveView} />
+        <HQContent
+          activeView={activeView}
+          onNavigate={setActiveView}
+          isAdmin={isAdmin}
+          session={session}
+          libraryPacks={libraryPacks}
+          interruptionPacks={interruptionPacks}
+          onGlobalPacksChanged={onGlobalPacksChanged}
+          onBack={onBack}
+        />
+      </div>
+      <HQMobileNav activeView={activeView} onNavigate={setActiveView} />
+    </div>
+  );
+}
+
+const HQContent = memo(function HQContent({
+  activeView,
+  onNavigate,
+  isAdmin,
+  session,
+  libraryPacks,
+  interruptionPacks,
+  onGlobalPacksChanged,
+  onBack,
+}) {
+  useRenderDiagnostics("HQContent");
+
+  const [adminPacks, setAdminPacks] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [range, setRange] = useState("7d");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [expandedEventId, setExpandedEventId] = useState(null);
+  const [packForm, setPackForm] = useState(EMPTY_PACK_FORM);
+  const [loadingStatic, setLoadingStatic] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const { analytics, refreshAnalytics, isPolling } = useLiveTelemetry(isAdmin, range, setStatus);
+
+  const loadStaticData = useCallback(async () => {
+    if (!isAdmin) return;
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      const [packsResult, usersResult] = await Promise.all([
+        fetchAdminGlobalPacks(),
+        fetchAdminUsers(),
+      ]);
+      setAdminPacks(packsResult);
+      setUsers(usersResult);
+    } catch (error) {
+      setStatus(error?.message ?? "Could not load HQ data.");
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    loadStaticData();
+  }, [loadStaticData]);
 
   const telemetry = useMemo(
     () => buildTelemetryModel({
@@ -164,7 +270,7 @@ export default function HQPanel({
     });
   }, [eventTypeFilter, search, telemetry.events]);
 
-  async function handleSavePack(event) {
+  const handleSavePack = useCallback(async (event) => {
     event.preventDefault();
     const entries = parseImportedCards(packForm.importText);
 
@@ -173,7 +279,7 @@ export default function HQPanel({
       return;
     }
 
-    setLoading(true);
+    setLoadingStatic(true);
     setStatus("");
     try {
       await saveAdminGlobalPack(
@@ -188,49 +294,52 @@ export default function HQPanel({
         session?.user?.id,
       );
       setPackForm(EMPTY_PACK_FORM);
-      await refreshHQ();
+      await loadStaticData();
+      await refreshAnalytics();
       await onGlobalPacksChanged?.();
       setStatus("Pack deployment saved.");
     } catch (error) {
       setStatus(error?.message ?? "Could not save pack.");
     } finally {
-      setLoading(false);
+      setLoadingStatic(false);
     }
-  }
+  }, [packForm, session?.user?.id, loadStaticData, refreshAnalytics, onGlobalPacksChanged]);
 
-  async function handleTogglePublished(pack) {
-    setLoading(true);
+  const handleTogglePublished = useCallback(async (pack) => {
+    setLoadingStatic(true);
     setStatus("");
     try {
       await saveAdminGlobalPack({ ...pack, published: !pack.published }, session?.user?.id);
-      await refreshHQ();
+      await loadStaticData();
+      await refreshAnalytics();
       await onGlobalPacksChanged?.();
       setStatus(pack.published ? "Pack moved to draft." : "Pack published.");
     } catch (error) {
       setStatus(error?.message ?? "Could not update pack.");
     } finally {
-      setLoading(false);
+      setLoadingStatic(false);
     }
-  }
+  }, [session?.user?.id, loadStaticData, refreshAnalytics, onGlobalPacksChanged]);
 
-  async function handleDeletePack(pack) {
+  const handleDeletePack = useCallback(async (pack) => {
     if (!window.confirm(`Delete "${pack.title}"? Published users will stop seeing it after refresh.`)) return;
-    setLoading(true);
+    setLoadingStatic(true);
     setStatus("");
     try {
       await deleteAdminGlobalPack(pack.id);
       if (packForm.id === pack.id) setPackForm(EMPTY_PACK_FORM);
-      await refreshHQ();
+      await loadStaticData();
+      await refreshAnalytics();
       await onGlobalPacksChanged?.();
       setStatus("Pack deleted.");
     } catch (error) {
       setStatus(error?.message ?? "Could not delete pack.");
     } finally {
-      setLoading(false);
+      setLoadingStatic(false);
     }
-  }
+  }, [packForm.id, loadStaticData, refreshAnalytics, onGlobalPacksChanged]);
 
-  function editPack(pack) {
+  const editPack = useCallback((pack) => {
     setPackForm({
       id: pack.id,
       title: pack.title ?? "",
@@ -239,121 +348,114 @@ export default function HQPanel({
       published: Boolean(pack.published),
       importText: pack.entries?.map(formatImportedCard).join("\n") ?? "",
     });
-    setActiveView("packs");
+    onNavigate("packs");
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-  }
+  }, [onNavigate]);
 
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-950 p-6 text-white">
-        <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">MyBishBash HQ</p>
-          <h2 className="mt-3 text-2xl font-semibold">Not authorised</h2>
-          <p className="mt-2 text-sm text-slate-300">You must be an admin to view this telemetry surface.</p>
-          <button className="mt-6 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white" onClick={onBack}>
-            Back home
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const loading = loadingStatic || isPolling;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fbff_38%,#ffffff_70%)] text-slate-950">
-      <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-blue-100/80 bg-white/80 px-4 py-5 shadow-[18px_0_50px_rgba(15,23,42,0.04)] backdrop-blur-xl lg:block">
-          <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-slate-950 to-blue-950 p-4 text-white shadow-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">MyBishBash</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">HQ</h1>
-            <p className="mt-2 text-xs text-blue-100">Operational telemetry console</p>
-          </div>
-          <nav className="mt-5 space-y-1" aria-label="HQ sections">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
-                  activeView === item
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                    : "text-slate-600 hover:bg-blue-50 hover:text-slate-950"
-                }`}
-                onClick={() => setActiveView(item)}
-              >
-                <span className="capitalize">{item}</span>
-                <span className={`h-1.5 w-1.5 rounded-full ${activeView === item ? "bg-white" : "bg-blue-300"}`} />
-              </button>
-            ))}
-          </nav>
-        </aside>
+    <main className="min-w-0 flex-1 pb-28 lg:pb-10">
+      <TelemetryTopBar
+        loading={loading}
+        status={status}
+        range={range}
+        setRange={setRange}
+        search={search}
+        setSearch={setSearch}
+        onBack={onBack}
+        eventTypes={telemetry.eventTypes}
+        eventTypeFilter={eventTypeFilter}
+        setEventTypeFilter={setEventTypeFilter}
+      />
 
-        <main className="min-w-0 flex-1 pb-28 lg:pb-10">
-          <TelemetryTopBar
-            loading={loading}
-            status={status}
-            range={range}
-            setRange={setRange}
-            search={search}
-            setSearch={setSearch}
-            onBack={onBack}
-            eventTypes={telemetry.eventTypes}
-            eventTypeFilter={eventTypeFilter}
-            setEventTypeFilter={setEventTypeFilter}
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+        {activeView === "overview" ? <OverviewPage telemetry={telemetry} /> : null}
+        {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
+        {activeView === "launchers" ? <LaunchersPage telemetry={telemetry} /> : null}
+        {activeView === "events" ? (
+          <EventsPage
+            events={filteredEvents}
+            expandedEventId={expandedEventId}
+            setExpandedEventId={setExpandedEventId}
           />
-
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-            {activeView === "overview" ? <OverviewPage telemetry={telemetry} /> : null}
-            {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
-            {activeView === "launchers" ? <LaunchersPage telemetry={telemetry} /> : null}
-            {activeView === "events" ? (
-              <EventsPage
-                events={filteredEvents}
-                expandedEventId={expandedEventId}
-                setExpandedEventId={setExpandedEventId}
-              />
-            ) : null}
-            {activeView === "packs" ? (
-              <PacksPage
-                adminPacks={adminPacks}
-                telemetry={telemetry}
-                packForm={packForm}
-                setPackForm={setPackForm}
-                handleSavePack={handleSavePack}
-                handleTogglePublished={handleTogglePublished}
-                handleDeletePack={handleDeletePack}
-                editPack={editPack}
-                loading={loading}
-              />
-            ) : null}
-            {activeView === "notifications" ? <NotificationsPage telemetry={telemetry} /> : null}
-            {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} /> : null}
-            {activeView === "devices" ? <DevicesPage telemetry={telemetry} /> : null}
-            {activeView === "data" ? <DataPage telemetry={telemetry} /> : null}
-            {activeView === "settings" ? <SettingsPage onRefresh={refreshHQ} onBack={onBack} loading={loading} /> : null}
-          </div>
-        </main>
+        ) : null}
+        {activeView === "packs" ? (
+          <PacksPage
+            adminPacks={adminPacks}
+            telemetry={telemetry}
+            packForm={packForm}
+            setPackForm={setPackForm}
+            handleSavePack={handleSavePack}
+            handleTogglePublished={handleTogglePublished}
+            handleDeletePack={handleDeletePack}
+            editPack={editPack}
+            loading={loading}
+          />
+        ) : null}
+        {activeView === "notifications" ? <NotificationsPage telemetry={telemetry} /> : null}
+        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} /> : null}
+        {activeView === "devices" ? <DevicesPage telemetry={telemetry} /> : null}
+        {activeView === "data" ? <DataPage telemetry={telemetry} /> : null}
+        {activeView === "settings" ? <SettingsPage onRefresh={() => { loadStaticData(); refreshAnalytics(); }} onBack={onBack} loading={loading} /> : null}
       </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-100 bg-white/95 px-2 py-2 shadow-2xl backdrop-blur lg:hidden" aria-label="HQ mobile sections">
-        <div className="grid grid-cols-5 gap-1">
-          {["overview", "analytics", "events", "packs", "users"].map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setActiveView(item)}
-              className={`rounded-xl px-2 py-2 text-[11px] font-semibold capitalize ${
-                activeView === item ? "bg-blue-600 text-white" : "text-slate-600"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </nav>
-    </div>
+    </main>
   );
-}
+});
 
-function TelemetryTopBar({
+const HQSidebar = memo(function HQSidebar({ activeView, onNavigate }) {
+  useRenderDiagnostics("HQSidebar");
+  return (
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-blue-100/80 bg-white/80 px-4 py-5 shadow-[18px_0_50px_rgba(15,23,42,0.04)] backdrop-blur-xl lg:block">
+      <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-slate-950 to-blue-950 p-4 text-white shadow-xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">MyBishBash</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight">HQ</h1>
+        <p className="mt-2 text-xs text-blue-100">Operational telemetry console</p>
+      </div>
+      <nav className="mt-5 space-y-1" aria-label="HQ sections">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
+              activeView === item
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                : "text-slate-600 hover:bg-blue-50 hover:text-slate-950"
+            }`}
+            onClick={() => onNavigate(item)}
+          >
+            <span className="capitalize">{item}</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${activeView === item ? "bg-white" : "bg-blue-300"}`} />
+          </button>
+        ))}
+      </nav>
+    </aside>
+  );
+});
+
+const HQMobileNav = memo(function HQMobileNav({ activeView, onNavigate }) {
+  useRenderDiagnostics("HQMobileNav");
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-100 bg-white/95 px-2 py-2 shadow-2xl backdrop-blur lg:hidden" aria-label="HQ mobile sections">
+      <div className="grid grid-cols-5 gap-1">
+        {["overview", "analytics", "events", "packs", "users"].map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onNavigate(item)}
+            className={`rounded-xl px-2 py-2 text-[11px] font-semibold capitalize ${
+              activeView === item ? "bg-blue-600 text-white" : "text-slate-600"
+            }`}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+});
+
+const TelemetryTopBar = memo(function TelemetryTopBar({
   loading,
   status,
   range,
@@ -365,6 +467,7 @@ function TelemetryTopBar({
   eventTypeFilter,
   setEventTypeFilter,
 }) {
+  useRenderDiagnostics("TelemetryTopBar");
   return (
     <header className="sticky top-0 z-30 border-b border-blue-100/80 bg-white/80 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -415,18 +518,20 @@ function TelemetryTopBar({
       </div>
     </header>
   );
-}
+});
 
-function SectionHeader({ title, subtitle }) {
+const SectionHeader = memo(function SectionHeader({ title, subtitle }) {
+  useRenderDiagnostics("SectionHeader");
   return (
     <div className="rounded-2xl border border-blue-100 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
       <h3 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h3>
       <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
     </div>
   );
-}
+});
 
-function OverviewPage({ telemetry }) {
+const OverviewPage = memo(function OverviewPage({ telemetry }) {
+  useRenderDiagnostics("OverviewPage");
   return (
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -452,9 +557,10 @@ function OverviewPage({ telemetry }) {
       </section>
     </div>
   );
-}
+});
 
-function AnalyticsPage({ telemetry }) {
+const AnalyticsPage = memo(function AnalyticsPage({ telemetry }) {
+  useRenderDiagnostics("AnalyticsPage");
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -498,9 +604,10 @@ function AnalyticsPage({ telemetry }) {
       </section>
     </div>
   );
-}
+});
 
-function LaunchersPage({ telemetry }) {
+const LaunchersPage = memo(function LaunchersPage({ telemetry }) {
+  useRenderDiagnostics("LaunchersPage");
   const [launcherFilter, setLauncherFilter] = useState("all");
   const [identityFilter, setIdentityFilter] = useState("all");
   const [displayFilter, setDisplayFilter] = useState("all");
@@ -569,9 +676,10 @@ function LaunchersPage({ telemetry }) {
       </section>
     </div>
   );
-}
+});
 
-function EventsPage({ events, expandedEventId, setExpandedEventId }) {
+const EventsPage = memo(function EventsPage({ events, expandedEventId, setExpandedEventId }) {
+  useRenderDiagnostics("EventsPage");
   return (
     <GlassPanel title="Live Event Stream" subtitle={`${events.length} events in current filter`}>
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100 shadow-inner">
@@ -611,9 +719,9 @@ function EventsPage({ events, expandedEventId, setExpandedEventId }) {
       </div>
     </GlassPanel>
   );
-}
+});
 
-function PacksPage({
+const PacksPage = memo(function PacksPage({
   adminPacks,
   telemetry,
   packForm,
@@ -624,6 +732,7 @@ function PacksPage({
   editPack,
   loading,
 }) {
+  useRenderDiagnostics("PacksPage");
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
       <GlassPanel title={packForm.id ? "Edit Pack Deployment" : "Create Pack Deployment"} subtitle="Database-managed content object">
@@ -650,9 +759,10 @@ function PacksPage({
       </div>
     </div>
   );
-}
+});
 
-function NotificationsPage({ telemetry }) {
+const NotificationsPage = memo(function NotificationsPage({ telemetry }) {
+  useRenderDiagnostics("NotificationsPage");
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <TelemetryChart
@@ -667,9 +777,10 @@ function NotificationsPage({ telemetry }) {
       <DistributionPanel title="Notification Event Types" rows={telemetry.notificationRows} />
     </div>
   );
-}
+});
 
-function UsersPage({ users, telemetry }) {
+const UsersPage = memo(function UsersPage({ users, telemetry }) {
+  useRenderDiagnostics("UsersPage");
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -713,18 +824,20 @@ function UsersPage({ users, telemetry }) {
       </div>
     </div>
   );
-}
+});
 
-function DevicesPage({ telemetry }) {
+const DevicesPage = memo(function DevicesPage({ telemetry }) {
+  useRenderDiagnostics("DevicesPage");
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <DistributionPanel title="Launcher Contexts" rows={telemetry.topLaunchers} />
       <DistributionPanel title="Device Type Signals" rows={telemetry.deviceRows} />
     </div>
   );
-}
+});
 
-function DataPage({ telemetry }) {
+const DataPage = memo(function DataPage({ telemetry }) {
+  useRenderDiagnostics("DataPage");
   return (
     <div className="grid gap-4 xl:grid-cols-3">
       <MiniStat label="Event rows sampled" value={telemetry.events.length} />
@@ -739,9 +852,10 @@ function DataPage({ telemetry }) {
       </GlassPanel>
     </div>
   );
-}
+});
 
-function SettingsPage({ onRefresh, onBack, loading }) {
+const SettingsPage = memo(function SettingsPage({ onRefresh, onBack, loading }) {
+  useRenderDiagnostics("SettingsPage");
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <GlassPanel title="HQ Operations" subtitle="Administrative controls">
@@ -763,15 +877,13 @@ function SettingsPage({ onRefresh, onBack, loading }) {
       </GlassPanel>
     </div>
   );
-}
+});
 
-function HeroMetricCard({ metric }) {
+const HeroMetricCard = memo(function HeroMetricCard({ metric }) {
+  useRenderDiagnostics("HeroMetricCard");
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -3 }}
-      className="rounded-2xl border border-blue-100/80 bg-white/80 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.08)] backdrop-blur-xl"
+    <article
+      className="transition-transform hover:-translate-y-1 rounded-2xl border border-blue-100/80 bg-white/80 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.08)] backdrop-blur-xl"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -785,16 +897,17 @@ function HeroMetricCard({ metric }) {
       <div className="mt-3 h-12">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={metric.sparkline}>
-            <Line type="monotone" dataKey="value" stroke={metric.color} strokeWidth={2} dot={false} isAnimationActive />
+            <Line type="monotone" dataKey="value" stroke={metric.color} strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
       <p className="mt-2 text-xs text-slate-500">{metric.comparison}</p>
-    </motion.article>
+    </article>
   );
-}
+});
 
-function SparklineCard({ title, data, dataKey }) {
+const SparklineCard = memo(function SparklineCard({ title, data, dataKey }) {
+  useRenderDiagnostics("SparklineCard");
   return (
     <GlassPanel title={title} subtitle="Recent time buckets">
       <div className="h-48">
@@ -810,15 +923,16 @@ function SparklineCard({ title, data, dataKey }) {
             <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
             <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={32} />
             <Tooltip content={<ChartTooltip />} />
-            <Area dataKey={dataKey} type="monotone" stroke={TELEMETRY_BLUE} fill="url(#sparklineBlue)" strokeWidth={2} />
+            <Area dataKey={dataKey} type="monotone" stroke={TELEMETRY_BLUE} fill="url(#sparklineBlue)" strokeWidth={2} isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
     </GlassPanel>
   );
-}
+});
 
-function TelemetryChart({ title, subtitle, data, lines }) {
+const TelemetryChart = memo(function TelemetryChart({ title, subtitle, data, lines }) {
+  useRenderDiagnostics("TelemetryChart");
   return (
     <GlassPanel title={title} subtitle={subtitle}>
       <div className="h-72">
@@ -845,7 +959,7 @@ function TelemetryChart({ title, subtitle, data, lines }) {
                 stroke={line.color}
                 fill={`url(#${line.key}Gradient)`}
                 strokeWidth={2}
-                isAnimationActive
+                isAnimationActive={false}
               />
             ))}
           </AreaChart>
@@ -853,9 +967,10 @@ function TelemetryChart({ title, subtitle, data, lines }) {
       </div>
     </GlassPanel>
   );
-}
+});
 
-function BarPanel({ title, data, xKey, yKey }) {
+const BarPanel = memo(function BarPanel({ title, data, xKey, yKey }) {
+  useRenderDiagnostics("BarPanel");
   return (
     <GlassPanel title={title} subtitle="Counted event rows">
       <div className="h-72">
@@ -865,15 +980,16 @@ function BarPanel({ title, data, xKey, yKey }) {
             <XAxis dataKey={xKey} tick={{ fontSize: 11 }} stroke="#94a3b8" />
             <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={34} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey={yKey} radius={[7, 7, 0, 0]} fill={TELEMETRY_BLUE} />
+            <Bar dataKey={yKey} radius={[7, 7, 0, 0]} fill={TELEMETRY_BLUE} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
     </GlassPanel>
   );
-}
+});
 
-function HeatmapPanel({ data }) {
+const HeatmapPanel = memo(function HeatmapPanel({ data }) {
+  useRenderDiagnostics("HeatmapPanel");
   const max = Math.max(...data.map((item) => item.count), 1);
   return (
     <GlassPanel title="Hourly Activity Heatmap" subtitle="Events by weekday and hour">
@@ -893,9 +1009,10 @@ function HeatmapPanel({ data }) {
       </div>
     </GlassPanel>
   );
-}
+});
 
-function DistributionPanel({ title, rows }) {
+const DistributionPanel = memo(function DistributionPanel({ title, rows }) {
+  useRenderDiagnostics("DistributionPanel");
   const max = Math.max(...rows.map((row) => row.count), 1);
   return (
     <GlassPanel title={title} subtitle="Ranked by count">
@@ -915,14 +1032,14 @@ function DistributionPanel({ title, rows }) {
       </div>
     </GlassPanel>
   );
-}
+});
 
-function PackDeploymentCard({ pack, stats = {}, onEdit, onTogglePublished, onDelete }) {
+const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, onEdit, onTogglePublished, onDelete }) {
+  useRenderDiagnostics("PackDeploymentCard");
   const entries = pack.entries ?? [];
   return (
-    <motion.article
-      whileHover={{ y: -3 }}
-      className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-[0_18px_55px_rgba(15,23,42,0.06)] backdrop-blur"
+    <article
+      className="transition-transform hover:-translate-y-1 rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-[0_18px_55px_rgba(15,23,42,0.06)] backdrop-blur"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -943,7 +1060,7 @@ function PackDeploymentCard({ pack, stats = {}, onEdit, onTogglePublished, onDel
       <div className="mt-4 h-16">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={stats.trend ?? []}>
-            <Line dataKey="value" stroke={TELEMETRY_BLUE} strokeWidth={2} dot={false} />
+            <Line dataKey="value" stroke={TELEMETRY_BLUE} strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -955,11 +1072,12 @@ function PackDeploymentCard({ pack, stats = {}, onEdit, onTogglePublished, onDel
         </button>
         <button type="button" onClick={() => onDelete(pack)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button>
       </div>
-    </motion.article>
+    </article>
   );
-}
+});
 
-function PackEditor({ form, setForm, onSubmit, loading }) {
+const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading }) {
+  useRenderDiagnostics("PackEditor");
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
       <input
@@ -1009,9 +1127,10 @@ function PackEditor({ form, setForm, onSubmit, loading }) {
       </div>
     </form>
   );
-}
+});
 
-function GlassPanel({ title, subtitle, children }) {
+const GlassPanel = memo(function GlassPanel({ title, subtitle, children }) {
+  useRenderDiagnostics("GlassPanel");
   return (
     <section className="rounded-2xl border border-blue-100/80 bg-white/78 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.07)] backdrop-blur-xl">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -1023,18 +1142,20 @@ function GlassPanel({ title, subtitle, children }) {
       {children}
     </section>
   );
-}
+});
 
-function MiniStat({ label, value }) {
+const MiniStat = memo(function MiniStat({ label, value }) {
+  useRenderDiagnostics("MiniStat");
   return (
     <div className="rounded-xl border border-blue-100 bg-white/85 p-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
       <strong className="mt-1 block text-xl font-semibold text-slate-950">{value}</strong>
     </div>
   );
-}
+});
 
-function UserActivityHeatmap({ data }) {
+const UserActivityHeatmap = memo(function UserActivityHeatmap({ data }) {
+  useRenderDiagnostics("UserActivityHeatmap");
   const cells = data.length ? data : Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
   const max = Math.max(...cells.map((item) => item.count), 1);
   return (
@@ -1052,9 +1173,10 @@ function UserActivityHeatmap({ data }) {
       </div>
     </div>
   );
-}
+});
 
-function ChartTooltip({ active, payload, label }) {
+const ChartTooltip = memo(function ChartTooltip({ active, payload, label }) {
+  useRenderDiagnostics("ChartTooltip");
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-blue-100 bg-white/95 p-3 text-xs shadow-xl">
@@ -1067,7 +1189,7 @@ function ChartTooltip({ active, payload, label }) {
       ))}
     </div>
   );
-}
+});
 
 function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, libraryPacks, interruptionPacks, range }) {
   const events = normalizeEvents(recent);

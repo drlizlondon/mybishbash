@@ -4318,7 +4318,6 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
           <p>Loading your shared MyBishBash...</p>
         ) : (
           <>
-            <p>Log in to sync this launcher with your MyBishBash profile.</p>
             <p>{isStandalone ? "Reconnect MyBishBash. (iOS Home Screen apps require you to log in once per launcher.)" : "Log in to sync this launcher with your MyBishBash profile."}</p>
             {error ? <p className="sync-error">{error}</p> : null}
 
