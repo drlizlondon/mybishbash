@@ -36,7 +36,9 @@ const NAV_ITEMS = [
   "live",
   "launchers",
   "retention",
+  "users",
   "packs",
+  "analytics",
   "events",
   "settings",
 ];
@@ -46,7 +48,9 @@ const NAV_LABELS = {
   live: "Live Activity",
   launchers: "Launcher Performance",
   retention: "User Retention",
+  users: "User Timelines",
   packs: "Packs",
+  analytics: "Advanced Analytics",
   events: "Events",
   settings: "Settings",
 };
@@ -441,6 +445,8 @@ const HQContent = memo(function HQContent({
         {activeView === "live" ? <LiveActivityPage fallbackEvents={telemetry.meaningfulEvents} paused={liveActivityPaused || pauseTelemetryUpdates} setStatus={setStatus} /> : null}
         {activeView === "launchers" ? <LaunchersPage telemetry={telemetry} /> : null}
         {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
+        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} /> : null}
+        {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
         {activeView === "events" ? (
           <EventsPage
             events={filteredEvents}
@@ -502,7 +508,7 @@ const HQMobileNav = memo(function HQMobileNav({ activeView, onNavigate }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-100 bg-white/95 px-2 py-2 shadow-2xl backdrop-blur lg:hidden" aria-label="HQ mobile sections">
       <div className="grid grid-cols-5 gap-1">
-        {["recruitment", "live", "launchers", "retention", "packs"].map((item) => (
+        {["recruitment", "live", "launchers", "retention", "users"].map((item) => (
           <button
             key={item}
             type="button"
@@ -1035,22 +1041,33 @@ const UsersPage = memo(function UsersPage({ users, telemetry }) {
     <div className="space-y-5">
       <SectionHeader
         title="User Analytics"
-        subtitle="Pseudonymous user timelines, exact event counts, active days, launcher installs, and hourly activity."
+        subtitle="Individual adoption paths: signup, onboarding, launcher install, interruptions, Do Something Else, and action-card completion."
       />
+      {users.length === 0 ? (
+        <EmptyState title="No user records yet." body="User timelines will appear once early-access accounts are created." />
+      ) : null}
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         {users.map((user) => {
           const stats = telemetry.userStats.get(user.user_id) ?? {};
+          const usageStatus = getUserUsageStatus(stats);
           return (
             <GlassPanel key={user.user_id} title={user.email || pseudoUser(user.user_id)} subtitle={`Pseudonymous user ${pseudoUser(user.user_id)}`}>
               <div className="grid gap-2 sm:grid-cols-2">
+                <MiniStat label="Usage status" value={usageStatus} />
                 <MiniStat label="Interruption events" value={stats.interruptions ?? 0} />
                 <MiniStat label="Continue to app" value={stats.continueToApp ?? 0} />
                 <MiniStat label="Do Something Else" value={stats.doSomethingElse ?? 0} />
                 <MiniStat label="Action completions" value={stats.actionsCompleted ?? 0} />
                 <MiniStat label="Active days" value={stats.activeDays ?? 0} />
-                <MiniStat label="Notification events" value={stats.notifications ?? 0} />
-                <MiniStat label="Launcher contexts" value={stats.launcherCount ?? 0} />
-                <MiniStat label="Enabled packs" value={stats.enabledPacks ?? 0} />
+                <MiniStat label="Installed launchers" value={stats.installedLaunchers?.join(", ") || "None tracked"} />
+                <MiniStat label="Last event" value={stats.lastEventAt ? formatDate(stats.lastEventAt) : "No events yet"} />
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                <LifecyclePill label="Onboarding" active={stats.eventTypes?.includes("onboarding_completed")} />
+                <LifecyclePill label="Launcher" active={(stats.installedLaunchers?.length ?? 0) > 0} />
+                <LifecyclePill label="Interruption" active={(stats.interruptions ?? 0) > 0} />
+                <LifecyclePill label="Do Something Else" active={(stats.doSomethingElse ?? 0) > 0} />
+                <LifecyclePill label="Action done" active={(stats.actionsCompleted ?? 0) > 0} />
               </div>
               <UserActivityHeatmap data={stats.hourlyActivity ?? []} />
               <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3">
@@ -1083,6 +1100,18 @@ const DevicesPage = memo(function DevicesPage({ telemetry }) {
       <DistributionPanel title="Launcher Contexts" rows={telemetry.topLaunchers} />
       <DistributionPanel title="Device Type Signals" rows={telemetry.deviceRows} />
     </div>
+  );
+});
+
+const LifecyclePill = memo(function LifecyclePill({ label, active }) {
+  return (
+    <span className={`rounded-xl border px-3 py-2 text-center text-[11px] font-semibold ${
+      active
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-slate-50 text-slate-400"
+    }`}>
+      {label}
+    </span>
   );
 });
 
@@ -1765,10 +1794,14 @@ function buildUserStats(events) {
       notifications: 0,
       activeDates: new Set(),
       launchers: new Set(),
+      installedLaunchers: new Set(),
       packs: new Set(),
+      eventTypes: new Set(),
       latestEvents: [],
       hourlyCounts: new Map(),
+      lastEventAt: null,
     };
+    if (event.event_type) current.eventTypes.add(event.event_type);
     if (event.event_type?.startsWith("intercept_")) current.interruptions += 1;
     if (event.event_type === "intercept_continue_to_app") current.continueToApp += 1;
     if (event.event_type === "intercept_do_something_else") current.doSomethingElse += 1;
@@ -1777,19 +1810,38 @@ function buildUserStats(events) {
     current.activeDates.add(new Date(event.created_at).toISOString().slice(0, 10));
     const launcher = event.launcher_context || event.target_app || event.app_name;
     if (launcher) current.launchers.add(launcher);
+    if (["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && launcher) {
+      current.installedLaunchers.add(launcher);
+    }
     if (event.pack_id) current.packs.add(event.pack_id);
     const hour = new Date(event.created_at).getHours();
     current.hourlyCounts.set(hour, (current.hourlyCounts.get(hour) ?? 0) + 1);
     current.latestEvents = [event, ...current.latestEvents].slice(0, 4);
+    if (!current.lastEventAt || new Date(event.created_at).getTime() > new Date(current.lastEventAt).getTime()) {
+      current.lastEventAt = event.created_at;
+    }
     stats.set(event.user_id, current);
   });
   return new Map(Array.from(stats.entries()).map(([key, value]) => [key, {
     ...value,
     activeDays: value.activeDates.size,
     launcherCount: value.launchers.size,
+    installedLaunchers: Array.from(value.installedLaunchers),
     enabledPacks: value.packs.size,
+    eventTypes: Array.from(value.eventTypes),
     hourlyActivity: Array.from({ length: 24 }, (_, hour) => ({ hour, count: value.hourlyCounts.get(hour) ?? 0 })),
   }]));
+}
+
+function getUserUsageStatus(stats = {}) {
+  const eventTypes = new Set(stats.eventTypes ?? []);
+  if ((stats.actionsCompleted ?? 0) > 0) return "Completing actions";
+  if ((stats.doSomethingElse ?? 0) > 0) return "Choosing alternatives";
+  if ((stats.interruptions ?? 0) > 0) return "Seeing interruptions";
+  if ((stats.installedLaunchers?.length ?? 0) > 0) return "Installed, not used";
+  if (eventTypes.has("onboarding_completed")) return "Onboarded, no launcher use";
+  if (eventTypes.has("onboarding_started")) return "Onboarding started";
+  return "Signed up, no product use";
 }
 
 function buildPackStats(events, packs, userCount) {

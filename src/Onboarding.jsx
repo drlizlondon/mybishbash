@@ -12,6 +12,20 @@ export const DEFAULT_ACTION_CARD_TITLES = [
   "Stretch",
 ];
 
+export const DEFAULT_PERSONAL_CARD_TEXTS = [
+  "Drink some water.",
+  "Stretch your neck.",
+  "What matters most right now?",
+];
+
+const OPTIONAL_PERSONAL_CARD_TEXTS = [
+  "Text someone back.",
+  "Read one page.",
+  "Take a proper breath.",
+  "Tidy one thing.",
+  "Step outside for a minute.",
+];
+
 const OPTIONAL_ACTION_CARD_TITLES = [
   "Text someone back",
   "Go for a walk",
@@ -20,14 +34,21 @@ const OPTIONAL_ACTION_CARD_TITLES = [
   "Read one page",
 ];
 
-const FALLBACK_APPS = [
-  { id: "safari", label: "Safari", launcherId: "safari" },
-  { id: "youtube", label: "YouTube", launcherId: "youtube" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "x", label: "X" },
-  { id: "whatsapp", label: "WhatsApp" },
-  { id: "custom", label: "Custom app" },
-];
+const INTERRUPTION_CONTEXTS = {
+  social: {
+    label: "Social media",
+    launchers: [
+      { id: "instagram", label: "Instagram", launcherId: "instagram", available: true },
+      { id: "tiktok", label: "TikTok", available: false },
+    ],
+  },
+  videos: {
+    label: "Videos",
+    launchers: [
+      { id: "youtube", label: "YouTube", launcherId: "youtube", available: true },
+    ],
+  },
+};
 
 function createChoice(text, selected = true) {
   return {
@@ -37,8 +58,13 @@ function createChoice(text, selected = true) {
   };
 }
 
-export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
+export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLauncher, onGoHome }) {
   const [step, setStep] = useState("welcome");
+  const [route, setRoute] = useState(null);
+  const [personalCards, setPersonalCards] = useState(() => [
+    ...DEFAULT_PERSONAL_CARD_TEXTS.map((text) => createChoice(text, true)),
+    ...OPTIONAL_PERSONAL_CARD_TEXTS.map((text) => createChoice(text, false)),
+  ]);
   const [interrupterCards, setInterrupterCards] = useState(() =>
     DEFAULT_INTERRUPTER_CARDS.map((text) => createChoice(text, true)),
   );
@@ -46,13 +72,14 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
     ...DEFAULT_ACTION_CARD_TITLES.map((text) => createChoice(text, true)),
     ...OPTIONAL_ACTION_CARD_TITLES.map((text) => createChoice(text, false)),
   ]);
-  const [selectedAppId, setSelectedAppId] = useState("safari");
-  const [customAppName, setCustomAppName] = useState("");
+  const [interruptionContext, setInterruptionContext] = useState("social");
+  const [selectedLauncherId, setSelectedLauncherId] = useState("instagram");
   const [savedLauncherId, setSavedLauncherId] = useState("instagram");
 
-  const selectedFallbackApp = useMemo(
-    () => FALLBACK_APPS.find((app) => app.id === selectedAppId) ?? FALLBACK_APPS[0],
-    [selectedAppId],
+  const contextLaunchers = INTERRUPTION_CONTEXTS[interruptionContext].launchers;
+  const selectedLauncher = useMemo(
+    () => contextLaunchers.find((launcher) => launcher.id === selectedLauncherId && launcher.available) ?? contextLaunchers.find((launcher) => launcher.available),
+    [contextLaunchers, selectedLauncherId],
   );
 
   function selectedTexts(choices) {
@@ -69,13 +96,9 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
     setter((current) => [...current, createChoice(text, true)]);
   }
 
-  function saveSetup(launcher) {
-    const fallbackLabel = selectedAppId === "custom"
-      ? customAppName.trim() || "Custom app"
-      : selectedFallbackApp.label;
-    const launcherId = launcher?.launcherId ?? launcher?.id ?? "instagram";
-    const appContext = launcher ?? { id: selectedAppId, label: fallbackLabel, launcherId: selectedFallbackApp.launcherId ?? null };
-
+  function savePauseSetup(launcher) {
+    const launcherId = launcher?.launcherId ?? launcher?.id ?? selectedLauncher?.launcherId ?? "instagram";
+    const appContext = launcher ?? selectedLauncher ?? { id: "instagram", label: "Instagram", launcherId: "instagram" };
     setSavedLauncherId(launcherId || "instagram");
     onSaveSetup({
       interrupterCards: selectedTexts(interrupterCards),
@@ -86,13 +109,40 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
     setStep("done");
   }
 
-  function saveFallbackApp() {
-    saveSetup({
-      id: selectedAppId,
-      label: selectedAppId === "custom" ? customAppName.trim() || "Custom app" : selectedFallbackApp.label,
-      launcherId: selectedFallbackApp.launcherId ?? null,
+  function saveFrequentUseSetup() {
+    setSavedLauncherId("safari");
+    onSavePersonalSetup({
+      personalCards: selectedTexts(personalCards),
+      launcherId: "safari",
+      appContext: { id: "safari", label: "Safari", launcherId: "safari" },
     });
+    setStep("done");
   }
+
+  function chooseRoute(nextRoute) {
+    setRoute(nextRoute);
+    setStep(nextRoute === "frequent" ? "personal-cards" : "context");
+  }
+
+  function getPreviousStep() {
+    if (step === "route") return "welcome";
+    if (step === "personal-cards" || step === "context") return "route";
+    if (step === "safari-launcher") return "personal-cards";
+    if (step === "safari-install") return "safari-launcher";
+    if (step === "interrupters") return "context";
+    if (step === "actions") return "interrupters";
+    if (step === "launcher") return "actions";
+    if (step === "install") return "launcher";
+    if (step === "done") return route === "frequent" ? "safari-install" : "install";
+    return null;
+  }
+
+  function goBack() {
+    const previous = getPreviousStep();
+    if (previous) setStep(previous);
+  }
+
+  const previousStep = getPreviousStep();
 
   return (
     <div className="overlay-screen onboarding-screen">
@@ -109,11 +159,126 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
 
           {step === "welcome" ? (
             <OnboardingStep
-              title="Build your interruption layer."
-              body="Choose what you want to see before opening an app, then choose what you could do instead."
+              title="Build your first MyBishBash."
+              body="Start with one clear setup. You can add more shortcuts and card types later."
               primaryLabel="Start setup"
-              onPrimary={() => setStep("interrupters")}
+              onPrimary={() => setStep("route")}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
             />
+          ) : null}
+
+          {step === "route" ? (
+            <OnboardingStep
+              title="How do you want to use MyBishBash first?"
+              body="This is just your first setup. You can add the other shortcut type later."
+              hidePrimary
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            >
+              <div className="onboarding-route-options">
+                <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("frequent")}>
+                  <strong>Reminders during everyday phone use</strong>
+                  <span>Surface personal reminders throughout the day while browsing or checking your phone.</span>
+                  <em>Recommended shortcut: Safari</em>
+                </button>
+                <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("pause")}>
+                  <strong>Pause before scrolling</strong>
+                  <span>Create a small intentional moment before social media or video apps open.</span>
+                  <em>Popular shortcuts: Instagram, TikTok, YouTube</em>
+                </button>
+              </div>
+            </OnboardingStep>
+          ) : null}
+
+          {step === "personal-cards" ? (
+            <OnboardingStep
+              title="Create your first MyBishBash cards"
+              body="What do you want to remember during everyday phone use?"
+              primaryLabel="Continue"
+              onPrimary={() => setStep("safari-launcher")}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            >
+              <ChoiceCardList
+                choices={personalCards}
+                onToggle={(id, selected) => updateChoice(setPersonalCards, id, { selected })}
+                onEdit={(id, text) => updateChoice(setPersonalCards, id, { text })}
+                onAdd={() => addChoice(setPersonalCards, "Write your own reminder")}
+                addLabel="Create my own"
+              />
+            </OnboardingStep>
+          ) : null}
+
+          {step === "safari-launcher" ? (
+            <OnboardingStep
+              title="Set up your Safari shortcut"
+              body="This lets your reminders appear during everyday phone use."
+              primaryLabel="Set up Safari"
+              onPrimary={() => setStep("safari-install")}
+              quietLabel="Skip Safari setup"
+              onQuiet={saveFrequentUseSetup}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            >
+              <p className="onboarding-supporting-copy">You can add social-media pause shortcuts later.</p>
+            </OnboardingStep>
+          ) : null}
+
+          {step === "safari-install" ? (
+            <InstallStep
+              appName="Safari"
+              body="This creates a home-screen shortcut for everyday browsing and phone checks."
+              onDone={saveFrequentUseSetup}
+              onSkip={saveFrequentUseSetup}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            />
+          ) : null}
+
+          {step === "context" ? (
+            <OnboardingStep
+              title="Where do you want more intentional pause moments?"
+              body="Choose the kind of shortcut you want to set up first."
+              primaryLabel="Continue"
+              onPrimary={() => setStep("interrupters")}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            >
+              <div className="onboarding-context-options" role="radiogroup" aria-label="Choose interruption context">
+                {Object.entries(INTERRUPTION_CONTEXTS).map(([id, context]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`onboarding-app-option ${interruptionContext === id ? "selected" : ""}`}
+                    onClick={() => {
+                      setInterruptionContext(id);
+                      setSelectedLauncherId(context.launchers.find((launcher) => launcher.available)?.id ?? "instagram");
+                    }}
+                    role="radio"
+                    aria-checked={interruptionContext === id}
+                  >
+                    {context.label}
+                  </button>
+                ))}
+              </div>
+              <div className="onboarding-app-options" role="radiogroup" aria-label="Choose shortcut">
+                {contextLaunchers.map((launcher) => (
+                  <button
+                    key={launcher.id}
+                    type="button"
+                    className={`onboarding-app-option ${selectedLauncherId === launcher.id ? "selected" : ""}`}
+                    onClick={() => launcher.available && setSelectedLauncherId(launcher.id)}
+                    role="radio"
+                    aria-checked={selectedLauncherId === launcher.id}
+                    disabled={!launcher.available}
+                  >
+                    {launcher.label}
+                    {!launcher.available ? <span>Later</span> : null}
+                  </button>
+                ))}
+              </div>
+            </OnboardingStep>
           ) : null}
 
           {step === "interrupters" ? (
@@ -122,12 +287,15 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
               body="These are the messages you’ll see before opening your launcher."
               primaryLabel="Continue"
               onPrimary={() => setStep("actions")}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
             >
               <ChoiceCardList
                 choices={interrupterCards}
                 onToggle={(id, selected) => updateChoice(setInterrupterCards, id, { selected })}
                 onEdit={(id, text) => updateChoice(setInterrupterCards, id, { text })}
                 onAdd={() => addChoice(setInterrupterCards, "Write your own interrupter card")}
+                addLabel="Create my own"
               />
             </OnboardingStep>
           ) : null}
@@ -138,12 +306,15 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
               body="If you choose ‘Do something else’, these quick actions will appear."
               primaryLabel="Continue"
               onPrimary={() => setStep("launcher")}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
             >
               <ChoiceCardList
                 choices={actionCards}
                 onToggle={(id, selected) => updateChoice(setActionCards, id, { selected })}
                 onEdit={(id, text) => updateChoice(setActionCards, id, { text })}
                 onAdd={() => addChoice(setActionCards, "Write your own action")}
+                addLabel="Create my own"
               />
             </OnboardingStep>
           ) : null}
@@ -151,76 +322,46 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
           {step === "launcher" ? (
             <OnboardingStep
               title="Set up your first launcher"
-              body="Start with Instagram. You can add YouTube, Safari and more later."
-              primaryLabel="Set up Instagram"
+              body={`Start with ${selectedLauncher?.label ?? "Instagram"}. You can add more shortcuts later.`}
+              primaryLabel={`Set up ${selectedLauncher?.label ?? "Instagram"}`}
               onPrimary={() => setStep("install")}
-              quietLabel="Skip Instagram setup"
-              onQuiet={() => setStep("fallback-app")}
+              quietLabel={`Skip ${selectedLauncher?.label ?? "Instagram"} setup`}
+              onQuiet={() => savePauseSetup(selectedLauncher)}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
             />
           ) : null}
 
           {step === "install" ? (
-            <OnboardingStep
-              title="Add your Instagram launcher"
-              body="This creates a home-screen shortcut that helps you pause before opening Instagram."
-              primaryLabel="I’ve added it"
-              onPrimary={() => saveSetup({ id: "instagram", label: "Instagram", launcherId: "instagram" })}
-              quietLabel="Skip this for now"
-              onQuiet={() => setStep("fallback-app")}
-            >
-              <ol className="onboarding-install-steps">
-                <li>Tap Share</li>
-                <li>Tap Add to Home Screen</li>
-                <li>Name it Instagram</li>
-                <li>Open it when you’re about to scroll</li>
-              </ol>
-            </OnboardingStep>
-          ) : null}
-
-          {step === "fallback-app" ? (
-            <OnboardingStep
-              title="Choose an app you use often"
-              body="MyBishBash works best when it starts with an app you open without thinking."
-              primaryLabel="Use this app"
-              onPrimary={saveFallbackApp}
-            >
-              <div className="onboarding-app-options" role="radiogroup" aria-label="Choose an app">
-                {FALLBACK_APPS.map((app) => (
-                  <button
-                    key={app.id}
-                    type="button"
-                    className={`onboarding-app-option ${selectedAppId === app.id ? "selected" : ""}`}
-                    onClick={() => setSelectedAppId(app.id)}
-                    role="radio"
-                    aria-checked={selectedAppId === app.id}
-                  >
-                    {app.label}
-                  </button>
-                ))}
-              </div>
-              {selectedAppId === "custom" ? (
-                <label className="onboarding-custom-app">
-                  <span>App name</span>
-                  <input
-                    type="text"
-                    value={customAppName}
-                    onChange={(event) => setCustomAppName(event.target.value)}
-                    placeholder="App name"
-                  />
-                </label>
-              ) : null}
-            </OnboardingStep>
+            <InstallStep
+              appName={selectedLauncher?.label ?? "Instagram"}
+              body={`This creates a home-screen shortcut that helps you pause before opening ${selectedLauncher?.label ?? "Instagram"}.`}
+              onDone={() => savePauseSetup(selectedLauncher)}
+              onSkip={() => savePauseSetup(selectedLauncher)}
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            />
           ) : null}
 
           {step === "done" ? (
             <OnboardingStep
-              title="Your interruption layer is ready"
-              body="Next time you tap your launcher, you’ll see one of your interrupter cards. Choose ‘Do something else’ to see your action cards, or continue to the app."
+              title={route === "frequent" ? "Your Safari reminders are ready" : "Your interruption layer is ready"}
+              body={route === "frequent"
+                ? "Next time you tap your Safari shortcut, MyBishBash can surface one of your personal reminders during everyday phone use."
+                : "Next time you tap your launcher, you’ll see one of your interrupter cards. Choose ‘Do something else’ to see your action cards, or continue to the app."}
               primaryLabel="Try it now"
               onPrimary={() => onTryLauncher(savedLauncherId)}
               secondaryLabel="Go to home"
               onSecondary={onGoHome}
-            />
+              canGoBack={Boolean(previousStep)}
+              onBack={goBack}
+            >
+              <p className="onboarding-supporting-copy">
+                {route === "frequent"
+                  ? "Also available: pause moments before social media and video apps."
+                  : "Also available: reminders throughout everyday phone use."}
+              </p>
+            </OnboardingStep>
           ) : null}
         </section>
       </div>
@@ -228,7 +369,7 @@ export default function Onboarding({ onSaveSetup, onTryLauncher, onGoHome }) {
   );
 }
 
-function ChoiceCardList({ choices, onToggle, onEdit, onAdd }) {
+function ChoiceCardList({ choices, onToggle, onEdit, onAdd, addLabel = "Add my own card" }) {
   return (
     <div className="onboarding-choice-list">
       {choices.map((choice) => (
@@ -248,9 +389,39 @@ function ChoiceCardList({ choices, onToggle, onEdit, onAdd }) {
         </label>
       ))}
       <button type="button" className="onboarding-add-card" onClick={onAdd}>
-        Add my own card
+        {addLabel}
       </button>
     </div>
+  );
+}
+
+function InstallStep({ appName, body, onDone, onSkip, canGoBack, onBack }) {
+  const isSafari = appName === "Safari";
+
+  return (
+    <OnboardingStep
+      title={`Add your ${appName} shortcut`}
+      body={body}
+      primaryLabel="I’ve added it"
+      onPrimary={onDone}
+      quietLabel="Skip this for now"
+      onQuiet={onSkip}
+      canGoBack={canGoBack}
+      onBack={onBack}
+    >
+      <ol className="onboarding-install-steps">
+        <li>Tap Share</li>
+        <li>Tap Add to Home Screen</li>
+        <li>{`Name it ${isSafari ? "MyBishBash Safari" : appName}`}</li>
+        <li>{appName === "Safari" ? "Open it when you’re about to browse" : "Open it when you’re about to scroll"}</li>
+      </ol>
+      {isSafari ? (
+        <div className="onboarding-safari-tip">
+          <img src={`${import.meta.env.BASE_URL}safari-touch-icon.png`} alt="MyBishBash Safari shortcut icon" />
+          <p>Tip: move your Safari app into a folder, then put MyBishBash Safari where Safari used to be.</p>
+        </div>
+      ) : null}
+    </OnboardingStep>
   );
 }
 
@@ -264,24 +435,34 @@ function OnboardingStep({
   onSecondary,
   quietLabel,
   onQuiet,
+  hidePrimary = false,
+  canGoBack = false,
+  onBack,
 }) {
   return (
     <div className="onboarding-step">
+      {canGoBack ? (
+        <button type="button" className="onboarding-back-button" onClick={onBack} aria-label="Go back">
+          Back
+        </button>
+      ) : null}
       <div className="onboarding-step-copy">
         <h2>{title}</h2>
         <p>{body}</p>
       </div>
       {children ? <div className="onboarding-step-body">{children}</div> : null}
-      <div className="onboarding-actions">
-        <button type="button" className="save-button" onClick={onPrimary}>
-          {primaryLabel}
-        </button>
+      {!hidePrimary ? (
+        <div className="onboarding-actions">
+          <button type="button" className="save-button" onClick={onPrimary}>
+            {primaryLabel}
+          </button>
         {secondaryLabel ? (
           <button type="button" className="secondary-button" onClick={onSecondary}>
             {secondaryLabel}
           </button>
         ) : null}
-      </div>
+        </div>
+      ) : null}
       {quietLabel ? (
         <button type="button" className="onboarding-quiet-link" onClick={onQuiet}>
           {quietLabel}
@@ -292,8 +473,16 @@ function OnboardingStep({
 }
 
 function StepIndicator({ currentStep }) {
-  const steps = ["welcome", "interrupters", "actions", "launcher", "install", "done"];
-  const activeIndex = currentStep === "fallback-app" ? 4 : steps.indexOf(currentStep);
+  const steps = ["welcome", "route", "cards", "launcher", "install", "done"];
+  const stepAliases = {
+    "personal-cards": "cards",
+    context: "cards",
+    interrupters: "cards",
+    actions: "cards",
+    "safari-launcher": "launcher",
+    "safari-install": "install",
+  };
+  const activeIndex = steps.indexOf(stepAliases[currentStep] ?? currentStep);
 
   return (
     <div className="onboarding-step-indicator" aria-label={`Step ${Math.max(activeIndex, 0) + 1} of ${steps.length}`}>

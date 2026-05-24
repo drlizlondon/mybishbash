@@ -92,7 +92,7 @@ import {
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher } from "./lib/launcherRegistry";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
-import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS } from "./Onboarding";
+import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { EditableLandingPage } from "./LandingPage";
 import EarlyAccessPage from "./EarlyAccessPage";
@@ -2391,6 +2391,75 @@ function App() {
       ...current,
       onboardingAppContext: appContext,
       onboardingLauncherId: supportedLauncherId,
+      onboardingRoute: "pause_before_scrolling",
+    }));
+
+    setOverlay(null);
+    setMenuOpenId(null);
+    setSetupComplete(true);
+    setShouldLaunchOverlay(false);
+  }
+
+  function savePersonalOnboardingSetup({
+    personalCards = DEFAULT_PERSONAL_CARD_TEXTS,
+    launcherId = "safari",
+    appContext = { id: "safari", label: "Safari", launcherId: "safari" },
+  }) {
+    const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "safari";
+    const cleanPersonalCards = personalCards.map((text) => text.trim()).filter(Boolean);
+    const fallbackCards = cleanPersonalCards.length > 0 ? cleanPersonalCards : DEFAULT_PERSONAL_CARD_TEXTS;
+    const now = new Date().toISOString();
+
+    void logEvent({
+      event_type: "onboarding_completed",
+      source_type: "onboarding",
+      card_source: "personal",
+      target_app: supportedLauncherId,
+      launcher_context: supportedLauncherId,
+      action_taken: "completed",
+      metadata: {
+        route: "frequent_use_reminders",
+        selected_personal_cards: fallbackCards.length,
+        app_context: appContext,
+      },
+    });
+
+    updateCards((current) => [
+      ...fallbackCards.map((text) => ({
+        id: createId(),
+        promptText: text,
+        dashboardTitle: text,
+        theme: "Soft Bloom",
+        icon: "heart",
+        statusToday: "fresh",
+        createdAt: now,
+        updatedAt: now,
+        lastShownAt: null,
+        notYetUntil: null,
+        doneDate: null,
+        frequency: "once_daily",
+        timingWindows: ["morning", "day", "evening"],
+        paused: false,
+        disliked: false,
+        deletedAt: null,
+      })),
+      ...current,
+    ]);
+
+    setLauncherBehaviorSettings((current) => ({
+      ...current,
+      [supportedLauncherId]: {
+        ...(current[supportedLauncherId] || {}),
+        useInterruptionPack: false,
+        interruptionPaused: false,
+      },
+    }));
+
+    setProfile((current) => ({
+      ...current,
+      onboardingAppContext: appContext,
+      onboardingLauncherId: supportedLauncherId,
+      onboardingRoute: "frequent_use_reminders",
     }));
 
     setOverlay(null);
@@ -3041,6 +3110,7 @@ function App() {
         <Onboarding
           onSkip={skipInstagramOnboarding}
           onSaveSetup={saveOnboardingSetup}
+          onSavePersonalSetup={savePersonalOnboardingSetup}
           onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
           onGoHome={() => finishOnboarding("home")}
         />
@@ -4634,6 +4704,12 @@ function SettingsPanel({
 
   const isSelectedCurrentLauncher =
     isInsideFakeLauncher && previewVersionId === launcherContext;
+  const shortcutContexts = {
+    safari: "Reminders during everyday phone use",
+    instagram: "Pause before social scrolling",
+    youtube: "Pause before video scrolling",
+    mybishbash: "Main MyBishBash home",
+  };
 
   return (
     <section className="panel-section">
@@ -4687,8 +4763,18 @@ function SettingsPanel({
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
-          <p>Install launchers</p>
-          <span>Install separate home-screen buttons for Safari, Instagram and YouTube. Each launcher shares your MyBishBash cards and settings, but opens in its own app disguise.</span>
+          <p>Home Screen Shortcuts</p>
+          <span>Install separate home-screen shortcuts for Safari, Instagram and YouTube. Each shortcut shares your MyBishBash cards and settings.</span>
+        </div>
+        <div className="shortcut-context-grid">
+          <div>
+            <strong>Installed shortcuts</strong>
+            <p>{isInsideFakeLauncher ? `${homeScreenVersions[launcherContext]?.name ?? launcherContext}: ${shortcutContexts[launcherContext] ?? "MyBishBash shortcut"}` : "Open a Home Screen shortcut to see it here."}</p>
+          </div>
+          <div>
+            <strong>Available shortcuts</strong>
+            <p>Safari: reminders during everyday phone use · Instagram: pause before social scrolling · YouTube: pause before video scrolling</p>
+          </div>
         </div>
         <label className="field" style={{ marginBottom: "16px" }}>
           <select
@@ -4744,7 +4830,7 @@ function SettingsPanel({
                     <strong>{version.name}</strong>
                   </div>
                   <p>
-                    Uses launcherContext "{version.id}" and shares the same MyBishBash state.
+                    {shortcutContexts[version.id] ?? `Uses launcherContext "${version.id}" and shares the same MyBishBash state.`}
                   </p>
                     <a
                       href={installUrl}
@@ -5078,31 +5164,16 @@ function Overlay({
 
   if (overlay.type === "empty") {
     return (
-      <div className="overlay-screen empty-state">
-        <div className="floating floating-heart" />
-        <button
-          type="button"
-          className="overlay-library-button"
-          onClick={onClose}
-          aria-label="Open library"
-        >
-          <BookGlyph />
-        </button>
-        <div className="caught-up-content">
-          <p className="eyebrow">MyBishBash</p>
-          <h2>You&apos;re all caught up for now.</h2>
-          <p className="caught-up-copy">see you later</p>
-          <div className="caught-up-actions">
-            <button
-              type="button"
-              className="action-button"
-              onClick={onClose}
-            >
-              Back home
-            </button>
-          </div>
-        </div>
-      </div>
+      <PremiumCardScreen
+        type="empty"
+        greeting="MyBishBash"
+        icon="heart"
+        headline="You're all caught up for now."
+        subtitle="See you later."
+        actions={[{ label: "Back home", variant: "primary", onClick: onClose }]}
+        showHomeButton={true}
+        onHome={onClose}
+      />
     );
   }
 
@@ -5164,41 +5235,147 @@ function Overlay({
   if (!card) return null;
 
   return (
-    <div className={`overlay-screen reveal ${overlay.phase === "dissolving" ? "is-dissolving" : ""} theme-${getThemeClass(card.theme)}`}>
-      <div className="floating floating-heart" />
-      <div className="particle particle-a" />
-      <button
-        type="button"
-        className="overlay-library-button"
-        onClick={onClose}
-        aria-label="Open library"
-      >
-        <BookGlyph />
-      </button>
-      <div className="reveal-copy">
-        <p className="eyebrow">{getGreeting(new Date(), timezone)}</p>
-        <span className="mini-glyph" aria-hidden="true">
-          <HeartGlyph />
-        </span>
-        <h2>{card.promptText}</h2>
-        {card.attribution ? <p className="card-attribution">{card.attribution}</p> : null}
-        <p className="tiny-note">a gentle nudge from the version of you that cares</p>
-      </div>
-      <div className="action-row">
-        {card.sourcePackId ? (
-          <>
-            <ActionButton label="Dislike" onClick={() => onPackDislike(card.id)} />
-            <ActionButton label="Like" tone="solid" onClick={onPackLike} />
-          </>
-        ) : (
-          <>
-            <ActionButton label="Not done" onClick={() => onAction("later")} />
-            <ActionButton label="I'll do it now" onClick={() => onAction("now")} />
-            <ActionButton label="Done" tone="solid" onClick={() => onAction("done")} />
-          </>
-        )}
-      </div>
+    <PremiumCardScreen
+      type={card.sourcePackId ? "pack" : "personal"}
+      greeting={getGreeting(new Date(), timezone)}
+      icon="heart"
+      headline={card.promptText}
+      subtitle={card.attribution || "A gentle nudge from the version of you that cares."}
+      actions={
+        card.sourcePackId
+          ? [
+              { label: "Dislike", variant: "secondary", onClick: () => onPackDislike(card.id) },
+              { label: "Like", variant: "primary", onClick: onPackLike },
+            ]
+          : [
+              { label: "Not done", variant: "secondary", onClick: () => onAction("later") },
+              { label: "I'll do it now", variant: "secondary", onClick: () => onAction("now") },
+              { label: "Done", variant: "primary", onClick: () => onAction("done") },
+            ]
+      }
+      showHomeButton={true}
+      onHome={onClose}
+      className={overlay.phase === "dissolving" ? "is-dissolving" : ""}
+    />
+  );
+}
+
+function PremiumCardScreen({
+  type = "personal",
+  greeting,
+  icon = "heart",
+  headline,
+  subtitle,
+  actions = [],
+  showHomeButton = false,
+  homeHref,
+  onHome,
+  children,
+  className = "",
+}) {
+  return (
+    <div className={`premium-card-screen premium-card-${type} ${className}`.trim()}>
+      {showHomeButton ? <PremiumHomeButton href={homeHref} onClick={onHome} /> : null}
+      <main className="premium-card-main">
+        <PremiumCardHeader
+          greeting={greeting}
+          icon={icon}
+          headline={headline}
+          subtitle={subtitle}
+        />
+        {children}
+        <PremiumActionStack actions={actions} />
+      </main>
     </div>
+  );
+}
+
+function PremiumCardHeader({ greeting, icon = "heart", headline, subtitle }) {
+  return (
+    <section className="premium-card-content" aria-live="polite">
+      {greeting ? <p className="premium-greeting">{greeting}</p> : null}
+      <PremiumCardIcon icon={icon} />
+      {headline ? <h2 className="premium-headline">{headline}</h2> : null}
+      <span className="premium-divider" aria-hidden="true" />
+      {subtitle ? <p className="premium-subtitle">{subtitle}</p> : null}
+    </section>
+  );
+}
+
+function PremiumCardIcon({ icon }) {
+  if (!icon || icon === "none") return null;
+
+  if (typeof icon !== "string") {
+    return <span className="premium-card-icon premium-card-icon-custom" aria-hidden="true">{icon}</span>;
+  }
+
+  return (
+    <span className={`premium-card-icon premium-card-icon-${icon}`} aria-hidden="true">
+      {icon === "spark" ? <SparkGlyph /> : <HeartGlyph />}
+    </span>
+  );
+}
+
+function PremiumHomeButton({ href, onClick }) {
+  const content = (
+    <>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4.75 10.5 12 4.25l7.25 6.25" />
+        <path d="M6.75 9.25v9.5h10.5v-9.5" />
+        <path d="M10 18.75v-5.5h4v5.5" />
+      </svg>
+      <span className="sr-only">Go home</span>
+    </>
+  );
+
+  if (href) {
+    return (
+      <a className="premium-home-button" href={href} onClick={(event) => onClick?.(event)} aria-label="Go home">
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" className="premium-home-button" onClick={(event) => onClick?.(event)} aria-label="Go home">
+      {content}
+    </button>
+  );
+}
+
+function PremiumActionStack({ actions = [] }) {
+  if (!actions.length) return null;
+
+  return (
+    <div className="premium-action-stack">
+      {actions.map((action) => (
+        <PremiumActionButton
+          key={action.key || action.label}
+          label={action.label}
+          variant={action.variant}
+          onClick={action.onClick}
+          href={action.href}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PremiumActionButton({ label, variant = "secondary", onClick, href }) {
+  const className = `premium-action-button premium-action-button-${variant === "primary" ? "primary" : "secondary"}`;
+
+  if (href) {
+    return (
+      <a className={className} href={href} onClick={(event) => onClick?.(event)}>
+        {label}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" className={className} onClick={(event) => onClick?.(event)}>
+      {label}
+    </button>
   );
 }
 
@@ -5305,24 +5482,20 @@ function ActionCardOverlay({
   if (!currentCard) return null;
 
   return (
-    <div className="overlay-screen reveal">
-      <div className="floating floating-heart" />
-      <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
-        <CloseGlyph />
-      </button>
-      <div className="reveal-copy">
-        <p className="eyebrow">{currentCard.category || "Action"}</p>
-        <span className="mini-glyph" aria-hidden="true">
-          <SparkGlyph />
-        </span>
-        <h2>{currentCard.title}</h2>
-        {currentCard.body ? <p className="card-attribution">{currentCard.body}</p> : null}
-        <p className="tiny-note">an alternative to scrolling</p>
-      </div>
-      <div className="action-row">
-        <ActionButton label="Another idea" onClick={pickNext} />
-        <ActionButton label="I'll do this" tone="solid" onClick={handleAccept} />
-      </div>
+    <div className="premium-overlay-with-launchers">
+      <PremiumCardScreen
+        type="action"
+        greeting={currentCard.category || "Action"}
+        icon="spark"
+        headline={currentCard.title}
+        subtitle={currentCard.body || "An alternative to scrolling."}
+        actions={[
+          { label: "Another idea", variant: "secondary", onClick: pickNext },
+          { label: "I'll do this", variant: "primary", onClick: handleAccept },
+        ]}
+        showHomeButton={true}
+        onHome={onClose}
+      />
       {fakeLauncherVersions?.length > 0 ? (
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
@@ -5357,23 +5530,21 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
   }
 
   return (
-    <div className="overlay-screen empty-state">
-      <div className="floating floating-heart" />
-      <button type="button" className="overlay-library-button" onClick={onClose} aria-label="Close">
-        <BookGlyph />
-      </button>
-      <div className="caught-up-content">
-        <p className="eyebrow">Action Cards</p>
-        <h2>No action ideas yet.</h2>
-        <p className="caught-up-copy">Make one for yourself.</p>
-        <div className="caught-up-actions" style={{ flexDirection: "column", gap: "12px", display: "flex", alignItems: "center" }}>
-          <ActionButton label="Create action card" tone="solid" onClick={onCreateActionCard} />
-          <ActionButton label="Back home" onClick={onClose} />
-          {version ? (
-            <ActionButton label={`Continue to ${version.name}`} onClick={handleContinueToApp} />
-          ) : null}
-        </div>
-      </div>
+    <div className="premium-overlay-with-launchers">
+      <PremiumCardScreen
+        type="empty"
+        greeting="Action Cards"
+        icon="spark"
+        headline="No action ideas yet."
+        subtitle="Make one for yourself."
+        actions={[
+          { label: "Back home", variant: "secondary", onClick: onClose },
+          ...(version ? [{ label: `Continue to ${version.name}`, variant: "secondary", onClick: handleContinueToApp }] : []),
+          { label: "Create action card", variant: "primary", onClick: onCreateActionCard },
+        ]}
+        showHomeButton={true}
+        onHome={onClose}
+      />
       {fakeLauncherVersions?.length > 0 ? (
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
@@ -5387,18 +5558,16 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
 
 function ActionSuccessOverlay({ onClose }) {
   return (
-    <div className="overlay-screen empty-state">
-      <div className="floating floating-heart" />
-      <button type="button" className="overlay-library-button" onClick={onClose}><BookGlyph /></button>
-      <div className="caught-up-content">
-        <p className="eyebrow">Action</p>
-        <h2>Nice choice.</h2>
-        <p className="caught-up-copy">take all the time you need</p>
-        <div className="caught-up-actions">
-          <ActionButton label="Back home" tone="solid" onClick={onClose} />
-        </div>
-      </div>
-    </div>
+    <PremiumCardScreen
+      type="action"
+      greeting="Action"
+      icon="heart"
+      headline="Nice choice."
+      subtitle="Take all the time you need."
+      actions={[{ label: "Back home", variant: "primary", onClick: onClose }]}
+      showHomeButton={true}
+      onHome={onClose}
+    />
   );
 }
 
@@ -5422,53 +5591,42 @@ function CustomPackOverlay({ overlay, onClose }) {
   }
 
   return (
-    <div className="overlay-screen custom-pack-screen">
-      <button
-        type="button"
-        className="overlay-library-button"
-        onClick={onClose}
-        aria-label="Open library"
+    <div
+      onTouchStart={(event) => {
+        touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(event) => {
+        if (touchStartX.current == null) return;
+        const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
+        const delta = endX - touchStartX.current;
+        touchStartX.current = null;
+        if (Math.abs(delta) < 36) return;
+        move(delta < 0 ? 1 : -1);
+      }}
+    >
+      <PremiumCardScreen
+        type="pack"
+        greeting={overlay.name}
+        icon="heart"
+        headline={messages[activeIndex] ?? "Your pack is ready."}
+        subtitle="Swipe through these little interruptions."
+        showHomeButton={true}
+        onHome={onClose}
       >
-        <BookGlyph />
-      </button>
-      <div
-        className="custom-pack-carousel"
-        onTouchStart={(event) => {
-          touchStartX.current = event.changedTouches[0]?.clientX ?? null;
-        }}
-        onTouchEnd={(event) => {
-          if (touchStartX.current == null) return;
-          const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
-          const delta = endX - touchStartX.current;
-          touchStartX.current = null;
-          if (Math.abs(delta) < 36) return;
-          move(delta < 0 ? 1 : -1);
-        }}
-      >
-        <div className="custom-pack-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
-          {messages.map((message, index) => (
-            <article key={`${overlay.packId}-${index}`} className="custom-pack-card">
-              <p className="eyebrow">{overlay.name}</p>
-              <span className="mini-glyph" aria-hidden="true">
-                <HeartGlyph />
-              </span>
-              <h2>{message}</h2>
-              <p className="tiny-note">Swipe through these little interruptions.</p>
-            </article>
-          ))}
-        </div>
-      </div>
-      <div className="onboarding-pagination">
-        {messages.map((message, index) => (
-          <button
-            key={`${overlay.packId}-dot-${index}`}
-            type="button"
-            className={`pagination-dot ${index === activeIndex ? "active" : ""}`}
-            onClick={() => setActiveIndex(index)}
-            aria-label={`Show card ${index + 1}`}
-          />
-        ))}
-      </div>
+        {messages.length > 1 ? (
+          <div className="premium-card-pagination">
+            {messages.map((message, index) => (
+              <button
+                key={`${overlay.packId}-dot-${index}`}
+                type="button"
+                className={`pagination-dot ${index === activeIndex ? "active" : ""}`}
+                onClick={() => setActiveIndex(index)}
+                aria-label={`Show card ${index + 1}`}
+              />
+            ))}
+          </div>
+        ) : null}
+      </PremiumCardScreen>
     </div>
   );
 }
@@ -5576,62 +5734,63 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
     });
   }
 
+  const activeMessage = messages[activeIndex] ?? "Pause for a second.";
+  const hasMultipleMessages = messages.length > 1;
+
   return (
-    <div className="overlay-screen interception-screen">
-      <div
-        className="custom-pack-carousel interception-carousel"
-        onTouchStart={(event) => {
-          touchStartX.current = event.changedTouches[0]?.clientX ?? null;
-        }}
-        onTouchEnd={(event) => {
-          if (touchStartX.current == null) return;
-          const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
-          const delta = endX - touchStartX.current;
-          touchStartX.current = null;
-          if (Math.abs(delta) < 36) return;
-          move(delta < 0 ? 1 : -1);
-        }}
+    <div
+      className="premium-interception-frame"
+      onTouchStart={(event) => {
+        touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(event) => {
+        if (touchStartX.current == null) return;
+        const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
+        const delta = endX - touchStartX.current;
+        touchStartX.current = null;
+        if (Math.abs(delta) < 36) return;
+        move(delta < 0 ? 1 : -1);
+      }}
+    >
+      <PremiumCardScreen
+        type="interruption"
+        greeting={overlay.name || version?.name || "Before you open"}
+        icon="heart"
+        headline={activeMessage}
+        subtitle="A little pause before the app opens."
+        actions={[
+          {
+            label: "Continue to app",
+            variant: "secondary",
+            onClick: handleContinueToApp,
+          },
+          {
+            label: "Do something else",
+            variant: "primary",
+            onClick: (event) => {
+              event?.stopPropagation?.();
+              onChooseElse();
+            },
+          },
+        ]}
+        showHomeButton={false}
       >
-        <div className="custom-pack-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
-          {messages.map((message, index) => (
-            <article key={`${overlay.packId}-${index}`} className="custom-pack-card interception-card">
-              <p className="eyebrow">{overlay.name}</p>
-              <span className="mini-glyph" aria-hidden="true">
-                <HeartGlyph />
-              </span>
-              <h2>{message}</h2>
-              <p className="tiny-note">A little pause before the app opens.</p>
-            </article>
-          ))}
-        </div>
-      </div>
-      <div className="onboarding-pagination">
-        {messages.map((message, index) => (
-          <button
-            key={`${overlay.packId}-dot-${index}`}
-            type="button"
-            className={`pagination-dot ${index === activeIndex ? "active" : ""}`}
-            onClick={() => setActiveIndex(index)}
-            aria-label={`Show card ${index + 1}`}
-          />
-        ))}
-      </div>
-      <div className="interception-actions">
-        <ActionButton
-          label="Do something else"
-          tone="solid"
-          onClick={(event) => {
-            event?.stopPropagation?.();
-            onChooseElse();
-          }}
-        />
-        <ActionButton
-          label="Continue to app"
-          onClick={handleContinueToApp}
-        />
-      </div>
+        {hasMultipleMessages ? (
+          <div className="premium-card-pagination">
+            {messages.map((message, index) => (
+              <button
+                key={`${overlay.packId}-dot-${index}`}
+                type="button"
+                className={`pagination-dot ${index === activeIndex ? "active" : ""}`}
+                onClick={() => setActiveIndex(index)}
+                aria-label={`Show card ${index + 1}`}
+              />
+            ))}
+          </div>
+        ) : null}
+      </PremiumCardScreen>
       {showFallbackLink && version?.manualUrl ? (
-        <p className="manual-open-copy">
+        <p className="manual-open-copy premium-manual-open-copy">
           App didn&apos;t open?{" "}
           <a href={version.manualUrl} target="_blank" rel="noopener noreferrer">
             Open {version.name} manually
@@ -5643,20 +5802,13 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
 }
 
 function ActionButton({ label, onClick, tone = "ghost", href }) {
-  const className = `action-button ${tone}`;
-
-  if (href) {
-    return (
-      <a className={className} href={href} onClick={(e) => onClick?.(e)}>
-        {label}
-      </a>
-    );
-  }
-
   return (
-    <button type="button" className={className} onClick={(e) => onClick?.(e)}>
-      {label}
-    </button>
+    <PremiumActionButton
+      label={label}
+      variant={tone === "solid" ? "primary" : "secondary"}
+      onClick={onClick}
+      href={href}
+    />
   );
 }
 
