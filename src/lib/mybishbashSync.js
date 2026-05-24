@@ -11,6 +11,7 @@ const SHARED_STATE_TABLE = "mybishbash_state";
 const LEGACY_SHARED_STATE_TABLE = ("bish" + "bash") + "_state";
 const SHARED_EVENTS_TABLE = "mybishbash_events";
 const LEGACY_SHARED_EVENTS_TABLE = ("bish" + "bash") + "_events";
+export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nYour access code was not recognised.";
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -121,6 +122,47 @@ export async function getSession() {
   return data.session;
 }
 
+function normalizeAccessCode(accessCode) {
+  return String(accessCode ?? "").trim().replace(/\s+/g, "").toUpperCase();
+}
+
+async function validateAccessCode(accessCode) {
+  const client = requireSupabase();
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+
+  if (!normalizedAccessCode) return false;
+
+  const { data, error } = await client.rpc("validate_mybishbash_access_code", {
+    access_code: normalizedAccessCode,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+async function claimAccessCode(accessCode) {
+  const client = requireSupabase();
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return false;
+
+  const { data, error } = await client.rpc("claim_mybishbash_access_code", {
+    access_code: normalizedAccessCode,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+export async function hasAccessEntitlement(userId) {
+  if (isDemoMode()) return true;
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("user_profiles")
+    .select("has_access")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.has_access === true;
+}
+
 export function onAuthStateChange(callback) {
   if (isDemoMode()) {
     return { data: { subscription: { unsubscribe: () => {} } } };
@@ -129,10 +171,28 @@ export function onAuthStateChange(callback) {
   return client.auth.onAuthStateChange(callback);
 }
 
-export async function signUp(email, password) {
+export async function signUp(email, password, accessCode) {
   const client = requireSupabase();
-  const { data, error } = await client.auth.signUp({ email, password });
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  const hasValidAccessCode = await validateAccessCode(normalizedAccessCode);
+
+  if (!hasValidAccessCode) {
+    const error = new Error(INVITE_ONLY_ACCESS_ERROR);
+    error.code = "MYBISHBASH_INVALID_ACCESS_CODE";
+    throw error;
+  }
+
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        mybishbash_access_code: normalizedAccessCode,
+      },
+    },
+  });
   if (error) throw error;
+  if (data.session?.user) await claimAccessCode(normalizedAccessCode);
   return data.session;
 }
 
@@ -377,6 +437,7 @@ export async function fetchAdminAnalytics() {
     { data: summary, error: summaryError },
     { data: recent, error: recentError },
     { data: launcherEvents, error: launcherEventsError },
+    { data: waitlist, error: waitlistError },
   ] = await Promise.all([
     client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
     client
@@ -389,9 +450,37 @@ export async function fetchAdminAnalytics() {
       .select("id,user_id,anonymous_device_id,session_id,event_type,launcher_id,launcher_name,launcher_category,route,source,is_standalone,app_display_mode,platform,metadata,created_at")
       .order("created_at", { ascending: false })
       .limit(500),
+    client
+      .from("launch_signups")
+      .select("id,email,country,created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000),
   ]);
   if (summaryError) throw summaryError;
   if (recentError) throw recentError;
   if (launcherEventsError && launcherEventsError.code !== "PGRST205") throw launcherEventsError;
-  return { summary: summary ?? [], recent: recent ?? [], launcherEvents: launcherEvents ?? [] };
+  if (waitlistError && !["PGRST205", "42501"].includes(waitlistError.code)) throw waitlistError;
+  return { summary: summary ?? [], recent: recent ?? [], launcherEvents: launcherEvents ?? [], waitlist: waitlist ?? [] };
+}
+
+export async function fetchAdminLiveActivity() {
+  const client = requireSupabase();
+  const [
+    { data: recent, error: recentError },
+    { data: launcherEvents, error: launcherEventsError },
+  ] = await Promise.all([
+    client
+      .from(SHARED_EVENTS_TABLE)
+      .select("id,user_id,event_type,created_at,source_type,bash_id,card_id,card_title,card_text,target_app,launcher_context,pack_id,message_id,app_id,app_name,action_taken,metadata")
+      .order("created_at", { ascending: false })
+      .limit(80),
+    client
+      .from("launcher_events")
+      .select("id,user_id,anonymous_device_id,session_id,event_type,launcher_id,launcher_name,launcher_category,route,source,is_standalone,app_display_mode,platform,metadata,created_at")
+      .order("created_at", { ascending: false })
+      .limit(120),
+  ]);
+  if (recentError) throw recentError;
+  if (launcherEventsError && launcherEventsError.code !== "PGRST205") throw launcherEventsError;
+  return { recent: recent ?? [], launcherEvents: launcherEvents ?? [] };
 }

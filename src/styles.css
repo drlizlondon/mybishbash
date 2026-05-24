@@ -852,7 +852,8 @@ textarea {
 .card-copy p,
 .card-status p,
 .tiny-note,
-.field span {
+.field span,
+.field label {
   margin: 0;
   color: var(--ink-muted);
 }
@@ -1648,6 +1649,312 @@ textarea {
   animation: rise-in 260ms ease both;
 }
 
+.onboarding-flow-card {
+  min-height: 520px;
+  max-height: calc(100dvh - 168px);
+  border-radius: 34px;
+  padding: 22px 20px 18px;
+  background:
+    radial-gradient(circle at 26% 14%, rgba(255, 255, 255, 0.8), transparent 30%),
+    radial-gradient(circle at 80% 22%, rgba(255, 239, 232, 0.62), transparent 28%),
+    linear-gradient(180deg, rgba(249, 231, 224, 0.98) 0%, rgba(247, 221, 211, 0.96) 66%, rgba(240, 213, 202, 0.96) 100%);
+  box-shadow:
+    0 22px 42px rgba(149, 108, 89, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  animation: rise-in 260ms ease both;
+}
+
+.onboarding-step {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.onboarding-step-copy {
+  display: grid;
+  gap: 14px;
+}
+
+.onboarding-step-copy h2 {
+  margin: 0;
+  max-width: 100%;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(2.1rem, 9vw, 3rem);
+  line-height: 1.04;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  color: rgba(47, 42, 40, 0.98);
+  overflow-wrap: anywhere;
+}
+
+.onboarding-step-copy p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: rgba(79, 71, 67, 0.78);
+}
+
+.onboarding-step-body {
+  align-self: start;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  padding-right: 2px;
+  overscroll-behavior: contain;
+}
+
+.onboarding-step-indicator {
+  display: flex;
+  gap: 7px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.onboarding-step-indicator span {
+  width: 22px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(233, 120, 93, 0.18);
+}
+
+.onboarding-step-indicator span.active {
+  background: var(--coral);
+}
+
+.onboarding-install-steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-choice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-choice-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  padding: 11px;
+  border: 1px solid rgba(233, 120, 93, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 250, 247, 0.54);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.onboarding-choice-card.selected {
+  border-color: rgba(233, 120, 93, 0.42);
+  background: rgba(255, 250, 247, 0.82);
+  transform: translateY(-1px);
+}
+
+.onboarding-choice-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-check {
+  width: 26px;
+  height: 26px;
+  align-self: start;
+  border-radius: 999px;
+  border: 1px solid rgba(233, 120, 93, 0.34);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.onboarding-choice-card.selected .choice-check {
+  border-color: var(--coral);
+  background: var(--coral);
+  box-shadow: 0 7px 14px rgba(233, 120, 93, 0.2);
+}
+
+.onboarding-choice-card.selected .choice-check::after {
+  content: "";
+  display: block;
+  width: 11px;
+  height: 7px;
+  margin: 7px auto 0;
+  border-left: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: rotate(-45deg);
+}
+
+.onboarding-choice-card textarea {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: rgba(47, 42, 40, 0.94);
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.28;
+  resize: vertical;
+}
+
+.onboarding-choice-card textarea:focus-visible {
+  outline: 2px solid rgba(233, 120, 93, 0.34);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.onboarding-add-card {
+  min-height: 44px;
+  border: 1px dashed rgba(233, 120, 93, 0.42);
+  border-radius: 18px;
+  background: rgba(255, 250, 247, 0.42);
+  color: #9a5145;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.onboarding-app-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.onboarding-app-option {
+  min-height: 48px;
+  border: 1px solid rgba(233, 120, 93, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 250, 247, 0.58);
+  color: rgba(47, 42, 40, 0.9);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.onboarding-app-option.selected {
+  border-color: rgba(233, 120, 93, 0.54);
+  background: rgba(255, 250, 247, 0.9);
+  color: #9a5145;
+  box-shadow: 0 10px 20px rgba(149, 108, 89, 0.1);
+}
+
+.onboarding-custom-app {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.onboarding-custom-app span {
+  color: rgba(79, 71, 67, 0.78);
+  font-weight: 650;
+}
+
+.onboarding-custom-app input {
+  width: 100%;
+  border: 1px solid rgba(233, 120, 93, 0.24);
+  border-radius: 18px;
+  padding: 13px 14px;
+  background: rgba(255, 250, 247, 0.78);
+  color: var(--charcoal);
+  font: inherit;
+}
+
+.onboarding-install-steps li {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(255, 250, 247, 0.7);
+  color: rgba(47, 42, 40, 0.9);
+  font-weight: 650;
+}
+
+.onboarding-install-steps li::before {
+  content: counter(list-item);
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(233, 120, 93, 0.16);
+  color: #9a5145;
+  font-size: 0.82rem;
+}
+
+.onboarding-prompt-card {
+  border-radius: 26px;
+  padding: 24px 20px;
+  background: rgba(255, 250, 247, 0.74);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  color: rgba(47, 42, 40, 0.95);
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.55rem;
+  line-height: 1.18;
+}
+
+.onboarding-prompt-editor {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.onboarding-prompt-editor span {
+  color: rgba(79, 71, 67, 0.78);
+  font-weight: 650;
+}
+
+.onboarding-prompt-editor textarea {
+  width: 100%;
+  border: 1px solid rgba(233, 120, 93, 0.24);
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(255, 250, 247, 0.78);
+  color: var(--charcoal);
+  font: inherit;
+  resize: vertical;
+}
+
+.onboarding-prompt-editor textarea:focus-visible {
+  outline: 2px solid rgba(233, 120, 93, 0.4);
+  outline-offset: 1px;
+}
+
+.secondary-button {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(233, 120, 93, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 250, 247, 0.58);
+  color: #9a5145;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.onboarding-quiet-link {
+  align-self: end;
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  color: rgba(79, 71, 67, 0.58);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+
 .onboarding-carousel {
   overflow: hidden;
   position: relative;
@@ -1842,6 +2149,8 @@ textarea {
 .onboarding-actions {
   padding-bottom: 8px;
   padding-top: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .onboarding-actions .save-button {
@@ -3122,6 +3431,7 @@ body {
 .card-status p,
 .tiny-note,
 .field span,
+.field label,
 .settings-version-heading span,
 .home-screen-version-copy p,
 .pack-row-copy p,
@@ -3794,6 +4104,10 @@ body {
   margin: 0;
 }
 
+.sync-card h1 {
+  line-height: 1.1;
+}
+
 .sync-heart {
   width: 26px;
   margin: 0 auto;
@@ -3804,10 +4118,66 @@ body {
   color: #9a5145;
 }
 
+.sync-invite-error {
+  line-height: 1.45;
+}
+
+.sync-note {
+  font-size: 0.92rem;
+  color: #8a8178;
+}
+
 .sync-form,
-.sync-profile-row {
+.sync-profile-row,
+.sync-actions {
   display: grid;
   gap: 12px;
+}
+
+.sync-form .field {
+  margin-bottom: 0;
+  text-align: left;
+}
+
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field .settings-input {
+  padding-right: 72px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(233, 120, 93, 0.11);
+  color: #9a5145;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid rgba(233, 120, 93, 0.45);
+  outline-offset: 2px;
+}
+
+.sync-secondary-link {
+  margin-top: 4px;
+}
+
+.sync-waitlist-link {
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+  text-decoration: none;
 }
 
 .sync-profile-row strong {

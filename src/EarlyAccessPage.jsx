@@ -495,16 +495,39 @@ export default function EarlyAccessPage() {
       consent_launch_updates: form.consent_launch_updates,
     };
 
-    let insertError = null;
+    let submitResult = null;
+    let submitError = null;
 
     try {
-      const { error } = await supabase.from("launch_signups").insert(payload);
-      insertError = error;
+      const { data, error } = await supabase.rpc("join_launch_waitlist", payload);
+      submitResult = data;
+      submitError = error;
     } catch (error) {
-      insertError = error;
+      submitError = error;
     }
 
-    if (insertError) {
+    if (submitResult === "already_account") {
+      submitLockRef.current = false;
+      setStatus("idle");
+      setError("Email address already used. Please log in with this email, or use a different email for the waitlist.");
+      return;
+    }
+
+    if (submitResult === "already_waitlist") {
+      submitLockRef.current = false;
+      setStatus("idle");
+      setError("Email address already used. You are already on the waitlist.");
+      return;
+    }
+
+    if (submitResult === "invalid") {
+      submitLockRef.current = false;
+      setStatus("idle");
+      setError("Please complete the required fields and try again.");
+      return;
+    }
+
+    if (submitError || submitResult !== "created") {
       submitLockRef.current = false;
       setStatus("idle");
       setError("We could not add you to the list just now. Please check your details and try again.");

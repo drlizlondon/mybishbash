@@ -47,6 +47,21 @@ export const landingContent = ${JSON.stringify(content, null, 2)};
   };
 }
 
+function legacyBishbashBaseAliasPlugin() {
+  return {
+    name: "legacy-bishbash-base-alias",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url === "/bishbash" || req.url?.startsWith("/bishbash/")) {
+          req.url = req.url.replace(/^\/bishbash(?=\/|$)/, "/mybishbash");
+        }
+        next();
+      });
+    },
+  };
+}
+
 function appVersionPlugin() {
   return {
     name: "mybishbash-version",
@@ -69,7 +84,7 @@ function appVersionPlugin() {
 
 export default defineConfig({
   base: "/mybishbash/",
-  plugins: [react(), tailwindcss(), landingContentEditorPlugin(), appVersionPlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), react(), tailwindcss(), landingContentEditorPlugin(), appVersionPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },

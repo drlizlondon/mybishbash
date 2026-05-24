@@ -54,7 +54,7 @@
     launchLink.addEventListener("click", () => {
       const pendingEvents = loadPendingEvents();
       pendingEvents.push({
-        event_type: "fake_launcher_opened",
+        event_type: "launcher_installed",
         launcher_id: version.id,
         route: version.launchPath,
         created_at: new Date().toISOString(),
@@ -77,14 +77,14 @@
   const pendingEvents = loadPendingEvents();
   pendingEvents.push(
     {
-      event_type: "fake_launcher_install_page_viewed",
+      event_type: "launcher_install_viewed",
       launcher_id: version.id,
       route: window.location.pathname,
       created_at: new Date().toISOString(),
       is_standalone: isStandalone,
     },
     {
-      event_type: "fake_launcher_manifest_loaded",
+      event_type: "launcher_manifest_loaded",
       launcher_id: version.id,
       route: version.manifestPath,
       created_at: new Date().toISOString(),

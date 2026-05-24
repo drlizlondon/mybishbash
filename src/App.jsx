@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
+  DEFAULT_ACTION_CARDS,
   clearSharedMyBishBashState,
   loadCards,
   loadCardPacks,
@@ -39,6 +40,7 @@ import {
 } from "./eventLog";
 import {
   getSyncErrorMessage,
+  INVITE_ONLY_ACCESS_ERROR,
   loadSharedState,
   saveSharedState,
   getSession,
@@ -46,6 +48,7 @@ import {
   signUp,
   logIn,
   logOut,
+  hasAccessEntitlement,
   markNotificationOpened,
   saveLauncherEvent,
   saveNotificationPreferences,
@@ -89,10 +92,11 @@ import {
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher } from "./lib/launcherRegistry";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
-import Onboarding from "./Onboarding";
+import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS } from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { EditableLandingPage } from "./LandingPage";
 import EarlyAccessPage from "./EarlyAccessPage";
+import AboutPage from "./AboutPage";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
 
 const HQPanel = lazy(() => import("./HQPanel"));
@@ -103,6 +107,7 @@ function resolveTheme(theme) {
 }
 
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const LEGACY_BASE_PATHS = ["/bishbash"];
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -135,6 +140,12 @@ function normalizeRoutePath(path) {
   return withLeadingSlash.length > 1 ? withLeadingSlash.replace(/\/+$/, "") : withLeadingSlash;
 }
 
+function getPathRelativeToKnownBase(pathname) {
+  const knownBasePaths = [BASE_PATH, ...LEGACY_BASE_PATHS].filter(Boolean).sort((a, b) => b.length - a.length);
+  const matchingBase = knownBasePaths.find((basePath) => pathname === basePath || pathname.startsWith(`${basePath}/`));
+  return matchingBase ? pathname.slice(matchingBase.length) || "/" : pathname || "/";
+}
+
 function getRouteFromLocation(setupComplete) {
   if (typeof window === "undefined") {
     return setupComplete ? "/home" : "/onboarding";
@@ -148,7 +159,7 @@ function getRouteFromLocation(setupComplete) {
     return `/intercept/${disguisedVersion}`;
   }
 
-  const rawPath = routeParam || window.location.pathname.replace(BASE_PATH || "", "") || "/";
+  const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
   const normalized = normalizeRoutePath(rawPath);
 
   if (routeParam) {
@@ -561,13 +572,17 @@ function App() {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
     const routeParam = params.get("route");
-    const rawPath = routeParam || window.location.pathname.replace(BASE_PATH || "", "") || "/";
+    const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
     const normalizedPath = normalizeRoutePath(rawPath);
     const hasAppRouteParam = params.has("route");
     const isStandaloneMode = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone || !!window.Capacitor;
 
     if (normalizedPath === "/early-access") {
       return <EarlyAccessPage />;
+    }
+
+    if (normalizedPath === "/about") {
+      return <AboutPage />;
     }
 
     if (!hasAppRouteParam && !isStandaloneMode && (normalizedPath === "/" || normalizedPath === "/index.html")) {
@@ -625,6 +640,7 @@ function App() {
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
   const loggedLauncherOpenRef = useRef("");
+  const loggedOnboardingStartedRef = useRef(false);
   const interceptActivationRef = useRef(null);
   const interceptActivationCounterRef = useRef(0);
   const launchAttemptCounterRef = useRef(0);
@@ -870,7 +886,14 @@ function App() {
 
     console.log("SESSION USER", session.user.id);
 
-    loadSharedState(session.user.id)
+    hasAccessEntitlement(session.user.id)
+      .then((hasAccess) => {
+        if (!hasAccess) {
+          throw Object.assign(new Error(INVITE_ONLY_ACCESS_ERROR), { code: "MYBISHBASH_MISSING_ACCESS_ENTITLEMENT" });
+        }
+
+        return loadSharedState(session.user.id);
+      })
       .then((sharedState) => {
         if (cancelled) return;
         console.log("LOADED CLOUD STATE", sharedState);
@@ -883,6 +906,14 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
+        if (error?.code === "MYBISHBASH_MISSING_ACCESS_ENTITLEMENT") {
+          void logOut().catch((err) => console.warn(err));
+          setSession(null);
+          setSyncError(INVITE_ONLY_ACCESS_ERROR);
+          setSyncStatus("needs-connection");
+          return;
+        }
+
         setSyncError(getSyncErrorMessage(error, "Could not load your MyBishBash profile."));
         setSyncStatus("error");
       });
@@ -940,7 +971,7 @@ function App() {
   }, [syncStatus, session?.user?.id, currentSharedState]);
 
   useEffect(() => {
-    if (syncStatus !== "ready" || !session?.user?.id) return undefined;
+    if (screen === "hq" || syncStatus !== "ready" || !session?.user?.id) return undefined;
 
     const pollInterval = window.setInterval(() => {
       if (localDirtyRef.current) {
@@ -983,7 +1014,7 @@ function App() {
     }, 5000);
 
     return () => window.clearInterval(pollInterval);
-  }, [syncStatus, session?.user?.id, applySharedState]);
+  }, [screen, syncStatus, session?.user?.id, applySharedState]);
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
@@ -1127,11 +1158,23 @@ function App() {
     setEvents(next);
   }, [launcherContext]);
 
+  useEffect(() => {
+    if (screen === "onboarding" && !loggedOnboardingStartedRef.current) {
+      loggedOnboardingStartedRef.current = true;
+      void logEvent({
+        event_type: "onboarding_started",
+        source_type: "onboarding",
+        card_source: "onboarding",
+        action_taken: "started",
+      });
+    }
+  }, [screen, logEvent]);
+
   const logLauncherEvent = useCallback(
     async (eventType, launcherId, metadata = {}) => {
       const launcher = getLauncherConfig(launcherId);
       if (!launcher) return;
-      const routeValue = metadata.route || window.location.pathname.replace(BASE_PATH || "", "") || "/";
+      const routeValue = metadata.route || getPathRelativeToKnownBase(window.location.pathname);
       const payload = buildLauncherEventPayload({
         eventType,
         launcher,
@@ -1475,7 +1518,7 @@ function App() {
       const launcherOpenKey = `${route.versionId}:${route.path}:${session?.user?.id ?? "anon"}`;
       if (loggedLauncherOpenRef.current !== launcherOpenKey) {
         loggedLauncherOpenRef.current = launcherOpenKey;
-        void logLauncherEvent("fake_launcher_opened", route.versionId, {
+        void logLauncherEvent("first_interruption_seen", route.versionId, {
           launched_from: isResumeInterceptLaunch ? "home_screen_resume" : "route",
         });
       }
@@ -1635,7 +1678,7 @@ function App() {
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
     loggedLauncherOpenRef.current = `${versionId}:/intercept/${versionId}:${session?.user?.id ?? "anon"}`;
-    void logLauncherEvent("fake_launcher_opened", versionId, { launched_from: "in_app_fake_launcher_bar" });
+    void logLauncherEvent("first_interruption_seen", versionId, { launched_from: "in_app_fake_launcher_bar" });
 
     const { selected, interruption } = selectLauncherActivationCard(versionId, "in_app_fake_launcher_bar");
 
@@ -2249,6 +2292,138 @@ function App() {
     });
   }
 
+  function saveOnboardingSetup({
+    interrupterCards = DEFAULT_INTERRUPTER_CARDS,
+    actionCards: selectedActionCards = DEFAULT_ACTION_CARD_TITLES,
+    launcherId = "instagram",
+    appContext = { id: "instagram", label: "Instagram", launcherId: "instagram" },
+  }) {
+    const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
+    const cleanInterrupterCards = interrupterCards.map((text) => text.trim()).filter(Boolean);
+    const cleanActionCards = selectedActionCards.map((text) => text.trim()).filter(Boolean);
+    const now = new Date().toISOString();
+    const fallbackInterrupters = cleanInterrupterCards.length > 0 ? cleanInterrupterCards : DEFAULT_INTERRUPTER_CARDS;
+    const fallbackActions = cleanActionCards.length > 0 ? cleanActionCards : DEFAULT_ACTION_CARD_TITLES;
+    void logEvent({
+      event_type: "onboarding_completed",
+      source_type: "onboarding",
+      card_source: "onboarding",
+      target_app: supportedLauncherId,
+      launcher_context: supportedLauncherId,
+      action_taken: "completed",
+      metadata: {
+        selected_interrupter_cards: fallbackInterrupters.length,
+        selected_action_cards: fallbackActions.length,
+        app_context: appContext,
+      },
+    });
+
+    setCardPacks((current) => {
+      const existing = getStoredInterruptionPackForTarget(supportedLauncherId, current, homeScreenVersions, launcherBehaviorSettings);
+      const packId = existing?.id ?? `${supportedLauncherId}-user-interruptions`;
+      const nextCards = fallbackInterrupters.map((text) => ({
+        id: createId(),
+        text,
+        title: text,
+        readOnly: false,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      const nextPack = {
+        id: packId,
+        type: "interruption",
+        name: `${homeScreenVersions[supportedLauncherId]?.name ?? appContext?.label ?? supportedLauncherId} Interruptions`,
+        targetApp: supportedLauncherId,
+        linkedVersionId: supportedLauncherId,
+        active: true,
+        editable: true,
+        cards: nextCards,
+        messages: nextCards.map((card) => card.text),
+        updatedAt: now,
+      };
+
+      if (existing) return current.map((pack) => (pack.id === existing.id ? nextPack : pack));
+      return [nextPack, ...current];
+    });
+
+    setLauncherBehaviorSettings((current) => ({
+      ...current,
+      [supportedLauncherId]: {
+        ...(current[supportedLauncherId] || {}),
+        useInterruptionPack: true,
+        interruptionPaused: false,
+      },
+    }));
+
+    const defaultMessages = DEFAULT_INTERRUPTION_PACKS[supportedLauncherId]?.messages ?? [];
+    const defaultPackId = DEFAULT_INTERRUPTION_PACKS[supportedLauncherId]?.id ?? `${supportedLauncherId}-interruption`;
+    setDislikedPackCardIds((current) => {
+      const hiddenDefaultCards = defaultMessages.map((message) =>
+        getPackDislikeKey({ sourcePackId: defaultPackId, promptText: message }),
+      );
+      return Array.from(new Set([...current, ...hiddenDefaultCards]));
+    });
+
+    setActionCards((current) => {
+      const hiddenStarterCards = DEFAULT_ACTION_CARDS.map((card) => ({
+        ...card,
+        hidden: true,
+        updatedAt: now,
+        defaultsVersion: card.defaultsVersion,
+      }));
+      const preservedUserCards = current.filter((card) => card.source !== "starter" && !card.id?.startsWith("onboarding-action-"));
+      const onboardingCards = fallbackActions.map((title) => ({
+        id: createId(),
+        title,
+        body: "",
+        category: "Action",
+        launchUrl: "",
+        hidden: false,
+        source: "user",
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      return [...onboardingCards, ...preservedUserCards, ...hiddenStarterCards];
+    });
+
+    setProfile((current) => ({
+      ...current,
+      onboardingAppContext: appContext,
+      onboardingLauncherId: supportedLauncherId,
+    }));
+
+    setOverlay(null);
+    setMenuOpenId(null);
+    setSetupComplete(true);
+    setShouldLaunchOverlay(false);
+  }
+
+  function finishOnboarding(destination = "home", launcherId = profile.onboardingLauncherId ?? "instagram") {
+    const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
+    setScreen("library");
+    setOverlay(null);
+    setMenuOpenId(null);
+    setSetupComplete(true);
+    setShouldLaunchOverlay(destination === "try");
+    navigateTo(destination === "try" ? `/intercept/${supportedLauncherId}` : "/home", { replace: true });
+  }
+
+  function skipInstagramOnboarding() {
+    void logEvent({
+      event_type: "onboarding_completed",
+      source_type: "onboarding",
+      card_source: "onboarding",
+      action_taken: "skipped_instagram_setup",
+    });
+    setOverlay(null);
+    setMenuOpenId(null);
+    setSetupComplete(true);
+    setShouldLaunchOverlay(false);
+    setScreen("library");
+    navigateTo("/home", { replace: true });
+  }
+
   function handleDeleteInterruptionCard(targetApp, cardId) {
     setCardPacks((current) => {
       const existing = getStoredInterruptionPackForTarget(targetApp, current, homeScreenVersions, launcherBehaviorSettings);
@@ -2374,13 +2549,25 @@ function App() {
     navigateTo("/onboarding", { replace: true });
   }
 
-  async function handleSignUp(email, password) {
+  async function handleSignUp(email, password, accessCode) {
     setSyncStatus("loading");
     setSyncError("");
+    void logEvent({
+      event_type: "signup_started",
+      source_type: "auth",
+      card_source: "auth",
+      action_taken: "started",
+    });
     try {
-      await signUp(email, password);
+      await signUp(email, password, accessCode);
+      void logEvent({
+        event_type: "signup_completed",
+        source_type: "auth",
+        card_source: "auth",
+        action_taken: "completed",
+      });
     } catch (error) {
-      setSyncError(getSyncErrorMessage(error, "Could not sign up."));
+      setSyncError(error?.code === "MYBISHBASH_INVALID_ACCESS_CODE" ? INVITE_ONLY_ACCESS_ERROR : getSyncErrorMessage(error, "Could not sign up."));
       setSyncStatus("needs-connection");
     }
   }
@@ -2697,6 +2884,7 @@ function App() {
         error={syncError}
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
+        onClearError={() => setSyncError("")}
       />
     );
   }
@@ -2851,14 +3039,10 @@ function App() {
 
       {screen === "onboarding" ? (
         <Onboarding
-          onCreate={() => {
-            setOverlay(null);
-            setMenuOpenId(null);
-            setEditingId(null);
-            setEditingPackId(null);
-            setEditingCustomPackId(null);
-            setIsComposerOpen(true);
-          }}
+          onSkip={skipInstagramOnboarding}
+          onSaveSetup={saveOnboardingSetup}
+          onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
+          onGoHome={() => finishOnboarding("home")}
         />
       ) : null}
 
@@ -4290,20 +4474,30 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
+function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+  const isInviteError = error === INVITE_ONLY_ACCESS_ERROR;
+  const waitlistHref = `${import.meta.env.BASE_URL}early-access`;
+
+  function switchMode(nextIsLogin) {
+    setIsLogin(nextIsLogin);
+    setShowPassword(false);
+    onClearError?.();
+  }
 
   function submitExisting(event) {
     event.preventDefault();
-    if (!email.trim() || !password.trim()) return;
+    if (!email.trim() || !password.trim() || (!isLogin && !accessCode.trim())) return;
     if (isLogin) {
       onLogIn(email, password);
     } else {
-      onSignUp(email, password);
+      onSignUp(email, password, accessCode);
     }
   }
 
@@ -4313,43 +4507,89 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn }) {
         <span className="sync-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h1>MyBishBash</h1>
+        <h1>{isLogin ? "MyBishBash" : "Create your MyBishBash account"}</h1>
         {mode === "loading" ? (
           <p>Loading your shared MyBishBash...</p>
+        ) : isInviteError ? (
+          <>
+            <p className="sync-error sync-invite-error">
+              MyBishBash is currently invite-only.
+              <br />
+              Your access code was not recognised.
+            </p>
+            <div className="sync-actions">
+              <button type="button" className="save-button" onClick={() => onClearError?.()}>
+                Try Again
+              </button>
+              <a className="text-button sync-waitlist-link" href={waitlistHref}>
+                Join Waitlist
+              </a>
+            </div>
+          </>
         ) : (
           <>
-            <p>{isStandalone ? "Reconnect MyBishBash. (iOS Home Screen apps require you to log in once per launcher.)" : "Log in to sync this launcher with your MyBishBash profile."}</p>
+            <p>
+              {isLogin
+                ? "Log in to sync this launcher with your MyBishBash profile."
+                : "Enter your invite access code once. After that, you’ll only need to log in."}
+            </p>
+            {isLogin && isStandalone ? <p className="sync-note">iOS Home Screen apps require you to log in once per launcher.</p> : null}
             {error ? <p className="sync-error">{error}</p> : null}
 
             <form className="sync-form" onSubmit={submitExisting}>
-              <label className="field">
-                <span>Email</span>
+              <div className="field">
+                <label htmlFor="sync-email">Email</label>
                 <input
+                  id="sync-email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   className="settings-input"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="you@example.com"
                   required
                 />
-              </label>
-              <label className="field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  className="settings-input"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Password"
-                  required
-                />
-              </label>
+              </div>
+              <div className="field">
+                <label htmlFor="sync-password">Password</label>
+                <span className="password-field">
+                  <input
+                    id="sync-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={isLogin ? "current-password" : "new-password"}
+                    className="settings-input"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Password"
+                    required
+                  />
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword((current) => !current)}>
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </span>
+              </div>
+              {!isLogin ? (
+                <div className="field">
+                  <label htmlFor="sync-access-code">Access code</label>
+                  <input
+                    id="sync-access-code"
+                    type="text"
+                    autoComplete="off"
+                    className="settings-input"
+                    value={accessCode}
+                    onChange={(event) => setAccessCode(event.target.value)}
+                    placeholder="Access code"
+                    required
+                  />
+                </div>
+              ) : null}
               <button type="submit" className="save-button">
-                {isLogin ? "Log In" : "Sign Up"}
+                {isLogin ? "Log In" : "Create Account"}
               </button>
             </form>
 
-            <button type="button" className="text-button" style={{ marginTop: 16 }} onClick={() => setIsLogin(!isLogin)}>
+            <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
               {isLogin ? "Need an account? Sign Up" : "Already have an account? Log In"}
             </button>
           </>
@@ -4513,7 +4753,7 @@ function SettingsPanel({
                       className="home-screen-install-link"
                       onClick={() => {
                         if (version.id !== "mybishbash") {
-                          void onLogLauncherEvent?.("fake_launcher_install_cta_clicked", version.id);
+                          void onLogLauncherEvent?.("launcher_install_clicked", version.id);
                         }
                       }}
                     >
@@ -5051,12 +5291,12 @@ function ActionCardOverlay({
   function handleAccept() {
     if (currentCard) {
       void onLogEvent({
-        event_type: "action_card_accepted",
+        event_type: "action_card_completed",
         source_type: "action_card",
         card_source: "action_card",
         card_id: currentCard.id,
         card_title: currentCard.title,
-        action_taken: "accepted",
+        action_taken: "completed",
       });
       onAccept(currentCard);
     }
@@ -5151,7 +5391,7 @@ function ActionSuccessOverlay({ onClose }) {
       <div className="floating floating-heart" />
       <button type="button" className="overlay-library-button" onClick={onClose}><BookGlyph /></button>
       <div className="caught-up-content">
-        <p className="eyebrow">Redirect</p>
+        <p className="eyebrow">Action</p>
         <h2>Nice choice.</h2>
         <p className="caught-up-copy">take all the time you need</p>
         <div className="caught-up-actions">
@@ -5272,7 +5512,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
     viewedCardRef.current = viewKey;
 
     void onLogEvent({
-      event_type: "intercept_card_viewed",
+      event_type: "first_interruption_seen",
       source_type: "interruption",
       card_source: "interruption",
       card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
@@ -5297,7 +5537,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
       messageId: `${overlay.packId}:${activeIndex}`,
       cardIndex: activeIndex,
     });
-    void onLogLauncherEvent?.("intercept_card_viewed", version.id, {
+    void onLogLauncherEvent?.("first_interruption_seen", version.id, {
       card_id: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
       card_index: activeIndex,
       pack_id: overlay.packId,
@@ -5378,7 +5618,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
       </div>
       <div className="interception-actions">
         <ActionButton
-          label="I'll do something else"
+          label="Do something else"
           tone="solid"
           onClick={(event) => {
             event?.stopPropagation?.();
@@ -5386,7 +5626,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
           }}
         />
         <ActionButton
-          label={`Continue to ${version?.name ?? "app"}`}
+          label="Continue to app"
           onClick={handleContinueToApp}
         />
       </div>

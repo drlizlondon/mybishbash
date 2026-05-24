@@ -7,8 +7,12 @@ import {
 } from "./editing/ContentEditContext";
 import AnimatedFeatureSection from "./AnimatedFeatureSection";
 
-const APP_HOME_HREF = `${import.meta.env.BASE_URL}home`;
-const EARLY_ACCESS_HREF = `${import.meta.env.BASE_URL}early-access`;
+const BASE = import.meta.env.BASE_URL;
+const HOME_HREF = BASE;
+const APP_HOME_HREF = `${BASE}home`;
+const ABOUT_HREF = `${BASE}about`;
+const EARLY_ACCESS_HREF = `${BASE}early-access`;
+const LANDING_NAV_HREFS = [ABOUT_HREF, HOME_HREF, HOME_HREF, HOME_HREF, HOME_HREF];
 
 function BrandMark({ dark = false }) {
   return (
@@ -25,13 +29,13 @@ function Header() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <a className="site-logo" href="/" onClick={stopEditNavigation} aria-label="MyBishBash home">
+        <a className="site-logo" href={HOME_HREF} onClick={stopEditNavigation} aria-label="MyBishBash home">
           <BrandMark />
           <EditableText path="brand.name" />
         </a>
         <nav className="site-nav" aria-label="Primary navigation">
           {content.nav.map((item, index) => (
-            <a href="/" key={item} onClick={stopEditNavigation}>
+            <a href={LANDING_NAV_HREFS[index] ?? "/"} key={item} onClick={stopEditNavigation}>
               <EditableText path={`nav.${index}`} />
             </a>
           ))}
@@ -136,7 +140,7 @@ function Hero() {
                 Join early access
                 <span aria-hidden="true">→</span>
               </a>
-              <a className="button secondary" href="/" onClick={stopEditNavigation}>
+              <a className="button secondary" href={ABOUT_HREF} onClick={stopEditNavigation}>
                 <span className="play-dot" aria-hidden="true" />
                 <EditableText path="ctas.secondary" />
               </a>
@@ -184,13 +188,13 @@ function Footer() {
 
   return (
     <footer className="site-footer">
-      <a className="footer-logo" href="/" onClick={stopEditNavigation}>
+      <a className="footer-logo" href={HOME_HREF} onClick={stopEditNavigation}>
         <BrandMark dark />
         <EditableText path="brand.name" />
       </a>
       <nav aria-label="Footer navigation">
         {content.footer.links.map((link, index) => (
-          <a href="/" key={link} onClick={stopEditNavigation}>
+          <a href={HOME_HREF} key={link} onClick={stopEditNavigation}>
             <EditableText path={`footer.links.${index}`} />
           </a>
         ))}

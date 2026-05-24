@@ -24,7 +24,7 @@ export const landingContent = {
       "shape it intentionally."
     ],
     "copy": [
-      "Create pauses, meaningful reminders, and turn everyday phone use into support for the person you want to become",
+      "Create pauses, meaningful reminders and turn everyday phone use into support for the person you want to become",
       ""
     ]
   },

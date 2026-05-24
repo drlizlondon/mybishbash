@@ -175,6 +175,7 @@ export function loadProfile() {
   try {
     const stored = JSON.parse(getStorageItem(PROFILE_KEY) ?? "{}");
     return {
+      ...stored,
       name: stored?.name ?? "",
       timezone: stored?.timezone ?? "Europe/London",
     };
