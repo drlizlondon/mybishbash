@@ -3263,10 +3263,10 @@ function App() {
         />
       ) : null}
 
-      {session?.user?.id && setupComplete && fakeLauncherVersions.length > 0 ? (
+      {session?.user?.id && setupComplete && fakeLauncherVersions.length > 0 && !overlay ? (
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
-          raised={Boolean(overlay)}
+          raised={false}
           onLaunch={handleFakeLauncherLaunch}
         />
       ) : null}
@@ -5171,6 +5171,8 @@ function Overlay({
         headline="You're all caught up for now."
         subtitle="See you later."
         actions={[{ label: "Back home", variant: "primary", onClick: onClose }]}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={true}
         onHome={onClose}
       />
@@ -5253,6 +5255,8 @@ function Overlay({
               { label: "Done", variant: "primary", onClick: () => onAction("done") },
             ]
       }
+      launcherVersions={fakeLauncherVersions}
+      onLauncherLaunch={onFakeLauncherLaunch}
       showHomeButton={true}
       onHome={onClose}
       className={overlay.phase === "dissolving" ? "is-dissolving" : ""}
@@ -5267,6 +5271,8 @@ function PremiumCardScreen({
   headline,
   subtitle,
   actions = [],
+  launcherVersions = [],
+  onLauncherLaunch,
   showHomeButton = false,
   homeHref,
   onHome,
@@ -5284,6 +5290,15 @@ function PremiumCardScreen({
           subtitle={subtitle}
         />
         {children}
+        {launcherVersions?.length > 0 ? (
+          <div className="premium-card-launchers">
+            <FakeAppLauncherBar
+              versions={launcherVersions}
+              onLaunch={onLauncherLaunch}
+              raised={false}
+            />
+          </div>
+        ) : null}
         <PremiumActionStack actions={actions} />
       </main>
     </div>
@@ -5493,16 +5508,11 @@ function ActionCardOverlay({
           { label: "Another idea", variant: "secondary", onClick: pickNext },
           { label: "I'll do this", variant: "primary", onClick: handleAccept },
         ]}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={true}
         onHome={onClose}
       />
-      {fakeLauncherVersions?.length > 0 ? (
-        <FakeAppLauncherBar
-          versions={fakeLauncherVersions}
-          onLaunch={onFakeLauncherLaunch}
-          raised={true}
-        />
-      ) : null}
     </div>
   );
 }
@@ -5542,16 +5552,11 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
           ...(version ? [{ label: `Continue to ${version.name}`, variant: "secondary", onClick: handleContinueToApp }] : []),
           { label: "Create action card", variant: "primary", onClick: onCreateActionCard },
         ]}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={true}
         onHome={onClose}
       />
-      {fakeLauncherVersions?.length > 0 ? (
-        <FakeAppLauncherBar
-          versions={fakeLauncherVersions}
-          onLaunch={onFakeLauncherLaunch}
-          raised={true}
-        />
-      ) : null}
     </div>
   );
 }

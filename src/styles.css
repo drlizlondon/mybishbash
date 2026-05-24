@@ -4035,10 +4035,10 @@ body {
   inset: 0;
   z-index: 99999;
   width: 100%;
-  min-height: 100svh;
+  min-height: 100dvh;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: max(28px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  padding: 0;
   background: var(--bb-bg);
   color: var(--bb-text);
   isolation: isolate;
@@ -4071,22 +4071,25 @@ body {
 .premium-card-main {
   position: relative;
   z-index: 1;
-  width: 100%;
-  max-width: 820px;
-  min-height: calc(100svh - max(28px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom)));
-  margin: 0 auto;
+  width: calc(100% - 32px);
+  max-width: 430px;
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding-top: 88px;
+  padding-bottom: 32px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
 }
 
 .premium-home-button {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 86px);
-  right: 24px;
+  top: max(24px, calc(env(safe-area-inset-top) + 16px));
+  right: clamp(20px, 5vw, 56px);
   z-index: 5;
-  width: 58px;
-  height: 58px;
+  width: 56px;
+  height: 56px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.78);
   background: rgba(255, 255, 255, 0.82);
@@ -4106,8 +4109,8 @@ body {
 }
 
 .premium-home-button svg {
-  width: 27px;
-  height: 27px;
+  width: 24px;
+  height: 24px;
   stroke: currentColor;
   stroke-width: 1.75;
   stroke-linecap: round;
@@ -4124,21 +4127,21 @@ body {
 }
 
 .premium-greeting {
-  margin: clamp(92px, 13svh, 126px) 0 0;
+  margin: 0 0 clamp(28px, 4vh, 44px);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   text-transform: uppercase;
-  font-size: 15px;
+  font-size: clamp(15px, 2vw, 20px);
   font-weight: 500;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.32em;
   line-height: 1.2;
   color: var(--bb-muted);
   text-align: center;
 }
 
 .premium-card-icon {
-  margin-top: 30px;
-  width: 31px;
-  height: 31px;
+  margin-bottom: clamp(48px, 7vh, 72px);
+  width: clamp(34px, 5vw, 46px);
+  height: clamp(34px, 5vw, 46px);
   color: var(--bb-primary);
   display: inline-flex;
   align-items: center;
@@ -4155,12 +4158,12 @@ body {
 
 .premium-headline {
   width: 100%;
-  max-width: min(92vw, 820px);
-  margin: 50px 0 0;
+  max-width: 100%;
+  margin: 0 auto;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(54px, 14vw, 74px);
+  font-size: clamp(42px, 12vw, 58px);
   font-weight: 400;
-  line-height: 0.98;
+  line-height: 0.92;
   letter-spacing: -0.045em;
   color: var(--bb-text);
   text-align: center;
@@ -4170,43 +4173,45 @@ body {
 
 .premium-divider {
   display: block;
-  width: 54px;
-  height: 3px;
-  margin-top: 36px;
+  width: 88px;
+  height: 5px;
+  margin-top: clamp(42px, 6vh, 56px);
+  margin-bottom: clamp(34px, 5vh, 48px);
   border-radius: 999px;
   background: var(--bb-divider);
 }
 
 .premium-subtitle {
   width: 100%;
-  max-width: 340px;
-  margin: 32px 0 0;
+  max-width: 92%;
+  margin: 0 0 clamp(36px, 6vh, 56px);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 21px;
+  font-size: clamp(20px, 5vw, 22px);
   font-weight: 400;
-  line-height: 1.45;
+  line-height: 1.3;
   color: var(--bb-muted);
   text-align: center;
 }
 
 .premium-action-stack {
-  width: 100%;
-  max-width: 760px;
-  margin-top: clamp(84px, 11svh, 110px);
+  width: min(100%, 170px);
+  max-width: 170px;
+  margin-top: 0;
   padding-bottom: 6px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
 }
 
 .premium-action-button {
   width: 100%;
-  min-height: 84px;
-  border-radius: 26px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 24px;
+  padding: 0 14px;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
   line-height: 1;
   text-align: center;
@@ -4225,18 +4230,19 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.78);
   color: var(--bb-text);
   box-shadow: var(--bb-shadow-card);
-  font-size: 25px;
+  font-size: 16px;
   font-weight: 500;
 }
 
 .premium-action-button-primary {
-  min-height: 86px;
-  margin-top: 2px;
+  height: 42px;
+  min-height: 42px;
+  margin-top: 0;
   border: none;
   background: var(--bb-primary);
   color: #FFF7F1;
   box-shadow: var(--bb-shadow-primary);
-  font-size: 27px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -4270,6 +4276,7 @@ body {
 .premium-card-screen .premium-headline,
 .premium-card-screen .premium-divider,
 .premium-card-screen .premium-subtitle,
+.premium-card-screen .premium-card-launchers,
 .premium-card-screen .premium-action-stack {
   opacity: 0;
   transform: translateY(10px);
@@ -4289,8 +4296,43 @@ body {
   animation-delay: 220ms;
 }
 
+.premium-card-screen .premium-card-launchers {
+  animation-delay: 280ms;
+}
+
 .premium-card-screen .premium-action-stack {
   animation-delay: 320ms;
+}
+
+.premium-card-launchers {
+  width: 100%;
+  margin-bottom: clamp(44px, 6vh, 64px);
+  display: flex;
+  justify-content: center;
+}
+
+.premium-card-launchers .fake-launcher-bar {
+  position: static;
+  inset: auto;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.premium-card-launchers .fake-launcher-button {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.premium-card-launchers .fake-launcher-button span {
+  font-size: 16px;
 }
 
 .premium-overlay-with-launchers {
@@ -4301,10 +4343,6 @@ body {
 
 .premium-overlay-with-launchers .premium-card-screen {
   z-index: 99999;
-}
-
-.premium-overlay-with-launchers .premium-action-stack {
-  margin-top: clamp(184px, 22svh, 228px);
 }
 
 .premium-interception-frame {
@@ -4344,6 +4382,7 @@ body {
   .premium-card-screen .premium-headline,
   .premium-card-screen .premium-divider,
   .premium-card-screen .premium-subtitle,
+  .premium-card-screen .premium-card-launchers,
   .premium-card-screen .premium-action-stack {
     animation: none;
     opacity: 1;
@@ -4357,142 +4396,192 @@ body {
 }
 
 @media (max-width: 390px) {
-  .premium-card-screen {
-    padding-left: 16px;
-    padding-right: 16px;
+  .premium-card-launchers .fake-launcher-bar {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1024px) {
+  .premium-card-main {
+    width: min(calc(100% - 32px), 620px);
+    max-width: 620px;
+    padding-top: clamp(64px, 7vh, 92px);
   }
 
   .premium-home-button {
-    width: 54px;
-    height: 54px;
+    width: 60px;
+    height: 60px;
   }
 
   .premium-home-button svg {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
   }
 
   .premium-headline {
-    font-size: clamp(48px, 13.5vw, 64px);
+    max-width: 620px;
+    font-size: clamp(56px, 7vw, 72px);
   }
 
   .premium-subtitle {
-    max-width: 310px;
-    font-size: 19px;
+    max-width: 620px;
+    font-size: clamp(22px, 2.7vw, 24px);
   }
 
-  .premium-action-button {
-    min-height: 76px;
-    border-radius: 24px;
+  .premium-card-launchers .fake-launcher-button {
+    height: 46px;
+    min-height: 46px;
+    font-size: 17px;
   }
 
+  .premium-card-launchers .fake-launcher-button span {
+    font-size: 17px;
+  }
+
+  .premium-action-stack {
+    width: min(100%, 180px);
+    max-width: 180px;
+  }
+
+  .premium-action-button,
   .premium-action-button-primary {
-    min-height: 78px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 18px;
   }
 
   .premium-action-button-secondary,
   .premium-action-button-primary {
-    font-size: 23px;
+    font-size: 17px;
   }
 }
 
-@media (min-width: 768px) {
-  .premium-card-screen {
-    padding-left: 40px;
-    padding-right: 40px;
-  }
-
-  .premium-card-main {
-    max-width: 860px;
-  }
-
-  .premium-greeting {
-    margin-top: clamp(90px, 10vh, 128px);
-  }
-
-  .premium-headline {
-    max-width: 860px;
-    font-size: clamp(72px, 8vw, 104px);
-  }
-
-  .premium-subtitle {
-    max-width: 520px;
-    font-size: 23px;
-  }
-
-  .premium-action-stack {
-    max-width: 720px;
-  }
-
-  .premium-action-button {
-    min-height: 86px;
-  }
-
-  .premium-action-button-primary {
-    min-height: 88px;
-  }
-}
-
-@media (min-width: 1024px) {
+@media (min-width: 1025px) {
   .premium-card-screen {
     min-height: 100vh;
-    padding-left: 48px;
-    padding-right: 48px;
   }
 
   .premium-card-main {
-    max-width: 820px;
+    width: min(calc(100% - 32px), 620px);
+    max-width: 620px;
+    padding-top: clamp(28px, 4vh, 52px);
+  }
+
+  .premium-home-button {
+    width: 64px;
+    height: 64px;
+  }
+
+  .premium-home-button svg {
+    width: 28px;
+    height: 28px;
   }
 
   .premium-greeting {
-    margin-top: clamp(34px, 4vh, 64px);
+    margin-bottom: clamp(14px, 2vh, 24px);
   }
 
   .premium-card-icon {
-    margin-top: 24px;
+    width: 34px;
+    height: 34px;
+    margin-bottom: clamp(24px, 3.2vh, 34px);
   }
 
   .premium-headline {
-    max-width: 820px;
-    margin-top: 36px;
-    font-size: clamp(62px, 4.8vw, 86px);
+    max-width: 620px;
+    font-size: clamp(46px, 4.8vw, 60px);
   }
 
   .premium-divider {
-    margin-top: 28px;
+    width: 72px;
+    height: 4px;
+    margin-top: clamp(22px, 3vh, 30px);
+    margin-bottom: clamp(18px, 2.6vh, 26px);
   }
 
   .premium-subtitle {
-    max-width: 500px;
-    margin-top: 24px;
-    font-size: 22px;
+    max-width: 560px;
+    margin-bottom: clamp(20px, 3vh, 30px);
+    font-size: clamp(20px, 1.6vw, 22px);
+  }
+
+  .premium-card-launchers .fake-launcher-button {
+    height: 40px;
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  .premium-card-launchers .fake-launcher-button span {
+    font-size: 16px;
+  }
+
+  .premium-card-launchers {
+    margin-bottom: clamp(22px, 3.4vh, 32px);
   }
 
   .premium-action-stack {
-    max-width: 640px;
-    margin-top: clamp(64px, 9vh, 96px);
+    width: min(100%, 180px);
+    max-width: 180px;
+    gap: 10px;
   }
 
-  .premium-action-button {
-    min-height: 70px;
-    border-radius: 24px;
-  }
-
+  .premium-action-button,
   .premium-action-button-primary {
-    min-height: 72px;
+    height: 42px;
+    min-height: 42px;
+    border-radius: 18px;
   }
 
-  .premium-action-button-secondary {
-    font-size: 23px;
-  }
-
+  .premium-action-button-secondary,
   .premium-action-button-primary {
-    font-size: 24px;
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1025px) and (max-height: 820px) {
+  .premium-card-main {
+    padding-top: 32px;
   }
 
-  .premium-overlay-with-launchers .premium-action-stack {
-    max-width: 640px;
-    margin-top: clamp(96px, 12vh, 128px);
+  .premium-greeting {
+    margin-bottom: 16px;
+    font-size: 15px;
+  }
+
+  .premium-card-icon {
+    width: 34px;
+    height: 34px;
+    margin-bottom: 28px;
+  }
+
+  .premium-headline {
+    font-size: clamp(48px, 4.6vw, 60px);
+  }
+
+  .premium-divider {
+    width: 72px;
+    height: 4px;
+    margin-top: 24px;
+    margin-bottom: 20px;
+  }
+
+  .premium-subtitle {
+    margin-bottom: 24px;
+    font-size: 21px;
+  }
+
+  .premium-card-launchers {
+    margin-bottom: 28px;
+  }
+
+  .premium-action-stack {
+    gap: 14px;
+  }
+
+  .premium-action-button,
+  .premium-action-button-primary {
+    height: 40px;
+    min-height: 40px;
   }
 }
 
