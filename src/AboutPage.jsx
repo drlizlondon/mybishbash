@@ -1,5 +1,7 @@
 import "./landing.css";
 import "./about.css";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
+import { aboutContent } from "./content/aboutContent";
 
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
@@ -15,30 +17,32 @@ function BrandMark({ dark = false }) {
 }
 
 function AboutHeader() {
+  const { content, editMode } = useContentEdit();
+  const stopEditNavigation = editMode ? (event) => event.preventDefault() : undefined;
   const navItems = [
-    { label: "How it works", href: `${BASE}about`, active: true },
-    { label: "Features", href: HOME_HREF },
-    { label: "For you", href: HOME_HREF },
-    { label: "Pricing", href: HOME_HREF },
-    { label: "Blog", href: HOME_HREF },
+    { href: `${BASE}about`, active: true },
+    { href: HOME_HREF },
+    { href: HOME_HREF },
+    { href: HOME_HREF },
+    { href: HOME_HREF },
   ];
 
   return (
     <header className="site-header about-site-header">
       <div className="site-header-inner">
-        <a className="site-logo" href={HOME_HREF} aria-label="MyBishBash home">
+        <a className="site-logo" href={HOME_HREF} onClick={stopEditNavigation} aria-label="MyBishBash home">
           <BrandMark />
-          MyBishBash
+          <EditableText path="brand" />
         </a>
         <nav className="site-nav" aria-label="Primary navigation">
-          {navItems.map((item) => (
-            <a className={item.active ? "is-active" : ""} href={item.href} key={item.label} aria-current={item.active ? "page" : undefined}>
-              {item.label}
+          {navItems.map((item, index) => (
+            <a className={item.active ? "is-active" : ""} href={item.href} key={content.nav[index]} onClick={stopEditNavigation} aria-current={item.active ? "page" : undefined}>
+              <EditableText path={`nav.${index}`} />
             </a>
           ))}
         </nav>
-        <a className="header-cta" href={APP_HOME_HREF}>
-          Get MyBishBash
+        <a className="header-cta" href={APP_HOME_HREF} onClick={stopEditNavigation}>
+          <EditableText path="cta" />
         </a>
       </div>
     </header>
@@ -46,7 +50,8 @@ function AboutHeader() {
 }
 
 function AboutPhoneVisual() {
-  const actions = ["Drink water", "Stretch", "Back to work", "Go outside", "Text someone back", "Read one page"];
+  const { content } = useContentEdit();
+  const actions = content.phone.actions;
 
   return (
     <div className="about-phone-wrap" aria-label="MyBishBash interruption preview">
@@ -57,20 +62,20 @@ function AboutPhoneVisual() {
         </div>
         <BrandMark dark />
         <div className="about-prompt-card">
-          <p>Before Instagram</p>
-          <h2>Pause for a second.</h2>
+          <EditableText as="p" path="phone.eyebrow" />
+          <EditableText as="h2" path="phone.title" />
           <span />
-          <h3>Do I actually want to open Instagram right now?</h3>
+          <EditableText as="h3" path="phone.prompt" />
         </div>
         <div className="about-choice-row" aria-label="Interruption choices">
-          <button type="button">Do something else</button>
-          <button type="button">Continue to app</button>
+          <button type="button"><EditableText path="phone.choices.0" /></button>
+          <button type="button"><EditableText path="phone.choices.1" /></button>
         </div>
         <div className="about-reminder-list">
           {actions.map((item, index) => (
             <div className="about-reminder-row" key={item}>
               <i aria-hidden="true" />
-              <span>{item}</span>
+              <EditableText as="span" path={`phone.actions.${index}`} />
               <em>{index < 3 ? "Action" : "Later"}</em>
             </div>
           ))}
@@ -91,6 +96,8 @@ function AboutFeatureCard({ title, children, secondary = false }) {
 }
 
 function AboutPage() {
+  const { editMode, content } = useContentEdit();
+  const stopEditNavigation = editMode ? (event) => event.preventDefault() : undefined;
   return (
     <div className="landing-page about-page">
       <AboutHeader />
@@ -100,24 +107,22 @@ function AboutPage() {
           <div className="about-hero-glow" aria-hidden="true" />
           <div className="container about-hero-grid">
             <div className="about-hero-copy reveal-up">
-              <p className="about-eyebrow">How it works</p>
-              <h1>Build a better relationship with your phone.</h1>
+              <EditableText as="p" className="about-eyebrow" path="hero.eyebrow" />
+              <EditableText as="h1" path="hero.title" />
               <div className="about-lede">
-                <p>How many times a day do you pick up your phone?</p>
-                <p>MyBishBash helps you place small interruption layers in front of the apps you open without thinking.</p>
-                <p>Before the app opens, you see an interrupter card. You can choose to do something else, or continue to the app.</p>
+                {content.hero.lede.map((item, index) => <EditableText as="p" path={`hero.lede.${index}`} key={index} />)}
               </div>
               <div className="about-reminder-copy">
-                <span>Whether that means drinking water, stretching, getting back to work, taking a breath, or simply pausing for a second,</span>
-                <strong>the prompt comes from you. Not an algorithm.</strong>
+                <EditableText as="span" path="hero.reminder" />
+                <EditableText as="strong" path="hero.reminderStrong" />
               </div>
               <div className="hero-actions about-actions">
-                <a className="button primary" href={EARLY_ACCESS_HREF}>
-                  Join early access <span aria-hidden="true">-&gt;</span>
+                <a className="button primary" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
+                  <EditableText path="backCta" /> <span aria-hidden="true">-&gt;</span>
                 </a>
-                <a className="button secondary" href="#how-it-works">
+                <a className="button secondary" href="#how-it-works" onClick={stopEditNavigation}>
                   <span className="play-dot" aria-hidden="true" />
-                  See how it works
+                  <EditableText path="secondaryCta" />
                 </a>
               </div>
             </div>
@@ -128,12 +133,10 @@ function AboutPage() {
         <section className="about-section" id="how-it-works">
           <div className="container">
             <article className="about-belief-card">
-              <p className="about-eyebrow">The mechanic</p>
-              <h2>Interrupter card. Choice. Action cards if you want them.</h2>
+              <EditableText as="p" className="about-eyebrow" path="mechanic.eyebrow" />
+              <EditableText as="h2" path="mechanic.title" />
               <div>
-                <p>Most apps are designed to pull your attention back toward them again and again.</p>
-                <p>MyBishBash explores the opposite idea: what if your phone could put a small moment of choice before the automatic open?</p>
-                <p>The goal is not restriction or guilt. Continue to app is always a normal option.</p>
+                {content.mechanic.copy.map((item, index) => <EditableText as="p" path={`mechanic.copy.${index}`} key={index} />)}
               </div>
             </article>
           </div>
@@ -142,17 +145,17 @@ function AboutPage() {
         <section className="about-section">
           <div className="container">
             <div className="about-feature-grid">
-              <AboutFeatureCard title="Interrupter cards">
-                Choose the messages you want to see before opening a launcher.
+              <AboutFeatureCard title={<EditableText path="features.0.0" />}>
+                <EditableText path="features.0.1" />
               </AboutFeatureCard>
-              <AboutFeatureCard title="Do something else">
-                If you decide not to open the app, MyBishBash shows quick action cards you picked.
+              <AboutFeatureCard title={<EditableText path="features.1.0" />}>
+                <EditableText path="features.1.1" />
               </AboutFeatureCard>
-              <AboutFeatureCard title="Continue to app">
-                When you still want to open the app, you can continue without shame or friction.
+              <AboutFeatureCard title={<EditableText path="features.2.0" />}>
+                <EditableText path="features.2.1" />
               </AboutFeatureCard>
-              <AboutFeatureCard title="Launcher shortcuts" secondary>
-                Add a home-screen launcher for Instagram first, then add more apps later when you are ready.
+              <AboutFeatureCard title={<EditableText path="features.3.0" />} secondary>
+                <EditableText path="features.3.1" />
               </AboutFeatureCard>
             </div>
           </div>
@@ -161,14 +164,13 @@ function AboutPage() {
         <section className="about-section">
           <div className="container about-split">
             <div>
-              <p className="about-eyebrow">Early access</p>
-              <h2>Built carefully. Released intentionally.</h2>
-              <p>MyBishBash is currently in a limited early-access release while we refine the experience with first users.</p>
-              <p>We are focused on building something calm, trustworthy and genuinely useful, rather than optimising for endless engagement.</p>
+              <EditableText as="p" className="about-eyebrow" path="early.eyebrow" />
+              <EditableText as="h2" path="early.title" />
+              {content.early.copy.map((item, index) => <EditableText as="p" path={`early.copy.${index}`} key={index} />)}
             </div>
             <div className="about-badge-panel">
-              {["Interrupter cards", "Action cards", "Instagram launcher", "Home-screen setup", "Future app launchers"].map((item) => (
-                <span key={item}>{item}</span>
+              {content.early.badges.map((item, index) => (
+                <EditableText as="span" path={`early.badges.${index}`} key={item} />
               ))}
             </div>
           </div>
@@ -179,11 +181,10 @@ function AboutPage() {
             <article className="about-privacy-card">
               <div className="about-lock" aria-hidden="true">~</div>
               <div>
-                <p className="about-eyebrow">Privacy</p>
-                <h2>Personal by design.</h2>
-                <p>Your interrupter cards and action cards can be personal. They might involve your goals, routines, relationships, health, study or work.</p>
-                <p>That trust matters. We are building MyBishBash with careful handling of personal content from the beginning.</p>
-                <strong>Your prompts should feel personal, not exposed.</strong>
+                <EditableText as="p" className="about-eyebrow" path="privacy.eyebrow" />
+                <EditableText as="h2" path="privacy.title" />
+                {content.privacy.copy.map((item, index) => <EditableText as="p" path={`privacy.copy.${index}`} key={index} />)}
+                <EditableText as="strong" path="privacy.strong" />
               </div>
             </article>
           </div>
@@ -191,32 +192,44 @@ function AboutPage() {
 
         <section className="about-why">
           <div className="container">
-            <h2>Technology does not have to fight for your attention all the time.</h2>
-            <p>Sometimes a single interruption at the right moment can change the direction of a day.</p>
-            <p>MyBishBash is being built to create more of those moments.</p>
-            <span>Not to remove technology from life. Just to make it feel more intentional.</span>
+            <EditableText as="h2" path="why.title" />
+            {content.why.copy.map((item, index) => <EditableText as="p" path={`why.copy.${index}`} key={index} />)}
+            <EditableText as="span" path="why.final" />
           </div>
         </section>
 
         <section className="about-final-cta">
           <div className="container">
             <article>
-              <h2>Join the early-access release.</h2>
-              <p>Help shape a calmer way to use technology.</p>
+              <EditableText as="h2" path="final.title" />
+              <EditableText as="p" path="final.copy" />
               <div className="hero-actions about-actions">
-                <a className="button primary" href={APP_HOME_HREF}>
-                  Get MyBishBash <span aria-hidden="true">-&gt;</span>
+                <a className="button primary" href={APP_HOME_HREF} onClick={stopEditNavigation}>
+                  <EditableText path="final.primary" /> <span aria-hidden="true">-&gt;</span>
                 </a>
-                <a className="button launch-list" href={EARLY_ACCESS_HREF}>
-                  Join the waiting list <span aria-hidden="true">-&gt;</span>
+                <a className="button launch-list" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
+                  <EditableText path="final.secondary" /> <span aria-hidden="true">-&gt;</span>
                 </a>
               </div>
             </article>
           </div>
         </section>
       </main>
+      <EditPanel />
     </div>
   );
 }
 
-export default AboutPage;
+export default function EditableAboutPage() {
+  return (
+    <ContentEditProvider
+      initialContent={aboutContent}
+      storageKey="mybishbash.aboutContentDraft.v1"
+      saveEndpoint="/__save-about-content"
+      saveLabel="src/content/aboutContent.js"
+      isContentCompatible={(value) => Array.isArray(value?.hero?.lede) && Array.isArray(value?.features)}
+    >
+      <AboutPage />
+    </ContentEditProvider>
+  );
+}

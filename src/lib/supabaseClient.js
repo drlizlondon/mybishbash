@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_ENV = import.meta.env ?? {};
+const SUPABASE_URL = SUPABASE_ENV.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = SUPABASE_ENV.VITE_SUPABASE_ANON_KEY;
 const SUPABASE_AUTH_STORAGE_KEY = "mybishbash.supabase.auth.v1";
 const LEGACY_SUPABASE_AUTH_STORAGE_KEY = ("bish" + "bash") + ".supabase.auth.v1";
 

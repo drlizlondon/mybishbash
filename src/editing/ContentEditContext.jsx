@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { landingContent } from "../content/landingContent";
 
 const ContentEditContext = createContext(null);
-const STORAGE_KEY = "mybishbash.landingContentDraft.v8";
+const DEFAULT_STORAGE_KEY = "mybishbash.landingContentDraft.v8";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -25,7 +25,7 @@ function setAtPath(source, path, value) {
   return next;
 }
 
-function isLandingContentCompatible(value) {
+function isDefaultContentCompatible(value) {
   return (
     Array.isArray(value?.hero?.headline) &&
     value.hero.headline.length === landingContent.hero.headline.length &&
@@ -49,19 +49,26 @@ async function copyToClipboard(text) {
   textarea.remove();
 }
 
-export function ContentEditProvider({ children }) {
+export function ContentEditProvider({
+  children,
+  initialContent = landingContent,
+  storageKey = DEFAULT_STORAGE_KEY,
+  saveEndpoint = "/__save-landing-content",
+  saveLabel = "src/content/landingContent.js",
+  isContentCompatible = isDefaultContentCompatible,
+}) {
   const isDev = import.meta.env.DEV;
   const [content, setContent] = useState(() => {
-    if (!isDev || typeof window === "undefined") return landingContent;
+    if (!isDev || typeof window === "undefined") return initialContent;
 
     try {
-      const draft = window.localStorage.getItem(STORAGE_KEY);
-      if (!draft) return landingContent;
+      const draft = window.localStorage.getItem(storageKey);
+      if (!draft) return initialContent;
 
       const parsed = JSON.parse(draft);
-      return isLandingContentCompatible(parsed) ? parsed : landingContent;
+      return isContentCompatible(parsed) ? parsed : initialContent;
     } catch {
-      return landingContent;
+      return initialContent;
     }
   });
   const [editMode, setEditMode] = useState(false);
@@ -69,14 +76,14 @@ export function ContentEditProvider({ children }) {
 
   useEffect(() => {
     if (!isDev) return;
-    if (!isLandingContentCompatible(content)) {
-      window.localStorage.removeItem(STORAGE_KEY);
-      setContent(landingContent);
+    if (!isContentCompatible(content)) {
+      window.localStorage.removeItem(storageKey);
+      setContent(initialContent);
       return;
     }
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(content));
-  }, [content, isDev]);
+    window.localStorage.setItem(storageKey, JSON.stringify(content));
+  }, [content, initialContent, isContentCompatible, isDev, storageKey]);
 
   const getValue = useCallback((path) => getAtPath(content, path), [content]);
 
@@ -85,10 +92,10 @@ export function ContentEditProvider({ children }) {
   }, []);
 
   const resetDraft = useCallback(() => {
-    setContent(landingContent);
-    window.localStorage.removeItem(STORAGE_KEY);
+    setContent(initialContent);
+    window.localStorage.removeItem(storageKey);
     setStatus("Draft reset");
-  }, []);
+  }, [initialContent, storageKey]);
 
   const copyJson = useCallback(async () => {
     await copyToClipboard(JSON.stringify(content, null, 2));
@@ -96,7 +103,7 @@ export function ContentEditProvider({ children }) {
   }, [content]);
 
   const saveToFile = useCallback(async () => {
-    const response = await fetch("/__save-landing-content", {
+    const response = await fetch(saveEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(content),
@@ -106,8 +113,8 @@ export function ContentEditProvider({ children }) {
       throw new Error(await response.text());
     }
 
-    setStatus("Saved to src/content/landingContent.js");
-  }, [content]);
+    setStatus(`Saved to ${saveLabel}`);
+  }, [content, saveEndpoint, saveLabel]);
 
   const value = useMemo(
     () => ({
@@ -117,13 +124,14 @@ export function ContentEditProvider({ children }) {
       getValue,
       isDev,
       resetDraft,
+      saveLabel,
       saveToFile,
       setEditMode,
       setStatus,
       status,
       updateValue,
     }),
-    [content, copyJson, editMode, getValue, isDev, resetDraft, saveToFile, status, updateValue],
+    [content, copyJson, editMode, getValue, isDev, resetDraft, saveLabel, saveToFile, status, updateValue],
   );
 
   return <ContentEditContext.Provider value={value}>{children}</ContentEditContext.Provider>;
@@ -162,8 +170,17 @@ export function EditableText({ as: Component = "span", path, className, children
 }
 
 export function EditPanel() {
-  const { copyJson, editMode, isDev, resetDraft, saveToFile, setEditMode, setStatus, status } =
+  const { copyJson, editMode, isDev, resetDraft, saveLabel, saveToFile, setEditMode, setStatus, status } =
     useContentEdit();
+  const [position, setPosition] = useState(() => {
+    if (typeof window === "undefined") return { x: null, y: null };
+    try {
+      const stored = window.localStorage.getItem("mybishbash.editPanelPosition.v1");
+      return stored ? JSON.parse(stored) : { x: null, y: null };
+    } catch {
+      return { x: null, y: null };
+    }
+  });
 
   if (!isDev) return null;
 
@@ -183,8 +200,42 @@ export function EditPanel() {
     }
   }
 
+  function startDrag(event) {
+    if (event.button !== 0) return;
+    const panel = event.currentTarget.closest(".edit-panel");
+    const rect = panel.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+
+    function movePanel(moveEvent) {
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const next = {
+        x: Math.min(Math.max(8, moveEvent.clientX - offsetX), window.innerWidth - width - 8),
+        y: Math.min(Math.max(8, moveEvent.clientY - offsetY), window.innerHeight - height - 8),
+      };
+      setPosition(next);
+      window.localStorage.setItem("mybishbash.editPanelPosition.v1", JSON.stringify(next));
+    }
+
+    function stopDrag() {
+      window.removeEventListener("pointermove", movePanel);
+      window.removeEventListener("pointerup", stopDrag);
+    }
+
+    window.addEventListener("pointermove", movePanel);
+    window.addEventListener("pointerup", stopDrag);
+  }
+
+  const style = position.x == null || position.y == null
+    ? undefined
+    : { left: position.x, top: position.y, right: "auto", bottom: "auto" };
+
   return (
-    <aside className="edit-panel" aria-label="Local content editor">
+    <aside className="edit-panel" style={style} aria-label="Local content editor">
+      <button type="button" className="edit-panel-handle" onPointerDown={startDrag}>
+        Move editor
+      </button>
       <label className="edit-toggle">
         <input
           checked={editMode}
@@ -204,7 +255,7 @@ export function EditPanel() {
           Reset local draft
         </button>
       </div>
-      <p>Editing: src/content/landingContent.js</p>
+      <p>Editing: {saveLabel}</p>
       {status ? <strong>{status}</strong> : null}
     </aside>
   );

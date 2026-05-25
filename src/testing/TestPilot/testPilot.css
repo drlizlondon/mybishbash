@@ -1,0 +1,233 @@
+.testpilot-floating-button {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(env(safe-area-inset-bottom) + 92px);
+  z-index: 80;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--testpilot-accent, #d9654c);
+  box-shadow: 0 16px 34px rgba(151, 75, 55, 0.26), 0 3px 8px rgba(47, 42, 40, 0.12);
+}
+
+.testpilot-floating-button svg {
+  width: 23px;
+  height: 23px;
+  fill: currentColor;
+}
+
+.testpilot-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(47, 42, 40, 0.28);
+  padding: 16px;
+}
+
+.testpilot-sheet,
+.testpilot-modal {
+  width: min(430px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border: 1px solid rgba(217, 101, 76, 0.16);
+  border-radius: 22px;
+  background: #fffdfa;
+  color: #151515;
+  box-shadow: 0 26px 70px rgba(50, 38, 28, 0.22);
+}
+
+.testpilot-sheet {
+  padding: 10px 16px 18px;
+}
+
+.testpilot-modal {
+  align-self: center;
+  padding: 18px;
+}
+
+.testpilot-handle {
+  width: 44px;
+  height: 4px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: rgba(21, 21, 21, 0.14);
+}
+
+.testpilot-sheet-header,
+.testpilot-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.testpilot-sheet-header p {
+  margin: 0 0 2px;
+  color: #8a8178;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.testpilot-sheet-header h2,
+.testpilot-modal-header h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.testpilot-sheet-header button,
+.testpilot-modal-header button {
+  border: 0;
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  background: #f5efe6;
+  color: #625c56;
+  font-weight: 700;
+}
+
+.testpilot-action-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.testpilot-action {
+  border: 1px solid rgba(21, 21, 21, 0.08);
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+  text-align: left;
+  box-shadow: 0 8px 22px rgba(50, 38, 28, 0.065);
+}
+
+.testpilot-action span,
+.testpilot-report-card strong {
+  display: block;
+  color: #151515;
+  font-weight: 750;
+}
+
+.testpilot-action small,
+.testpilot-report-card p,
+.testpilot-report-card small,
+.testpilot-status,
+.testpilot-empty,
+.testpilot-privacy {
+  color: #625c56;
+  font-size: 12px;
+}
+
+.testpilot-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.testpilot-form label {
+  display: grid;
+  gap: 7px;
+  color: #2f2a28;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.testpilot-form textarea,
+.testpilot-form select,
+.testpilot-form input[type="file"] {
+  width: 100%;
+  border: 1px solid rgba(21, 21, 21, 0.12);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+  color: #151515;
+}
+
+.testpilot-form textarea:focus,
+.testpilot-form select:focus {
+  border-color: rgba(217, 101, 76, 0.6);
+  outline: 3px solid rgba(217, 101, 76, 0.14);
+}
+
+.testpilot-form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.testpilot-primary {
+  border: 0;
+  border-radius: 999px;
+  background: var(--testpilot-accent, #d9654c);
+  color: #fff;
+  padding: 12px 16px;
+  font-weight: 800;
+  box-shadow: 0 14px 34px rgba(151, 75, 55, 0.16);
+}
+
+.testpilot-diagnostics {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.testpilot-diagnostics div,
+.testpilot-report-card {
+  border: 1px solid rgba(21, 21, 21, 0.08);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+}
+
+.testpilot-diagnostics dt {
+  color: #8a8178;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.testpilot-diagnostics dd {
+  margin: 4px 0 0;
+  color: #151515;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.testpilot-report-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.testpilot-report-card {
+  display: flex;
+  gap: 10px;
+}
+
+.testpilot-report-card img {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+@media (min-width: 760px) {
+  .testpilot-backdrop {
+    align-items: center;
+  }
+
+  .testpilot-sheet {
+    border-radius: 22px;
+  }
+}

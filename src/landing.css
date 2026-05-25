@@ -48,14 +48,16 @@ body:has(.landing-page)::after {
   text-decoration: none;
 }
 
-.landing-page [data-editable-text] {
+.landing-page [data-editable-text],
+.onboarding-screen [data-editable-text] {
   outline: 1px dashed rgba(233,201,127,0.72);
   outline-offset: 4px;
   border-radius: 6px;
   cursor: text;
 }
 
-.landing-page [data-editable-text]:focus {
+.landing-page [data-editable-text]:focus,
+.onboarding-screen [data-editable-text]:focus {
   outline: 2px solid var(--gold-light);
   background: rgba(233,201,127,0.12);
 }
@@ -747,6 +749,24 @@ body:has(.landing-page)::after {
   box-shadow: 0 18px 60px rgba(0,0,0,0.28);
   color: #fff;
   backdrop-filter: blur(18px);
+}
+
+.edit-panel-handle {
+  width: 100%;
+  min-height: 28px;
+  margin: 0 0 10px;
+  border: 1px dashed rgba(255,255,255,0.22);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.78);
+  cursor: grab;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.edit-panel-handle:active {
+  cursor: grabbing;
 }
 
 .edit-toggle {

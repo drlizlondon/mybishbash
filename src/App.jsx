@@ -92,6 +92,17 @@ import {
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher } from "./lib/launcherRegistry";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
+import {
+  DiagnosticsModal,
+  FeedbackModal,
+  MyReportsModal,
+  ReportIssueModal,
+  TesterFloatingButton,
+  TesterToolsSheet,
+  TestPilotProvider,
+  fetchTesterStatus,
+} from "./testing/TestPilot";
+import "./testing/TestPilot/testPilot.css";
 import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { EditableLandingPage } from "./LandingPage";
@@ -100,6 +111,12 @@ import AboutPage from "./AboutPage";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
 
 const HQPanel = lazy(() => import("./HQPanel"));
+const TESTPILOT_CONFIG = {
+  productName: "MyBishBash",
+  uiLabel: "Tester Mode",
+  accent: "#D9654C",
+  appVersion: import.meta.env.VITE_APP_VERSION ?? import.meta.env.VITE_GIT_SHA ?? "0.1.0",
+};
 
 function resolveTheme(theme) {
   if (theme === "Paper Cut") return "Soft Bloom";
@@ -624,6 +641,8 @@ function App() {
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [testerStatus, setTesterStatus] = useState({ is_tester: false });
+  const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
@@ -834,6 +853,26 @@ function App() {
       setIsAdmin(false);
     }
   }, [session?.user?.email, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setTesterStatus({ is_tester: false });
+      return undefined;
+    }
+
+    let cancelled = false;
+    fetchTesterStatus(session.user.id)
+      .then((status) => {
+        if (!cancelled) setTesterStatus(status ?? { is_tester: false });
+      })
+      .catch((error) => {
+        console.warn("Could not load tester status", error);
+        if (!cancelled) setTesterStatus({ is_tester: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (authReady) {
@@ -2977,8 +3016,23 @@ function App() {
     );
   }
 
+  const testPilotDiagnosticsContext = {
+    route: route.path,
+    launcherContext,
+    displayMode: getAppDisplayMode(),
+    recentEvents: events,
+    selectedLauncher: profile.onboardingLauncherId,
+    setupComplete,
+  };
+
   return (
-    <>
+    <TestPilotProvider
+      config={TESTPILOT_CONFIG}
+      session={session}
+      testerStatus={testerStatus}
+      diagnosticsContext={testPilotDiagnosticsContext}
+      getDisplayMode={getAppDisplayMode}
+    >
       <div className="grain" />
       {screen === "library" && !isLaunchingHomeOverlay ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
@@ -3281,7 +3335,13 @@ function App() {
           </div>
         </div>
       ) : null}
-    </>
+      <TesterFloatingButton />
+      <TesterToolsSheet />
+      <ReportIssueModal onSubmitted={() => setTesterReportsRefreshKey((value) => value + 1)} />
+      <FeedbackModal onSubmitted={() => setTesterReportsRefreshKey((value) => value + 1)} />
+      <MyReportsModal refreshKey={testerReportsRefreshKey} />
+      <DiagnosticsModal />
+    </TestPilotProvider>
   );
 }
 

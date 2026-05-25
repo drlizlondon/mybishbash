@@ -20,6 +20,11 @@ import {
   fetchAdminUsers,
   saveAdminGlobalPack,
 } from "./lib/mybishbashSync";
+import {
+  fetchAdminTesterReports,
+  updateTesterReportStatus,
+  updateTesterUser,
+} from "./testing/TestPilot";
 import { THEMES } from "./utils";
 
 const EMPTY_PACK_FORM = {
@@ -36,6 +41,7 @@ const NAV_ITEMS = [
   "live",
   "launchers",
   "retention",
+  "tester_reports",
   "users",
   "packs",
   "analytics",
@@ -48,6 +54,7 @@ const NAV_LABELS = {
   live: "Live Activity",
   launchers: "Launcher Performance",
   retention: "User Retention",
+  tester_reports: "Tester Reports",
   users: "User Timelines",
   packs: "Packs",
   analytics: "Advanced Analytics",
@@ -445,7 +452,8 @@ const HQContent = memo(function HQContent({
         {activeView === "live" ? <LiveActivityPage fallbackEvents={telemetry.meaningfulEvents} paused={liveActivityPaused || pauseTelemetryUpdates} setStatus={setStatus} /> : null}
         {activeView === "launchers" ? <LaunchersPage telemetry={telemetry} /> : null}
         {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
-        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} /> : null}
+        {activeView === "tester_reports" ? <TesterReportsPage /> : null}
+        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} /> : null}
         {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
         {activeView === "events" ? (
           <EventsPage
@@ -508,7 +516,7 @@ const HQMobileNav = memo(function HQMobileNav({ activeView, onNavigate }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-100 bg-white/95 px-2 py-2 shadow-2xl backdrop-blur lg:hidden" aria-label="HQ mobile sections">
       <div className="grid grid-cols-5 gap-1">
-        {["recruitment", "live", "launchers", "retention", "users"].map((item) => (
+        {["recruitment", "live", "launchers", "tester_reports", "users"].map((item) => (
           <button
             key={item}
             type="button"
@@ -1035,8 +1043,152 @@ const NotificationsPage = memo(function NotificationsPage({ telemetry }) {
   );
 });
 
-const UsersPage = memo(function UsersPage({ users, telemetry }) {
+const TesterReportsPage = memo(function TesterReportsPage() {
+  useRenderDiagnostics("TesterReportsPage");
+  const [reports, setReports] = useState([]);
+  const [filters, setFilters] = useState({ status: "all", severity: "all", reportType: "all", launcher: "all", device: "", search: "" });
+  const [expandedId, setExpandedId] = useState(null);
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const loadReports = useCallback(async () => {
+    setLoading(true);
+    setStatus("");
+    try {
+      setReports(await fetchAdminTesterReports(filters));
+    } catch (error) {
+      setStatus(error?.message ?? "Could not load tester reports.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
+
+  const launcherOptions = Array.from(new Set(reports.map((report) => report.launcher_context).filter(Boolean))).sort();
+
+  async function saveReport(report, updates) {
+    setStatus("Saving report...");
+    try {
+      await updateTesterReportStatus(report.id, updates);
+      await loadReports();
+      setStatus("Report updated.");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not update report.");
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader title="Tester Reports" subtitle="Bugs, feedback, diagnostics, screenshots, and internal follow-up." />
+      <GlassPanel title="Filters" subtitle="Narrow by status, severity, launcher, type, device, or text">
+        <div className="grid gap-2 md:grid-cols-6">
+          <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All status</option><option value="open">Open</option><option value="in_review">In review</option><option value="fixed">Fixed</option><option value="closed">Closed</option><option value="not_reproducible">Not reproducible</option>
+          </select>
+          <select value={filters.severity} onChange={(event) => setFilters({ ...filters, severity: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All severity</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="blocking">Blocking</option>
+          </select>
+          <select value={filters.reportType} onChange={(event) => setFilters({ ...filters, reportType: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All types</option><option value="bug">Bug</option><option value="feedback">Feedback</option><option value="confusion">Confusion</option><option value="idea">Idea</option>
+          </select>
+          <select value={filters.launcher} onChange={(event) => setFilters({ ...filters, launcher: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All launchers</option>
+            {launcherOptions.map((launcher) => <option key={launcher} value={launcher}>{launcher}</option>)}
+          </select>
+          <input value={filters.device} onChange={(event) => setFilters({ ...filters, device: event.target.value })} placeholder="Device" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+          <input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        </div>
+        <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
+          <button type="button" onClick={loadReports} disabled={loading} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Refresh</button>
+          {status || `${reports.length} reports`}
+        </div>
+      </GlassPanel>
+      <div className="grid gap-4">
+        {reports.length === 0 && !loading ? <EmptyState title="No tester reports yet." body="Submissions will appear here once testers use Tester Mode." /> : null}
+        {reports.map((report) => (
+          <TesterReportCard
+            key={report.id}
+            report={report}
+            expanded={expandedId === report.id}
+            onToggle={() => setExpandedId(expandedId === report.id ? null : report.id)}
+            onSave={saveReport}
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+const TesterReportCard = memo(function TesterReportCard({ report, expanded, onToggle, onSave }) {
+  const [notes, setNotes] = useState(report.admin_notes ?? "");
+  const screenshot = report.screenshot_urls?.[0] || report.tester_report_attachments?.[0]?.public_url;
+  const userEmail = report.user_profiles?.email || pseudoUser(report.user_id);
+  const testerGroup = report.user_profiles?.tester_group || "No tester group";
+
+  useEffect(() => {
+    setNotes(report.admin_notes ?? "");
+  }, [report.admin_notes]);
+
+  return (
+    <GlassPanel title={report.title || report.description.slice(0, 90)} subtitle={`${userEmail} - ${testerGroup}`}>
+      <div className="grid gap-4 lg:grid-cols-[120px_1fr]">
+        <button type="button" onClick={onToggle} className="overflow-hidden rounded-xl border border-blue-100 bg-white text-left">
+          {screenshot ? <img src={screenshot} alt="Tester screenshot" className="h-28 w-full object-cover" /> : <div className="grid h-28 place-items-center text-xs font-semibold text-slate-400">No screenshot</div>}
+        </button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{report.report_type}</span>
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">{report.severity}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{report.status}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{report.launcher_context || "normal"}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{formatDate(report.created_at)}</span>
+          </div>
+          <p className="text-sm text-slate-700">{report.description}</p>
+          {report.expected || report.actual ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <MiniStat label="Expected" value={report.expected || "Not provided"} />
+              <MiniStat label="Actual" value={report.actual || "Not provided"} />
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {["open", "in_review", "fixed", "closed", "not_reproducible"].map((nextStatus) => (
+              <button key={nextStatus} type="button" onClick={() => onSave(report, { status: nextStatus, admin_notes: notes })} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${report.status === nextStatus ? "bg-blue-600 text-white" : "border border-blue-100 bg-white text-slate-700"}`}>
+                {nextStatus.replace("_", " ")}
+              </button>
+            ))}
+          </div>
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Internal notes" rows={3} className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm" />
+          <button type="button" onClick={() => onSave(report, { status: report.status, admin_notes: notes })} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Save notes</button>
+        </div>
+      </div>
+      {expanded ? (
+        <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <div><strong>Route:</strong> {report.route || "Not captured"}</div>
+          <div><strong>Display:</strong> {report.display_mode || "Not captured"}</div>
+          <div><strong>Device:</strong> {report.device_summary || "Not captured"}</div>
+          <pre className="max-h-80 overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] text-slate-100">{JSON.stringify(report.diagnostics_json ?? {}, null, 2)}</pre>
+        </div>
+      ) : null}
+    </GlassPanel>
+  );
+});
+
+const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, setStatus }) {
   useRenderDiagnostics("UsersPage");
+  async function handleTesterUpdate(user, fields) {
+    try {
+      setStatus?.("Updating tester access...");
+      await updateTesterUser(user.user_id, fields);
+      await onUserUpdated?.();
+      setStatus?.("Tester access updated.");
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update tester access.");
+    }
+  }
+
   return (
     <div className="space-y-5">
       <SectionHeader
@@ -1085,10 +1237,39 @@ const UsersPage = memo(function UsersPage({ users, telemetry }) {
               <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-slate-600">
                 Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(user.last_seen_at)} - {user.event_count ?? 0} total events
               </div>
+              <TesterUserControls user={user} onUpdate={handleTesterUpdate} />
             </GlassPanel>
           );
         })}
       </div>
+    </div>
+  );
+});
+
+const TesterUserControls = memo(function TesterUserControls({ user, onUpdate }) {
+  const [group, setGroup] = useState(user.tester_group ?? "");
+  const [notes, setNotes] = useState(user.tester_notes ?? "");
+  useEffect(() => {
+    setGroup(user.tester_group ?? "");
+    setNotes(user.tester_notes ?? "");
+  }, [user.tester_group, user.tester_notes]);
+
+  return (
+    <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700">Tester Mode</p>
+          <p className="text-xs text-slate-600">{user.is_tester ? "Enabled" : "Disabled"}</p>
+        </div>
+        <button type="button" onClick={() => onUpdate(user, { is_tester: !user.is_tester, tester_group: group, tester_notes: notes })} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white">
+          {user.is_tester ? "Remove tester" : "Mark tester"}
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <input value={group} onChange={(event) => setGroup(event.target.value)} placeholder="Tester group" className="h-10 rounded-xl border border-orange-100 bg-white px-3 text-sm" />
+        <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Tester notes" className="h-10 rounded-xl border border-orange-100 bg-white px-3 text-sm" />
+      </div>
+      <button type="button" onClick={() => onUpdate(user, { is_tester: Boolean(user.is_tester), tester_group: group, tester_notes: notes })} className="mt-2 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700">Save tester fields</button>
     </div>
   );
 });

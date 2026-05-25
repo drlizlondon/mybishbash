@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import "./landing.css";
 import "./early-access.css";
 import { isSupabaseConfigured, supabase } from "./lib/supabaseClient";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
+import { earlyAccessContent } from "./content/earlyAccessContent";
 
 const HOME_HREF = `${import.meta.env.BASE_URL || "/"}`
   .replace(/\/+/g, "/")
@@ -442,6 +445,22 @@ function FieldLabel({ children, required = false, htmlFor }) {
 }
 
 export default function EarlyAccessPage() {
+  return (
+    <ContentEditProvider
+      initialContent={earlyAccessContent}
+      storageKey="mybishbash.earlyAccessContentDraft.v1"
+      saveEndpoint="/__save-early-access-content"
+      saveLabel="src/content/earlyAccessContent.js"
+      isContentCompatible={(value) => Array.isArray(value?.hero?.titleLines) && Array.isArray(value?.benefits)}
+    >
+      <EarlyAccessPageContent />
+    </ContentEditProvider>
+  );
+}
+
+function EarlyAccessPageContent() {
+  const { content, editMode } = useContentEdit();
+  const stopEditNavigation = editMode ? (event) => event.preventDefault() : undefined;
   const [form, setForm] = useState({
     email: "",
     country: "",
@@ -543,62 +562,37 @@ export default function EarlyAccessPage() {
         <header className="early-topbar">
           <a className="early-logo" href={HOME_HREF} aria-label="MyBishBash home">
             <BrandMark />
-            <span>MyBishBash</span>
+            <EditableText as="span" path="brand" />
           </a>
-          <a className="early-back-link" href={HOME_HREF}>
-            ← Back to home
+          <a className="early-back-link" href={HOME_HREF} onClick={stopEditNavigation}>
+            ← <EditableText path="back" />
           </a>
         </header>
 
         <div className="early-story">
           <div className="early-story-copy">
-            <span className="early-eyebrow">Early access</span>
+            <EditableText as="span" className="early-eyebrow" path="hero.eyebrow" />
             <h1 id="early-access-title">
-              Help bring
+              <EditableText path="hero.titleLines.0" />
               <br />
-              MyBishBash to
+              <EditableText path="hero.titleLines.1" />
               <br />
-              <span>your country.</span>
+              <EditableText as="span" path="hero.titleLines.2" />
             </h1>
-            <p className="early-subheading">
-              We’re rolling out gradually across devices and regions. Join the early list and help us
-              prioritise where we launch next.
-            </p>
+            <EditableText as="p" className="early-subheading" path="hero.subheading" />
 
             <div className="early-benefits" aria-label="Early access benefits">
-              <article className="early-benefit">
-                <BenefitIcon>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="none" stroke="currentColor" strokeWidth="1.8" d="M7 13.5c2.8-4.2 7.2-4.2 10 0M4.5 17c4.6-5.9 10.4-5.9 15 0M9.2 9.4a2.8 2.8 0 1 0 5.6 0 2.8 2.8 0 0 0-5.6 0Z" />
-                  </svg>
-                </BenefitIcon>
-                <div>
-                  <h2>Help shape the rollout</h2>
-                  <p>Tell us where you are so we can bring MyBishBash to your country sooner.</p>
-                </div>
-              </article>
-              <article className="early-benefit">
-                <BenefitIcon>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="none" stroke="currentColor" strokeWidth="1.8" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c2.2-2.4 3.4-5.4 3.4-9S14.2 5.4 12 3m0 18c-2.2-2.4-3.4-5.4-3.4-9S9.8 5.4 12 3M3.8 9h16.4M3.8 15h16.4" />
-                  </svg>
-                </BenefitIcon>
-                <div>
-                  <h2>Be first in your area</h2>
-                  <p>We’ll let you know when MyBishBash is ready for your country and phone.</p>
-                </div>
-              </article>
-              <article className="early-benefit">
-                <BenefitIcon>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="none" stroke="currentColor" strokeWidth="1.8" d="M12 3.8 13.7 9l5.4 1.1-4.2 3.5.6 5.5-4.7-2.9-5 2.3 1.3-5.4-3.7-4.1 5.5-.5L12 3.8Z" />
-                  </svg>
-                </BenefitIcon>
-                <div>
-                  <h2>Test early versions</h2>
-                  <p>Opt in if you’d like to help us improve MyBishBash before wider release.</p>
-                </div>
-              </article>
+              {content.benefits.map((benefit, index) => (
+                <article className="early-benefit" key={index}>
+                  <BenefitIcon>
+                    <BenefitSvg index={index} />
+                  </BenefitIcon>
+                  <div>
+                    <EditableText as="h2" path={`benefits.${index}.0`} />
+                    <EditableText as="p" path={`benefits.${index}.1`} />
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
           <div className="early-globe" aria-hidden="true" />
@@ -608,20 +602,18 @@ export default function EarlyAccessPage() {
           {status === "success" ? (
             <div className="early-success" role="status">
               <span className="early-success-mark">✓</span>
-              <h2>You’re on the list.</h2>
-              <p>We’ll let you know when MyBishBash is ready for your country and phone.</p>
-              <small>Thank you for helping shape the rollout.</small>
+              <EditableText as="h2" path="success.title" />
+              <EditableText as="p" path="success.copy" />
+              <EditableText as="small" path="success.small" />
             </div>
           ) : (
             <>
-              <h2>Join the early list</h2>
-              <p className="early-form-intro">
-                Tell us a little about you and we’ll let you know when MyBishBash launches in your area.
-              </p>
+              <EditableText as="h2" path="form.title" />
+              <EditableText as="p" className="early-form-intro" path="form.intro" />
               <form className="early-form" onSubmit={handleSubmit}>
                 <div className="early-field">
                   <FieldLabel htmlFor="early-email" required>
-                    Email address
+                    <EditableText path="form.email" />
                   </FieldLabel>
                   <div className="early-input-wrap">
                     <input
@@ -640,7 +632,7 @@ export default function EarlyAccessPage() {
                 </div>
 
                 <div className="early-field is-country">
-                  <FieldLabel required>Country</FieldLabel>
+                  <FieldLabel required><EditableText path="form.country" /></FieldLabel>
                   <CountryCombobox
                     value={form.country}
                     onChange={(country) => updateField("country", country)}
@@ -650,7 +642,7 @@ export default function EarlyAccessPage() {
 
                 <fieldset className="early-phone-field">
                   <legend>
-                    Phone type <span>*</span>
+                    <EditableText path="form.phone" /> <span>*</span>
                   </legend>
                   <div className="early-phone-options">
                     {PHONE_OPTIONS.map((option) => (
@@ -670,7 +662,7 @@ export default function EarlyAccessPage() {
 
                 <div className="early-field">
                   <FieldLabel htmlFor="early-distraction">
-                    What’s your biggest distraction? <em>(optional)</em>
+                    <EditableText path="form.distraction" /> <em>(optional)</em>
                   </FieldLabel>
                   <select
                     id="early-distraction"
@@ -688,7 +680,7 @@ export default function EarlyAccessPage() {
 
                 <div className="early-field">
                   <FieldLabel htmlFor="early-age">
-                    Age range <em>(optional)</em>
+                    <EditableText path="form.age" /> <em>(optional)</em>
                   </FieldLabel>
                   <select
                     id="early-age"
@@ -710,7 +702,7 @@ export default function EarlyAccessPage() {
                     checked={form.wants_beta_testing}
                     onChange={(event) => updateField("wants_beta_testing", event.target.checked)}
                   />
-                  <span>I’d like to help test early versions and provide feedback.</span>
+                  <EditableText as="span" path="form.beta" />
                 </label>
 
                 <label className="early-checkbox-row">
@@ -720,16 +712,13 @@ export default function EarlyAccessPage() {
                     checked={form.consent_launch_updates}
                     onChange={(event) => updateField("consent_launch_updates", event.target.checked)}
                   />
-                  <span>
-                    I agree to receive MyBishBash updates about the launch, early access and news. You can
-                    unsubscribe anytime.
-                  </span>
+                  <EditableText as="span" path="form.consent" />
                 </label>
 
                 {error ? <p className="early-error">{error}</p> : null}
 
                 <button className="early-submit" type="submit" disabled={!canSubmit}>
-                  {status === "loading" ? "Joining…" : "Join the early list"}
+                  {status === "loading" ? "Joining…" : <EditableText path="form.submit" />}
                   {status !== "loading" ? <Icon name="arrow" /> : <span className="early-spinner" aria-hidden="true" />}
                 </button>
 
@@ -742,6 +731,20 @@ export default function EarlyAccessPage() {
           )}
         </aside>
       </section>
+      <EditPanel />
     </main>
+  );
+}
+
+function BenefitSvg({ index }) {
+  const paths = [
+    "M7 13.5c2.8-4.2 7.2-4.2 10 0M4.5 17c4.6-5.9 10.4-5.9 15 0M9.2 9.4a2.8 2.8 0 1 0 5.6 0 2.8 2.8 0 0 0-5.6 0Z",
+    "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c2.2-2.4 3.4-5.4 3.4-9S14.2 5.4 12 3m0 18c-2.2-2.4-3.4-5.4-3.4-9S9.8 5.4 12 3M3.8 9h16.4M3.8 15h16.4",
+    "M12 3.8 13.7 9l5.4 1.1-4.2 3.5.6 5.5-4.7-2.9-5 2.3 1.3-5.4-3.7-4.1 5.5-.5L12 3.8Z",
+  ];
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="none" stroke="currentColor" strokeWidth="1.8" d={paths[index] ?? paths[0]} />
+    </svg>
   );
 }

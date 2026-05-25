@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import "./landing.css";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
+import { onboardingContent } from "./content/onboardingContent";
 
 export const DEFAULT_INTERRUPTER_CARDS = [
   "Do I actually want to open Instagram right now?",
@@ -58,7 +61,22 @@ function createChoice(text, selected = true) {
   };
 }
 
-export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLauncher, onGoHome }) {
+export default function Onboarding(props) {
+  return (
+    <ContentEditProvider
+      initialContent={onboardingContent}
+      storageKey="mybishbash.onboardingContentDraft.v1"
+      saveEndpoint="/__save-onboarding-content"
+      saveLabel="src/content/onboardingContent.js"
+      isContentCompatible={(value) => Boolean(value?.welcome?.title && value?.done?.primary)}
+    >
+      <OnboardingContent {...props} />
+    </ContentEditProvider>
+  );
+}
+
+function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, onGoHome }) {
+  const { content } = useContentEdit();
   const [step, setStep] = useState("welcome");
   const [route, setRoute] = useState(null);
   const [personalCards, setPersonalCards] = useState(() => [
@@ -151,7 +169,7 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
           <span className="onboarding-heart" aria-hidden="true">
             <HeartGlyph />
           </span>
-          <h1>MyBishBash</h1>
+          <EditableText as="h1" path="brand" />
         </header>
 
         <section className="onboarding-flow-card" aria-live="polite">
@@ -159,9 +177,9 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
 
           {step === "welcome" ? (
             <OnboardingStep
-              title="Build your first MyBishBash."
-              body="Start with one clear setup. You can add more shortcuts and card types later."
-              primaryLabel="Start setup"
+              title={<EditableText path="welcome.title" />}
+              body={<EditableText path="welcome.body" />}
+              primaryLabel={<EditableText path="welcome.primary" />}
               onPrimary={() => setStep("route")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
@@ -170,22 +188,22 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
 
           {step === "route" ? (
             <OnboardingStep
-              title="How do you want to use MyBishBash first?"
-              body="This is just your first setup. You can add the other shortcut type later."
+              title={<EditableText path="route.title" />}
+              body={<EditableText path="route.body" />}
               hidePrimary
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
             >
               <div className="onboarding-route-options">
                 <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("frequent")}>
-                  <strong>Reminders during everyday phone use</strong>
-                  <span>Surface personal reminders throughout the day while browsing or checking your phone.</span>
-                  <em>Recommended shortcut: Safari</em>
+                  <EditableText as="strong" path="route.frequent.title" />
+                  <EditableText as="span" path="route.frequent.body" />
+                  <EditableText as="em" path="route.frequent.meta" />
                 </button>
                 <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("pause")}>
-                  <strong>Pause before scrolling</strong>
-                  <span>Create a small intentional moment before social media or video apps open.</span>
-                  <em>Popular shortcuts: Instagram, TikTok, YouTube</em>
+                  <EditableText as="strong" path="route.pause.title" />
+                  <EditableText as="span" path="route.pause.body" />
+                  <EditableText as="em" path="route.pause.meta" />
                 </button>
               </div>
             </OnboardingStep>
@@ -193,9 +211,9 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
 
           {step === "personal-cards" ? (
             <OnboardingStep
-              title="Create your first MyBishBash cards"
-              body="What do you want to remember during everyday phone use?"
-              primaryLabel="Continue"
+              title={<EditableText path="personalCards.title" />}
+              body={<EditableText path="personalCards.body" />}
+              primaryLabel={<EditableText path="personalCards.primary" />}
               onPrimary={() => setStep("safari-launcher")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
@@ -205,30 +223,30 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
                 onToggle={(id, selected) => updateChoice(setPersonalCards, id, { selected })}
                 onEdit={(id, text) => updateChoice(setPersonalCards, id, { text })}
                 onAdd={() => addChoice(setPersonalCards, "Write your own reminder")}
-                addLabel="Create my own"
+                addLabel={<EditableText path="personalCards.add" />}
               />
             </OnboardingStep>
           ) : null}
 
           {step === "safari-launcher" ? (
             <OnboardingStep
-              title="Set up your Safari shortcut"
-              body="This lets your reminders appear during everyday phone use."
-              primaryLabel="Set up Safari"
+              title={<EditableText path="safariLauncher.title" />}
+              body={<EditableText path="safariLauncher.body" />}
+              primaryLabel={<EditableText path="safariLauncher.primary" />}
               onPrimary={() => setStep("safari-install")}
-              quietLabel="Skip Safari setup"
+              quietLabel={<EditableText path="safariLauncher.quiet" />}
               onQuiet={saveFrequentUseSetup}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
             >
-              <p className="onboarding-supporting-copy">You can add social-media pause shortcuts later.</p>
+              <EditableText as="p" className="onboarding-supporting-copy" path="safariLauncher.supporting" />
             </OnboardingStep>
           ) : null}
 
           {step === "safari-install" ? (
             <InstallStep
               appName="Safari"
-              body="This creates a home-screen shortcut for everyday browsing and phone checks."
+              body={<EditableText path="install.safariBody" />}
               onDone={saveFrequentUseSetup}
               onSkip={saveFrequentUseSetup}
               canGoBack={Boolean(previousStep)}
@@ -238,9 +256,9 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
 
           {step === "context" ? (
             <OnboardingStep
-              title="Where do you want more intentional pause moments?"
-              body="Choose the kind of shortcut you want to set up first."
-              primaryLabel="Continue"
+              title={<EditableText path="context.title" />}
+              body={<EditableText path="context.body" />}
+              primaryLabel={<EditableText path="context.primary" />}
               onPrimary={() => setStep("interrupters")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
@@ -283,9 +301,9 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
 
           {step === "interrupters" ? (
             <OnboardingStep
-              title="Choose 3 interrupter cards"
-              body="These are the messages you’ll see before opening your launcher."
-              primaryLabel="Continue"
+              title={<EditableText path="interrupters.title" />}
+              body={<EditableText path="interrupters.body" />}
+              primaryLabel={<EditableText path="interrupters.primary" />}
               onPrimary={() => setStep("actions")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
@@ -295,16 +313,16 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
                 onToggle={(id, selected) => updateChoice(setInterrupterCards, id, { selected })}
                 onEdit={(id, text) => updateChoice(setInterrupterCards, id, { text })}
                 onAdd={() => addChoice(setInterrupterCards, "Write your own interrupter card")}
-                addLabel="Create my own"
+                addLabel={<EditableText path="interrupters.add" />}
               />
             </OnboardingStep>
           ) : null}
 
           {step === "actions" ? (
             <OnboardingStep
-              title="Choose 3 action cards"
-              body="If you choose ‘Do something else’, these quick actions will appear."
-              primaryLabel="Continue"
+              title={<EditableText path="actions.title" />}
+              body={<EditableText path="actions.body" />}
+              primaryLabel={<EditableText path="actions.primary" />}
               onPrimary={() => setStep("launcher")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
@@ -314,18 +332,18 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
                 onToggle={(id, selected) => updateChoice(setActionCards, id, { selected })}
                 onEdit={(id, text) => updateChoice(setActionCards, id, { text })}
                 onAdd={() => addChoice(setActionCards, "Write your own action")}
-                addLabel="Create my own"
+                addLabel={<EditableText path="actions.add" />}
               />
             </OnboardingStep>
           ) : null}
 
           {step === "launcher" ? (
             <OnboardingStep
-              title="Set up your first launcher"
-              body={`Start with ${selectedLauncher?.label ?? "Instagram"}. You can add more shortcuts later.`}
-              primaryLabel={`Set up ${selectedLauncher?.label ?? "Instagram"}`}
+              title={<EditableText path="launcher.title" />}
+              body={<>{content.launcher.bodyPrefix} {selectedLauncher?.label ?? "Instagram"}. {content.launcher.bodySuffix}</>}
+              primaryLabel={<>{content.launcher.primaryPrefix} {selectedLauncher?.label ?? "Instagram"}</>}
               onPrimary={() => setStep("install")}
-              quietLabel={`Skip ${selectedLauncher?.label ?? "Instagram"} setup`}
+              quietLabel={<>{content.launcher.quietPrefix} {selectedLauncher?.label ?? "Instagram"} {content.launcher.quietSuffix}</>}
               onQuiet={() => savePauseSetup(selectedLauncher)}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
@@ -335,7 +353,7 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
           {step === "install" ? (
             <InstallStep
               appName={selectedLauncher?.label ?? "Instagram"}
-              body={`This creates a home-screen shortcut that helps you pause before opening ${selectedLauncher?.label ?? "Instagram"}.`}
+              body={<>{content.install.pauseBodyPrefix} {selectedLauncher?.label ?? "Instagram"}.</>}
               onDone={() => savePauseSetup(selectedLauncher)}
               onSkip={() => savePauseSetup(selectedLauncher)}
               canGoBack={Boolean(previousStep)}
@@ -345,26 +363,25 @@ export default function Onboarding({ onSaveSetup, onSavePersonalSetup, onTryLaun
 
           {step === "done" ? (
             <OnboardingStep
-              title={route === "frequent" ? "Your Safari reminders are ready" : "Your interruption layer is ready"}
-              body={route === "frequent"
-                ? "Next time you tap your Safari shortcut, MyBishBash can surface one of your personal reminders during everyday phone use."
-                : "Next time you tap your launcher, you’ll see one of your interrupter cards. Choose ‘Do something else’ to see your action cards, or continue to the app."}
-              primaryLabel="Try it now"
+              title={route === "frequent" ? <EditableText path="done.frequentTitle" /> : <EditableText path="done.pauseTitle" />}
+              body={route === "frequent" ? <EditableText path="done.frequentBody" /> : <EditableText path="done.pauseBody" />}
+              primaryLabel={<EditableText path="done.primary" />}
               onPrimary={() => onTryLauncher(savedLauncherId)}
-              secondaryLabel="Go to home"
+              secondaryLabel={<EditableText path="done.secondary" />}
               onSecondary={onGoHome}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
             >
               <p className="onboarding-supporting-copy">
                 {route === "frequent"
-                  ? "Also available: pause moments before social media and video apps."
-                  : "Also available: reminders throughout everyday phone use."}
+                  ? <EditableText path="done.frequentSupporting" />
+                  : <EditableText path="done.pauseSupporting" />}
               </p>
             </OnboardingStep>
           ) : null}
         </section>
       </div>
+      <EditPanel />
     </div>
   );
 }
@@ -396,29 +413,30 @@ function ChoiceCardList({ choices, onToggle, onEdit, onAdd, addLabel = "Add my o
 }
 
 function InstallStep({ appName, body, onDone, onSkip, canGoBack, onBack }) {
+  const { content } = useContentEdit();
   const isSafari = appName === "Safari";
 
   return (
     <OnboardingStep
-      title={`Add your ${appName} shortcut`}
+      title={<>{content.install.titlePrefix} {appName} {content.install.titleSuffix}</>}
       body={body}
-      primaryLabel="I’ve added it"
+      primaryLabel={<EditableText path="install.primary" />}
       onPrimary={onDone}
-      quietLabel="Skip this for now"
+      quietLabel={<EditableText path="install.quiet" />}
       onQuiet={onSkip}
       canGoBack={canGoBack}
       onBack={onBack}
     >
       <ol className="onboarding-install-steps">
-        <li>Tap Share</li>
-        <li>Tap Add to Home Screen</li>
-        <li>{`Name it ${isSafari ? "MyBishBash Safari" : appName}`}</li>
-        <li>{appName === "Safari" ? "Open it when you’re about to browse" : "Open it when you’re about to scroll"}</li>
+        <li><EditableText path="install.steps.0" /></li>
+        <li><EditableText path="install.steps.1" /></li>
+        <li><EditableText path="install.steps.2" /> {isSafari ? "MyBishBash Safari" : appName}</li>
+        <li>{appName === "Safari" ? <EditableText path="install.steps.3" /> : <EditableText path="install.steps.4" />}</li>
       </ol>
       {isSafari ? (
         <div className="onboarding-safari-tip">
           <img src={`${import.meta.env.BASE_URL}safari-touch-icon.png`} alt="MyBishBash Safari shortcut icon" />
-          <p>Tip: move your Safari app into a folder, then put MyBishBash Safari where Safari used to be.</p>
+          <EditableText as="p" path="install.safariTip" />
         </div>
       ) : null}
     </OnboardingStep>
@@ -439,11 +457,12 @@ function OnboardingStep({
   canGoBack = false,
   onBack,
 }) {
+  const { content } = useContentEdit();
   return (
     <div className="onboarding-step">
       {canGoBack ? (
         <button type="button" className="onboarding-back-button" onClick={onBack} aria-label="Go back">
-          Back
+          <EditableText path="back" />
         </button>
       ) : null}
       <div className="onboarding-step-copy">
