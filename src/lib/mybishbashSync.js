@@ -152,6 +152,15 @@ async function validateAccessCode(accessCode) {
   if (!normalizedAccessCode) return false;
   if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
 
+  const { data: rpcData, error: rpcError } = await client.rpc("validate_mybishbash_access_code", {
+    access_code: normalizedAccessCode,
+  });
+
+  if (!rpcError) return rpcData === true;
+  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") {
+    logSupabaseAccessError("rpc:validate_mybishbash_access_code", rpcError);
+  }
+
   const { data, error } = await client
     .from("access_invitation_codes")
     .select("code, active, usage_count, max_uses")
@@ -175,6 +184,15 @@ async function claimAccessCode(accessCode) {
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
   if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
+
+  const { data: rpcData, error: rpcError } = await client.rpc("claim_mybishbash_access_code", {
+    access_code: normalizedAccessCode,
+  });
+
+  if (!rpcError) return rpcData === true;
+  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") {
+    logSupabaseAccessError("rpc:claim_mybishbash_access_code", rpcError);
+  }
 
   const { data, error: fetchError } = await client
     .from("access_invitation_codes")
@@ -202,6 +220,20 @@ async function claimAccessCode(accessCode) {
 export async function hasAccessEntitlement(userId) {
   if (isDemoMode()) return true;
   const client = requireSupabase();
+
+  const { data: profile, error: profileError } = await client
+    .from("user_profiles")
+    .select("has_access")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!profileError) {
+    if (profile?.has_access === false) return false;
+    if (profile?.has_access === true) return true;
+  } else if (!isMissingTableError(profileError)) {
+    logSupabaseAccessError("query:user_profiles.has_access", profileError);
+  }
+
   const { data, error } = await client
     .from("access_entitlements")
     .select("has_access")
@@ -402,6 +434,23 @@ export async function fetchGlobalPacks() {
 export async function touchUserProfile(user) {
   if (!user?.id || (isDemoMode())) return;
   const client = requireSupabase();
+
+  const { error: profileError } = await client
+    .from("user_profiles")
+    .update({
+      email: user.email,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq("user_id", user.id);
+
+  if (!profileError) return;
+
+  if (!isMissingTableError(profileError)) {
+    logSupabaseAccessError("update:user_profiles.touchUserProfile", profileError);
+    console.warn("Could not update user profile heartbeat", profileError);
+    return;
+  }
+
   const { error } = await client.from("access_entitlements").upsert(
     {
       user_id: user.id,

@@ -2728,13 +2728,17 @@ function App() {
       action_taken: "started",
     });
     try {
-      await signUp(email, password, accessCode);
+      const createdSession = await signUp(email, password, accessCode);
       void logEvent({
         event_type: "signup_completed",
         source_type: "auth",
         card_source: "auth",
         action_taken: "completed",
       });
+      if (!createdSession) {
+        setSyncError("Account created. Check your email if Supabase asks for confirmation, then log in here to start onboarding.");
+        setSyncStatus("needs-connection");
+      }
     } catch (error) {
       signupOnboardingPendingRef.current = false;
       setSignupOnboardingPending(false);
@@ -2746,11 +2750,11 @@ function App() {
   async function handleLogIn(email, password) {
     setSyncStatus("loading");
     setSyncError("");
-    signupOnboardingPendingRef.current = false;
-    setSignupOnboardingPending(false);
     try {
       await logIn(email, password);
     } catch (error) {
+      signupOnboardingPendingRef.current = false;
+      setSignupOnboardingPending(false);
       setSyncError(getSyncErrorMessage(error, "Could not log in."));
       setSyncStatus("needs-connection");
     }
