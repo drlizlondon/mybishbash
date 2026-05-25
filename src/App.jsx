@@ -5582,12 +5582,12 @@ function getMessageBaseSize(value) {
   const text = String(value ?? "").trim();
   const characterCount = text.length;
   const manualLines = text ? text.split(/\r\n|\r|\n/).length : 1;
-  const estimatedLines = Math.max(manualLines, Math.ceil(characterCount / 18));
+  const estimatedLines = Math.max(manualLines, Math.ceil(characterCount / 20));
 
-  if (estimatedLines <= 1 && characterCount <= 18) return 72;
-  if (estimatedLines <= 2 && characterCount <= 42) return 64;
-  if (estimatedLines <= 3 && characterCount <= 72) return 52;
-  return 42;
+  if (estimatedLines <= 1 && characterCount <= 14) return 56;
+  if (estimatedLines <= 2 && characterCount <= 24) return 48;
+  if (estimatedLines <= 3 && characterCount <= 48) return 42;
+  return 34;
 }
 
 function CardRevealMessage({ message }) {
