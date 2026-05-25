@@ -130,6 +130,21 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
+
+function hasSignupOnboardingPending() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SIGNUP_ONBOARDING_PENDING_KEY) === "true";
+}
+
+function setSignupOnboardingPending(value) {
+  if (typeof window === "undefined") return;
+  if (value) {
+    window.localStorage.setItem(SIGNUP_ONBOARDING_PENDING_KEY, "true");
+    return;
+  }
+  window.localStorage.removeItem(SIGNUP_ONBOARDING_PENDING_KEY);
+}
 
 function debugLaunch(label, payload) {
   console.log(label, payload);
@@ -660,6 +675,7 @@ function App() {
   const transitionTimerRef = useRef(null);
   const loggedLauncherOpenRef = useRef("");
   const loggedOnboardingStartedRef = useRef(false);
+  const signupOnboardingPendingRef = useRef(hasSignupOnboardingPending());
   const interceptActivationRef = useRef(null);
   const interceptActivationCounterRef = useRef(0);
   const launchAttemptCounterRef = useRef(0);
@@ -752,7 +768,7 @@ function App() {
     ],
   );
 
-  const applySharedState = useCallback((incomingState) => {
+  const applySharedState = useCallback((incomingState, options = {}) => {
     const { updatedAt, ...incomingStateContent } = incomingState || {};
     lastCloudStateStrRef.current = JSON.stringify(incomingStateContent);
 
@@ -769,6 +785,7 @@ function App() {
       actionCards: initialState.actionCards,
     });
     const next = normalizeSharedState(incomingState, fallback);
+    const nextSetupComplete = options.forceSetupComplete ? true : next.setupComplete;
 
     isApplyingSharedStateRef.current = true;
 
@@ -779,7 +796,7 @@ function App() {
         theme: resolveTheme(card.theme),
       }));
     });
-    setSetupComplete(next.setupComplete);
+    setSetupComplete(nextSetupComplete);
     setMood(resolveTheme(next.mood));
     setProfile({
       name: next.profile?.name ?? "",
@@ -795,8 +812,14 @@ function App() {
     setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
     setActionCards((current) => mergeEntitiesById(current, next.actionCards));
 
-    setScreen(next.setupComplete ? "library" : "onboarding");
-    setRoutePath(getRouteFromLocation(next.setupComplete));
+    setScreen(nextSetupComplete ? "library" : "onboarding");
+    const nextRoutePath = getRouteFromLocation(nextSetupComplete);
+    if (nextSetupComplete && nextRoutePath === "/onboarding") {
+      setRoutePath("/home");
+      window.history.replaceState({}, "", `${BASE_PATH}/home`);
+    } else {
+      setRoutePath(nextRoutePath);
+    }
 
     window.setTimeout(() => {
       isApplyingSharedStateRef.current = false;
@@ -936,10 +959,22 @@ function App() {
       .then((sharedState) => {
         if (cancelled) return;
         console.log("LOADED CLOUD STATE", sharedState);
+        const shouldRunSignupOnboarding = signupOnboardingPendingRef.current;
         if (sharedState) {
           const incomingTime = new Date(sharedState.updatedAt).getTime();
           if (!isNaN(incomingTime)) highestKnownCloudTimeRef.current = incomingTime;
-          applySharedState(sharedState);
+          applySharedState(sharedState, { forceSetupComplete: !shouldRunSignupOnboarding });
+        } else if (!shouldRunSignupOnboarding) {
+          setSetupComplete(true);
+          setScreen("library");
+          const nextRoutePath = getRouteFromLocation(true);
+          if (nextRoutePath === "/onboarding") {
+            setRoutePath("/home");
+            window.history.replaceState({}, "", `${BASE_PATH}/home`);
+          } else {
+            setRoutePath(nextRoutePath);
+          }
+          setShouldLaunchOverlay(false);
         }
         setSyncStatus("ready");
       })
@@ -1057,6 +1092,10 @@ function App() {
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
+    if (setupComplete) {
+      signupOnboardingPendingRef.current = false;
+      setSignupOnboardingPending(false);
+    }
   }, [setupComplete]);
 
   useEffect(() => {
@@ -2435,6 +2474,8 @@ function App() {
 
     setOverlay(null);
     setMenuOpenId(null);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     setSetupComplete(true);
     setShouldLaunchOverlay(false);
   }
@@ -2503,6 +2544,8 @@ function App() {
 
     setOverlay(null);
     setMenuOpenId(null);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     setSetupComplete(true);
     setShouldLaunchOverlay(false);
   }
@@ -2512,6 +2555,8 @@ function App() {
     setScreen("library");
     setOverlay(null);
     setMenuOpenId(null);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     setSetupComplete(true);
     setShouldLaunchOverlay(destination === "try");
     navigateTo(destination === "try" ? `/intercept/${supportedLauncherId}` : "/home", { replace: true });
@@ -2526,6 +2571,8 @@ function App() {
     });
     setOverlay(null);
     setMenuOpenId(null);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     setSetupComplete(true);
     setShouldLaunchOverlay(false);
     setScreen("library");
@@ -2650,6 +2697,8 @@ function App() {
     setGlobalInterruptionMode(true);
     setHiddenLibraryPacks([]);
     setEvents([]);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     setSetupComplete(false);
     setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
     setOverlay(null);
@@ -2660,6 +2709,8 @@ function App() {
   async function handleSignUp(email, password, accessCode) {
     setSyncStatus("loading");
     setSyncError("");
+    signupOnboardingPendingRef.current = true;
+    setSignupOnboardingPending(true);
     void logEvent({
       event_type: "signup_started",
       source_type: "auth",
@@ -2675,6 +2726,8 @@ function App() {
         action_taken: "completed",
       });
     } catch (error) {
+      signupOnboardingPendingRef.current = false;
+      setSignupOnboardingPending(false);
       setSyncError(error?.code === "MYBISHBASH_INVALID_ACCESS_CODE" ? INVITE_ONLY_ACCESS_ERROR : getSyncErrorMessage(error, "Could not sign up."));
       setSyncStatus("needs-connection");
     }
@@ -2683,6 +2736,8 @@ function App() {
   async function handleLogIn(email, password) {
     setSyncStatus("loading");
     setSyncError("");
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     try {
       await logIn(email, password);
     } catch (error) {
@@ -2701,6 +2756,8 @@ function App() {
       console.warn(err);
     }
     setSession(null);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
     setSyncStatus("needs-connection");
     setSyncError("");
   }
@@ -5339,38 +5396,62 @@ function PremiumCardScreen({
   children,
   className = "",
 }) {
+  const hasLaunchers = launcherVersions?.length > 0;
+  const hasActions = actions?.length > 0;
+
   return (
     <div className={`premium-card-screen premium-card-${type} ${className}`.trim()}>
       {showHomeButton ? <PremiumHomeButton href={homeHref} onClick={onHome} /> : null}
       <main className="premium-card-main">
-        <PremiumCardHeader
-          greeting={greeting}
-          icon={icon}
-          headline={headline}
-          subtitle={subtitle}
-        />
-        {children}
-        {launcherVersions?.length > 0 ? (
-          <div className="premium-card-launchers">
-            <FakeAppLauncherBar
-              versions={launcherVersions}
-              onLaunch={onLauncherLaunch}
-              raised={false}
-            />
+        <div className="premium-card-upper">
+          <PremiumCardHeader
+            greeting={greeting}
+            icon={icon}
+            headline={headline}
+            subtitle={subtitle}
+          />
+          {children}
+        </div>
+        {hasLaunchers || hasActions ? (
+          <div className={`premium-card-cta ${hasLaunchers ? "has-launchers" : "no-launchers"}`}>
+            {hasLaunchers ? (
+              <div className="premium-card-launchers">
+                <FakeAppLauncherBar
+                  versions={launcherVersions}
+                  onLaunch={onLauncherLaunch}
+                  raised={false}
+                />
+              </div>
+            ) : null}
+            <PremiumActionStack actions={actions} />
           </div>
         ) : null}
-        <PremiumActionStack actions={actions} />
       </main>
     </div>
   );
 }
 
+function getPremiumTitleSizeClass(value) {
+  const length = String(value ?? "").trim().length;
+  if (length <= 28) return "title-size-xl";
+  if (length <= 55) return "title-size-lg";
+  if (length <= 85) return "title-size-md";
+  if (length <= 130) return "title-size-sm";
+  return "title-size-xs";
+}
+
 function PremiumCardHeader({ greeting, icon = "heart", headline, subtitle }) {
+  const titleSizeClass = getPremiumTitleSizeClass(headline);
+
   return (
     <section className="premium-card-content" aria-live="polite">
       {greeting ? <p className="premium-greeting">{greeting}</p> : null}
       <PremiumCardIcon icon={icon} />
-      {headline ? <h2 className="premium-headline">{headline}</h2> : null}
+      {headline ? (
+        <div className="premium-title-box">
+          <h2 className={`premium-headline ${titleSizeClass}`}>{headline}</h2>
+        </div>
+      ) : null}
       <span className="premium-divider" aria-hidden="true" />
       {subtitle ? <p className="premium-subtitle">{subtitle}</p> : null}
     </section>

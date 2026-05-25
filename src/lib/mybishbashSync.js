@@ -126,6 +126,18 @@ function normalizeAccessCode(accessCode) {
   return String(accessCode ?? "").trim().replace(/\s+/g, "").toUpperCase();
 }
 
+function logSupabaseAccessError(operation, error) {
+  if (!error) return;
+  console.error("[AUTH_ACCESS_ERROR]", {
+    operation,
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    status: error.status,
+  });
+}
+
 async function validateAccessCode(accessCode) {
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
@@ -135,7 +147,10 @@ async function validateAccessCode(accessCode) {
   const { data, error } = await client.rpc("validate_mybishbash_access_code", {
     access_code: normalizedAccessCode,
   });
-  if (error) throw error;
+  if (error) {
+    logSupabaseAccessError("rpc:validate_mybishbash_access_code", error);
+    throw error;
+  }
   return data === true;
 }
 
@@ -147,7 +162,10 @@ async function claimAccessCode(accessCode) {
   const { data, error } = await client.rpc("claim_mybishbash_access_code", {
     access_code: normalizedAccessCode,
   });
-  if (error) throw error;
+  if (error) {
+    logSupabaseAccessError("rpc:claim_mybishbash_access_code", error);
+    throw error;
+  }
   return data === true;
 }
 
@@ -159,7 +177,10 @@ export async function hasAccessEntitlement(userId) {
     .select("has_access")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    logSupabaseAccessError("query:user_profiles.has_access", error);
+    throw error;
+  }
   return data?.has_access === true;
 }
 
@@ -191,7 +212,10 @@ export async function signUp(email, password, accessCode) {
       },
     },
   });
-  if (error) throw error;
+  if (error) {
+    logSupabaseAccessError("auth.signUp", error);
+    throw error;
+  }
   if (data.session?.user) await claimAccessCode(normalizedAccessCode);
   return data.session;
 }
@@ -199,7 +223,10 @@ export async function signUp(email, password, accessCode) {
 export async function logIn(email, password) {
   const client = requireSupabase();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  if (error) {
+    logSupabaseAccessError("auth.signInWithPassword", error);
+    throw error;
+  }
   return data.session;
 }
 
@@ -348,7 +375,10 @@ export async function touchUserProfile(user) {
     },
     { onConflict: "user_id" },
   );
-  if (error) console.warn("Could not update user profile heartbeat", error);
+  if (error) {
+    logSupabaseAccessError("upsert:user_profiles.touchUserProfile", error);
+    console.warn("Could not update user profile heartbeat", error);
+  }
 }
 
 export async function fetchAdminGlobalPacks() {

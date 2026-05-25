@@ -1,8 +1,8 @@
 .testpilot-floating-button {
   position: fixed;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: calc(env(safe-area-inset-bottom) + 92px);
-  z-index: 80;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: calc(50% + 28px);
+  z-index: 100001;
   width: 46px;
   height: 46px;
   border: 0;
@@ -12,6 +12,12 @@
   color: #fff;
   background: var(--testpilot-accent, #d9654c);
   box-shadow: 0 16px 34px rgba(151, 75, 55, 0.26), 0 3px 8px rgba(47, 42, 40, 0.12);
+}
+
+@media (min-width: 720px) {
+  .testpilot-floating-button {
+    left: calc(50% + 36px);
+  }
 }
 
 .testpilot-floating-button svg {
