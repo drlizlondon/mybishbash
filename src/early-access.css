@@ -348,6 +348,7 @@ body:has(.early-page)::after {
 }
 
 .early-form input[type="email"],
+.early-form input[type="text"],
 .early-form select,
 .country-field input {
   width: 100%;
@@ -394,6 +395,7 @@ body:has(.early-page)::after {
 }
 
 .early-form input[type="email"]:focus,
+.early-form input[type="text"]:focus,
 .early-form select:focus,
 .country-field input:focus,
 .country-field.is-open input {

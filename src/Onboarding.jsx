@@ -119,6 +119,7 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
     const appContext = launcher ?? selectedLauncher ?? { id: "instagram", label: "Instagram", launcherId: "instagram" };
     setSavedLauncherId(launcherId || "instagram");
     onSaveSetup({
+      personalCards: selectedTexts(personalCards),
       interrupterCards: selectedTexts(interrupterCards),
       actionCards: selectedTexts(actionCards),
       launcherId: launcherId || "instagram",
@@ -139,12 +140,13 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
 
   function chooseRoute(nextRoute) {
     setRoute(nextRoute);
-    setStep(nextRoute === "frequent" ? "personal-cards" : "context");
+    setStep("personal-cards");
   }
 
   function getPreviousStep() {
     if (step === "route") return "welcome";
-    if (step === "personal-cards" || step === "context") return "route";
+    if (step === "personal-cards") return "route";
+    if (step === "context") return "personal-cards";
     if (step === "safari-launcher") return "personal-cards";
     if (step === "safari-install") return "safari-launcher";
     if (step === "interrupters") return "context";
@@ -214,7 +216,7 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
               title={<EditableText path="personalCards.title" />}
               body={<EditableText path="personalCards.body" />}
               primaryLabel={<EditableText path="personalCards.primary" />}
-              onPrimary={() => setStep("safari-launcher")}
+              onPrimary={() => setStep(route === "frequent" ? "safari-launcher" : "context")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
             >

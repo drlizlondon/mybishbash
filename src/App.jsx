@@ -2381,15 +2381,18 @@ function App() {
   }
 
   function saveOnboardingSetup({
+    personalCards = DEFAULT_PERSONAL_CARD_TEXTS,
     interrupterCards = DEFAULT_INTERRUPTER_CARDS,
     actionCards: selectedActionCards = DEFAULT_ACTION_CARD_TITLES,
     launcherId = "instagram",
     appContext = { id: "instagram", label: "Instagram", launcherId: "instagram" },
   }) {
     const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
+    const cleanPersonalCards = personalCards.map((text) => text.trim()).filter(Boolean);
     const cleanInterrupterCards = interrupterCards.map((text) => text.trim()).filter(Boolean);
     const cleanActionCards = selectedActionCards.map((text) => text.trim()).filter(Boolean);
     const now = new Date().toISOString();
+    const fallbackPersonalCards = cleanPersonalCards.length > 0 ? cleanPersonalCards : DEFAULT_PERSONAL_CARD_TEXTS;
     const fallbackInterrupters = cleanInterrupterCards.length > 0 ? cleanInterrupterCards : DEFAULT_INTERRUPTER_CARDS;
     const fallbackActions = cleanActionCards.length > 0 ? cleanActionCards : DEFAULT_ACTION_CARD_TITLES;
     void logEvent({
@@ -2400,6 +2403,7 @@ function App() {
       launcher_context: supportedLauncherId,
       action_taken: "completed",
       metadata: {
+        selected_personal_cards: fallbackPersonalCards.length,
         selected_interrupter_cards: fallbackInterrupters.length,
         selected_action_cards: fallbackActions.length,
         app_context: appContext,
@@ -2433,6 +2437,28 @@ function App() {
       if (existing) return current.map((pack) => (pack.id === existing.id ? nextPack : pack));
       return [nextPack, ...current];
     });
+
+    updateCards((current) => [
+      ...fallbackPersonalCards.map((text) => ({
+        id: createId(),
+        promptText: text,
+        dashboardTitle: text,
+        theme: "Soft Bloom",
+        icon: "heart",
+        statusToday: "fresh",
+        createdAt: now,
+        updatedAt: now,
+        lastShownAt: null,
+        notYetUntil: null,
+        doneDate: null,
+        frequency: "once_daily",
+        timingWindows: ["morning", "day", "evening"],
+        paused: false,
+        disliked: false,
+        deletedAt: null,
+      })),
+      ...current,
+    ]);
 
     setLauncherBehaviorSettings((current) => ({
       ...current,

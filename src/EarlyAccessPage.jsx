@@ -466,6 +466,7 @@ function EarlyAccessPageContent() {
     country: "",
     phone_os: "",
     main_distraction_app: "",
+    main_distraction_app_other: "",
     age_range: "",
     wants_beta_testing: false,
     consent_launch_updates: false,
@@ -482,7 +483,11 @@ function EarlyAccessPageContent() {
     status !== "loading";
 
   function updateField(name, value) {
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+      ...(name === "main_distraction_app" && value !== "Other" ? { main_distraction_app_other: "" } : {}),
+    }));
     setError("");
   }
 
@@ -504,12 +509,17 @@ function EarlyAccessPageContent() {
     setStatus("loading");
     setError("");
 
+    const mainDistractionApp =
+      form.main_distraction_app === "Other"
+        ? form.main_distraction_app_other.trim() || "Other"
+        : form.main_distraction_app;
+
     const payload = {
       email: form.email.trim(),
       country: form.country.trim(),
       phone_os: form.phone_os,
       age_range: form.age_range || null,
-      main_distraction_app: form.main_distraction_app || null,
+      main_distraction_app: mainDistractionApp || null,
       wants_beta_testing: form.wants_beta_testing,
       consent_launch_updates: form.consent_launch_updates,
     };
@@ -676,6 +686,16 @@ function EarlyAccessPageContent() {
                       </option>
                     ))}
                   </select>
+                  {form.main_distraction_app === "Other" ? (
+                    <input
+                      id="early-distraction-other"
+                      type="text"
+                      value={form.main_distraction_app_other}
+                      placeholder="Which app or website?"
+                      autoComplete="off"
+                      onChange={(event) => updateField("main_distraction_app_other", event.target.value)}
+                    />
+                  ) : null}
                 </div>
 
                 <div className="early-field">
