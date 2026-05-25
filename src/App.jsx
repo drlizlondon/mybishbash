@@ -5460,7 +5460,7 @@ function Overlay({
       greeting={getGreeting(new Date(), timezone)}
       icon="heart"
       headline={card.promptText}
-      subtitle={card.attribution || "A gentle nudge from the version of you that cares."}
+      subtitle="A gentle nudge from the version of you that cares."
       actions={
         card.sourcePackId
           ? [
