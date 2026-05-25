@@ -617,6 +617,16 @@ function App() {
       return <AboutPage />;
     }
 
+    if (normalizedPath === "/terms" || normalizedPath === "/privacy") {
+      const isTerms = normalizedPath === "/terms";
+      return (
+        <LegalPage 
+          title={isTerms ? "Terms of Use" : "Privacy Policy"} 
+          docUrl={`${BASE_PATH}/${isTerms ? "terms-of-use.md" : "privacy-policy.md"}`} 
+        />
+      );
+    }
+
     if (!hasAppRouteParam && !isStandaloneMode && (normalizedPath === "/" || normalizedPath === "/index.html")) {
       return <EditableLandingPage />;
     }
@@ -4661,12 +4671,13 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError }) {
+function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
+  const [agreedToLegal, setAgreedToLegal] = useState(false);
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
   const isInviteError = error === INVITE_ONLY_ACCESS_ERROR;
@@ -4681,6 +4692,10 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError }) 
   function submitExisting(event) {
     event.preventDefault();
     if (!email.trim() || !password.trim() || (!isLogin && !accessCode.trim())) return;
+    if (!isLogin && !agreedToLegal) {
+      alert("Please agree to the Terms of Use and Privacy Policy to continue.");
+      return;
+    }
     if (isLogin) {
       onLogIn(email, password);
     } else {
@@ -4757,7 +4772,8 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError }) 
                 </span>
               </div>
               {!isLogin ? (
-                <div className="field">
+            <>
+              <div className="field">
                   <label htmlFor="sync-access-code">Access code</label>
                   <input
                     id="sync-access-code"
@@ -4770,7 +4786,19 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError }) 
                     required
                   />
                 </div>
-              ) : null}
+              <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>
+                <input
+                  type="checkbox"
+                  checked={agreedToLegal}
+                  onChange={(e) => setAgreedToLegal(e.target.checked)}
+                  style={{ width: "auto", margin: 0 }}
+                />
+                <span style={{ lineHeight: "1.4" }}>
+                  I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
+                </span>
+              </label>
+            </>
+          ) : null}
               <button type="submit" className="save-button">
                 {isLogin ? "Log In" : "Create Account"}
               </button>
@@ -4783,6 +4811,79 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError }) 
         )}
       </section>
     </main>
+  );
+}
+
+function LegalModal({ docType, onClose }) {
+  const docUrl = `${BASE_PATH}/${docType === 'terms' ? 'terms-of-use.md' : 'privacy-policy.md'}`;
+  const title = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
+  const [content, setContent] = useState("Loading...");
+
+  useEffect(() => {
+    fetch(docUrl)
+      .then((res) => res.text())
+      .then((text) => {
+        const parsed = text
+          .replace(/^# (.*$)/gim, "<h1>$1</h1>")
+          .replace(/^## (.*$)/gim, "<h2>$1</h2>")
+          .replace(/^### (.*$)/gim, "<h3>$1</h3>")
+          .replace(/\*\*(.*)\*\*/gim, "<strong>$1</strong>")
+          .replace(/^- (.*$)/gim, "<li>$1</li>")
+          .replace(/^---$/gim, "<hr />");
+
+        const lines = parsed.split("\n");
+        let inList = false;
+        const formatted = lines
+          .map((line) => {
+            if (line.startsWith("<li>")) {
+              if (!inList) {
+                inList = true;
+                return "<ul>" + line;
+              }
+              return line;
+            } else {
+              let out = line;
+              if (inList) {
+                inList = false;
+                out = "</ul>" + line;
+              }
+              if (!line.startsWith("<h") && !line.startsWith("<u") && !line.startsWith("<hr") && line.trim().length > 0) {
+                return "<p>" + out + "</p>";
+              }
+              return out;
+            }
+          })
+          .join("");
+
+        setContent(formatted + (inList ? "</ul>" : ""));
+      })
+      .catch(() => setContent("<p>Failed to load document.</p>"));
+  }, [docUrl]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="composer pack-editor" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+        <div className="composer-heading" style={{ flexShrink: 0 }}>
+          <p className="eyebrow">{title}</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '0 24px 24px' }}>
+          <div className="legal-content" style={{ lineHeight: "1.6", color: "var(--charcoal)", fontSize: "16px" }} dangerouslySetInnerHTML={{ __html: content }} />
+        </div>
+      </div>
+      <style dangerouslySetInnerHTML={{__html: "\n" +
+        "  .legal-content h1 { font-size: 24px; font-weight: bold; margin-bottom: 16px; margin-top: 0; }\n" +
+        "  .legal-content h1:first-child { margin-top: 0; }\n" +
+        "  .legal-content h2 { font-size: 20px; font-weight: bold; margin-bottom: 12px; margin-top: 24px; }\n" +
+        "  .legal-content h3 { font-size: 16px; font-weight: bold; margin-bottom: 12px; margin-top: 24px; }\n" +
+        "  .legal-content p { margin-bottom: 16px; }\n" +
+        "  .legal-content ul { margin-bottom: 16px; padding-left: 20px; list-style-type: disc; }\n" +
+        "  .legal-content li { margin-bottom: 8px; }\n" +
+        "  .legal-content hr { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 32px 0; }\n"
+      }} />
+    </div>
   );
 }
 
@@ -6193,6 +6294,71 @@ function AuthDiagnostics({ session }) {
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Expires:</span> <span>{session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : "N/A"}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Route:</span> <span>{status.route}</span></div>
       <div style={{ display: "flex", justifyContent: "space-between" }}><span>Standalone:</span> <span>{status.isStandalone ? "True" : "False"}</span></div>
+    </div>
+  );
+}
+
+function LegalPage({ title, docUrl }) {
+  const [content, setContent] = useState("Loading...");
+
+  useEffect(() => {
+    fetch(docUrl)
+      .then((res) => res.text())
+      .then((text) => {
+        const parsed = text
+          .replace(/^# (.*$)/gim, "<h1>$1</h1>")
+          .replace(/^## (.*$)/gim, "<h2>$1</h2>")
+          .replace(/^### (.*$)/gim, "<h3>$1</h3>")
+          .replace(/\*\*(.*)\*\*/gim, "<strong>$1</strong>")
+          .replace(/^- (.*$)/gim, "<li>$1</li>")
+          .replace(/^---$/gim, "<hr />");
+
+        const lines = parsed.split("\n");
+        let inList = false;
+        const formatted = lines
+          .map((line) => {
+            if (line.startsWith("<li>")) {
+              if (!inList) {
+                inList = true;
+                return "<ul>" + line;
+              }
+              return line;
+            } else {
+              let out = line;
+              if (inList) {
+                inList = false;
+                out = "</ul>" + line;
+              }
+              if (!line.startsWith("<h") && !line.startsWith("<u") && !line.startsWith("<hr") && line.trim().length > 0) {
+                return "<p>" + out + "</p>";
+              }
+              return out;
+            }
+          })
+          .join("");
+
+        setContent(formatted + (inList ? "</ul>" : ""));
+      })
+      .catch(() => setContent("<p>Failed to load document.</p>"));
+  }, [docUrl]);
+
+  return (
+    <div className="app-shell" style={{ backgroundColor: "#FAF7F2", minHeight: "100vh" }}>
+      <div style={{ padding: "24px", maxWidth: "600px", margin: "0 auto", position: "relative", zIndex: 10 }}>
+        <a href={BASE_PATH || "/"} style={{ display: "inline-block", marginBottom: "24px", textDecoration: "underline", color: "var(--charcoal)", fontWeight: "bold" }}>
+          ← Back
+        </a>
+        <div className="legal-content" style={{ lineHeight: "1.6", color: "var(--charcoal)", fontSize: "16px" }} dangerouslySetInnerHTML={{ __html: content }} />
+      </div>
+      <style dangerouslySetInnerHTML={{__html: "\n" +
+        "  .legal-content h1 { font-size: 24px; font-weight: bold; margin-bottom: 16px; margin-top: 32px; }\n" +
+        "  .legal-content h2 { font-size: 20px; font-weight: bold; margin-bottom: 12px; margin-top: 24px; }\n" +
+        "  .legal-content h3 { font-size: 16px; font-weight: bold; margin-bottom: 12px; margin-top: 24px; }\n" +
+        "  .legal-content p { margin-bottom: 16px; }\n" +
+        "  .legal-content ul { margin-bottom: 16px; padding-left: 20px; list-style-type: disc; }\n" +
+        "  .legal-content li { margin-bottom: 8px; }\n" +
+        "  .legal-content hr { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 32px 0; }\n"
+      }} />
     </div>
   );
 }

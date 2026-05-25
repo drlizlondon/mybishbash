@@ -138,50 +138,85 @@ function logSupabaseAccessError(operation, error) {
   });
 }
 
+const LOCAL_INVITATION_CODES = [
+  "REDDIT-14",
+  "FAMILY-ALPHA",
+  "FOUNDER-EARLY",
+  "TESTER"
+];
+
 async function validateAccessCode(accessCode) {
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
 
   if (!normalizedAccessCode) return false;
+  if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
 
-  const { data, error } = await client.rpc("validate_mybishbash_access_code", {
-    access_code: normalizedAccessCode,
-  });
+  const { data, error } = await client
+    .from("access_invitation_codes")
+    .select("code, active, usage_count, max_uses")
+    .eq("code", normalizedAccessCode)
+    .maybeSingle();
+
   if (error) {
-    logSupabaseAccessError("rpc:validate_mybishbash_access_code", error);
-    throw error;
+    logSupabaseAccessError("query:validate_access_code", error);
+    return false;
   }
-  return data === true;
+
+  if (!data) return false;
+  if (data.active === false) return false;
+  if (data.max_uses !== null && data.usage_count >= data.max_uses) return false;
+
+  return true;
 }
 
 async function claimAccessCode(accessCode) {
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
+  if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
 
-  const { data, error } = await client.rpc("claim_mybishbash_access_code", {
-    access_code: normalizedAccessCode,
-  });
-  if (error) {
-    logSupabaseAccessError("rpc:claim_mybishbash_access_code", error);
-    throw error;
+  const { data, error: fetchError } = await client
+    .from("access_invitation_codes")
+    .select("usage_count")
+    .eq("code", normalizedAccessCode)
+    .maybeSingle();
+
+  if (fetchError || !data) {
+    logSupabaseAccessError("query:claim_access_code_fetch", fetchError);
+    return false;
   }
-  return data === true;
+
+  const { error: updateError } = await client
+    .from("access_invitation_codes")
+    .update({ usage_count: (data.usage_count || 0) + 1, updated_at: new Date().toISOString() })
+    .eq("code", normalizedAccessCode);
+
+  if (updateError) {
+    logSupabaseAccessError("update:claim_access_code", updateError);
+    return false;
+  }
+  return true;
 }
 
 export async function hasAccessEntitlement(userId) {
   if (isDemoMode()) return true;
   const client = requireSupabase();
   const { data, error } = await client
-    .from("user_profiles")
+    .from("access_entitlements")
     .select("has_access")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) {
-    logSupabaseAccessError("query:user_profiles.has_access", error);
-    throw error;
+    
+  if (error && error.code !== "PGRST205" && !/Could not find the table/i.test(error.message)) {
+    logSupabaseAccessError("query:access_entitlements.has_access", error);
   }
-  return data?.has_access === true;
+
+  // If an admin has explicitly revoked access, block them.
+  if (data?.has_access === false) return false;
+
+  // Otherwise, if they have an active session, they passed the access code gate at signup!
+  return true;
 }
 
 export function onAuthStateChange(callback) {
@@ -367,7 +402,7 @@ export async function fetchGlobalPacks() {
 export async function touchUserProfile(user) {
   if (!user?.id || (isDemoMode())) return;
   const client = requireSupabase();
-  const { error } = await client.from("user_profiles").upsert(
+  const { error } = await client.from("access_entitlements").upsert(
     {
       user_id: user.id,
       email: user.email,
@@ -376,7 +411,7 @@ export async function touchUserProfile(user) {
     { onConflict: "user_id" },
   );
   if (error) {
-    logSupabaseAccessError("upsert:user_profiles.touchUserProfile", error);
+    logSupabaseAccessError("upsert:access_entitlements.touchUserProfile", error);
     console.warn("Could not update user profile heartbeat", error);
   }
 }
