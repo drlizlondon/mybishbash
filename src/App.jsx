@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   DEFAULT_ACTION_CARDS,
@@ -5409,6 +5409,7 @@ function Overlay({
         onChooseElse={onChooseElse}
         onLogEvent={onLogEvent}
         onLogLauncherEvent={onLogLauncherEvent}
+        onFakeLauncherLaunch={onFakeLauncherLaunch}
       />
     );
   }
@@ -5464,7 +5465,11 @@ function Overlay({
       greeting={getGreeting(new Date(), timezone)}
       icon="heart"
       headline={card.promptText}
-      subtitle="A gentle nudge from the version of you that cares."
+      subtitle={
+        card.sourcePackId
+          ? card.attribution || card.sourceTitle || "A card from your pack."
+          : "A gentle nudge from the version of you that cares."
+      }
       actions={
         card.sourcePackId
           ? [
@@ -5473,7 +5478,7 @@ function Overlay({
             ]
           : [
               { label: "Not done", variant: "secondary", onClick: () => onAction("later") },
-              { label: "I'll do it now", variant: "secondary", onClick: () => onAction("now") },
+              { label: "I’ll do it now", variant: "secondary", onClick: () => onAction("now") },
               { label: "Done", variant: "primary", onClick: () => onAction("done") },
             ]
       }
@@ -5501,65 +5506,146 @@ function PremiumCardScreen({
   children,
   className = "",
 }) {
-  const hasLaunchers = launcherVersions?.length > 0;
+  return (
+    <CardRevealTemplate
+      variant={type}
+      greeting={greeting}
+      icon={icon}
+      message={headline}
+      subtitle={subtitle}
+      launchers={launcherVersions}
+      actions={actions}
+      onLauncherLaunch={onLauncherLaunch}
+      showHomeButton={showHomeButton}
+      homeHref={homeHref}
+      onHome={onHome}
+      className={className}
+    >
+      {children}
+    </CardRevealTemplate>
+  );
+}
+
+function CardRevealTemplate({
+  greeting,
+  icon = "heart",
+  message,
+  subtitle,
+  launchers = [],
+  actions = [],
+  variant = "personal",
+  onLauncherLaunch,
+  showHomeButton = false,
+  homeHref,
+  onHome,
+  children,
+  className = "",
+}) {
+  const hasLaunchers = launchers?.length > 0;
   const hasActions = actions?.length > 0;
 
   return (
-    <div className={`premium-card-screen premium-card-${type} ${className}`.trim()}>
+    <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()}>
       {showHomeButton ? <PremiumHomeButton href={homeHref} onClick={onHome} /> : null}
-      <main className="premium-card-main">
-        <div className="premium-card-upper">
-          <PremiumCardHeader
-            greeting={greeting}
-            icon={icon}
-            headline={headline}
-            subtitle={subtitle}
-          />
+      <main className="premium-card-main" aria-live="polite">
+        <section className="premium-card-header">
+          {greeting ? <p className="premium-greeting">{greeting}</p> : null}
+          <PremiumCardIcon icon={icon} />
+        </section>
+        <section className="premium-card-message-section">
+          {message ? <CardRevealMessage message={message} /> : null}
+          <span className="premium-divider" aria-hidden="true" />
+          {subtitle ? <p className="premium-subtitle">{subtitle}</p> : null}
           {children}
-        </div>
+        </section>
+        <div className="premium-card-spacer" aria-hidden="true" />
         {hasLaunchers || hasActions ? (
-          <div className={`premium-card-cta ${hasLaunchers ? "has-launchers" : "no-launchers"}`}>
+          <section className={`premium-card-cta ${hasLaunchers ? "has-launchers" : "no-launchers"}`}>
             {hasLaunchers ? (
               <div className="premium-card-launchers">
                 <FakeAppLauncherBar
-                  versions={launcherVersions}
+                  versions={launchers}
                   onLaunch={onLauncherLaunch}
                   raised={false}
                 />
               </div>
             ) : null}
             <PremiumActionStack actions={actions} />
-          </div>
+          </section>
         ) : null}
       </main>
     </div>
   );
 }
 
-function getPremiumTitleSizeClass(value) {
-  const length = String(value ?? "").trim().length;
-  if (length <= 28) return "title-size-xl";
-  if (length <= 55) return "title-size-lg";
-  if (length <= 85) return "title-size-md";
-  if (length <= 130) return "title-size-sm";
-  return "title-size-xs";
+function getMessageBaseSize(value) {
+  const text = String(value ?? "").trim();
+  const characterCount = text.length;
+  const manualLines = text ? text.split(/\r\n|\r|\n/).length : 1;
+  const estimatedLines = Math.max(manualLines, Math.ceil(characterCount / 18));
+
+  if (estimatedLines <= 1 && characterCount <= 18) return 72;
+  if (estimatedLines <= 2 && characterCount <= 42) return 64;
+  if (estimatedLines <= 3 && characterCount <= 72) return 52;
+  return 42;
 }
 
-function PremiumCardHeader({ greeting, icon = "heart", headline, subtitle }) {
-  const titleSizeClass = getPremiumTitleSizeClass(headline);
+function CardRevealMessage({ message }) {
+  const frameRef = useRef(null);
+  const headlineRef = useRef(null);
+  const baseSize = getMessageBaseSize(message);
+  const [fontSize, setFontSize] = useState(baseSize);
+
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    const headline = headlineRef.current;
+    if (!frame || !headline) return undefined;
+
+    let frameId;
+
+    function fit() {
+      const minSize = 16;
+      let nextSize = baseSize;
+      headline.style.fontSize = `${nextSize}px`;
+
+      while (
+        nextSize > minSize &&
+        (headline.scrollHeight > frame.clientHeight || headline.scrollWidth > frame.clientWidth)
+      ) {
+        nextSize -= 1;
+        headline.style.fontSize = `${nextSize}px`;
+      }
+
+      setFontSize(nextSize);
+    }
+
+    frameId = window.requestAnimationFrame(fit);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(fit);
+    });
+    observer.observe(frame);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, [baseSize, message]);
 
   return (
-    <section className="premium-card-content" aria-live="polite">
-      {greeting ? <p className="premium-greeting">{greeting}</p> : null}
-      <PremiumCardIcon icon={icon} />
-      {headline ? (
-        <div className="premium-title-box">
-          <h2 className={`premium-headline ${titleSizeClass}`}>{headline}</h2>
-        </div>
-      ) : null}
-      <span className="premium-divider" aria-hidden="true" />
-      {subtitle ? <p className="premium-subtitle">{subtitle}</p> : null}
-    </section>
+    <div className="premium-title-box" ref={frameRef}>
+      <h2
+        className="premium-headline"
+        ref={headlineRef}
+        style={{ "--message-font-size": `${fontSize}px` }}
+      >
+        {message}
+      </h2>
+    </div>
   );
 }
 
@@ -5882,7 +5968,7 @@ function CustomPackOverlay({ overlay, onClose }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onFakeLauncherLaunch }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -6024,6 +6110,8 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
             },
           },
         ]}
+        launcherVersions={version ? [version] : []}
+        onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={false}
       >
         {hasMultipleMessages ? (
