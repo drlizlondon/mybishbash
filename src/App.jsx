@@ -1599,7 +1599,10 @@ function App() {
         return;
       }
 
-      if (!isResumeInterceptLaunch && ["reveal", "empty"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
+      if (!isResumeInterceptLaunch && ["reveal", "empty", "continue-to-app"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
+        if (overlay?.type === "continue-to-app") {
+          console.log("[ROUTING_GUARD] protected continue-to-app overlay");
+        }
         return;
       }
 
@@ -1952,6 +1955,9 @@ function App() {
   }
 
   function handleRevealCompletion() {
+    console.log("[launcher context at completion]", launcherContext);
+    console.log("[overlay type before handleRevealCompletion]", overlay?.type);
+
     if (overlay?.versionId && (route.kind === "intercept" || route.kind === "card")) {
       const versionId = overlay.versionId;
       const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
@@ -1961,21 +1967,26 @@ function App() {
 
       if (pack && (pack.cards?.length > 0 || pack.messages?.length > 0)) {
          setScreen("interception");
-         setOverlay({
+         const nextOverlay = {
            ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
            versionId: versionId,
            activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
-         });
+         };
+         setOverlay(nextOverlay);
+         console.log("[handleRevealCompletion] routing to interruption decision", nextOverlay);
          return;
       }
 
-      setOverlay({
+      const nextOverlay = {
         type: "continue-to-app",
         versionId: versionId
-      });
+      };
+      setOverlay(nextOverlay);
+      console.log("[handleRevealCompletion] routing to ContinueToAppCard", nextOverlay);
       return;
     }
 
+    console.log("[handleRevealCompletion] falling back to home");
     suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     navigateTo("/home", { replace: true });
@@ -1983,6 +1994,7 @@ function App() {
       navigateTo("/home", { replace: true });
     }
     setOverlay(null);
+    return;
   }
 
   function handleAction(action) {
@@ -2022,6 +2034,7 @@ function App() {
     });
 
     handleRevealCompletion();
+    return;
   }
 
   function handleSaveCard(formData) {
@@ -2320,6 +2333,7 @@ function App() {
       action_taken: "disliked",
     });
     handleRevealCompletion();
+    return;
   }
 
   function dislikeInterruptionPackCard(packId, card) {
@@ -3387,6 +3401,7 @@ function App() {
               });
             }
             handleRevealCompletion();
+            return;
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
