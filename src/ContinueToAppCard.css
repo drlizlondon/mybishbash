@@ -1,0 +1,110 @@
+.continue-to-app-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #F4EFE8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.continue-to-app-card {
+  margin-top: 19vh;
+  width: calc(100vw - 48px);
+  max-width: 390px;
+  background-color: rgba(255, 255, 255, 0.88);
+  border-radius: 34px;
+  padding: 48px 34px 40px;
+  box-shadow: 0 24px 70px rgba(60, 40, 28, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  
+  /* Animation initial state */
+  opacity: 0;
+  transform: translateY(16px) scale(0.985);
+  transition: opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1), 
+              transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.continue-to-app-card.mounted {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.continue-to-app-icon {
+  width: 92px;
+  height: 92px;
+  border-radius: 24px;
+  object-fit: contain;
+  margin-bottom: 44px;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.10);
+}
+
+.continue-to-app-heading {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 42px;
+  line-height: 1.05;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: #151515;
+  max-width: 310px;
+  margin: 0 0 56px 0;
+  text-align: center;
+}
+
+.continue-to-app-primary-btn,
+.continue-to-app-secondary-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  outline: none;
+}
+
+.continue-to-app-primary-btn:active,
+.continue-to-app-secondary-btn:active {
+  transform: scale(0.985);
+}
+
+.continue-to-app-primary-btn {
+  height: 64px;
+  border-radius: 999px;
+  background-color: #E26349;
+  color: #FFFFFF;
+  font-size: 22px;
+  font-weight: 500;
+  margin-bottom: 22px;
+  border: none;
+}
+
+.continue-to-app-secondary-btn {
+  height: 64px;
+  border-radius: 999px;
+  background-color: transparent;
+  border: 2px solid #E26349;
+  color: #D95F47;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+/* Responsive Rules */
+@media (max-width: 374px) {
+  .continue-to-app-card { width: calc(100vw - 36px); padding: 42px 26px 34px; margin-top: 17vh; }
+  .continue-to-app-icon { width: 84px; height: 84px; }
+  .continue-to-app-heading { font-size: clamp(34px, 10vw, 42px); }
+  .continue-to-app-primary-btn, .continue-to-app-secondary-btn { font-size: 20px; }
+}
+
+@media (min-width: 768px) {
+  .continue-to-app-card { max-width: 430px; min-height: 450px; }
+  .continue-to-app-heading { font-size: 46px; }
+  .continue-to-app-primary-btn, .continue-to-app-secondary-btn { height: 66px; }
+}

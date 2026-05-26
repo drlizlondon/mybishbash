@@ -109,6 +109,7 @@ import { EditableLandingPage } from "./LandingPage";
 import EarlyAccessPage from "./EarlyAccessPage";
 import AboutPage from "./AboutPage";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
+import { ContinueToAppCard } from "./ContinueToAppCard";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 const TESTPILOT_CONFIG = {
@@ -251,6 +252,7 @@ function parseRoute(path) {
 
   if (normalized === "/caught-up") return { kind: "caught-up", path: normalized, tab: "home" };
   if (normalized === "/hq") return { kind: "hq", path: normalized, tab: null };
+  if (normalized === "/preview-continue") return { kind: "preview-continue", path: normalized, tab: null };
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
   if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
   if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
@@ -1346,22 +1348,19 @@ function App() {
           activeIndex: pickInterruptionCardIndex(interruptionPack, selectionEvents),
         }
       : null;
-    
-    let selected = null;
-    if (!interruption) {
-      const fallbackDisplay = pickRandomHomeCardForDisplay(
-        cards,
-        profile.timezone,
-        NORMAL_LAUNCHER_CONTEXT,
-        homeScreenVersions,
-        launcherBehaviorSettings,
-        cardPacks,
-        dislikedPackCardIds,
-        globalInterruptionMode,
-        events,
-      );
-      selected = fallbackDisplay.selected;
-    }
+
+    const fallbackDisplay = pickRandomHomeCardForDisplay(
+      cards,
+      profile.timezone,
+      NORMAL_LAUNCHER_CONTEXT,
+      homeScreenVersions,
+      launcherBehaviorSettings,
+      cardPacks,
+      dislikedPackCardIds,
+      globalInterruptionMode,
+      events,
+    );
+    const selected = fallbackDisplay.selected;
 
     const selectedCard = interruption
       ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
@@ -1566,6 +1565,12 @@ function App() {
       return;
     }
 
+    if (route.kind === "preview-continue") {
+      setScreen("preview-continue");
+      setOverlay(null);
+      return;
+    }
+
     if (route.kind === "invalid-intercept") {
       console.warn("[INTERCEPT] Unknown launcher id; returning home", route.versionId);
       setScreen("library");
@@ -1615,16 +1620,6 @@ function App() {
           ? interceptActivationRef.current
           : selectLauncherActivationCard(route.versionId, isResumeInterceptLaunch ? "resume" : "route");
       const { selected, interruption } = activeActivation;
-
-      if (interruption) {
-        setScreen("interception");
-        setOverlay({
-          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
-          versionId: interruption.versionId,
-          activationKey: activeActivation.activationKey,
-        });
-        return;
-      }
 
       setScreen("library");
 
@@ -1769,21 +1764,6 @@ function App() {
     void logLauncherEvent("first_interruption_seen", versionId, { launched_from: "in_app_fake_launcher_bar" });
 
     const { selected, interruption } = selectLauncherActivationCard(versionId, "in_app_fake_launcher_bar");
-
-    if (interruption) {
-      console.log("[INTERCEPT] Opening interruption pack", {
-        versionId: interruption.versionId,
-        packId: interruption.pack.id,
-        activeIndex: interruption.activeIndex ?? 0,
-      });
-      setScreen("interception");
-      setOverlay({
-        ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex ?? 0, "intercept-pack"),
-        versionId: interruption.versionId,
-      });
-      navigateTo(`/intercept/${versionId}`, { replace: true });
-      return;
-    }
 
     setScreen("library");
     if (selected) {
@@ -1971,6 +1951,40 @@ function App() {
     openSpecificReveal(selected.id);
   }
 
+  function handleRevealCompletion() {
+    if (overlay?.versionId && (route.kind === "intercept" || route.kind === "card")) {
+      const versionId = overlay.versionId;
+      const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
+        hiddenCardIds: dislikedPackCardIds,
+        globalEnabled: globalInterruptionMode,
+      });
+
+      if (pack && (pack.cards?.length > 0 || pack.messages?.length > 0)) {
+         setScreen("interception");
+         setOverlay({
+           ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
+           versionId: versionId,
+           activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
+         });
+         return;
+      }
+
+      setOverlay({
+        type: "continue-to-app",
+        versionId: versionId
+      });
+      return;
+    }
+
+    suppressNextHomeAutoLaunchRef.current = true;
+    setShouldLaunchOverlay(false);
+    navigateTo("/home", { replace: true });
+    if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
+      navigateTo("/home", { replace: true });
+    }
+    setOverlay(null);
+  }
+
   function handleAction(action) {
     if (!overlay || overlay.type !== "reveal") return;
 
@@ -2007,13 +2021,7 @@ function App() {
       },
     });
 
-    suppressNextHomeAutoLaunchRef.current = true;
-    setShouldLaunchOverlay(false);
-    navigateTo("/home", { replace: true });
-    if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
-      navigateTo("/home", { replace: true });
-    }
-    setOverlay(null);
+    handleRevealCompletion();
   }
 
   function handleSaveCard(formData) {
@@ -2311,12 +2319,7 @@ function App() {
       pack_id: card.sourcePackId,
       action_taken: "disliked",
     });
-    suppressNextHomeAutoLaunchRef.current = true;
-    setShouldLaunchOverlay(false);
-    if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
-      navigateTo("/home", { replace: true });
-    }
-    setOverlay(null);
+    handleRevealCompletion();
   }
 
   function dislikeInterruptionPackCard(packId, card) {
@@ -3113,6 +3116,17 @@ function App() {
     );
   }
 
+  if (screen === "preview-continue") {
+    return (
+      <ContinueToAppCard
+        appName="Instagram"
+        appIcon="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
+        destinationUrl="https://instagram.com"
+        onBack={() => navigateTo("/home", { replace: true })}
+      />
+    );
+  }
+
   const testPilotDiagnosticsContext = {
     route: route.path,
     launcherContext,
@@ -3337,6 +3351,10 @@ function App() {
               setOverlay(null);
               return;
             }
+            if (overlay.type === "empty" && overlay.versionId) {
+              handleRevealCompletion();
+              return;
+            }
             suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
             navigateTo("/home", { replace: true });
@@ -3368,12 +3386,7 @@ function App() {
                 action_taken: "liked",
               });
             }
-            suppressNextHomeAutoLaunchRef.current = true;
-            setShouldLaunchOverlay(false);
-            if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
-              navigateTo("/home", { replace: true });
-            }
-            setOverlay(null);
+            handleRevealCompletion();
           }}
           onPackDislike={dislikePackCard}
           onChooseElse={() => {
@@ -5408,7 +5421,49 @@ function Overlay({
   fakeLauncherVersions,
   onFakeLauncherLaunch,
 }) {
-  console.log("[OVERLAY TYPE]", overlay?.type);
+  if (overlay.type === "continue-to-app") {
+    const handleContinue = () => {
+      const href = getVersionOpenHref(version);
+      if (href) {
+        window.location.assign(href);
+      }
+      void onLogLauncherEvent?.("intercept_continue_to_app", version?.id, { href });
+      void onLogEvent?.({
+        event_type: "intercept_continue_to_app",
+        source_type: "continue_card",
+        card_source: "continue_card",
+        app_id: version?.id,
+        app_name: version?.name,
+        launcher_context: version?.id,
+        action_taken: "continued_to_app",
+        metadata: { href },
+      });
+      onClose();
+    };
+
+    const handleBack = () => {
+      void onLogEvent?.({
+        event_type: "intercept_continue_to_app_cancelled",
+        source_type: "continue_card",
+        card_source: "continue_card",
+        app_id: version?.id,
+        app_name: version?.name,
+        launcher_context: version?.id,
+        action_taken: "cancelled_continue",
+      });
+      onClose();
+    };
+
+    return (
+      <ContinueToAppCard
+        appName={version?.name ?? "App"}
+        appIcon={version?.customIconSrc || version?.iconSrc}
+        destinationUrl={getVersionOpenHref(version)}
+        onContinue={handleContinue}
+        onBack={handleBack}
+      />
+    );
+  }
 
   if (overlay.type === "empty") {
     return (
