@@ -109,7 +109,6 @@ import { EditableLandingPage } from "./LandingPage";
 import EarlyAccessPage from "./EarlyAccessPage";
 import AboutPage from "./AboutPage";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
-import { ContinueToAppCard } from "./ContinueToAppCard";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 const TESTPILOT_CONFIG = {
@@ -1977,9 +1976,11 @@ function App() {
          return;
       }
 
+      setScreen("interception");
       const nextOverlay = {
         type: "continue-to-app",
-        versionId: versionId
+        versionId: versionId,
+        activationKey: overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString(),
       };
       setOverlay(nextOverlay);
       console.log("[handleRevealCompletion] routing to ContinueToAppCard", nextOverlay);
@@ -3363,10 +3364,6 @@ function App() {
           onClose={() => {
             if (overlay.type === "custom-pack-preview") {
               setOverlay(null);
-              return;
-            }
-            if (overlay.type === "empty" && overlay.versionId) {
-              handleRevealCompletion();
               return;
             }
             suppressNextHomeAutoLaunchRef.current = true;
@@ -5481,17 +5478,54 @@ function Overlay({
   }
 
   if (overlay.type === "empty") {
+    const isIntercept = !!overlay.versionId;
+    const interceptVersion = isIntercept ? version : null;
+    const appName = interceptVersion?.name ?? "App";
+
+    const actions = [];
+    if (isIntercept && interceptVersion) {
+      actions.push({
+        label: `Continue to ${appName}`,
+        variant: "primary",
+        onClick: () => {
+          const href = getVersionOpenHref(interceptVersion);
+          if (href) {
+            window.location.assign(href);
+          }
+          void onLogLauncherEvent?.("intercept_continue_to_app", interceptVersion.id, { href });
+          void onLogEvent?.({
+            event_type: "intercept_continue_to_app",
+            source_type: "empty_card",
+            card_source: "empty_card",
+            app_id: interceptVersion.id,
+            app_name: interceptVersion.name,
+            launcher_context: interceptVersion.id,
+            action_taken: "continued_to_app",
+            metadata: { href },
+          });
+          onClose();
+        }
+      });
+      actions.push({
+        label: "Back to MyBishBash",
+        variant: "secondary",
+        onClick: onClose
+      });
+    } else {
+      actions.push({ label: "Back home", variant: "primary", onClick: onClose });
+    }
+
     return (
       <PremiumCardScreen
         type="empty"
-        greeting="MyBishBash"
+        greeting={isIntercept ? interceptVersion?.name || "MyBishBash" : "MyBishBash"}
         icon="heart"
         headline="You're all caught up for now."
         subtitle="See you later."
-        actions={[{ label: "Back home", variant: "primary", onClick: onClose }]}
-        launcherVersions={fakeLauncherVersions}
+        actions={actions}
+        launcherVersions={isIntercept ? [] : fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
-        showHomeButton={true}
+        showHomeButton={!isIntercept}
         onHome={onClose}
       />
     );
@@ -6547,6 +6581,39 @@ function LegalPage({ title, docUrl }) {
         "  .legal-content li { margin-bottom: 8px; }\n" +
         "  .legal-content hr { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 32px 0; }\n"
       }} />
+    </div>
+  );
+}
+
+function ContinueToAppCard({ appName, appIcon, destinationUrl, onContinue, onBack }) {
+  const handleContinue = () => {
+    if (onContinue) {
+      onContinue();
+    } else if (destinationUrl) {
+      window.location.assign(destinationUrl);
+    }
+  };
+
+  return (
+    <div className="premium-card-screen premium-card-personal">
+      <main className="premium-card-main" aria-live="polite">
+        <section className="premium-card-header" />
+        <section className="premium-card-message-section" style={{ alignItems: 'center', textAlign: 'center' }}>
+          {appIcon ? (
+            <img src={appIcon} alt={`${appName} icon`} style={{ width: 72, height: 72, borderRadius: 16, marginBottom: 32, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }} />
+          ) : null}
+          <h2 style={{ fontSize: '26px', fontWeight: 400, fontFamily: 'var(--font-serif, Georgia, serif)', color: 'var(--charcoal)', textAlign: 'center', margin: 0, lineHeight: 1.3 }}>
+            Continue to {appName}?
+          </h2>
+        </section>
+        <div className="premium-card-spacer" aria-hidden="true" />
+        <section className="premium-card-cta no-launchers">
+          <PremiumActionStack actions={[
+            { label: `Continue to ${appName}`, variant: "primary", onClick: handleContinue },
+            { label: "Back to MyBishBash", variant: "secondary", onClick: onBack }
+          ]} />
+        </section>
+      </main>
     </div>
   );
 }
