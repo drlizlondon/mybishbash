@@ -1593,7 +1593,7 @@ function App() {
         return;
       }
 
-      if (!isResumeInterceptLaunch && overlay?.type === "intercept-pack" && overlay?.versionId === route.versionId) {
+      if (!isResumeInterceptLaunch && ["intercept-pack", "continue-to-app"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
         console.log("[INTERCEPT] skipped rebuild because overlay already active", {
           versionId: route.versionId,
           activationKey: interceptActivationRef.current?.activationKey ?? null,
@@ -1602,10 +1602,7 @@ function App() {
         return;
       }
 
-      if (!isResumeInterceptLaunch && ["reveal", "empty", "continue-to-app"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
-        if (overlay?.type === "continue-to-app") {
-          console.log("[ROUTING_GUARD] protected continue-to-app overlay");
-        }
+      if (!isResumeInterceptLaunch && ["reveal", "empty"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
         return;
       }
 
@@ -1645,11 +1642,26 @@ function App() {
         return;
       }
 
+      if (interruption) {
+        console.log("[INTERCEPT_EMPTY_BUT_HAS_INTERRUPTION]");
+        console.log("[LAUNCH_DIAG_DECISION] intercept -> intercept-pack");
+        debugLaunch("[LAUNCH_DECISION]", "intercept -> intercept-pack");
+        setScreen("interception");
+        setOverlay({
+          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
+          versionId: route.versionId,
+          activationKey: activeActivation.activationKey,
+        });
+        return;
+      }
+
       console.log("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
-      console.log("[LAUNCH_DIAG_DECISION] intercept -> empty");
-      debugLaunch("[LAUNCH_DECISION]", "intercept -> empty");
+      console.log("[LAUNCH_DIAG_DECISION] intercept -> continue-to-app");
+      debugLaunch("[LAUNCH_DECISION]", "intercept -> continue-to-app");
+      setScreen("interception");
       setOverlay({
-        ...buildEmptyOverlay(route.versionId),
+        type: "continue-to-app",
+        versionId: route.versionId,
         activationKey: activeActivation.activationKey,
       });
       return;
@@ -1775,9 +1787,22 @@ function App() {
     if (selected) {
       console.log("[INTERCEPT] Opening fallback MyBishBash card", selected.id);
       setOverlay(buildRevealOverlay(selected.id, versionId));
+      } else if (interruption) {
+        console.log("[INTERCEPT] No eligible card; opening interruption pack", versionId);
+        setScreen("interception");
+        setOverlay({
+          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
+          versionId: versionId,
+          activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
+        });
     } else {
-      console.log("[INTERCEPT] No eligible card; opening empty state", versionId);
-      setOverlay(buildEmptyOverlay(versionId));
+        console.log("[INTERCEPT] No eligible card or interruption; opening continue state", versionId);
+        setScreen("interception");
+        setOverlay({
+          type: "continue-to-app",
+          versionId: versionId,
+          activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
+        });
     }
     navigateTo(`/intercept/${versionId}`, { replace: true });
   }
@@ -1973,7 +1998,7 @@ function App() {
          const nextOverlay = {
            ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
            versionId: versionId,
-           activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
+           activationKey: overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString(),
          };
          setOverlay(nextOverlay);
          console.log("[handleRevealCompletion] routing to interruption decision", nextOverlay);
@@ -2783,11 +2808,17 @@ function App() {
         card_source: "auth",
         action_taken: "completed",
       });
-      if (!createdSession) {
+      if (createdSession) {
+        console.log("[SIGNUP_SUCCESS_SESSION_RETURNED]", createdSession?.user?.id);
+        setSession(createdSession);
+        setAuthReady(true);
+      } else {
+        console.log("[SIGNUP_SUCCESS_NO_SESSION]");
         setSyncError("Account created. Check your email if Supabase asks for confirmation, then log in here to start onboarding.");
         setSyncStatus("needs-connection");
       }
     } catch (error) {
+      console.error("[SIGNUP_ERROR]", error);
       signupOnboardingPendingRef.current = false;
       setSignupOnboardingPending(false);
       setSyncError(error?.code === "MYBISHBASH_INVALID_ACCESS_CODE" ? INVITE_ONLY_ACCESS_ERROR : getSyncErrorMessage(error, "Could not sign up."));
@@ -2799,8 +2830,20 @@ function App() {
     setSyncStatus("loading");
     setSyncError("");
     try {
-      await logIn(email, password);
+      const nextSession = await logIn(email, password);
+      if (nextSession) {
+        console.log("[LOGIN_SUCCESS_SESSION_RETURNED]", nextSession?.user?.id);
+        setSession(nextSession);
+        setAuthReady(true);
+        signupOnboardingPendingRef.current = false;
+        setSignupOnboardingPending(false);
+      } else {
+        console.log("[LOGIN_SUCCESS_NO_SESSION]");
+        setSyncStatus("needs-connection");
+        setSyncError("Login succeeded, but MyBishBash could not start your session. Please close and reopen the app.");
+      }
     } catch (error) {
+      console.error("[LOGIN_ERROR]", error);
       signupOnboardingPendingRef.current = false;
       setSignupOnboardingPending(false);
       setSyncError(getSyncErrorMessage(error, "Could not log in."));
