@@ -48,15 +48,75 @@ export const DEFAULT_INTERRUPTION_PACKS = {
   },
 };
 
+function getLauncherPlatform() {
+  const ua = navigator.userAgent || navigator.vendor || "";
+  const isAndroid = /android/i.test(ua);
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  if (isAndroid) return "android";
+  if (isIOS) return "ios";
+  return "desktop";
+}
+
+function firstNonEmpty(...values) {
+  return values.find((value) => typeof value === "string" && value.trim()) || "";
+}
+
 export function getVersionOpenHref(version) {
   if (!version) return "";
+
   const launcher = getLauncherConfig(version.id) ?? getLauncherConfig(version.type);
-  if (launcher?.id === "safari") return version.manualUrl || launcher.webFallbackUrl;
-  return version.appUrl || version.nativeAppUrl || version.manualUrl || version.webFallbackUrl || "";
+  const merged = { ...(launcher ?? {}), ...(version ?? {}) };
+  const platform = getLauncherPlatform();
+
+  let href = "";
+
+  if (platform === "android") {
+    href = firstNonEmpty(
+      merged.androidIntentUrl,
+      merged.androidWebFallbackUrl,
+      merged.webFallbackUrl,
+      merged.manualUrl
+    );
+
+    // Critical safety: never return iOS-only Safari scheme on Android.
+    if (href.startsWith("x-safari-")) {
+      href = href.replace(/^x-safari-/, "");
+    }
+    if (!href) href = "https://www.google.com";
+  } else if (platform === "ios") {
+    if (merged.id === "safari") {
+      href = firstNonEmpty(merged.iosAppUrl, merged.manualUrl, merged.webFallbackUrl);
+    } else {
+      href = firstNonEmpty(
+        merged.iosAppUrl,
+        merged.appUrl,
+        merged.nativeAppUrl,
+        merged.iosWebFallbackUrl,
+        merged.webFallbackUrl,
+        merged.manualUrl
+      );
+    }
+  } else {
+    href = firstNonEmpty(
+      merged.webFallbackUrl,
+      merged.manualUrl,
+      merged.androidWebFallbackUrl,
+      merged.iosWebFallbackUrl
+    );
+  }
+
+  console.log("[LAUNCHER_URL_RESOLVED]", {
+    versionId: merged.id,
+    platform,
+    href,
+  });
+
+  return href;
 }
 
 export function openSafariEscape() {
-  window.location.href = "x-safari-https://www.google.com";
+  window.location.href = getVersionOpenHref({ id: "safari" }) || "https://www.google.com";
 }
 
 export function isInterruptionLauncherContext(value) {

@@ -6265,7 +6265,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
       {showFallbackLink && version?.manualUrl ? (
         <p className="manual-open-copy premium-manual-open-copy">
           App didn&apos;t open?{" "}
-          <a href={version.manualUrl} target="_blank" rel="noopener noreferrer">
+          <a href={getVersionOpenHref(version)} target="_blank" rel="noopener noreferrer">
             Open {version.name} manually
           </a>
         </p>
