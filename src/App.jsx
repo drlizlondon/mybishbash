@@ -750,6 +750,10 @@ function App() {
   );
   const isPersonalRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
   const isLaunchingHomeOverlay = isPersonalRoute && shouldLaunchOverlay && overlay == null;
+  const isPreparingIntercept = route.kind === "intercept" && overlay == null;
+  const isPreparingSpecificCard = route.kind === "card" && overlay == null;
+  const isPreparingCaughtUp = route.kind === "caught-up" && overlay == null;
+  const hideAppShell = isLaunchingHomeOverlay || isPreparingIntercept || isPreparingSpecificCard || isPreparingCaughtUp;
 
   const currentSharedState = useCallback(
     () =>
@@ -3160,7 +3164,7 @@ function App() {
       getDisplayMode={getAppDisplayMode}
     >
       <div className="grain" />
-      {screen === "library" && !isLaunchingHomeOverlay ? (
+      {screen === "library" && !hideAppShell ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
           <div className="app-inner">
             <Masthead
