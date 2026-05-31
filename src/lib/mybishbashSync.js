@@ -535,6 +535,75 @@ export async function deleteAdminGlobalPack(packId) {
   if (error) throw error;
 }
 
+function mapLauncherConfig(row = {}) {
+  return {
+    id: row.launcher_id ?? row.id,
+    displayName: row.display_name ?? "",
+    name: row.display_name ?? "",
+    realAppLabel: row.real_app_label ?? "",
+    iconSrc: row.icon_src ?? "",
+    customIconSrc: row.uploaded_icon_url ?? "",
+    enabled: row.enabled,
+    hqVisible: row.hq_visible,
+    iosAppUrl: row.ios_app_url ?? "",
+    androidIntentUrl: row.android_intent_url ?? "",
+    webFallbackUrl: row.web_fallback_url ?? "",
+    useInterruptionPack: row.use_interruption_pack,
+    interruptionPackId: row.interruption_pack_id ?? "",
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function fetchLauncherConfigs() {
+  if (isDemoMode()) return [];
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("hq_launcher_configs")
+    .select("*")
+    .order("launcher_id", { ascending: true });
+  if (error) {
+    if (isMissingTableError(error) || error.code === "42501") {
+      console.warn("[HQ LAUNCHERS] Falling back to static launcher defaults", error.message);
+      return [];
+    }
+    throw error;
+  }
+  return (data ?? []).map(mapLauncherConfig);
+}
+
+export async function fetchAdminLauncherConfigs() {
+  return fetchLauncherConfigs();
+}
+
+export async function saveAdminLauncherConfig(config, userId) {
+  const client = requireSupabase();
+  const now = new Date().toISOString();
+  const payload = {
+    launcher_id: config.id,
+    display_name: config.displayName || config.name || "",
+    real_app_label: config.realAppLabel || "",
+    icon_src: config.iconSrc || "",
+    uploaded_icon_url: config.customIconSrc || "",
+    enabled: Boolean(config.enabled),
+    hq_visible: Boolean(config.hqVisible),
+    ios_app_url: config.iosAppUrl || "",
+    android_intent_url: config.androidIntentUrl || "",
+    web_fallback_url: config.webFallbackUrl || "",
+    use_interruption_pack: Boolean(config.useInterruptionPack),
+    interruption_pack_id: config.interruptionPackId || "",
+    updated_at: now,
+    updated_by: userId ?? null,
+  };
+
+  const { data, error } = await client
+    .from("hq_launcher_configs")
+    .upsert(payload, { onConflict: "launcher_id" })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapLauncherConfig(data);
+}
+
 export async function fetchAdminUsers() {
   const client = requireSupabase();
   const { data, error } = await client
@@ -552,6 +621,7 @@ export async function fetchAdminAnalytics() {
     { data: recent, error: recentError },
     { data: launcherEvents, error: launcherEventsError },
     { data: waitlist, error: waitlistError },
+    { data: testerReports, error: testerReportsError },
   ] = await Promise.all([
     client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
     client
@@ -569,12 +639,18 @@ export async function fetchAdminAnalytics() {
       .select("id,email,country,created_at")
       .order("created_at", { ascending: false })
       .limit(1000),
+    client
+      .from("tester_reports")
+      .select("id,user_id,report_type,status,severity,launcher_context,created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000),
   ]);
   if (summaryError) throw summaryError;
   if (recentError) throw recentError;
   if (launcherEventsError && launcherEventsError.code !== "PGRST205") throw launcherEventsError;
   if (waitlistError && !["PGRST205", "42501"].includes(waitlistError.code)) throw waitlistError;
-  return { summary: summary ?? [], recent: recent ?? [], launcherEvents: launcherEvents ?? [], waitlist: waitlist ?? [] };
+  if (testerReportsError && !["PGRST205", "42501"].includes(testerReportsError.code)) throw testerReportsError;
+  return { summary: summary ?? [], recent: recent ?? [], launcherEvents: launcherEvents ?? [], waitlist: waitlist ?? [], testerReports: testerReports ?? [] };
 }
 
 export async function fetchAdminLiveActivity() {

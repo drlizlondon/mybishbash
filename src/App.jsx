@@ -55,6 +55,7 @@ import {
   savePushSubscription,
   checkIsAdmin,
   fetchGlobalPacks,
+  fetchLauncherConfigs,
   touchUserProfile,
 } from "./lib/mybishbashSync";
 import {
@@ -90,7 +91,7 @@ import {
   pickInterruptionCardIndex,
   getVersionOpenHref,
 } from "./lib/launcherState";
-import { getLauncherConfig, isKnownLauncher } from "./lib/launcherRegistry";
+import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/launcherRegistry";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
   DiagnosticsModal,
@@ -956,6 +957,42 @@ function App() {
     }
   }, [authReady]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchLauncherConfigs()
+      .then((configs) => {
+        if (cancelled || configs.length === 0) return;
+        setHomeScreenVersions((current) => {
+          const next = { ...current };
+          configs.forEach((config) => {
+            const defaults = DEFAULT_HOME_SCREEN_VERSIONS[config.id];
+            if (!defaults) return;
+            next[config.id] = mergeLauncherConfig(defaults, {
+              ...(current[config.id] ?? {}),
+              ...config,
+            });
+          });
+          return next;
+        });
+        setLauncherBehaviorSettings((current) => {
+          const next = { ...current };
+          configs.forEach((config) => {
+            if (!DEFAULT_HOME_SCREEN_VERSIONS[config.id]) return;
+            next[config.id] = {
+              ...(current[config.id] ?? {}),
+              useInterruptionPack: config.useInterruptionPack ?? current[config.id]?.useInterruptionPack ?? false,
+              interruptionPackId: config.interruptionPackId ?? current[config.id]?.interruptionPackId ?? "",
+            };
+          });
+          return next;
+        });
+      })
+      .catch((err) => console.warn("[HQ LAUNCHERS] Could not load HQ launcher config; using static defaults", err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const refreshGlobalPacks = useCallback(() => {
     return fetchGlobalPacks()
       .then(setGlobalPacks)
@@ -1307,7 +1344,7 @@ function App() {
 
   const logLauncherEvent = useCallback(
     async (eventType, launcherId, metadata = {}) => {
-      const launcher = getLauncherConfig(launcherId);
+      const launcher = homeScreenVersions[launcherId] ?? getLauncherConfig(launcherId);
       if (!launcher) return;
       const routeValue = metadata.route || getPathRelativeToKnownBase(window.location.pathname);
       const payload = buildLauncherEventPayload({
@@ -1344,7 +1381,7 @@ function App() {
         },
       });
     },
-    [logEvent, session],
+    [homeScreenVersions, logEvent, session],
   );
 
   function createInterceptActivation(versionId, source = "route") {
@@ -3378,6 +3415,7 @@ function App() {
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
                   onLogLauncherEvent={logLauncherEvent}
+                  onFakeLauncherLaunch={handleFakeLauncherLaunch}
                 />
               ) : null}
             </main>
@@ -5107,6 +5145,7 @@ function SettingsPanel({
   interruptionPacks,
   launcherContext,
   onLogLauncherEvent,
+  onFakeLauncherLaunch,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);

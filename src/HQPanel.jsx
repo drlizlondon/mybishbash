@@ -16,15 +16,18 @@ import {
   deleteAdminGlobalPack,
   fetchAdminAnalytics,
   fetchAdminGlobalPacks,
+  fetchAdminLauncherConfigs,
   fetchAdminLiveActivity,
   fetchAdminUsers,
   saveAdminGlobalPack,
+  saveAdminLauncherConfig,
 } from "./lib/mybishbashSync";
 import {
   fetchAdminTesterReports,
   updateTesterReportStatus,
   updateTesterUser,
 } from "./testing/TestPilot";
+import { FAKE_APP_LAUNCHERS, mergeLauncherConfigs, normalizeLauncherOverride } from "./lib/launcherRegistry";
 import { THEMES } from "./utils";
 
 const EMPTY_PACK_FORM = {
@@ -94,7 +97,7 @@ function useRenderDiagnostics(componentName) {
 }
 
 function useStableAnalytics({ isAdmin, setStatus, paused, suppressed }) {
-  const [analytics, setAnalytics] = useState({ summary: [], recent: [], launcherEvents: [], waitlist: [] });
+  const [analytics, setAnalytics] = useState({ summary: [], recent: [], launcherEvents: [], waitlist: [], testerReports: [] });
   const [isPolling, setIsPolling] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const hasLoadedRef = useRef(false);
@@ -252,6 +255,7 @@ const HQContent = memo(function HQContent({
   useRenderDiagnostics("HQContent");
 
   const [adminPacks, setAdminPacks] = useState([]);
+  const [launcherConfigs, setLauncherConfigs] = useState([]);
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [range, setRange] = useState("7d");
@@ -283,6 +287,9 @@ const HQContent = memo(function HQContent({
       ]);
       setAdminPacks(packsResult);
       setUsers(usersResult);
+      fetchAdminLauncherConfigs()
+        .then(setLauncherConfigs)
+        .catch((error) => console.warn("Could not load HQ launcher configs", error));
     } catch (error) {
       setStatus(error?.message ?? "Could not load HQ data.");
     } finally {
@@ -315,9 +322,29 @@ const HQContent = memo(function HQContent({
       interruptionPacks,
       range,
       waitlist: analytics.waitlist,
+      testerReports: analytics.testerReports,
     }),
-    [analytics.summary, analytics.recent, analytics.launcherEvents, analytics.waitlist, users, adminPacks, libraryPacks, interruptionPacks, range],
+    [analytics.summary, analytics.recent, analytics.launcherEvents, analytics.waitlist, analytics.testerReports, users, adminPacks, libraryPacks, interruptionPacks, range],
   );
+
+  const mergedLaunchers = useMemo(() => mergeLauncherConfigs(launcherConfigs), [launcherConfigs]);
+
+  const handleSaveLauncherConfig = useCallback(async (config) => {
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      const saved = await saveAdminLauncherConfig({ id: config.id, ...normalizeLauncherOverride(config) }, session?.user?.id);
+      setLauncherConfigs((current) => {
+        const rest = current.filter((item) => item.id !== saved.id);
+        return [...rest, saved];
+      });
+      setStatus("Launcher config saved.");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not save launcher config.");
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [session?.user?.id]);
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -450,7 +477,15 @@ const HQContent = memo(function HQContent({
       <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         {activeView === "recruitment" ? <RecruitmentPage telemetry={telemetry} /> : null}
         {activeView === "live" ? <LiveActivityPage fallbackEvents={telemetry.meaningfulEvents} paused={liveActivityPaused || pauseTelemetryUpdates} setStatus={setStatus} /> : null}
-        {activeView === "launchers" ? <LaunchersPage telemetry={telemetry} /> : null}
+        {activeView === "launchers" ? (
+          <LaunchersPage
+            telemetry={telemetry}
+            launchers={mergedLaunchers}
+            interruptionPacks={interruptionPacks}
+            onSaveLauncherConfig={handleSaveLauncherConfig}
+            loading={loading}
+          />
+        ) : null}
         {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
         {activeView === "tester_reports" ? <TesterReportsPage /> : null}
         {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} /> : null}
@@ -865,7 +900,7 @@ const EmptyState = memo(function EmptyState({ title, body }) {
   );
 });
 
-const LaunchersPage = memo(function LaunchersPage({ telemetry }) {
+const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], interruptionPacks = [], onSaveLauncherConfig, loading }) {
   useRenderDiagnostics("LaunchersPage");
   const [launcherFilter, setLauncherFilter] = useState("all");
   const [identityFilter, setIdentityFilter] = useState("all");
@@ -886,8 +921,21 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry }) {
     <div className="space-y-5">
       <SectionHeader
         title="Launcher Performance"
-        subtitle="Instagram first: install views, installs, interruption opens, Do Something Else, and Continue to app."
+        subtitle="Install views, installs, interruption opens, Do Something Else, Continue to app, and HQ launcher configuration."
       />
+      <GlassPanel title="HQ Launcher Config" subtitle="Static registry values remain the fallback if cloud config is unavailable. Installed home-screen icons may require users to reinstall a launcher before icon changes appear.">
+        <div className="grid gap-4 xl:grid-cols-3">
+          {(launchers.length ? launchers : FAKE_APP_LAUNCHERS).map((launcher) => (
+            <LauncherConfigCard
+              key={launcher.id}
+              launcher={launcher}
+              interruptionPacks={interruptionPacks}
+              onSave={onSaveLauncherConfig}
+              loading={loading}
+            />
+          ))}
+        </div>
+      </GlassPanel>
       <div className="grid gap-2 md:grid-cols-3">
         <select value={launcherFilter} onChange={(event) => setLauncherFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
           <option value="all">All launchers</option>
@@ -982,6 +1030,58 @@ const EventsPage = memo(function EventsPage({ events, expandedEventId, setExpand
       </div>
       )}
     </GlassPanel>
+  );
+});
+
+const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interruptionPacks, onSave, loading }) {
+  const [form, setForm] = useState(() => launcher);
+
+  useEffect(() => {
+    setForm(launcher);
+  }, [launcher]);
+
+  const packOptions = interruptionPacks.filter((pack) => pack.targetApp === launcher.id || pack.linkedVersionId === launcher.id);
+  const iconPreview = form.customIconSrc || form.iconSrc;
+
+  return (
+    <article className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        {iconPreview ? <img src={iconPreview} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <div className="h-12 w-12 rounded-xl bg-slate-100" />}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}</p>
+          <h4 className="text-base font-semibold text-slate-950">{form.displayName || form.name}</h4>
+          <p className="text-xs text-slate-500">{form.enabled ? "Enabled" : "Disabled"} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2">
+        <input value={form.displayName ?? ""} onChange={(event) => setForm({ ...form, displayName: event.target.value, name: event.target.value })} placeholder="Display name" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.realAppLabel ?? ""} onChange={(event) => setForm({ ...form, realAppLabel: event.target.value })} placeholder="Real app label" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.iconSrc ?? ""} onChange={(event) => setForm({ ...form, iconSrc: event.target.value })} placeholder="Default icon URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.customIconSrc ?? ""} onChange={(event) => setForm({ ...form, customIconSrc: event.target.value })} placeholder="Uploaded icon URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.iosAppUrl ?? ""} onChange={(event) => setForm({ ...form, iosAppUrl: event.target.value })} placeholder="iOS URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.androidIntentUrl ?? ""} onChange={(event) => setForm({ ...form, androidIntentUrl: event.target.value })} placeholder="Android intent URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.webFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, webFallbackUrl: event.target.value })} placeholder="Web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <select value={form.interruptionPackId ?? ""} onChange={(event) => setForm({ ...form, interruptionPackId: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="">Default interruption pack</option>
+          {packOptions.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
+        </select>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <input type="checkbox" checked={Boolean(form.enabled)} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />
+          Enabled
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <input type="checkbox" checked={Boolean(form.hqVisible)} onChange={(event) => setForm({ ...form, hqVisible: event.target.checked })} />
+          HQ visible
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <input type="checkbox" checked={Boolean(form.useInterruptionPack)} onChange={(event) => setForm({ ...form, useInterruptionPack: event.target.checked })} />
+          Use interruption pack
+        </label>
+        <button type="button" disabled={loading} onClick={() => onSave?.(form)} className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          Save launcher config
+        </button>
+      </div>
+    </article>
   );
 });
 
@@ -1178,6 +1278,9 @@ const TesterReportCard = memo(function TesterReportCard({ report, expanded, onTo
 
 const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, setStatus }) {
   useRenderDiagnostics("UsersPage");
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(null);
+
   async function handleTesterUpdate(user, fields) {
     try {
       setStatus?.("Updating tester access...");
@@ -1189,30 +1292,70 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
     }
   }
 
+  const enrichedUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    return users
+      .map((user) => {
+        const stats = telemetry.userStats.get(user.user_id) ?? {};
+        const lastActivity = stats.lastMeaningfulActivityAt || user.last_meaningful_activity_at || stats.lastEventAt || user.last_seen_at || user.signed_up_at;
+        const lastSeen = user.last_login_at || user.last_sign_in_at || user.last_seen_at;
+        const searchable = [user.email, user.user_id, user.access_code, user.tester_group].filter(Boolean).join(" ").toLowerCase();
+        return { user, stats, lastActivity, lastSeen, searchable };
+      })
+      .filter((item) => !query || item.searchable.includes(query))
+      .sort((left, right) => new Date(right.lastActivity || 0).getTime() - new Date(left.lastActivity || 0).getTime());
+  }, [telemetry.userStats, userSearch, users]);
+
   return (
     <div className="space-y-5">
       <SectionHeader
         title="User Analytics"
         subtitle="Individual adoption paths: signup, onboarding, launcher install, interruptions, Do Something Else, and action-card completion."
       />
+      <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+        <input
+          value={userSearch}
+          onChange={(event) => setUserSearch(event.target.value)}
+          placeholder="Search by email, user id, access code, or tester group"
+          className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm"
+        />
+        <span className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-semibold text-slate-600">
+          Sorted by last activity
+        </span>
+      </div>
       {users.length === 0 ? (
         <EmptyState title="No user records yet." body="User timelines will appear once early-access accounts are created." />
       ) : null}
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        {users.map((user) => {
-          const stats = telemetry.userStats.get(user.user_id) ?? {};
+      {users.length > 0 && enrichedUsers.length === 0 ? (
+        <EmptyState title="No matching users." body="Try another email or user id." />
+      ) : null}
+      <div className="grid gap-4">
+        {enrichedUsers.map(({ user, stats, lastActivity, lastSeen }) => {
           const usageStatus = getUserUsageStatus(stats);
+          const activeBadge = getUserActivityBadge(lastActivity);
+          const expanded = selectedUserId === user.user_id;
           return (
             <GlassPanel key={user.user_id} title={user.email || pseudoUser(user.user_id)} subtitle={`Pseudonymous user ${pseudoUser(user.user_id)}`}>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className={`rounded-full px-2.5 py-1 ${activeBadge.className}`}>{activeBadge.label}</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{user.is_tester ? `Tester${user.tester_group ? ` · ${user.tester_group}` : ""}` : "Not tester"}</span>
+                  <span className={`rounded-full px-2.5 py-1 ${user.has_access === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{user.has_access === false ? "No access" : "Access granted"}</span>
+                </div>
+                <button type="button" onClick={() => setSelectedUserId(expanded ? null : user.user_id)} className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
+                  {expanded ? "Hide timeline" : "View timeline"}
+                </button>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <MiniStat label="Usage status" value={usageStatus} />
-                <MiniStat label="Interruption events" value={stats.interruptions ?? 0} />
-                <MiniStat label="Continue to app" value={stats.continueToApp ?? 0} />
-                <MiniStat label="Do Something Else" value={stats.doSomethingElse ?? 0} />
-                <MiniStat label="Action completions" value={stats.actionsCompleted ?? 0} />
-                <MiniStat label="Active days" value={stats.activeDays ?? 0} />
-                <MiniStat label="Installed launchers" value={stats.installedLaunchers?.join(", ") || "None tracked"} />
-                <MiniStat label="Last event" value={stats.lastEventAt ? formatDate(stats.lastEventAt) : "No events yet"} />
+                <MiniStat label="Created" value={formatDate(user.signed_up_at || user.created_at)} />
+                <MiniStat label="Last login / seen" value={formatDate(lastSeen)} />
+                <MiniStat label="Last meaningful activity" value={formatDate(lastActivity)} />
+                <MiniStat label="Last launcher used" value={stats.lastLauncherUsed || "None tracked"} />
+                <MiniStat label="Launcher opens" value={stats.launcherOpens ?? 0} />
+                <MiniStat label="Cards completed" value={stats.actionsCompleted ?? 0} />
+                <MiniStat label="Reports / feedback" value={stats.reportsSubmitted ?? 0} />
+                <MiniStat label="Total events" value={user.event_count ?? stats.latestEvents?.length ?? 0} />
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-5">
                 <LifecyclePill label="Onboarding" active={stats.eventTypes?.includes("onboarding_completed")} />
@@ -1222,9 +1365,10 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
                 <LifecyclePill label="Action done" active={(stats.actionsCompleted ?? 0) > 0} />
               </div>
               <UserActivityHeatmap data={stats.hourlyActivity ?? []} />
-              <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3">
+              {expanded ? <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Event timeline</p>
                 <div className="space-y-2">
+                  {(stats.latestEvents ?? []).length === 0 ? <p className="text-sm text-slate-500">No recent events available for this user.</p> : null}
                   {(stats.latestEvents ?? []).map((event) => (
                     <div key={event.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs">
                       <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
@@ -1233,9 +1377,9 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
                     </div>
                   ))}
                 </div>
-              </div>
+              </div> : null}
               <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-slate-600">
-                Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(user.last_seen_at)} - {user.event_count ?? 0} total events
+                Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(lastSeen)} - {user.event_count ?? 0} total events
               </div>
               <TesterUserControls user={user} onUpdate={handleTesterUpdate} />
             </GlassPanel>
@@ -1651,7 +1795,7 @@ const ChartTooltip = memo(function ChartTooltip({ active, payload, label }) {
   );
 });
 
-function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, libraryPacks, interruptionPacks, range, waitlist = [] }) {
+function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, libraryPacks, interruptionPacks, range, waitlist = [], testerReports = [] }) {
   const appEvents = normalizeEvents(recent);
   const launcherEvents = normalizeLauncherEvents(rawLauncherEvents);
   const events = [...appEvents, ...launcherEvents.map(mapLauncherEventToOperationalEvent)]
@@ -1713,7 +1857,7 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
   const topLaunchers = rowsFromCounts(countBy(events, (event) => getEventLauncher(event) || "unknown"));
   const notificationRows = eventFrequency.filter((row) => row.label.includes("notification"));
   const deviceRows = rowsFromCounts(countBy(events, (event) => event.metadata?.deviceType || event.metadata?.platform || "not_reported"));
-  const userStats = buildUserStats(events);
+  const userStats = buildUserStats(events, testerReports);
   const packStats = buildPackStats(events, adminPacks, users.length);
   const activeUsersOverTime = bucketEvents(events, (bucket, event) => {
     if (event.user_id) bucket.usersSet.add(event.user_id);
@@ -1963,15 +2107,16 @@ function buildHeatmap(events) {
   );
 }
 
-function buildUserStats(events) {
+function buildUserStats(events, testerReports = []) {
   const stats = new Map();
-  events.forEach((event) => {
-    if (!event.user_id) return;
-    const current = stats.get(event.user_id) ?? {
+  function ensure(userId) {
+    const current = stats.get(userId) ?? {
       interruptions: 0,
+      launcherOpens: 0,
       continueToApp: 0,
       doSomethingElse: 0,
       actionsCompleted: 0,
+      reportsSubmitted: 0,
       notifications: 0,
       activeDates: new Set(),
       launchers: new Set(),
@@ -1981,27 +2126,62 @@ function buildUserStats(events) {
       latestEvents: [],
       hourlyCounts: new Map(),
       lastEventAt: null,
+      lastMeaningfulActivityAt: null,
+      lastLauncherUsed: "",
+      lastLauncherUsedAt: null,
     };
+    stats.set(userId, current);
+    return current;
+  }
+
+  events.forEach((event) => {
+    if (!event.user_id) return;
+    const current = ensure(event.user_id);
     if (event.event_type) current.eventTypes.add(event.event_type);
     if (event.event_type?.startsWith("intercept_")) current.interruptions += 1;
+    if (event.event_type === "first_interruption_seen") current.launcherOpens += 1;
     if (event.event_type === "intercept_continue_to_app") current.continueToApp += 1;
     if (event.event_type === "intercept_do_something_else") current.doSomethingElse += 1;
     if (event.event_type === "bash_done" || event.event_type === "action_card_completed") current.actionsCompleted += 1;
     if (event.event_type?.includes("notification")) current.notifications += 1;
     current.activeDates.add(new Date(event.created_at).toISOString().slice(0, 10));
     const launcher = event.launcher_context || event.target_app || event.app_name;
-    if (launcher) current.launchers.add(launcher);
+    if (launcher) {
+      current.launchers.add(launcher);
+      if (!current.lastLauncherUsedAt || new Date(event.created_at).getTime() > new Date(current.lastLauncherUsedAt).getTime()) {
+        current.lastLauncherUsed = launcher;
+        current.lastLauncherUsedAt = event.created_at;
+      }
+    }
     if (["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && launcher) {
       current.installedLaunchers.add(launcher);
     }
     if (event.pack_id) current.packs.add(event.pack_id);
     const hour = new Date(event.created_at).getHours();
     current.hourlyCounts.set(hour, (current.hourlyCounts.get(hour) ?? 0) + 1);
-    current.latestEvents = [event, ...current.latestEvents].slice(0, 4);
+    current.latestEvents = [event, ...current.latestEvents].slice(0, 8);
     if (!current.lastEventAt || new Date(event.created_at).getTime() > new Date(current.lastEventAt).getTime()) {
       current.lastEventAt = event.created_at;
     }
-    stats.set(event.user_id, current);
+    if (isMeaningfulEvent(event) && (!current.lastMeaningfulActivityAt || new Date(event.created_at).getTime() > new Date(current.lastMeaningfulActivityAt).getTime())) {
+      current.lastMeaningfulActivityAt = event.created_at;
+    }
+  });
+
+  testerReports.forEach((report) => {
+    if (!report.user_id) return;
+    const current = ensure(report.user_id);
+    current.reportsSubmitted += 1;
+    current.latestEvents = [
+      {
+        id: report.id,
+        user_id: report.user_id,
+        event_type: `tester_${report.report_type || "report"}_submitted`,
+        created_at: report.created_at,
+        launcher_context: report.launcher_context,
+      },
+      ...current.latestEvents,
+    ].slice(0, 8);
   });
   return new Map(Array.from(stats.entries()).map(([key, value]) => [key, {
     ...value,
@@ -2010,6 +2190,7 @@ function buildUserStats(events) {
     installedLaunchers: Array.from(value.installedLaunchers),
     enabledPacks: value.packs.size,
     eventTypes: Array.from(value.eventTypes),
+    latestEvents: [...(value.latestEvents ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()).slice(0, 8),
     hourlyActivity: Array.from({ length: 24 }, (_, hour) => ({ hour, count: value.hourlyCounts.get(hour) ?? 0 })),
   }]));
 }
@@ -2023,6 +2204,21 @@ function getUserUsageStatus(stats = {}) {
   if (eventTypes.has("onboarding_completed")) return "Onboarded, no launcher use";
   if (eventTypes.has("onboarding_started")) return "Onboarding started";
   return "Signed up, no product use";
+}
+
+function getUserActivityBadge(timestamp) {
+  const time = new Date(timestamp || 0).getTime();
+  if (!time || Number.isNaN(time)) {
+    return { label: "inactive", className: "bg-slate-100 text-slate-600" };
+  }
+  const age = Date.now() - time;
+  if (age <= 24 * 60 * 60 * 1000) {
+    return { label: "active today", className: "bg-emerald-50 text-emerald-700" };
+  }
+  if (age <= 7 * 24 * 60 * 60 * 1000) {
+    return { label: "active this week", className: "bg-blue-50 text-blue-700" };
+  }
+  return { label: "inactive", className: "bg-slate-100 text-slate-600" };
 }
 
 function buildPackStats(events, packs, userCount) {

@@ -97,6 +97,81 @@ export const LAUNCHER_REGISTRY = Object.fromEntries(
   FAKE_APP_LAUNCHERS.map((launcher) => [launcher.id, launcher]),
 );
 
+const HQ_EDITABLE_FIELDS = [
+  "displayName",
+  "name",
+  "realAppLabel",
+  "iconSrc",
+  "customIconSrc",
+  "nativeAppUrl",
+  "appUrl",
+  "iosAppUrl",
+  "androidIntentUrl",
+  "webFallbackUrl",
+  "androidWebFallbackUrl",
+  "iosWebFallbackUrl",
+  "manualUrl",
+  "enabled",
+  "hqVisible",
+  "useInterruptionPack",
+  "interruptionPackId",
+];
+
+export function sanitizeLauncherUrl(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "";
+  if (/^(https?:\/\/|x-safari-|instagram:\/\/|youtube:\/\/|intent:\/\/)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return "";
+}
+
+export function normalizeLauncherOverride(override = {}) {
+  const normalized = {};
+  HQ_EDITABLE_FIELDS.forEach((field) => {
+    if (!(field in override)) return;
+    const value = override[field];
+    if (value == null) return;
+    if (field.endsWith("Url")) {
+      normalized[field] = sanitizeLauncherUrl(value);
+      return;
+    }
+    if (["enabled", "hqVisible", "useInterruptionPack"].includes(field)) {
+      normalized[field] = Boolean(value);
+      return;
+    }
+    normalized[field] = typeof value === "string" ? value.trim() : value;
+  });
+  return normalized;
+}
+
+export function mergeLauncherConfig(defaultLauncher, override = {}) {
+  if (!defaultLauncher) return null;
+  const normalized = normalizeLauncherOverride(override);
+  const merged = {
+    ...defaultLauncher,
+    ...normalized,
+    id: defaultLauncher.id,
+    category: defaultLauncher.category,
+    installPath: defaultLauncher.installPath,
+    launchPath: defaultLauncher.launchPath,
+    manifestPath: defaultLauncher.manifestPath,
+    defaultInterruptionPackId: defaultLauncher.defaultInterruptionPackId,
+  };
+  return {
+    ...merged,
+    name: merged.name || merged.displayName || defaultLauncher.name,
+    displayName: merged.displayName || merged.name || defaultLauncher.displayName,
+    realAppLabel: merged.realAppLabel ?? defaultLauncher.realAppLabel,
+    updatedAt: override.updatedAt ?? override.updated_at ?? defaultLauncher.updatedAt,
+  };
+}
+
+export function mergeLauncherConfigs(overrides = []) {
+  const byId = Object.fromEntries((Array.isArray(overrides) ? overrides : []).map((override) => [override.id, override]));
+  return FAKE_APP_LAUNCHERS.map((launcher) => mergeLauncherConfig(launcher, byId[launcher.id])).filter(Boolean);
+}
+
 export function getLauncherConfig(launcherId) {
   return LAUNCHER_REGISTRY[launcherId] ?? null;
 }
@@ -112,7 +187,8 @@ export function getEnabledLaunchers() {
 export function buildManifestForLauncher(launcher, origin = "https://drlizlondon.github.io") {
   const launchPath = launcher.launchPath.startsWith("/") ? launcher.launchPath : `/${launcher.launchPath}`;
   const startUrl = `${origin}/mybishbash${launchPath}`;
-  const iconType = /\.jpe?g(?:$|\?)/i.test(launcher.iconSrc) ? "image/jpeg" : "image/png";
+  const iconSrc = launcher.customIconSrc || launcher.iconSrc;
+  const iconType = /\.jpe?g(?:$|\?)/i.test(iconSrc) ? "image/jpeg" : "image/png";
 
   return {
     name: launcher.displayName,
@@ -125,7 +201,7 @@ export function buildManifestForLauncher(launcher, origin = "https://drlizlondon
     theme_color: LAUNCHER_THEME.themeColor,
     icons: [
       {
-        src: launcher.iconSrc,
+        src: iconSrc,
         sizes: "180x180",
         type: iconType,
       },

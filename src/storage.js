@@ -1,4 +1,4 @@
-import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY } from "./lib/launcherRegistry";
+import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY, mergeLauncherConfig } from "./lib/launcherRegistry";
 
 const STORAGE_KEY = "mybishbash.cards.v1";
 const SETUP_KEY = "mybishbash.setup-complete.v1";
@@ -256,27 +256,33 @@ export function loadHomeScreenVersions() {
           ];
         }
 
-        const registryLauncher = LAUNCHER_REGISTRY[id];
+        const registryLauncher = LAUNCHER_REGISTRY[id] ?? defaults;
+        const launcherConfig = mergeLauncherConfig(registryLauncher, merged) ?? registryLauncher;
 
         return [
           id,
           {
             ...merged,
             id: defaults.id,
-            name: registryLauncher?.displayName ?? defaults.name,
-            displayName: registryLauncher?.displayName ?? defaults.displayName ?? defaults.name,
-            category: registryLauncher?.category ?? defaults.category,
-            installPath: registryLauncher?.installPath ?? defaults.installPath,
-            launchPath: registryLauncher?.launchPath ?? defaults.launchPath,
-            manifestPath: registryLauncher?.manifestPath ?? defaults.manifestPath,
-            iconSrc: registryLauncher?.iconSrc ?? defaults.iconSrc,
-            realAppLabel: registryLauncher?.realAppLabel ?? defaults.realAppLabel,
-            appUrl: registryLauncher?.appUrl ?? defaults.appUrl,
-            manualUrl: registryLauncher?.manualUrl ?? defaults.manualUrl,
-            nativeAppUrl: registryLauncher?.nativeAppUrl ?? defaults.nativeAppUrl,
-            webFallbackUrl: registryLauncher?.webFallbackUrl ?? defaults.webFallbackUrl,
-            enabled: registryLauncher?.enabled ?? defaults.enabled ?? true,
-            hqVisible: registryLauncher?.hqVisible ?? defaults.hqVisible ?? true,
+            name: launcherConfig.displayName ?? launcherConfig.name ?? defaults.name,
+            displayName: launcherConfig.displayName ?? launcherConfig.name ?? defaults.displayName ?? defaults.name,
+            category: launcherConfig.category ?? defaults.category,
+            installPath: launcherConfig.installPath ?? defaults.installPath,
+            launchPath: launcherConfig.launchPath ?? defaults.launchPath,
+            manifestPath: launcherConfig.manifestPath ?? defaults.manifestPath,
+            iconSrc: launcherConfig.iconSrc ?? defaults.iconSrc,
+            customIconSrc: launcherConfig.customIconSrc ?? merged.customIconSrc ?? "",
+            realAppLabel: launcherConfig.realAppLabel ?? defaults.realAppLabel,
+            appUrl: launcherConfig.appUrl ?? defaults.appUrl,
+            iosAppUrl: launcherConfig.iosAppUrl ?? defaults.iosAppUrl,
+            androidIntentUrl: launcherConfig.androidIntentUrl ?? defaults.androidIntentUrl,
+            androidWebFallbackUrl: launcherConfig.androidWebFallbackUrl ?? defaults.androidWebFallbackUrl,
+            iosWebFallbackUrl: launcherConfig.iosWebFallbackUrl ?? defaults.iosWebFallbackUrl,
+            manualUrl: launcherConfig.manualUrl ?? defaults.manualUrl,
+            nativeAppUrl: launcherConfig.nativeAppUrl ?? defaults.nativeAppUrl,
+            webFallbackUrl: launcherConfig.webFallbackUrl ?? defaults.webFallbackUrl,
+            enabled: launcherConfig.enabled ?? defaults.enabled ?? true,
+            hqVisible: launcherConfig.hqVisible ?? defaults.hqVisible ?? true,
             useInterruptionPack:
               typeof merged.useInterruptionPack === "boolean"
                 ? merged.useInterruptionPack

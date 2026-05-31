@@ -57,4 +57,8 @@ const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), 
 assert.match(hqSource, /tester_reports/);
 assert.match(hqSource, /TesterReportsPage/);
 
+const testPilotCss = await readFile(new URL("../src/testing/TestPilot/testPilot.css", import.meta.url), "utf8");
+assert.match(testPilotCss, /\.testpilot-backdrop\s*{[^}]*z-index:\s*100200/s);
+assert.match(testPilotCss, /\.testpilot-sheet,\s*\n\.testpilot-modal\s*{[^}]*z-index:\s*100201/s);
+
 console.log("TestPilot checks passed");
