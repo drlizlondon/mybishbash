@@ -1987,7 +1987,7 @@ function App() {
     }
 
     if (isPersonalRoute) {
-      if (overlay?.type === "reveal" || overlay?.type === "empty") {
+      if (route.kind === "home" && (overlay?.type === "reveal" || overlay?.type === "empty")) {
         return;
       }
       setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
