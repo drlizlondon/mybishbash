@@ -5,15 +5,15 @@ export function getLauncherDecisionReadiness({
   authReady,
   sessionPresent,
   syncStatus,
-  rawCardsCount,
+  hasUsableCachedLauncherState = false,
   waitExpired,
   isDemoMode = false,
 }) {
   if (routeKind !== "intercept") return { ready: true, reason: "not_launcher_route" };
-  if (rawCardsCount > 0) return { ready: true, reason: "cached_cards_available" };
   if (isDemoMode) return { ready: true, reason: "demo_mode" };
-  if (waitExpired) return { ready: true, reason: "wait_expired" };
+  if (hasUsableCachedLauncherState) return { ready: true, reason: "cached_launcher_state_available" };
   if (!authReady) return { ready: false, reason: "auth_pending" };
   if (sessionPresent && syncStatus === "loading") return { ready: false, reason: "sync_pending" };
+  if (waitExpired) return { ready: true, reason: "wait_expired" };
   return { ready: true, reason: "no_cards_after_ready" };
 }

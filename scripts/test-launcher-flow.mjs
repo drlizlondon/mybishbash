@@ -8,7 +8,7 @@ assert.deepEqual(
     authReady: false,
     sessionPresent: false,
     syncStatus: "loading",
-    rawCardsCount: 0,
+    hasUsableCachedLauncherState: false,
     waitExpired: false,
   }),
   { ready: false, reason: "auth_pending" },
@@ -20,7 +20,7 @@ assert.deepEqual(
     authReady: true,
     sessionPresent: true,
     syncStatus: "loading",
-    rawCardsCount: 0,
+    hasUsableCachedLauncherState: false,
     waitExpired: false,
   }),
   { ready: false, reason: "sync_pending" },
@@ -32,19 +32,31 @@ assert.equal(
     authReady: true,
     sessionPresent: true,
     syncStatus: "loading",
-    rawCardsCount: 2,
+    hasUsableCachedLauncherState: true,
     waitExpired: false,
   }).reason,
-  "cached_cards_available",
+  "cached_launcher_state_available",
+);
+
+assert.deepEqual(
+  getLauncherDecisionReadiness({
+    routeKind: "intercept",
+    authReady: true,
+    sessionPresent: true,
+    syncStatus: "loading",
+    hasUsableCachedLauncherState: false,
+    waitExpired: true,
+  }),
+  { ready: false, reason: "sync_pending" },
 );
 
 assert.equal(
   getLauncherDecisionReadiness({
     routeKind: "intercept",
     authReady: true,
-    sessionPresent: true,
-    syncStatus: "loading",
-    rawCardsCount: 0,
+    sessionPresent: false,
+    syncStatus: "needs-connection",
+    hasUsableCachedLauncherState: false,
     waitExpired: true,
   }).reason,
   "wait_expired",
@@ -56,7 +68,7 @@ assert.equal(
     authReady: false,
     sessionPresent: false,
     syncStatus: "loading",
-    rawCardsCount: 0,
+    hasUsableCachedLauncherState: false,
     waitExpired: false,
     isDemoMode: true,
   }).reason,

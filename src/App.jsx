@@ -1007,12 +1007,22 @@ function App() {
   }, [route.kind, route.versionId, resumeLaunchNonce]);
 
   useEffect(() => {
+    const routeInterruptionPack = route.kind === "intercept"
+      ? getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
+          hiddenCardIds: dislikedPackCardIds,
+          globalEnabled: globalInterruptionMode,
+        })
+      : null;
+    const normalizedCards = normalizeCards(cards, new Date(), profile.timezone);
+    const hasUsableCachedLauncherState =
+      normalizedCards.some((card) => !card.deletedAt && isEligible(card, new Date(), profile.timezone)) ||
+      (routeInterruptionPack?.cards?.length ?? 0) > 0;
     const readiness = getLauncherDecisionReadiness({
       routeKind: route.kind,
       authReady,
       sessionPresent: Boolean(session?.user?.id),
       syncStatus,
-      rawCardsCount: cards.length,
+      hasUsableCachedLauncherState,
       waitExpired: launcherDataWaitExpired,
       isDemoMode: window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true",
     });
@@ -1024,7 +1034,9 @@ function App() {
       sessionPresent: Boolean(session?.user?.id),
       syncStatus,
       rawCardsCount: cards.length,
+      hasUsableCachedLauncherState,
     });
+    if (launcherDataWaitExpired) return undefined;
     const timeoutId = window.setTimeout(() => {
       console.warn("[LAUNCHER_DATA_WAIT_TIMEOUT]", {
         versionId: route.versionId,
@@ -1034,7 +1046,7 @@ function App() {
       setLauncherDataWaitExpired(true);
     }, LAUNCHER_DATA_WAIT_TIMEOUT_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [authReady, cards.length, launcherDataWaitExpired, route.kind, route.versionId, session?.user?.id, syncStatus]);
+  }, [authReady, cardPacks, cards, dislikedPackCardIds, globalInterruptionMode, homeScreenVersions, launcherBehaviorSettings, launcherDataWaitExpired, profile.timezone, route.kind, route.versionId, session?.user?.id, syncStatus]);
 
   const refreshGlobalPacks = useCallback(() => {
     return fetchGlobalPacks()
@@ -1692,12 +1704,20 @@ function App() {
     if (route.kind === "intercept") {
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+      const routeInterruptionPack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
+        hiddenCardIds: dislikedPackCardIds,
+        globalEnabled: globalInterruptionMode,
+      });
+      const hasUsableCachedLauncherState =
+        eligiblePersonalCount > 0 ||
+        eligiblePackCount > 0 ||
+        (routeInterruptionPack?.cards?.length ?? 0) > 0;
       const launcherReadiness = getLauncherDecisionReadiness({
         routeKind: route.kind,
         authReady,
         sessionPresent: Boolean(session?.user?.id),
         syncStatus,
-        rawCardsCount: cards.length,
+        hasUsableCachedLauncherState,
         waitExpired: launcherDataWaitExpired,
         isDemoMode,
       });
@@ -1712,6 +1732,8 @@ function App() {
         rawCardsCount: cards.length,
         eligiblePersonalCount,
         eligiblePackCount,
+        eligibleInterruptionCount: routeInterruptionPack?.cards?.length ?? 0,
+        hasUsableCachedLauncherState,
         readiness: launcherReadiness,
         online: typeof navigator === "undefined" ? null : navigator.onLine,
       });
@@ -1732,6 +1754,8 @@ function App() {
             rawCardsCount: cards.length,
             eligiblePersonalCount,
             eligiblePackCount,
+            eligibleInterruptionCount: routeInterruptionPack?.cards?.length ?? 0,
+            hasUsableCachedLauncherState,
             reason: launcherReadiness.reason,
             finalDecision: "preparing",
           });
