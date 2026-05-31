@@ -959,12 +959,15 @@ function App() {
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (authReady) {
-      fetchGlobalPacks()
-        .then(setGlobalPacks)
-        .catch((err) => console.warn("Could not load global packs", err));
+    if (!authReady) return;
+    if (!session?.user?.id) {
+      setGlobalPacks([]);
+      return;
     }
-  }, [authReady]);
+    fetchGlobalPacks()
+      .then(setGlobalPacks)
+      .catch((err) => console.warn("Could not load global packs", err));
+  }, [authReady, session?.user?.id]);
 
   useEffect(() => {
     let cancelled = false;

@@ -420,13 +420,13 @@ export async function fetchGlobalPacks() {
     .select("*")
     .eq("published", true)
     .order("created_at", { ascending: false });
-  if (packsError) return [];
+  if (packsError) throw packsError;
 
   const { data: cards, error: cardsError } = await client
     .from("global_pack_cards")
     .select("*")
     .order("position", { ascending: true });
-  if (cardsError) return [];
+  if (cardsError) throw cardsError;
 
   return packs.map((pack) => mapGlobalPack(pack, cards));
 }
