@@ -585,6 +585,29 @@ function buildRevealOverlay(cardId, versionId = null) {
   return { type: "reveal", cardId, versionId };
 }
 
+function buildFakeLauncherOverlayContext(versionId, activationKey = null) {
+  return {
+    versionId,
+    activationKey,
+    launchSource: "fake_launcher",
+    origin: "intercept",
+  };
+}
+
+function buildFakeLauncherRevealOverlay(cardId, versionId, activationKey = null) {
+  return {
+    ...buildRevealOverlay(cardId, versionId),
+    ...buildFakeLauncherOverlayContext(versionId, activationKey),
+  };
+}
+
+function buildFakeLauncherContinueOverlay(versionId, activationKey = null) {
+  return {
+    type: "continue-to-app",
+    ...buildFakeLauncherOverlayContext(versionId, activationKey),
+  };
+}
+
 function buildEmptyOverlay(versionId = null) {
   return { type: "empty", versionId };
 }
@@ -695,6 +718,7 @@ function App() {
   const lastCloudStateStrRef = useRef(null);
   const localDirtyRef = useRef(false);
   const highestKnownCloudTimeRef = useRef(0);
+  const activeLauncherOverlayRef = useRef(null);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
@@ -783,6 +807,10 @@ function App() {
     ],
   );
 
+  useEffect(() => {
+    activeLauncherOverlayRef.current = overlay?.launchSource === "fake_launcher" ? overlay : null;
+  }, [overlay]);
+
   const applySharedState = useCallback((incomingState, options = {}) => {
     const { updatedAt, ...incomingStateContent } = incomingState || {};
     lastCloudStateStrRef.current = JSON.stringify(incomingStateContent);
@@ -827,13 +855,21 @@ function App() {
     setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
     setActionCards((current) => mergeEntitiesById(current, next.actionCards));
 
-    setScreen(nextSetupComplete ? "library" : "onboarding");
-    const nextRoutePath = getRouteFromLocation(nextSetupComplete);
-    if (nextSetupComplete && nextRoutePath === "/onboarding") {
-      setRoutePath("/home");
-      window.history.replaceState({}, "", `${BASE_PATH}/home`);
+    const activeLauncherOverlay = activeLauncherOverlayRef.current;
+    if (activeLauncherOverlay?.launchSource === "fake_launcher") {
+      console.log("[SYNC] Shared state merged without interrupting active launcher overlay", {
+        overlayType: activeLauncherOverlay.type,
+        versionId: activeLauncherOverlay.versionId,
+      });
     } else {
-      setRoutePath(nextRoutePath);
+      setScreen(nextSetupComplete ? "library" : "onboarding");
+      const nextRoutePath = getRouteFromLocation(nextSetupComplete);
+      if (nextSetupComplete && nextRoutePath === "/onboarding") {
+        setRoutePath("/home");
+        window.history.replaceState({}, "", `${BASE_PATH}/home`);
+      } else {
+        setRoutePath(nextRoutePath);
+      }
     }
 
     window.setTimeout(() => {
@@ -1172,9 +1208,15 @@ function App() {
   useEffect(() => {
     if (overlay?.type === "action-card" && visibleActionCards.length === 0) {
       console.log("[ACTION CARDS] No visible action cards; switching to empty fallback.");
-      setOverlay(buildActionCardEmptyOverlay(overlay.versionId));
+      const nextOverlay = {
+        ...buildActionCardEmptyOverlay(overlay.versionId),
+        origin: overlay.origin,
+        activationKey: overlay.activationKey,
+        launchSource: overlay.launchSource,
+      };
+      setOverlay(nextOverlay);
     }
-  }, [overlay?.type, overlay?.versionId, visibleActionCards.length]);
+  }, [overlay?.type, overlay?.versionId, overlay?.origin, overlay?.activationKey, overlay?.launchSource, visibleActionCards.length]);
 
   useEffect(() => {
     saveNotificationSettings(notificationSettings);
@@ -1394,10 +1436,10 @@ function App() {
   }
 
   useEffect(() => {
-    if (route.kind !== "intercept") {
+    if (route.kind !== "intercept" && overlay?.launchSource !== "fake_launcher") {
       setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
     }
-  }, [route.kind]);
+  }, [route.kind, overlay?.launchSource]);
 
   useEffect(() => {
     function handleOnline() {
@@ -1504,22 +1546,7 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!authReady) {
-      console.log("[COLD_START_LOADING_BLOCK] Waiting for authReady");
-      debugLaunch("[COLD_START_LOADING_BLOCK]", "Waiting for authReady");
-      return;
-    }
-    if (syncStatus === "loading") {
-      console.log("[COLD_START_LOADING_BLOCK] Waiting for syncStatus");
-      debugLaunch("[COLD_START_LOADING_BLOCK]", "Waiting for syncStatus");
-      if (shouldLaunchOverlay && overlay == null) {
-        console.log("[COLD_START_EMPTY_SUPPRESSED] Preventing empty overlay before sync settles");
-        debugLaunch("[COLD_START_EMPTY_SUPPRESSED]", "Preventing empty overlay before sync settles");
-      }
-      return;
-    }
-
+  useLayoutEffect(() => {
     const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
     const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
     const eligiblePackCount = normalizedDiagCards.filter((c) => c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
@@ -1542,7 +1569,7 @@ function App() {
       isInterruptionPackActive: (diagInterruptionPack?.cards?.length ?? 0) > 0,
     });
 
-    if (route.kind !== "intercept" && interceptActivationRef.current) {
+    if (route.kind !== "intercept" && overlay?.launchSource !== "fake_launcher" && interceptActivationRef.current) {
       interceptActivationRef.current = null;
     }
 
@@ -1583,6 +1610,16 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      console.log("[LAUNCHER ROUTE DETECTED]", {
+        route: route.path,
+        versionId: route.versionId,
+        authReady,
+        syncStatus,
+        online: typeof navigator === "undefined" ? null : navigator.onLine,
+      });
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        console.log("[OFFLINE CACHED LAUNCH USED]", { versionId: route.versionId, route: route.path });
+      }
       const isResumeInterceptLaunch = resumeLaunchNonce !== handledResumeLaunchNonceRef.current;
 
       if (
@@ -1634,42 +1671,48 @@ function App() {
       if (selected) {
         console.log("[INTERCEPT_FALLBACK_SELECTED_CARD]", selected.id);
         console.log("[LAUNCH_DIAG_DECISION] intercept -> reveal");
+        console.log("[CACHED OVERLAY SELECTED]", { type: "reveal", cardId: selected.id, versionId: route.versionId });
         debugLaunch("[LAUNCH_DECISION]", "intercept -> reveal");
-        setOverlay({
-          ...buildRevealOverlay(selected.id, route.versionId),
-          activationKey: activeActivation.activationKey,
-        });
+        const nextOverlay = buildFakeLauncherRevealOverlay(selected.id, route.versionId, activeActivation.activationKey);
+        console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+        console.log("[CARD_ORIGIN] intercept reveal created", nextOverlay);
+        setOverlay(nextOverlay);
         return;
       }
 
       if (interruption) {
         console.log("[INTERCEPT_EMPTY_BUT_HAS_INTERRUPTION]");
         console.log("[LAUNCH_DIAG_DECISION] intercept -> intercept-pack");
+        console.log("[CACHED OVERLAY SELECTED]", { type: "intercept-pack", versionId: route.versionId, packId: interruption.pack?.id });
         debugLaunch("[LAUNCH_DECISION]", "intercept -> intercept-pack");
         setScreen("interception");
-        setOverlay({
+        const nextOverlay = {
           ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
-          versionId: route.versionId,
-          activationKey: activeActivation.activationKey,
-        });
+          ...buildFakeLauncherOverlayContext(route.versionId, activeActivation.activationKey),
+        };
+        console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+        console.log("[CARD_ORIGIN] intercept pack created", nextOverlay);
+        setOverlay(nextOverlay);
         return;
       }
 
       console.log("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
       console.log("[LAUNCH_DIAG_DECISION] intercept -> continue-to-app");
+      console.log("[CACHED OVERLAY SELECTED]", { type: "continue-to-app", versionId: route.versionId });
       debugLaunch("[LAUNCH_DECISION]", "intercept -> continue-to-app");
       setScreen("interception");
-      setOverlay({
-        type: "continue-to-app",
-        versionId: route.versionId,
-        activationKey: activeActivation.activationKey,
-      });
+      const nextOverlay = buildFakeLauncherContinueOverlay(route.versionId, activeActivation.activationKey);
+      console.log("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+      console.log("[CARD_ORIGIN] intercept continue-to-app created", nextOverlay);
+      setOverlay(nextOverlay);
       return;
     }
 
     if (route.kind === "caught-up") {
       setScreen("library");
-      setOverlay(buildEmptyOverlay());
+      const nextOverlay = { ...buildEmptyOverlay(), origin: "home" };
+      console.log("[CARD_ORIGIN] caught-up created", nextOverlay);
+      setOverlay(nextOverlay);
       return;
     }
 
@@ -1679,7 +1722,9 @@ function App() {
       if (overlay?.type === "reveal" && overlay.cardId === route.cardId) {
         return;
       }
-      setOverlay(buildRevealOverlay(route.cardId));
+      const nextOverlay = { ...buildRevealOverlay(route.cardId), origin: "home" };
+      console.log("[CARD_ORIGIN] home card created", nextOverlay);
+      setOverlay(nextOverlay);
       return;
     }
 
@@ -1745,13 +1790,17 @@ function App() {
         console.log("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
         debugLaunch("[LAUNCH_DECISION]", "personal -> reveal");
         debugLaunch("[REVEAL_SELECTED_AFTER_SYNC]", { cardId: selected.id });
-        setOverlay(buildRevealOverlay(selected.id));
+        const nextOverlay = { ...buildRevealOverlay(selected.id), origin: "home" };
+        console.log("[CARD_ORIGIN] home reveal created", nextOverlay);
+        setOverlay(nextOverlay);
         return;
       }
 
       console.log("[LAUNCH_DIAG_DECISION] personal -> empty");
       debugLaunch("[LAUNCH_DECISION]", "personal -> empty");
-      setOverlay(buildEmptyOverlay());
+      const nextOverlayEmpty = { ...buildEmptyOverlay(), origin: "home" };
+      console.log("[CARD_ORIGIN] home empty created", nextOverlayEmpty);
+      setOverlay(nextOverlayEmpty);
       return;
     }
 
@@ -1764,7 +1813,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, overlay?.type, overlay?.versionId, overlay?.cardId, logLauncherEvent]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -1786,23 +1835,37 @@ function App() {
     setScreen("library");
     if (selected) {
       console.log("[INTERCEPT] Opening fallback MyBishBash card", selected.id);
-      setOverlay(buildRevealOverlay(selected.id, versionId));
-      } else if (interruption) {
-        console.log("[INTERCEPT] No eligible card; opening interruption pack", versionId);
-        setScreen("interception");
-        setOverlay({
-          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
-          versionId: versionId,
-          activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
-        });
+      const nextOverlay = buildFakeLauncherRevealOverlay(
+        selected.id,
+        versionId,
+        interceptActivationRef.current?.activationKey || Date.now().toString(),
+      );
+      console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+      console.log("[CARD_ORIGIN] in-app intercept reveal created", nextOverlay);
+      setOverlay(nextOverlay);
+    } else if (interruption) {
+      console.log("[INTERCEPT] No eligible card; opening interruption pack", versionId);
+      setScreen("interception");
+      const nextOverlay = {
+        ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
+        ...buildFakeLauncherOverlayContext(
+          versionId,
+          interceptActivationRef.current?.activationKey || Date.now().toString(),
+        ),
+      };
+      console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+      console.log("[CARD_ORIGIN] in-app intercept pack created", nextOverlay);
+      setOverlay(nextOverlay);
     } else {
-        console.log("[INTERCEPT] No eligible card or interruption; opening continue state", versionId);
-        setScreen("interception");
-        setOverlay({
-          type: "continue-to-app",
-          versionId: versionId,
-          activationKey: interceptActivationRef.current?.activationKey || Date.now().toString(),
-        });
+      console.log("[INTERCEPT] No eligible card or interruption; opening continue state", versionId);
+      setScreen("interception");
+      const nextOverlay = buildFakeLauncherContinueOverlay(
+        versionId,
+        interceptActivationRef.current?.activationKey || Date.now().toString(),
+      );
+      console.log("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+      console.log("[CARD_ORIGIN] in-app intercept continue created", nextOverlay);
+      setOverlay(nextOverlay);
     }
     navigateTo(`/intercept/${versionId}`, { replace: true });
   }
@@ -1985,44 +2048,50 @@ function App() {
   function handleRevealCompletion() {
     console.log("[launcher context at completion]", launcherContext);
     console.log("[overlay type before handleRevealCompletion]", overlay?.type);
+    console.log("[CARD_COMPLETE_ORIGIN]", overlay?.origin);
 
-    if (overlay?.versionId && (route.kind === "intercept" || route.kind === "card")) {
+    if (overlay?.launchSource === "fake_launcher" && overlay?.versionId) {
       const versionId = overlay.versionId;
       const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
+      });
+      const activationKey = overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString();
+
+      console.log("[REVEAL COMPLETION DECISION]", {
+        launchSource: overlay.launchSource,
+        versionId,
+        routeKind: route.kind,
+        hasInterruptionPack: Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0)),
       });
 
       if (pack && (pack.cards?.length > 0 || pack.messages?.length > 0)) {
          setScreen("interception");
          const nextOverlay = {
            ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
-           versionId: versionId,
-           activationKey: overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString(),
+           ...buildFakeLauncherOverlayContext(versionId, activationKey),
          };
          setOverlay(nextOverlay);
-         console.log("[handleRevealCompletion] routing to interruption decision", nextOverlay);
+         console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+         console.log("[CONTINUE_DECISION] intercept -> routing to interruption decision", nextOverlay);
+         navigateTo(`/intercept/${versionId}`, { replace: true });
          return;
       }
 
       setScreen("interception");
-      const nextOverlay = {
-        type: "continue-to-app",
-        versionId: versionId,
-        activationKey: overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString(),
-      };
+      const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
       setOverlay(nextOverlay);
-      console.log("[handleRevealCompletion] routing to ContinueToAppCard", nextOverlay);
+      console.log("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+      console.log("[CONTINUE_DECISION] intercept -> routing to ContinueToAppCard", nextOverlay);
+      navigateTo(`/intercept/${versionId}`, { replace: true });
       return;
     }
 
-    console.log("[handleRevealCompletion] falling back to home");
+    console.log("[CONTINUE_DECISION] home -> falling back to home");
     suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
+    setScreen("library");
     navigateTo("/home", { replace: true });
-    if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
-      navigateTo("/home", { replace: true });
-    }
     setOverlay(null);
     return;
   }
@@ -2713,7 +2782,9 @@ function App() {
     });
     if (version.interruptionPaused || !pack || pack.messages.length === 0) return;
     const activeIndex = typeof cardIndex === "number" ? cardIndex : pickInterruptionCardIndex(pack, events);
-    setOverlay({ ...buildCustomPackOverlay(pack, activeIndex, "intercept-pack"), versionId });
+    const nextOverlay = { ...buildCustomPackOverlay(pack, activeIndex, "intercept-pack"), versionId, origin: "home" };
+    console.log("[CARD_ORIGIN] home interruption preview created", nextOverlay);
+    setOverlay(nextOverlay);
   }
 
   function handleUpdateHomeScreenIcon(versionId, imageDataUrl) {
@@ -2976,7 +3047,9 @@ function App() {
     const pack = cardPacks.find((item) => item.id === packId);
     const normalizedPack = normalizeInterruptionPack(pack, pack?.targetApp ?? pack?.linkedVersionId ?? "");
     if (!normalizedPack || normalizedPack.messages.length === 0) return;
-    setOverlay(buildCustomPackOverlay(normalizedPack));
+    const nextOverlay = { ...buildCustomPackOverlay(normalizedPack), origin: "home" };
+    console.log("[CARD_ORIGIN] custom pack preview created", nextOverlay);
+    setOverlay(nextOverlay);
   }
 
   const editingCard = useMemo(
@@ -3143,11 +3216,13 @@ function App() {
   );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
-  if (!authReady) {
+  const isFakeLauncherFlow = route.kind === "intercept" || overlay?.launchSource === "fake_launcher";
+
+  if (!authReady && !isFakeLauncherFlow) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (!session && route.kind !== "intercept") {
+  if (!session && !isFakeLauncherFlow) {
     return (
       <SyncConnectionScreen
         mode="connect"
@@ -3159,7 +3234,7 @@ function App() {
     );
   }
 
-  if (session && syncStatus === "loading") {
+  if (session && syncStatus === "loading" && !isFakeLauncherFlow) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
@@ -3415,16 +3490,21 @@ function App() {
             }
             suppressNextHomeAutoLaunchRef.current = true;
             setShouldLaunchOverlay(false);
+            setScreen("library");
             navigateTo("/home", { replace: true });
-            if (route.kind === "intercept" || route.kind === "card" || route.kind === "caught-up") {
-              navigateTo("/home", { replace: true });
-            }
             setOverlay(null);
           }}
           onAction={handleAction}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
-            setOverlay(buildActionSuccessOverlay(overlay?.versionId));
+            const nextOverlay = {
+              ...buildActionSuccessOverlay(overlay?.versionId),
+              origin: overlay?.origin,
+              activationKey: overlay?.activationKey,
+              launchSource: overlay?.launchSource,
+            };
+            console.log("[CARD_ORIGIN] action success created", nextOverlay);
+            setOverlay(nextOverlay);
             if (card.launchUrl) {
               window.location.href = card.launchUrl;
             }
@@ -3469,10 +3549,24 @@ function App() {
             });
             if (visibleActionCards.length === 0) {
               console.log("[ACTION CARDS] Opening empty fallback.");
-              setOverlay(buildActionCardEmptyOverlay(overlay?.versionId));
+              const nextOverlay = {
+                ...buildActionCardEmptyOverlay(overlay?.versionId),
+                origin: overlay?.origin || "home",
+                activationKey: overlay?.activationKey,
+                launchSource: overlay?.launchSource,
+              };
+              console.log("[CARD_ORIGIN] action card empty created", nextOverlay);
+              setOverlay(nextOverlay);
             } else {
               console.log("[ACTION CARDS] Opening overlay.");
-              setOverlay(buildActionCardOverlay(overlay?.versionId));
+              const nextOverlay = {
+                ...buildActionCardOverlay(overlay?.versionId),
+                origin: overlay?.origin || "home",
+                activationKey: overlay?.activationKey,
+                launchSource: overlay?.launchSource,
+              };
+              console.log("[CARD_ORIGIN] action card created", nextOverlay);
+              setOverlay(nextOverlay);
             }
           }}
           onLogEvent={logEvent}
