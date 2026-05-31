@@ -61,4 +61,10 @@ const testPilotCss = await readFile(new URL("../src/testing/TestPilot/testPilot.
 assert.match(testPilotCss, /\.testpilot-backdrop\s*{[^}]*z-index:\s*100200/s);
 assert.match(testPilotCss, /\.testpilot-sheet,\s*\n\.testpilot-modal\s*{[^}]*z-index:\s*100201/s);
 
+const toolsSheetSource = await readFile(new URL("../src/testing/TestPilot/TesterToolsSheet.jsx", import.meta.url), "utf8");
+const reportModalSource = await readFile(new URL("../src/testing/TestPilot/ReportIssueModal.jsx", import.meta.url), "utf8");
+assert.match(toolsSheetSource, /if \(activePanel !== "tools"\) return null;/);
+assert.match(reportModalSource, /<div className="testpilot-backdrop"[^>]*onMouseDown=\{closePanel\}/);
+assert.match(reportModalSource, /onMouseDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+
 console.log("TestPilot checks passed");

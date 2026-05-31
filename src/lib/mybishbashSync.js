@@ -536,31 +536,51 @@ export async function deleteAdminGlobalPack(packId) {
 }
 
 function mapLauncherConfig(row = {}) {
-  return {
+  const config = {
     id: row.launcher_id ?? row.id,
-    displayName: row.display_name ?? "",
-    name: row.display_name ?? "",
-    realAppLabel: row.real_app_label ?? "",
-    iconSrc: row.icon_src ?? "",
-    customIconSrc: row.uploaded_icon_url ?? "",
     enabled: row.enabled,
     hqVisible: row.hq_visible,
-    iosAppUrl: row.ios_app_url ?? "",
-    androidIntentUrl: row.android_intent_url ?? "",
-    webFallbackUrl: row.web_fallback_url ?? "",
     useInterruptionPack: row.use_interruption_pack,
-    interruptionPackId: row.interruption_pack_id ?? "",
     updatedAt: row.updated_at,
   };
+  const optionalFields = {
+    displayName: row.display_name,
+    name: row.display_name,
+    realAppLabel: row.real_app_label,
+    iconSrc: row.icon_src,
+    customIconSrc: row.uploaded_icon_url,
+    iosAppUrl: row.ios_app_url,
+    androidIntentUrl: row.android_intent_url,
+    webFallbackUrl: row.web_fallback_url,
+    interruptionPackId: row.interruption_pack_id,
+  };
+  Object.entries(optionalFields).forEach(([key, value]) => {
+    if (typeof value === "string" && value.trim()) config[key] = value.trim();
+  });
+  return config;
+}
+
+function withTimeout(promise, timeoutMs, fallbackValue, label) {
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = globalThis.setTimeout(() => {
+      console.warn(`[${label}] Timed out; using static defaults.`);
+      resolve(fallbackValue);
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    globalThis.clearTimeout(timeoutId);
+  });
 }
 
 export async function fetchLauncherConfigs() {
   if (isDemoMode()) return [];
   const client = requireSupabase();
-  const { data, error } = await client
+  const query = client
     .from("hq_launcher_configs")
     .select("*")
     .order("launcher_id", { ascending: true });
+  const { data, error } = await withTimeout(query, 1200, { data: [], error: null }, "HQ LAUNCHERS");
   if (error) {
     if (isMissingTableError(error) || error.code === "42501") {
       console.warn("[HQ LAUNCHERS] Falling back to static launcher defaults", error.message);

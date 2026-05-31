@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { FAKE_APP_LAUNCHERS, buildManifestForLauncher } from "../src/lib/launcherRegistry.js";
+import { FAKE_APP_LAUNCHERS, buildManifestForLauncher, mergeLauncherConfig } from "../src/lib/launcherRegistry.js";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFields = [
@@ -48,5 +48,37 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
 
 const normalLaunchEvent = { event_type: "app_opened", route: "/home" };
 assert.notEqual(normalLaunchEvent.event_type, "fake_launcher_opened");
+
+const safari = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "safari");
+const instagram = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "instagram");
+const safariWithEmptyCloudFields = mergeLauncherConfig(safari, {
+  displayName: "",
+  iosAppUrl: "",
+  androidIntentUrl: "",
+  webFallbackUrl: "",
+  manualUrl: "",
+  enabled: undefined,
+  hqVisible: undefined,
+});
+assert.equal(safariWithEmptyCloudFields.displayName, safari.displayName);
+assert.equal(safariWithEmptyCloudFields.iosAppUrl, safari.iosAppUrl);
+assert.equal(safariWithEmptyCloudFields.webFallbackUrl, safari.webFallbackUrl);
+assert.equal(safariWithEmptyCloudFields.manualUrl, safari.manualUrl);
+assert.equal(safariWithEmptyCloudFields.enabled, true);
+assert.equal(safariWithEmptyCloudFields.hqVisible, true);
+
+const instagramWithEmptyCloudFields = mergeLauncherConfig(instagram, {
+  appUrl: "",
+  iosAppUrl: "",
+  androidIntentUrl: "",
+  webFallbackUrl: "",
+});
+assert.equal(instagramWithEmptyCloudFields.appUrl, instagram.appUrl);
+assert.equal(instagramWithEmptyCloudFields.iosAppUrl, instagram.iosAppUrl);
+assert.equal(instagramWithEmptyCloudFields.androidIntentUrl, instagram.androidIntentUrl);
+assert.equal(instagramWithEmptyCloudFields.webFallbackUrl, instagram.webFallbackUrl);
+
+const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
+assert.match(syncSource, /withTimeout\(query,\s*1200,\s*\{ data: \[\], error: null \}/);
 
 console.log(`Validated ${FAKE_APP_LAUNCHERS.length} launchers.`);

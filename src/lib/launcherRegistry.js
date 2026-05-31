@@ -132,11 +132,14 @@ export function normalizeLauncherOverride(override = {}) {
     if (!(field in override)) return;
     const value = override[field];
     if (value == null) return;
+    if (typeof value === "string" && value.trim() === "") return;
     if (field.endsWith("Url")) {
-      normalized[field] = sanitizeLauncherUrl(value);
+      const safeUrl = sanitizeLauncherUrl(value);
+      if (safeUrl) normalized[field] = safeUrl;
       return;
     }
     if (["enabled", "hqVisible", "useInterruptionPack"].includes(field)) {
+      if (typeof value !== "boolean") return;
       normalized[field] = Boolean(value);
       return;
     }
