@@ -86,8 +86,12 @@ assert.match(appSource, /const isLaunchingHomeOverlay = isHomeRoute && shouldLau
 assert.doesNotMatch(appSource, /const isPersonalRoute = \["home", "library", "log", "packs", "settings"\]/);
 assert.match(appSource, /if \(isHomeRoute && shouldLaunchOverlay\)/);
 assert.doesNotMatch(appSource, /if \(isPersonalRoute && shouldLaunchOverlay\)/);
-assert.match(appSource, /useEffect\(\(\) => \{\n    saveCards\(cards\);\n  \}, \[cards\]\);/);
+assert.match(appSource, /saveCards\(cards\);/);
+assert.match(appSource, /\}, \[cards\]\);/);
 assert.match(appSource, /if \(!card\.sourcePackId \|\| card\.deletedAt \|\| card\.paused \|\| card\.disliked\) return;/);
 assert.doesNotMatch(appSource, /if \(!card\.sourcePackId \|\| !isEligible\(card, new Date\(\), profile\.timezone\) \|\| card\.deletedAt\) return;/);
+assert.match(appSource, /launchCompletedCardIdsRef/);
+assert.match(appSource, /selectedNextOverlayType/);
+assert.match(appSource, /cardsOverride/);
 
 console.log("Launcher flow checks passed");

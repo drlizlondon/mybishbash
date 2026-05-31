@@ -383,18 +383,21 @@ function pickRandomHomeCardForDisplay(
   hiddenCardIds,
   globalInterruptionMode,
   events,
+  options = {},
 ) {
+  const excludedCardIds = new Set(options.excludeCardIds ?? []);
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, behaviors, customPacks, {
     hiddenCardIds,
     globalEnabled: globalInterruptionMode,
   });
   const singles = normalized
-    .filter((card) => !card.sourcePackId && isEligible(card, new Date(), timezone))
+    .filter((card) => !excludedCardIds.has(card.id) && !card.sourcePackId && isEligible(card, new Date(), timezone))
     .map((card) => ({ type: "single", card }));
 
   const packMap = new Map();
   normalized.forEach((card) => {
+    if (excludedCardIds.has(card.id)) return;
     if (!card.sourcePackId || !isEligible(card, new Date(), timezone)) return;
     if (!packMap.has(card.sourcePackId)) {
       packMap.set(card.sourcePackId, []);
@@ -437,6 +440,25 @@ function pickRandomHomeCardForDisplay(
   }
   const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
   return { normalized, selected };
+}
+
+function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set()) {
+  const normalized = normalizeCards(currentCards, new Date(), timezone);
+  const activePackCards = normalized.filter((card) =>
+    card.sourcePackId && !card.deletedAt && !card.paused && !card.disliked && !excludedCardIds.has(card.id)
+  );
+  const eligiblePersonalCards = normalized.filter((card) =>
+    !card.sourcePackId && !card.deletedAt && !excludedCardIds.has(card.id) && isEligible(card, new Date(), timezone)
+  );
+  const eligiblePackCards = activePackCards.filter((card) => isEligible(card, new Date(), timezone));
+  return {
+    totalCardsCount: normalized.length,
+    personalCardsCount: normalized.filter((card) => !card.sourcePackId && !card.deletedAt).length,
+    packCardsCount: normalized.filter((card) => card.sourcePackId && !card.deletedAt).length,
+    activePackCardsCount: activePackCards.length,
+    eligiblePersonalCardsCount: eligiblePersonalCards.length,
+    eligiblePackCardsCount: eligiblePackCards.length,
+  };
 }
 
 function countEligibleGeneralCards(currentCards, timezone) {
@@ -732,8 +754,10 @@ function App() {
   const interceptActivationRef = useRef(null);
   const interceptActivationCounterRef = useRef(0);
   const launchAttemptCounterRef = useRef(0);
+  const launchCompletedCardIdsRef = useRef(new Set());
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
+  const cardSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
   const localDirtyRef = useRef(false);
   const highestKnownCloudTimeRef = useRef(0);
@@ -912,7 +936,19 @@ function App() {
   }, [initialState]);
 
   useEffect(() => {
-    saveCards(cards);
+    if (cardSaveTimerRef.current) {
+      window.clearTimeout(cardSaveTimerRef.current);
+    }
+    cardSaveTimerRef.current = window.setTimeout(() => {
+      saveCards(cards);
+      cardSaveTimerRef.current = null;
+    }, 120);
+    return () => {
+      if (cardSaveTimerRef.current) {
+        window.clearTimeout(cardSaveTimerRef.current);
+        cardSaveTimerRef.current = null;
+      }
+    };
   }, [cards]);
 
   useEffect(() => {
@@ -1479,6 +1515,7 @@ function App() {
 
   function selectLauncherActivationCard(versionId, source = "route") {
     const activationKey = createInterceptActivation(versionId, source);
+    launchCompletedCardIdsRef.current = new Set();
     debugLaunch("[LAUNCH_ATTEMPT] intercept started", {
       route: route.path,
       launcherContext: versionId,
@@ -1524,8 +1561,10 @@ function App() {
       dislikedPackCardIds,
       globalInterruptionMode,
       events,
+      { excludeCardIds: launchCompletedCardIdsRef.current },
     );
     const selected = fallbackDisplay.selected;
+    const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
 
     const selectedCard = interruption
       ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
@@ -1541,9 +1580,11 @@ function App() {
       packId: interruption?.pack?.id ?? null,
       cardId: selectedCard?.id ?? null,
       selectedCardId: selectedCard?.id ?? null,
+      selectedCardSource: selected?.sourcePackId ? "library_pack" : selected ? "personal" : interruption ? "interruption" : null,
       activeIndex: interruption?.activeIndex ?? null,
+      ...launcherStats,
       caughtUpReason: interruption ? null : "no eligible interrupter cards",
-      fallbackReason: null,
+      fallbackReason: selected || interruption ? null : "no eligible personal, active pack, or interruption cards",
     });
     interceptActivationRef.current = {
       activationKey,
@@ -2233,35 +2274,72 @@ function App() {
     openSpecificReveal(selected.id);
   }
 
-  function handleRevealCompletion() {
-    console.log("[launcher context at completion]", launcherContext);
-    console.log("[overlay type before handleRevealCompletion]", overlay?.type);
-    console.log("[CARD_COMPLETE_ORIGIN]", overlay?.origin);
-
+  function handleRevealCompletion(options = {}) {
     if (overlay?.launchSource === "fake_launcher" && overlay?.versionId) {
       const versionId = overlay.versionId;
+      const completedCardId = options.completedCardId ?? overlay.cardId ?? null;
+      if (completedCardId) {
+        launchCompletedCardIdsRef.current = new Set([...launchCompletedCardIdsRef.current, completedCardId]);
+      }
+      const cardsForDecision = options.cardsOverride ?? cards;
+      const excludedCardIds = launchCompletedCardIdsRef.current;
+      const fallbackDisplay = pickRandomHomeCardForDisplay(
+        cardsForDecision,
+        profile.timezone,
+        NORMAL_LAUNCHER_CONTEXT,
+        homeScreenVersions,
+        launcherBehaviorSettings,
+        cardPacks,
+        dislikedPackCardIds,
+        globalInterruptionMode,
+        events,
+        { excludeCardIds: excludedCardIds },
+      );
       const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
       });
+      const hasNextInterruptionPack = overlay.type !== "intercept-pack" && Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0));
       const activationKey = overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString();
+      const launcherStats = getLauncherCardStats(cardsForDecision, profile.timezone, excludedCardIds);
 
-      console.log("[REVEAL COMPLETION DECISION]", {
+      debugLaunch("[REVEAL COMPLETION DECISION]", {
+        pathname: window.location.pathname,
+        currentPathname: window.location.pathname,
         launchSource: overlay.launchSource,
+        origin: overlay.origin,
+        overlayTypeBeforeCompletion: overlay.type,
         versionId,
         routeKind: route.kind,
-        hasInterruptionPack: Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0)),
+        overlayVersionId: overlay.versionId,
+        selectedNextCardId: fallbackDisplay.selected?.id ?? null,
+        selectedNextOverlayType: fallbackDisplay.selected ? "reveal" : hasNextInterruptionPack ? "intercept-pack" : "continue-to-app",
+        continueReason: fallbackDisplay.selected || hasNextInterruptionPack
+          ? null
+          : "no eligible cards remain after hydration and launcher evaluation",
+        ...launcherStats,
+        hasInterruptionPack: hasNextInterruptionPack,
       });
 
-      if (pack && (pack.cards?.length > 0 || pack.messages?.length > 0)) {
+      if (fallbackDisplay.selected) {
+        setScreen("library");
+        const nextOverlay = buildFakeLauncherRevealOverlay(fallbackDisplay.selected.id, versionId, activationKey);
+        setOverlay(nextOverlay);
+        debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+        debugLaunch("[CONTINUE_DECISION] intercept -> routing to next eligible card", nextOverlay);
+        navigateTo(`/intercept/${versionId}`, { replace: true });
+        return;
+      }
+
+      if (hasNextInterruptionPack) {
          setScreen("interception");
          const nextOverlay = {
            ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
            ...buildFakeLauncherOverlayContext(versionId, activationKey),
          };
          setOverlay(nextOverlay);
-         console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-         console.log("[CONTINUE_DECISION] intercept -> routing to interruption decision", nextOverlay);
+         debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+         debugLaunch("[CONTINUE_DECISION] intercept -> routing to interruption decision", nextOverlay);
          navigateTo(`/intercept/${versionId}`, { replace: true });
          return;
       }
@@ -2269,13 +2347,13 @@ function App() {
       setScreen("interception");
       const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
       setOverlay(nextOverlay);
-      console.log("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-      console.log("[CONTINUE_DECISION] intercept -> routing to ContinueToAppCard", nextOverlay);
+      debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+      debugLaunch("[CONTINUE_DECISION] intercept -> routing to ContinueToAppCard", nextOverlay);
       navigateTo(`/intercept/${versionId}`, { replace: true });
       return;
     }
 
-    console.log("[CONTINUE_DECISION] home -> falling back to home");
+    debugLaunch("[CONTINUE_DECISION] home -> falling back to home");
     suppressNextHomeAutoLaunchRef.current = true;
     setShouldLaunchOverlay(false);
     setScreen("library");
@@ -2294,9 +2372,8 @@ function App() {
     }
 
     const updatedCard = applyCardAction(activeCard, action, new Date(), profile.timezone);
-    updateCards((current) =>
-      current.map((card) => (card.id === updatedCard.id ? updatedCard : card)),
-    );
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
     const eventType =
       action === "done"
         ? "bash_done"
@@ -2320,7 +2397,7 @@ function App() {
       },
     });
 
-    handleRevealCompletion();
+    handleRevealCompletion({ cardsOverride: cardsAfterAction, completedCardId: activeCard.id });
     return;
   }
 
@@ -2533,16 +2610,21 @@ function App() {
     const pack = visibleLibraryPacks.find((item) => item.id === packId);
     if (!pack || isPackActive(packId)) return;
 
-    updateCards((current) => {
+    setCards((current) => {
       const hasOldCards = current.some((c) => c.sourcePackId === packId);
       if (hasOldCards) {
-        return current.map((c) =>
-          c.sourcePackId === packId ? { ...c, deletedAt: null, updatedAt: new Date().toISOString() } : c
-        );
+        const now = new Date().toISOString();
+        let changed = false;
+        const next = current.map((c) => {
+          if (c.sourcePackId !== packId || c.deletedAt == null) return c;
+          changed = true;
+          return { ...c, deletedAt: null, updatedAt: now };
+        });
+        return changed ? next : current;
       }
       return [...buildCardsFromPack(pack), ...current];
     });
-    setHiddenLibraryPacks((current) => current.filter((id) => id !== packId));
+    setHiddenLibraryPacks((current) => (current.includes(packId) ? current.filter((id) => id !== packId) : current));
     void logEvent({
       event_type: "pack_activated",
       source_type: "library",
@@ -2555,13 +2637,15 @@ function App() {
 
   function deactivatePack(packId) {
     const now = new Date().toISOString();
-    updateCards((current) =>
-      current.map((card) =>
-        card.sourcePackId === packId && !card.deletedAt
-          ? { ...card, deletedAt: now, updatedAt: now }
-          : card
-      )
-    );
+    setCards((current) => {
+      let changed = false;
+      const next = current.map((card) => {
+        if (card.sourcePackId !== packId || card.deletedAt) return card;
+        changed = true;
+        return { ...card, deletedAt: now, updatedAt: now };
+      });
+      return changed ? next : current;
+    });
     const pack = visibleLibraryPacks.find((item) => item.id === packId);
     void logEvent({
       event_type: "pack_deactivated",
@@ -2619,7 +2703,7 @@ function App() {
       pack_id: card.sourcePackId,
       action_taken: "disliked",
     });
-    handleRevealCompletion();
+    handleRevealCompletion({ completedCardId: card.id });
     return;
   }
 
