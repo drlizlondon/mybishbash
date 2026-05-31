@@ -92,6 +92,7 @@ import {
   getVersionOpenHref,
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/launcherRegistry";
+import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "./lib/launcherFlow";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
   DiagnosticsModal,
@@ -609,6 +610,13 @@ function buildFakeLauncherContinueOverlay(versionId, activationKey = null) {
   };
 }
 
+function buildFakeLauncherPreparingOverlay(versionId) {
+  return {
+    type: "launcher-preparing",
+    ...buildFakeLauncherOverlayContext(versionId, `preparing:${versionId}`),
+  };
+}
+
 function buildEmptyOverlay(versionId = null) {
   return { type: "empty", versionId };
 }
@@ -766,6 +774,7 @@ function App() {
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
   const [resumeLaunchNonce, setResumeLaunchNonce] = useState(0);
+  const [launcherDataWaitExpired, setLauncherDataWaitExpired] = useState(false);
   const hiddenSinceRef = useRef(null);
   const handledResumeLaunchNonceRef = useRef(0);
   const suppressNextHomeAutoLaunchRef = useRef(false);
@@ -992,6 +1001,40 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    setLauncherDataWaitExpired(false);
+  }, [route.kind, route.versionId, resumeLaunchNonce]);
+
+  useEffect(() => {
+    const readiness = getLauncherDecisionReadiness({
+      routeKind: route.kind,
+      authReady,
+      sessionPresent: Boolean(session?.user?.id),
+      syncStatus,
+      rawCardsCount: cards.length,
+      waitExpired: launcherDataWaitExpired,
+      isDemoMode: window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true",
+    });
+    if (readiness.ready || route.kind !== "intercept") return undefined;
+    console.log("[LAUNCHER_DATA_WAIT_STARTED]", {
+      versionId: route.versionId,
+      reason: readiness.reason,
+      authReady,
+      sessionPresent: Boolean(session?.user?.id),
+      syncStatus,
+      rawCardsCount: cards.length,
+    });
+    const timeoutId = window.setTimeout(() => {
+      console.warn("[LAUNCHER_DATA_WAIT_TIMEOUT]", {
+        versionId: route.versionId,
+        timeoutMs: LAUNCHER_DATA_WAIT_TIMEOUT_MS,
+        rawCardsCount: cards.length,
+      });
+      setLauncherDataWaitExpired(true);
+    }, LAUNCHER_DATA_WAIT_TIMEOUT_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [authReady, cards.length, launcherDataWaitExpired, route.kind, route.versionId, session?.user?.id, syncStatus]);
 
   const refreshGlobalPacks = useCallback(() => {
     return fetchGlobalPacks()
@@ -1647,15 +1690,54 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      const isTestMode = Boolean(testerStatus?.is_tester);
+      const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+      const launcherReadiness = getLauncherDecisionReadiness({
+        routeKind: route.kind,
+        authReady,
+        sessionPresent: Boolean(session?.user?.id),
+        syncStatus,
+        rawCardsCount: cards.length,
+        waitExpired: launcherDataWaitExpired,
+        isDemoMode,
+      });
       console.log("[LAUNCHER ROUTE DETECTED]", {
+        routeKind: route.kind,
         route: route.path,
         versionId: route.versionId,
+        isTestMode,
         authReady,
+        sessionPresent: Boolean(session?.user?.id),
         syncStatus,
+        rawCardsCount: cards.length,
+        eligiblePersonalCount,
+        eligiblePackCount,
+        readiness: launcherReadiness,
         online: typeof navigator === "undefined" ? null : navigator.onLine,
       });
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         console.log("[OFFLINE CACHED LAUNCH USED]", { versionId: route.versionId, route: route.path });
+      }
+      if (!launcherReadiness.ready) {
+        setLauncherContext(route.versionId);
+        setScreen("interception");
+        if (overlay?.type !== "launcher-preparing" || overlay?.versionId !== route.versionId) {
+          const nextOverlay = buildFakeLauncherPreparingOverlay(route.versionId);
+          console.log("[LAUNCHER_DECISION_WAITING]", {
+            routeKind: route.kind,
+            isTestMode,
+            authReady,
+            sessionPresent: Boolean(session?.user?.id),
+            syncStatus,
+            rawCardsCount: cards.length,
+            eligiblePersonalCount,
+            eligiblePackCount,
+            reason: launcherReadiness.reason,
+            finalDecision: "preparing",
+          });
+          setOverlay(nextOverlay);
+        }
+        return;
       }
       const isResumeInterceptLaunch = resumeLaunchNonce !== handledResumeLaunchNonceRef.current;
 
@@ -1709,6 +1791,18 @@ function App() {
         console.log("[INTERCEPT_FALLBACK_SELECTED_CARD]", selected.id);
         console.log("[LAUNCH_DIAG_DECISION] intercept -> reveal");
         console.log("[CACHED OVERLAY SELECTED]", { type: "reveal", cardId: selected.id, versionId: route.versionId });
+        console.log("[LAUNCHER_FINAL_DECISION]", {
+          routeKind: route.kind,
+          isTestMode,
+          authReady,
+          sessionPresent: Boolean(session?.user?.id),
+          syncStatus,
+          rawCardsCount: cards.length,
+          eligiblePersonalCount,
+          eligiblePackCount,
+          selectedCardId: selected.id,
+          finalDecision: "personal_card",
+        });
         debugLaunch("[LAUNCH_DECISION]", "intercept -> reveal");
         const nextOverlay = buildFakeLauncherRevealOverlay(selected.id, route.versionId, activeActivation.activationKey);
         console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
@@ -1721,6 +1815,18 @@ function App() {
         console.log("[INTERCEPT_EMPTY_BUT_HAS_INTERRUPTION]");
         console.log("[LAUNCH_DIAG_DECISION] intercept -> intercept-pack");
         console.log("[CACHED OVERLAY SELECTED]", { type: "intercept-pack", versionId: route.versionId, packId: interruption.pack?.id });
+        console.log("[LAUNCHER_FINAL_DECISION]", {
+          routeKind: route.kind,
+          isTestMode,
+          authReady,
+          sessionPresent: Boolean(session?.user?.id),
+          syncStatus,
+          rawCardsCount: cards.length,
+          eligiblePersonalCount,
+          eligiblePackCount,
+          selectedCardId: interruption.pack?.cards?.[interruption.activeIndex ?? 0]?.id ?? null,
+          finalDecision: "interruption_pack",
+        });
         debugLaunch("[LAUNCH_DECISION]", "intercept -> intercept-pack");
         setScreen("interception");
         const nextOverlay = {
@@ -1736,6 +1842,18 @@ function App() {
       console.log("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
       console.log("[LAUNCH_DIAG_DECISION] intercept -> continue-to-app");
       console.log("[CACHED OVERLAY SELECTED]", { type: "continue-to-app", versionId: route.versionId });
+      console.log("[LAUNCHER_FINAL_DECISION]", {
+        routeKind: route.kind,
+        isTestMode,
+        authReady,
+        sessionPresent: Boolean(session?.user?.id),
+        syncStatus,
+        rawCardsCount: cards.length,
+        eligiblePersonalCount,
+        eligiblePackCount,
+        selectedCardId: null,
+        finalDecision: "continue_to_app",
+      });
       debugLaunch("[LAUNCH_DECISION]", "intercept -> continue-to-app");
       setScreen("interception");
       const nextOverlay = buildFakeLauncherContinueOverlay(route.versionId, activeActivation.activationKey);
@@ -1850,7 +1968,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -5613,6 +5731,21 @@ function Overlay({
   fakeLauncherVersions,
   onFakeLauncherLaunch,
 }) {
+  if (overlay.type === "launcher-preparing") {
+    return (
+      <PremiumCardScreen
+        type="empty"
+        greeting={version?.name ?? "MyBishBash"}
+        icon="heart"
+        headline="Getting your card ready..."
+        subtitle="One moment."
+        actions={[]}
+        launcherVersions={[]}
+        showHomeButton={false}
+      />
+    );
+  }
+
   if (overlay.type === "continue-to-app") {
     const handleContinue = () => {
       const href = getVersionOpenHref(version);

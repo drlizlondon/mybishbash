@@ -7,6 +7,7 @@
     "prebuild": "node scripts/generate-launchers.mjs",
     "dev": "vite",
     "build": "vite build",
+    "test:launcher-flow": "node scripts/test-launcher-flow.mjs",
     "test:testpilot": "node scripts/test-testpilot.mjs",
     "test:launchers": "node scripts/validate-launchers.mjs",
     "preview": "vite preview",
