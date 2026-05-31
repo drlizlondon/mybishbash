@@ -148,7 +148,13 @@ function setSignupOnboardingPending(value) {
   window.localStorage.removeItem(SIGNUP_ONBOARDING_PENDING_KEY);
 }
 
+function isLaunchDebugEnabled() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("bishbash.launchDebug.enabled") === "true";
+}
+
 function debugLaunch(label, payload) {
+  if (!isLaunchDebugEnabled()) return;
   console.log(label, payload);
   try {
     if (typeof window !== "undefined" && window.localStorage) {
@@ -162,6 +168,10 @@ function debugLaunch(label, payload) {
   } catch (e) {
     // ignore storage errors
   }
+}
+
+function isSameJsonValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 if (typeof window !== "undefined") {
@@ -782,8 +792,9 @@ function App() {
     () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
     [actionCards],
   );
-  const isPersonalRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
-  const isLaunchingHomeOverlay = isPersonalRoute && shouldLaunchOverlay && overlay == null;
+  const isHomeRoute = route.kind === "home";
+  const isAppTabRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
+  const isLaunchingHomeOverlay = isHomeRoute && shouldLaunchOverlay && overlay == null;
   const isPreparingIntercept = route.kind === "intercept" && overlay == null;
   const isPreparingSpecificCard = route.kind === "card" && overlay == null;
   const isPreparingCaughtUp = route.kind === "caught-up" && overlay == null;
@@ -844,30 +855,43 @@ function App() {
 
     setCards((currentCards) => {
       const merged = mergeEntitiesById(currentCards, next.cards);
-      return normalizeCards(merged, new Date(), next.profile.timezone).map((card) => ({
+      const normalized = normalizeCards(merged, new Date(), next.profile.timezone).map((card) => ({
         ...card,
         theme: resolveTheme(card.theme),
       }));
+      return isSameJsonValue(currentCards, normalized) ? currentCards : normalized;
     });
     setSetupComplete(nextSetupComplete);
     setMood(resolveTheme(next.mood));
-    setProfile({
-      name: next.profile?.name ?? "",
-      timezone: next.profile?.timezone ?? "Europe/London",
+    setProfile((currentProfile) => {
+      const nextProfile = {
+        name: next.profile?.name ?? "",
+        timezone: next.profile?.timezone ?? "Europe/London",
+      };
+      return isSameJsonValue(currentProfile, nextProfile) ? currentProfile : nextProfile;
     });
-    setCardPacks((currentPacks) => mergeEntitiesById(currentPacks, next.cardPacks));
-    setHiddenLibraryPacks(next.hiddenLibraryPacks);
-    setDislikedPackCardIds(next.dislikedPackCardIds);
+    setCardPacks((currentPacks) => {
+      const merged = mergeEntitiesById(currentPacks, next.cardPacks);
+      return isSameJsonValue(currentPacks, merged) ? currentPacks : merged;
+    });
+    setHiddenLibraryPacks((current) => (isSameJsonValue(current, next.hiddenLibraryPacks) ? current : next.hiddenLibraryPacks));
+    setDislikedPackCardIds((current) => (isSameJsonValue(current, next.dislikedPackCardIds) ? current : next.dislikedPackCardIds));
     setGlobalInterruptionMode(next.globalInterruptionMode);
 
     // Merge incoming cloud events with current local events to prevent data loss.
     // This ensures offline actions survive sync.
-    setEvents((currentEvents) => mergeEventsById(currentEvents, next.events));
-    setActionCards((current) => mergeEntitiesById(current, next.actionCards));
+    setEvents((currentEvents) => {
+      const merged = mergeEventsById(currentEvents, next.events);
+      return isSameJsonValue(currentEvents, merged) ? currentEvents : merged;
+    });
+    setActionCards((current) => {
+      const merged = mergeEntitiesById(current, next.actionCards);
+      return isSameJsonValue(current, merged) ? current : merged;
+    });
 
     const activeLauncherOverlay = activeLauncherOverlayRef.current;
     if (activeLauncherOverlay?.launchSource === "fake_launcher") {
-      console.log("[SYNC] Shared state merged without interrupting active launcher overlay", {
+      debugLaunch("[SYNC] Shared state merged without interrupting active launcher overlay", {
         overlayType: activeLauncherOverlay.type,
         versionId: activeLauncherOverlay.versionId,
       });
@@ -889,7 +913,7 @@ function App() {
 
   useEffect(() => {
     saveCards(cards);
-  }, [cards, homeScreenVersions, cardPacks]);
+  }, [cards]);
 
   useEffect(() => {
     let mounted = true;
@@ -1010,6 +1034,7 @@ function App() {
   }, [route.kind, route.versionId, resumeLaunchNonce]);
 
   useEffect(() => {
+    if (route.kind !== "intercept") return undefined;
     const routeInterruptionPack = route.kind === "intercept"
       ? getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
           hiddenCardIds: dislikedPackCardIds,
@@ -1029,8 +1054,8 @@ function App() {
       waitExpired: launcherDataWaitExpired,
       isDemoMode: window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true",
     });
-    if (readiness.ready || route.kind !== "intercept") return undefined;
-    console.log("[LAUNCHER_DATA_WAIT_STARTED]", {
+    if (readiness.ready) return undefined;
+    debugLaunch("[LAUNCHER_DATA_WAIT_STARTED]", {
       versionId: route.versionId,
       reason: readiness.reason,
       authReady,
@@ -1092,7 +1117,7 @@ function App() {
     setSyncStatus("loading");
     setSyncError("");
 
-    console.log("SESSION USER", session.user.id);
+    debugLaunch("[SYNC] session user", session.user.id);
 
     hasAccessEntitlement(session.user.id)
       .then((hasAccess) => {
@@ -1104,7 +1129,7 @@ function App() {
       })
       .then((sharedState) => {
         if (cancelled) return;
-        console.log("LOADED CLOUD STATE", sharedState);
+        debugLaunch("[SYNC] loaded cloud state", sharedState);
         const shouldRunSignupOnboarding = signupOnboardingPendingRef.current;
         if (sharedState) {
           const incomingTime = new Date(sharedState.updatedAt).getTime();
@@ -1166,7 +1191,7 @@ function App() {
 
       const saveTime = new Date(updatedAt).getTime();
 
-      console.log("SAVING CLOUD STATE", stateToSave);
+      debugLaunch("[SYNC] saving cloud state", stateToSave);
 
       saveSharedState(session.user.id, stateToSave)
         .then(() => {
@@ -1195,7 +1220,7 @@ function App() {
 
     const pollInterval = window.setInterval(() => {
       if (localDirtyRef.current) {
-        console.log("[POLLING] Skipped: Local state has unsynced changes.");
+        debugLaunch("[POLLING] skipped: local state has unsynced changes");
         return;
       }
 
@@ -1203,17 +1228,17 @@ function App() {
         .then((sharedState) => {
           if (!sharedState) return;
           if (localDirtyRef.current) {
-            console.log("[POLLING] Aborted: Local state changed during fetch.");
+            debugLaunch("[POLLING] aborted: local state changed during fetch");
             return;
           }
 
           const incomingTime = new Date(sharedState.updatedAt).getTime();
           if (!isNaN(incomingTime) && incomingTime < highestKnownCloudTimeRef.current) {
-            console.log("[POLLING] Skipped: Cloud state is older than local known state (stale read).");
+            debugLaunch("[POLLING] skipped: stale cloud state");
             return;
           }
 
-          console.log("POLLING LOADED STATE", sharedState);
+          debugLaunch("[POLLING] loaded state", sharedState);
 
           const { updatedAt, ...incomingStateContent } = sharedState;
           const incomingStateStr = JSON.stringify(incomingStateContent);
@@ -1454,7 +1479,7 @@ function App() {
 
   function selectLauncherActivationCard(versionId, source = "route") {
     const activationKey = createInterceptActivation(versionId, source);
-    console.log("[LAUNCH_ATTEMPT] intercept started", {
+    debugLaunch("[LAUNCH_ATTEMPT] intercept started", {
       route: route.path,
       launcherContext: versionId,
       launchAttemptId: activationKey,
@@ -1505,7 +1530,7 @@ function App() {
     const selectedCard = interruption
       ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
       : selected;
-    console.log("[LAUNCH_ATTEMPT] intercept resolved", {
+    debugLaunch("[LAUNCH_ATTEMPT] intercept resolved", {
       route: route.path,
       launcherContext: versionId,
       launchAttemptId: activationKey,
@@ -1567,7 +1592,7 @@ function App() {
         setShouldLaunchOverlay(false);
         setLauncherContext(resumeRoute.versionId);
         setResumeLaunchNonce((current) => current + 1);
-        console.log("[LAUNCH_ATTEMPT] intercept resume", {
+        debugLaunch("[LAUNCH_ATTEMPT] intercept resume", {
           route: resumeRoute.path,
           launcherContext: resumeRoute.versionId,
           launchAttemptId: `${resumeRoute.versionId}:${source}:${Date.now()}`,
@@ -1641,29 +1666,7 @@ function App() {
     }
   }, []);
 
-  useLayoutEffect(() => {
-    const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
-    const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
-    const eligiblePackCount = normalizedDiagCards.filter((c) => c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
-    const diagInterruptionPack = getInterruptionPackForLauncher(launcherContext, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-      hiddenCardIds: dislikedPackCardIds,
-      globalEnabled: globalInterruptionMode,
-    });
-
-    console.log("[LAUNCH_DIAG_ROUTE]", {
-      routeKind: route.kind,
-      routePath: route.path,
-      launcherContext,
-      isPersonalRoute,
-      shouldLaunchOverlay,
-      overlayType: overlay?.type,
-    });
-    console.log("[LAUNCH_DIAG_ELIGIBLE]", {
-      eligiblePersonalCount,
-      eligiblePackCount,
-      isInterruptionPackActive: (diagInterruptionPack?.cards?.length ?? 0) > 0,
-    });
-
+  useEffect(() => {
     if (route.kind !== "intercept" && overlay?.launchSource !== "fake_launcher" && interceptActivationRef.current) {
       interceptActivationRef.current = null;
     }
@@ -1707,6 +1710,9 @@ function App() {
     if (route.kind === "intercept") {
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+      const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
+      const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
+      const eligiblePackCount = normalizedDiagCards.filter((c) => c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
       const routeInterruptionPack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
@@ -1724,7 +1730,7 @@ function App() {
         waitExpired: launcherDataWaitExpired,
         isDemoMode,
       });
-      console.log("[LAUNCHER ROUTE DETECTED]", {
+      debugLaunch("[LAUNCHER ROUTE DETECTED]", {
         routeKind: route.kind,
         route: route.path,
         versionId: route.versionId,
@@ -1741,14 +1747,14 @@ function App() {
         online: typeof navigator === "undefined" ? null : navigator.onLine,
       });
       if (typeof navigator !== "undefined" && !navigator.onLine) {
-        console.log("[OFFLINE CACHED LAUNCH USED]", { versionId: route.versionId, route: route.path });
+        debugLaunch("[OFFLINE CACHED LAUNCH USED]", { versionId: route.versionId, route: route.path });
       }
       if (!launcherReadiness.ready) {
         setLauncherContext(route.versionId);
         setScreen("interception");
         if (overlay?.type !== "launcher-preparing" || overlay?.versionId !== route.versionId) {
           const nextOverlay = buildFakeLauncherPreparingOverlay(route.versionId);
-          console.log("[LAUNCHER_DECISION_WAITING]", {
+          debugLaunch("[LAUNCHER_DECISION_WAITING]", {
             routeKind: route.kind,
             isTestMode,
             authReady,
@@ -1777,7 +1783,7 @@ function App() {
       }
 
       if (!isResumeInterceptLaunch && ["intercept-pack", "continue-to-app"].includes(overlay?.type) && overlay?.versionId === route.versionId) {
-        console.log("[INTERCEPT] skipped rebuild because overlay already active", {
+        debugLaunch("[INTERCEPT] skipped rebuild because overlay already active", {
           versionId: route.versionId,
           activationKey: interceptActivationRef.current?.activationKey ?? null,
         });
@@ -1811,14 +1817,14 @@ function App() {
 
       const eligibleCount = countEligibleGeneralCards(cards, profile.timezone);
       if (eligibleCount > 0) {
-        console.log("[INTERCEPT_FALLBACK_AVAILABLE]", { eligibleCount });
+        debugLaunch("[INTERCEPT_FALLBACK_AVAILABLE]", { eligibleCount });
       }
 
       if (selected) {
-        console.log("[INTERCEPT_FALLBACK_SELECTED_CARD]", selected.id);
-        console.log("[LAUNCH_DIAG_DECISION] intercept -> reveal");
-        console.log("[CACHED OVERLAY SELECTED]", { type: "reveal", cardId: selected.id, versionId: route.versionId });
-        console.log("[LAUNCHER_FINAL_DECISION]", {
+        debugLaunch("[INTERCEPT_FALLBACK_SELECTED_CARD]", selected.id);
+        debugLaunch("[LAUNCH_DIAG_DECISION]", "intercept -> reveal");
+        debugLaunch("[CACHED OVERLAY SELECTED]", { type: "reveal", cardId: selected.id, versionId: route.versionId });
+        debugLaunch("[LAUNCHER_FINAL_DECISION]", {
           routeKind: route.kind,
           isTestMode,
           authReady,
@@ -1832,17 +1838,17 @@ function App() {
         });
         debugLaunch("[LAUNCH_DECISION]", "intercept -> reveal");
         const nextOverlay = buildFakeLauncherRevealOverlay(selected.id, route.versionId, activeActivation.activationKey);
-        console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-        console.log("[CARD_ORIGIN] intercept reveal created", nextOverlay);
+        debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+        debugLaunch("[CARD_ORIGIN] intercept reveal created", nextOverlay);
         setOverlay(nextOverlay);
         return;
       }
 
       if (interruption) {
-        console.log("[INTERCEPT_EMPTY_BUT_HAS_INTERRUPTION]");
-        console.log("[LAUNCH_DIAG_DECISION] intercept -> intercept-pack");
-        console.log("[CACHED OVERLAY SELECTED]", { type: "intercept-pack", versionId: route.versionId, packId: interruption.pack?.id });
-        console.log("[LAUNCHER_FINAL_DECISION]", {
+        debugLaunch("[INTERCEPT_EMPTY_BUT_HAS_INTERRUPTION]");
+        debugLaunch("[LAUNCH_DIAG_DECISION]", "intercept -> intercept-pack");
+        debugLaunch("[CACHED OVERLAY SELECTED]", { type: "intercept-pack", versionId: route.versionId, packId: interruption.pack?.id });
+        debugLaunch("[LAUNCHER_FINAL_DECISION]", {
           routeKind: route.kind,
           isTestMode,
           authReady,
@@ -1860,16 +1866,16 @@ function App() {
           ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
           ...buildFakeLauncherOverlayContext(route.versionId, activeActivation.activationKey),
         };
-        console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-        console.log("[CARD_ORIGIN] intercept pack created", nextOverlay);
+        debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+        debugLaunch("[CARD_ORIGIN] intercept pack created", nextOverlay);
         setOverlay(nextOverlay);
         return;
       }
 
-      console.log("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
-      console.log("[LAUNCH_DIAG_DECISION] intercept -> continue-to-app");
-      console.log("[CACHED OVERLAY SELECTED]", { type: "continue-to-app", versionId: route.versionId });
-      console.log("[LAUNCHER_FINAL_DECISION]", {
+      debugLaunch("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
+      debugLaunch("[LAUNCH_DIAG_DECISION]", "intercept -> continue-to-app");
+      debugLaunch("[CACHED OVERLAY SELECTED]", { type: "continue-to-app", versionId: route.versionId });
+      debugLaunch("[LAUNCHER_FINAL_DECISION]", {
         routeKind: route.kind,
         isTestMode,
         authReady,
@@ -1884,8 +1890,8 @@ function App() {
       debugLaunch("[LAUNCH_DECISION]", "intercept -> continue-to-app");
       setScreen("interception");
       const nextOverlay = buildFakeLauncherContinueOverlay(route.versionId, activeActivation.activationKey);
-      console.log("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-      console.log("[CARD_ORIGIN] intercept continue-to-app created", nextOverlay);
+      debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] intercept continue-to-app created", nextOverlay);
       setOverlay(nextOverlay);
       return;
     }
@@ -1893,7 +1899,7 @@ function App() {
     if (route.kind === "caught-up") {
       setScreen("library");
       const nextOverlay = { ...buildEmptyOverlay(), origin: "home" };
-      console.log("[CARD_ORIGIN] caught-up created", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] caught-up created", nextOverlay);
       setOverlay(nextOverlay);
       return;
     }
@@ -1905,17 +1911,17 @@ function App() {
         return;
       }
       const nextOverlay = { ...buildRevealOverlay(route.cardId), origin: "home" };
-      console.log("[CARD_ORIGIN] home card created", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] home card created", nextOverlay);
       setOverlay(nextOverlay);
       return;
     }
 
-    if (isPersonalRoute && shouldLaunchOverlay) {
+    if (isHomeRoute && shouldLaunchOverlay) {
       if (suppressNextHomeAutoLaunchRef.current) {
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-        console.log("[LAUNCH_ATTEMPT] personal suppressed", {
+        debugLaunch("[LAUNCH_ATTEMPT] personal suppressed", {
           route: route.path,
           launcherContext: NORMAL_LAUNCHER_CONTEXT,
           launchAttemptId: createLaunchAttemptId("personal", "suppressed"),
@@ -1927,11 +1933,11 @@ function App() {
         return;
       }
 
-      console.log("[LAUNCH_CHECK] evaluating personal route launch", {
+      debugLaunch("[LAUNCH_CHECK] evaluating personal route launch", {
         route: route.path,
         shouldLaunchOverlay,
         overlayType: overlay?.type,
-        isPersonalRoute
+        isHomeRoute,
       });
 
       const launchAttemptId = createLaunchAttemptId("personal", "route");
@@ -1955,10 +1961,10 @@ function App() {
 
       setShouldLaunchOverlay(false);
 
-      console.log("[SELECTED_CARD]", selected);
-      console.log("[EMPTY_REASON]", selected ? null : "No eligible cards found at launch check.");
+      debugLaunch("[SELECTED_CARD]", selected);
+      debugLaunch("[EMPTY_REASON]", selected ? null : "No eligible cards found at launch check.");
 
-      console.log("[LAUNCH_ATTEMPT] personal resolved", {
+      debugLaunch("[LAUNCH_ATTEMPT] personal resolved", {
         route: route.path,
         launcherContext: NORMAL_LAUNCHER_CONTEXT,
         launchAttemptId,
@@ -1968,25 +1974,25 @@ function App() {
         fallbackReason: null,
       });
       if (selected) {
-        console.log("[LAUNCH_DIAG_DECISION] personal -> reveal");
-        console.log("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
+        debugLaunch("[LAUNCH_DIAG_DECISION]", "personal -> reveal");
+        debugLaunch("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
         debugLaunch("[LAUNCH_DECISION]", "personal -> reveal");
         debugLaunch("[REVEAL_SELECTED_AFTER_SYNC]", { cardId: selected.id });
         const nextOverlay = { ...buildRevealOverlay(selected.id), origin: "home" };
-        console.log("[CARD_ORIGIN] home reveal created", nextOverlay);
+        debugLaunch("[CARD_ORIGIN] home reveal created", nextOverlay);
         setOverlay(nextOverlay);
         return;
       }
 
-      console.log("[LAUNCH_DIAG_DECISION] personal -> empty");
+      debugLaunch("[LAUNCH_DIAG_DECISION]", "personal -> empty");
       debugLaunch("[LAUNCH_DECISION]", "personal -> empty");
       const nextOverlayEmpty = { ...buildEmptyOverlay(), origin: "home" };
-      console.log("[CARD_ORIGIN] home empty created", nextOverlayEmpty);
+      debugLaunch("[CARD_ORIGIN] home empty created", nextOverlayEmpty);
       setOverlay(nextOverlayEmpty);
       return;
     }
 
-    if (isPersonalRoute) {
+    if (isAppTabRoute) {
       if (route.kind === "home" && (overlay?.type === "reveal" || overlay?.type === "empty")) {
         return;
       }
@@ -2005,7 +2011,7 @@ function App() {
   }
 
   function startInterceptionFlow(versionId) {
-    console.log("[INTERCEPT] Starting interception flow", versionId);
+    debugLaunch("[INTERCEPT] Starting interception flow", versionId);
     suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
@@ -2016,17 +2022,17 @@ function App() {
 
     setScreen("library");
     if (selected) {
-      console.log("[INTERCEPT] Opening fallback MyBishBash card", selected.id);
+      debugLaunch("[INTERCEPT] Opening fallback MyBishBash card", selected.id);
       const nextOverlay = buildFakeLauncherRevealOverlay(
         selected.id,
         versionId,
         interceptActivationRef.current?.activationKey || Date.now().toString(),
       );
-      console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-      console.log("[CARD_ORIGIN] in-app intercept reveal created", nextOverlay);
+      debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] in-app intercept reveal created", nextOverlay);
       setOverlay(nextOverlay);
     } else if (interruption) {
-      console.log("[INTERCEPT] No eligible card; opening interruption pack", versionId);
+      debugLaunch("[INTERCEPT] No eligible card; opening interruption pack", versionId);
       setScreen("interception");
       const nextOverlay = {
         ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
@@ -2035,18 +2041,18 @@ function App() {
           interceptActivationRef.current?.activationKey || Date.now().toString(),
         ),
       };
-      console.log("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-      console.log("[CARD_ORIGIN] in-app intercept pack created", nextOverlay);
+      debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] in-app intercept pack created", nextOverlay);
       setOverlay(nextOverlay);
     } else {
-      console.log("[INTERCEPT] No eligible card or interruption; opening continue state", versionId);
+      debugLaunch("[INTERCEPT] No eligible card or interruption; opening continue state", versionId);
       setScreen("interception");
       const nextOverlay = buildFakeLauncherContinueOverlay(
         versionId,
         interceptActivationRef.current?.activationKey || Date.now().toString(),
       );
-      console.log("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-      console.log("[CARD_ORIGIN] in-app intercept continue created", nextOverlay);
+      debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] in-app intercept continue created", nextOverlay);
       setOverlay(nextOverlay);
     }
     navigateTo(`/intercept/${versionId}`, { replace: true });

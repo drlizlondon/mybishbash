@@ -81,5 +81,11 @@ assert.match(appSource, /\[\"intercept-pack\", "continue-to-app"\]\.includes\(ov
 assert.match(appSource, /if \(!launcherReadiness\.ready\)/);
 assert.match(appSource, /finalDecision: "personal_card"/);
 assert.match(appSource, /finalDecision: "continue_to_app"/);
+assert.match(appSource, /const isHomeRoute = route\.kind === "home";/);
+assert.match(appSource, /const isLaunchingHomeOverlay = isHomeRoute && shouldLaunchOverlay && overlay == null;/);
+assert.doesNotMatch(appSource, /const isPersonalRoute = \["home", "library", "log", "packs", "settings"\]/);
+assert.match(appSource, /if \(isHomeRoute && shouldLaunchOverlay\)/);
+assert.doesNotMatch(appSource, /if \(isPersonalRoute && shouldLaunchOverlay\)/);
+assert.match(appSource, /useEffect\(\(\) => \{\n    saveCards\(cards\);\n  \}, \[cards\]\);/);
 
 console.log("Launcher flow checks passed");
