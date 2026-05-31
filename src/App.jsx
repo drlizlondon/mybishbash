@@ -576,8 +576,8 @@ function getPackRepresentative(cards, packId) {
   return packCards.find((card) => !card.paused && !card.disliked) ?? null;
 }
 
-function buildLibraryPackHomeItem(packId, packCards) {
-  const representative = packCards[0];
+function buildLibraryPackHomeItem(packId, packCards, timezone) {
+  const representative = packCards.find((card) => isEligible(card, new Date(), timezone)) ?? packCards[0];
   const pack = PACKS.find((item) => item.id === packId);
   const packTitle = pack?.title ?? representative.dashboardTitle ?? representative.promptText;
   return {
@@ -3280,7 +3280,7 @@ function App() {
 
     const packMap = new Map();
     cards.forEach((card) => {
-      if (!card.sourcePackId || !isEligible(card, new Date(), profile.timezone) || card.deletedAt) return;
+      if (!card.sourcePackId || card.deletedAt || card.paused || card.disliked) return;
       if (!packMap.has(card.sourcePackId)) {
         packMap.set(card.sourcePackId, []);
       }
@@ -3288,7 +3288,7 @@ function App() {
     });
 
     packMap.forEach((packCards, packId) => {
-      items.push(buildLibraryPackHomeItem(packId, packCards));
+      items.push(buildLibraryPackHomeItem(packId, packCards, profile.timezone));
     });
 
     Object.values(homeScreenVersions).forEach((version) => {
