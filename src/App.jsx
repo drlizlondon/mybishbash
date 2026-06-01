@@ -5825,6 +5825,10 @@ function Overlay({
   onFakeLauncherLaunch,
   onContinueToApp,
 }) {
+  const launcherInterceptionClass = overlay?.launchSource === "fake_launcher" || overlay?.versionId
+    ? "launcher-interception-card"
+    : "";
+
   if (overlay.type === "launcher-preparing") {
     return (
       <PremiumCardScreen
@@ -5836,6 +5840,7 @@ function Overlay({
         actions={[]}
         launcherVersions={[]}
         showHomeButton={false}
+        className={launcherInterceptionClass}
       />
     );
   }
@@ -5865,6 +5870,7 @@ function Overlay({
         appIcon={version?.customIconSrc || version?.iconSrc}
         onContinue={handleContinue}
         onBack={handleBack}
+        className={launcherInterceptionClass}
       />
     );
   }
@@ -5905,6 +5911,7 @@ function Overlay({
         onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={!isIntercept}
         onHome={onClose}
+        className={launcherInterceptionClass}
       />
     );
   }
@@ -5937,6 +5944,7 @@ function Overlay({
         onLogEvent={onLogEvent}
         fakeLauncherVersions={fakeLauncherVersions}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
+        className={launcherInterceptionClass}
       />
     );
   }
@@ -5952,6 +5960,7 @@ function Overlay({
         onContinueToApp={onContinueToApp}
         fakeLauncherVersions={fakeLauncherVersions}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
+        className={launcherInterceptionClass}
       />
     );
   }
@@ -5963,6 +5972,7 @@ function Overlay({
         version={version}
         onClose={onClose}
         onContinueToApp={onContinueToApp}
+        className={launcherInterceptionClass}
       />
     );
   }
@@ -5996,7 +6006,7 @@ function Overlay({
       onLauncherLaunch={onFakeLauncherLaunch}
       showHomeButton={true}
       onHome={onClose}
-      className={overlay.phase === "dissolving" ? "is-dissolving" : ""}
+      className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
     />
   );
 }
@@ -6244,6 +6254,7 @@ function ActionCardOverlay({
   onLogEvent,
   fakeLauncherVersions,
   onFakeLauncherLaunch,
+  className = "",
 }) {
   console.log("[ACTION CARDS] Overlay rendered");
 
@@ -6354,12 +6365,13 @@ function ActionCardOverlay({
         onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={true}
         onHome={onClose}
+        className={className}
       />
     </div>
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, className = "" }) {
   function handleContinueToApp() {
     if (!version) return;
 
@@ -6392,12 +6404,13 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={true}
         onHome={onClose}
+        className={className}
       />
     </div>
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onContinueToApp }) {
+function ActionSuccessOverlay({ version, onClose, onContinueToApp, className = "" }) {
   const actions = version
     ? [
         { label: "Continue to App", variant: "primary", onClick: () => onContinueToApp?.(version.id, { source: "action_card_success", reason: "user_pressed_continue" }) },
@@ -6415,6 +6428,7 @@ function ActionSuccessOverlay({ version, onClose, onContinueToApp }) {
       actions={actions}
       showHomeButton={true}
       onHome={onClose}
+      className={className}
     />
   );
 }
@@ -6602,6 +6616,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         launcherVersions={version ? [version] : []}
         onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={false}
+        className="launcher-interception-card"
       >
         {hasMultipleMessages ? (
           <div className="premium-card-pagination">
@@ -6944,9 +6959,9 @@ function LegalPage({ title, docUrl }) {
   );
 }
 
-function ContinueToAppCard({ appName, appIcon, onContinue, onBack }) {
+function ContinueToAppCard({ appName, appIcon, onContinue, onBack, className = "" }) {
   return (
-    <div className="premium-card-screen premium-card-personal">
+    <div className={`premium-card-screen premium-card-personal ${className}`.trim()}>
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header" />
         <section className="premium-card-message-section" style={{ alignItems: 'center', textAlign: 'center' }}>
