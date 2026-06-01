@@ -252,7 +252,7 @@ export async function hasAccessEntitlement(userId) {
 }
 
 export function onAuthStateChange(callback) {
-  if (isDemoMode()) {
+  if (isDemoMode() || !supabase) {
     return { data: { subscription: { unsubscribe: () => {} } } };
   }
   const client = requireSupabase();
