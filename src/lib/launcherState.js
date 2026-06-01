@@ -115,10 +115,6 @@ export function getVersionOpenHref(version) {
   return href;
 }
 
-export function openSafariEscape() {
-  window.location.href = getVersionOpenHref({ id: "safari" }) || "https://www.google.com";
-}
-
 export function isInterruptionLauncherContext(value) {
   return isKnownLauncher(value);
 }

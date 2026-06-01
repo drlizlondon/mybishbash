@@ -314,11 +314,6 @@ function getInstallUrl(path) {
   return new URL(path, window.location.origin).toString();
 }
 
-function openNativeApp(appUrl) {
-  if (!appUrl) return;
-  window.location.href = appUrl;
-}
-
 function isMeaningfulEvent(event) {
   return event.event_type !== "intercept_card_viewed";
 }
@@ -440,6 +435,23 @@ function pickRandomHomeCardForDisplay(
   }
   const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
   return { normalized, selected };
+}
+
+function pickRandomPersonalCardForLauncher(currentCards, timezone, excludedCardIds = new Set()) {
+  const normalized = normalizeCards(currentCards, new Date(), timezone);
+  const candidates = normalized.filter((card) =>
+    !excludedCardIds.has(card.id) &&
+    !card.sourcePackId &&
+    !card.deletedAt &&
+    isEligible(card, new Date(), timezone)
+  );
+  if (candidates.length === 0) {
+    return { normalized, selected: null };
+  }
+  return {
+    normalized,
+    selected: candidates[Math.floor(Math.random() * candidates.length)],
+  };
 }
 
 function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set()) {
@@ -638,6 +650,13 @@ function buildFakeLauncherRevealOverlay(cardId, versionId, activationKey = null)
 function buildFakeLauncherContinueOverlay(versionId, activationKey = null) {
   return {
     type: "continue-to-app",
+    ...buildFakeLauncherOverlayContext(versionId, activationKey),
+  };
+}
+
+function buildFakeLauncherEmptyOverlay(versionId, activationKey = null) {
+  return {
+    ...buildEmptyOverlay(versionId),
     ...buildFakeLauncherOverlayContext(versionId, activationKey),
   };
 }
@@ -1551,17 +1570,10 @@ function App() {
         }
       : null;
 
-    const fallbackDisplay = pickRandomHomeCardForDisplay(
+    const fallbackDisplay = pickRandomPersonalCardForLauncher(
       cards,
       profile.timezone,
-      NORMAL_LAUNCHER_CONTEXT,
-      homeScreenVersions,
-      launcherBehaviorSettings,
-      cardPacks,
-      dislikedPackCardIds,
-      globalInterruptionMode,
-      events,
-      { excludeCardIds: launchCompletedCardIdsRef.current },
+      launchCompletedCardIdsRef.current,
     );
     const selected = fallbackDisplay.selected;
     const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
@@ -1836,7 +1848,6 @@ function App() {
         return;
       }
 
-      setLauncherContext(route.versionId);
       if (isResumeInterceptLaunch) {
         handledResumeLaunchNonceRef.current = resumeLaunchNonce;
         interceptActivationRef.current = null;
@@ -1844,78 +1855,7 @@ function App() {
       const launcherOpenKey = `${route.versionId}:${route.path}:${session?.user?.id ?? "anon"}`;
       if (loggedLauncherOpenRef.current !== launcherOpenKey) {
         loggedLauncherOpenRef.current = launcherOpenKey;
-        void logLauncherEvent("first_interruption_seen", route.versionId, {
-          launched_from: isResumeInterceptLaunch ? "home_screen_resume" : "route",
-        });
       }
-      const activeActivation =
-        !isResumeInterceptLaunch && interceptActivationRef.current?.versionId === route.versionId
-          ? interceptActivationRef.current
-          : selectLauncherActivationCard(route.versionId, isResumeInterceptLaunch ? "resume" : "route");
-      const { selected, interruption } = activeActivation;
-
-      setScreen("library");
-
-      const eligibleCount = countEligibleGeneralCards(cards, profile.timezone);
-      if (eligibleCount > 0) {
-        debugLaunch("[INTERCEPT_FALLBACK_AVAILABLE]", { eligibleCount });
-      }
-
-      if (selected) {
-        debugLaunch("[INTERCEPT_FALLBACK_SELECTED_CARD]", selected.id);
-        debugLaunch("[LAUNCH_DIAG_DECISION]", "intercept -> reveal");
-        debugLaunch("[CACHED OVERLAY SELECTED]", { type: "reveal", cardId: selected.id, versionId: route.versionId });
-        debugLaunch("[LAUNCHER_FINAL_DECISION]", {
-          routeKind: route.kind,
-          isTestMode,
-          authReady,
-          sessionPresent: Boolean(session?.user?.id),
-          syncStatus,
-          rawCardsCount: cards.length,
-          eligiblePersonalCount,
-          eligiblePackCount,
-          selectedCardId: selected.id,
-          finalDecision: "personal_card",
-        });
-        debugLaunch("[LAUNCH_DECISION]", "intercept -> reveal");
-        const nextOverlay = buildFakeLauncherRevealOverlay(selected.id, route.versionId, activeActivation.activationKey);
-        debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-        debugLaunch("[CARD_ORIGIN] intercept reveal created", nextOverlay);
-        setOverlay(nextOverlay);
-        return;
-      }
-
-      if (interruption) {
-        debugLaunch("[INTERCEPT_EMPTY_BUT_HAS_INTERRUPTION]");
-        debugLaunch("[LAUNCH_DIAG_DECISION]", "intercept -> intercept-pack");
-        debugLaunch("[CACHED OVERLAY SELECTED]", { type: "intercept-pack", versionId: route.versionId, packId: interruption.pack?.id });
-        debugLaunch("[LAUNCHER_FINAL_DECISION]", {
-          routeKind: route.kind,
-          isTestMode,
-          authReady,
-          sessionPresent: Boolean(session?.user?.id),
-          syncStatus,
-          rawCardsCount: cards.length,
-          eligiblePersonalCount,
-          eligiblePackCount,
-          selectedCardId: interruption.pack?.cards?.[interruption.activeIndex ?? 0]?.id ?? null,
-          finalDecision: "interruption_pack",
-        });
-        debugLaunch("[LAUNCH_DECISION]", "intercept -> intercept-pack");
-        setScreen("interception");
-        const nextOverlay = {
-          ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
-          ...buildFakeLauncherOverlayContext(route.versionId, activeActivation.activationKey),
-        };
-        debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-        debugLaunch("[CARD_ORIGIN] intercept pack created", nextOverlay);
-        setOverlay(nextOverlay);
-        return;
-      }
-
-      debugLaunch("[INTERCEPT_EMPTY_CONFIRMED]", { eligibleCount });
-      debugLaunch("[LAUNCH_DIAG_DECISION]", "intercept -> continue-to-app");
-      debugLaunch("[CACHED OVERLAY SELECTED]", { type: "continue-to-app", versionId: route.versionId });
       debugLaunch("[LAUNCHER_FINAL_DECISION]", {
         routeKind: route.kind,
         isTestMode,
@@ -1925,15 +1865,12 @@ function App() {
         rawCardsCount: cards.length,
         eligiblePersonalCount,
         eligiblePackCount,
-        selectedCardId: null,
-        finalDecision: "continue_to_app",
+        finalDecision: "begin_interception_flow",
       });
-      debugLaunch("[LAUNCH_DECISION]", "intercept -> continue-to-app");
-      setScreen("interception");
-      const nextOverlay = buildFakeLauncherContinueOverlay(route.versionId, activeActivation.activationKey);
-      debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-      debugLaunch("[CARD_ORIGIN] intercept continue-to-app created", nextOverlay);
-      setOverlay(nextOverlay);
+      beginInterceptionFlow(route.versionId, {
+        source: isResumeInterceptLaunch ? "home_screen_resume" : "route",
+        navigate: false,
+      });
       return;
     }
 
@@ -2051,79 +1988,118 @@ function App() {
     setRoutePath(normalized);
   }
 
-  function startInterceptionFlow(versionId) {
-    debugLaunch("[INTERCEPT] Starting interception flow", versionId);
+  function renderInterceptionDecision(versionId, activation, { source = "route" } = {}) {
+    const { selected, interruption, activationKey } = activation;
+
+    setScreen(selected ? "library" : "interception");
+
+    if (selected) {
+      debugLaunch("[INTERCEPT] Opening fallback MyBishBash card", { versionId, source, cardId: selected.id });
+      debugLaunch("[LAUNCHER_FINAL_DECISION]", {
+        source,
+        versionId,
+        selectedCardId: selected.id,
+        finalDecision: "personal_card",
+      });
+      const nextOverlay = buildFakeLauncherRevealOverlay(selected.id, versionId, activationKey);
+      debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] launcher reveal created", nextOverlay);
+      setOverlay(nextOverlay);
+      return nextOverlay;
+    }
+
+    if (interruption) {
+      debugLaunch("[INTERCEPT] Opening interruption pack", { versionId, source, packId: interruption.pack?.id });
+      debugLaunch("[LAUNCHER_FINAL_DECISION]", {
+        source,
+        versionId,
+        selectedCardId: interruption.pack?.cards?.[interruption.activeIndex ?? 0]?.id ?? null,
+        finalDecision: "interruption_pack",
+      });
+      const nextOverlay = {
+        ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
+        ...buildFakeLauncherOverlayContext(versionId, activationKey),
+      };
+      debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+      debugLaunch("[CARD_ORIGIN] launcher pack created", nextOverlay);
+      setOverlay(nextOverlay);
+      return nextOverlay;
+    }
+
+    debugLaunch("[INTERCEPT] No eligible personal card or interruption; showing caught-up launcher state", {
+      versionId,
+      source,
+    });
+    debugLaunch("[LAUNCHER_FINAL_DECISION]", {
+      source,
+      versionId,
+      selectedCardId: null,
+      finalDecision: "caught_up_empty",
+    });
+    const nextOverlay = buildFakeLauncherEmptyOverlay(versionId, activationKey);
+    debugLaunch("[CARD_ORIGIN] launcher empty created", nextOverlay);
+    setOverlay(nextOverlay);
+    return nextOverlay;
+  }
+
+  function beginInterceptionFlow(versionId, { source = "launcher", replace = true, navigate = true } = {}) {
+    debugLaunch("[INTERCEPT] Starting interception flow", { versionId, source });
     suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
     loggedLauncherOpenRef.current = `${versionId}:/intercept/${versionId}:${session?.user?.id ?? "anon"}`;
-    void logLauncherEvent("first_interruption_seen", versionId, { launched_from: "in_app_fake_launcher_bar" });
+    void logLauncherEvent("first_interruption_seen", versionId, { launched_from: source });
 
-    const { selected, interruption } = selectLauncherActivationCard(versionId, "in_app_fake_launcher_bar");
-
-    setScreen("library");
-    if (selected) {
-      debugLaunch("[INTERCEPT] Opening fallback MyBishBash card", selected.id);
-      const nextOverlay = buildFakeLauncherRevealOverlay(
-        selected.id,
-        versionId,
-        interceptActivationRef.current?.activationKey || Date.now().toString(),
-      );
-      debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-      debugLaunch("[CARD_ORIGIN] in-app intercept reveal created", nextOverlay);
-      setOverlay(nextOverlay);
-    } else if (interruption) {
-      debugLaunch("[INTERCEPT] No eligible card; opening interruption pack", versionId);
-      setScreen("interception");
-      const nextOverlay = {
-        ...buildCustomPackOverlay(interruption.pack, interruption.activeIndex, "intercept-pack"),
-        ...buildFakeLauncherOverlayContext(
-          versionId,
-          interceptActivationRef.current?.activationKey || Date.now().toString(),
-        ),
-      };
-      debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-      debugLaunch("[CARD_ORIGIN] in-app intercept pack created", nextOverlay);
-      setOverlay(nextOverlay);
-    } else {
-      debugLaunch("[INTERCEPT] No eligible card or interruption; opening continue state", versionId);
-      setScreen("interception");
-      const nextOverlay = buildFakeLauncherContinueOverlay(
-        versionId,
-        interceptActivationRef.current?.activationKey || Date.now().toString(),
-      );
-      debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-      debugLaunch("[CARD_ORIGIN] in-app intercept continue created", nextOverlay);
-      setOverlay(nextOverlay);
+    const activation = selectLauncherActivationCard(versionId, source);
+    const nextOverlay = renderInterceptionDecision(versionId, activation, { source });
+    if (navigate) {
+      navigateTo(`/intercept/${versionId}`, { replace });
     }
-    navigateTo(`/intercept/${versionId}`, { replace: true });
+    return nextOverlay;
   }
 
-  function handleFakeLauncherLaunch(versionId, launch = {}) {
+  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue" } = {}) {
     const version = resolveVersionConfig(
       homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
       launcherBehaviorSettings[versionId],
     );
-    const href = launch.href || getVersionOpenHref(version);
+    const href = getVersionOpenHref(version);
 
-    if (!launch.opened && href) {
-      console.log("[LAUNCHER] clicked", versionId, href);
-      console.log("[LAUNCHER] opening", href);
-      window.location.assign(href);
-    }
-
-    void logLauncherEvent("fake_launcher_real_app_opened", versionId, {
-      launched_from: "in_app_fake_launcher_bar",
+    void logLauncherEvent("intercept_continue_to_app", versionId, {
+      launched_from: source,
+      reason,
       href,
     });
+    void logLauncherEvent("fake_launcher_real_app_opened", versionId, {
+      launched_from: source,
+      reason,
+      href,
+    });
+    void logEvent({
+      event_type: "intercept_continue_to_app",
+      source_type: source,
+      card_source: source,
+      app_id: version?.id,
+      app_name: version?.name,
+      launcher_context: version?.id,
+      action_taken: "continued_to_app",
+      metadata: { href, reason },
+    });
+
+    if (href) {
+      console.log("[LAUNCHER] opening destination", { versionId, href, source, reason });
+      window.location.assign(href);
+    }
   }
 
-  function handleOverlayFakeLauncherLaunch(versionId, launch = {}) {
-    if (overlay?.launchSource === "fake_launcher" || overlay?.versionId) {
-      handleFakeLauncherLaunch(versionId, launch);
-      return;
-    }
-    startInterceptionFlow(versionId);
+  function openExternalActionUrl(url, { source = "action_card", cardId = null } = {}) {
+    if (!url) return;
+    console.log("[ACTION_CARD] opening external URL", { source, cardId, url });
+    window.location.assign(url);
+  }
+
+  function handleOverlayFakeLauncherLaunch(versionId) {
+    beginInterceptionFlow(versionId, { source: "overlay_fake_launcher" });
   }
 
   function updateCards(updater) {
@@ -2291,18 +2267,6 @@ function App() {
       }
       const cardsForDecision = options.cardsOverride ?? cards;
       const excludedCardIds = launchCompletedCardIdsRef.current;
-      const fallbackDisplay = pickRandomHomeCardForDisplay(
-        cardsForDecision,
-        profile.timezone,
-        NORMAL_LAUNCHER_CONTEXT,
-        homeScreenVersions,
-        launcherBehaviorSettings,
-        cardPacks,
-        dislikedPackCardIds,
-        globalInterruptionMode,
-        events,
-        { excludeCardIds: excludedCardIds },
-      );
       const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
@@ -2310,6 +2274,9 @@ function App() {
       const hasNextInterruptionPack = overlay.type !== "intercept-pack" && Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0));
       const activationKey = overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString();
       const launcherStats = getLauncherCardStats(cardsForDecision, profile.timezone, excludedCardIds);
+      const fallbackDisplay = hasNextInterruptionPack || overlay.type === "reveal"
+        ? { selected: null }
+        : pickRandomPersonalCardForLauncher(cardsForDecision, profile.timezone, excludedCardIds);
 
       debugLaunch("[REVEAL COMPLETION DECISION]", {
         pathname: window.location.pathname,
@@ -3538,7 +3505,7 @@ function App() {
       <ContinueToAppCard
         appName="Instagram"
         appIcon="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
-        destinationUrl="https://instagram.com"
+        onContinue={() => openDestinationApp("instagram", { source: "preview_continue", reason: "user_pressed_continue" })}
         onBack={() => navigateTo("/home", { replace: true })}
       />
     );
@@ -3658,7 +3625,7 @@ function App() {
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
                   onLogLauncherEvent={logLauncherEvent}
-                  onFakeLauncherLaunch={handleFakeLauncherLaunch}
+                  onFakeLauncherLaunch={(versionId) => beginInterceptionFlow(versionId, { source: "settings_fake_launcher" })}
                 />
               ) : null}
             </main>
@@ -3787,7 +3754,7 @@ function App() {
             console.log("[CARD_ORIGIN] action success created", nextOverlay);
             setOverlay(nextOverlay);
             if (card.launchUrl) {
-              window.location.href = card.launchUrl;
+              openExternalActionUrl(card.launchUrl, { source: "action_card", cardId: card.id });
             }
           }}
           onPackLike={() => {
@@ -3852,6 +3819,7 @@ function App() {
           }}
           onLogEvent={logEvent}
           onLogLauncherEvent={logLauncherEvent}
+          onContinueToApp={(versionId, options) => openDestinationApp(versionId, options)}
           onCreateActionCard={() => {
             setOverlay(null);
             setIsActionCardEditorOpen(true);
@@ -3865,7 +3833,7 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={false}
-          onLaunch={startInterceptionFlow}
+          onLaunch={(versionId) => beginInterceptionFlow(versionId, { source: "home_fake_launcher_bar" })}
         />
       ) : null}
 
@@ -5855,6 +5823,7 @@ function Overlay({
   onCreateActionCard,
   fakeLauncherVersions,
   onFakeLauncherLaunch,
+  onContinueToApp,
 }) {
   if (overlay.type === "launcher-preparing") {
     return (
@@ -5873,21 +5842,7 @@ function Overlay({
 
   if (overlay.type === "continue-to-app") {
     const handleContinue = () => {
-      const href = getVersionOpenHref(version);
-      if (href) {
-        window.location.assign(href);
-      }
-      void onLogLauncherEvent?.("intercept_continue_to_app", version?.id, { href });
-      void onLogEvent?.({
-        event_type: "intercept_continue_to_app",
-        source_type: "continue_card",
-        card_source: "continue_card",
-        app_id: version?.id,
-        app_name: version?.name,
-        launcher_context: version?.id,
-        action_taken: "continued_to_app",
-        metadata: { href },
-      });
+      onContinueToApp?.(version?.id, { source: "continue_card", reason: "user_pressed_continue" });
       onClose();
     };
 
@@ -5908,7 +5863,6 @@ function Overlay({
       <ContinueToAppCard
         appName={version?.name ?? "App"}
         appIcon={version?.customIconSrc || version?.iconSrc}
-        destinationUrl={getVersionOpenHref(version)}
         onContinue={handleContinue}
         onBack={handleBack}
       />
@@ -5923,24 +5877,10 @@ function Overlay({
     const actions = [];
     if (isIntercept && interceptVersion) {
       actions.push({
-        label: `Continue to ${appName}`,
+        label: "Continue to App",
         variant: "primary",
         onClick: () => {
-          const href = getVersionOpenHref(interceptVersion);
-          if (href) {
-            window.location.assign(href);
-          }
-          void onLogLauncherEvent?.("intercept_continue_to_app", interceptVersion.id, { href });
-          void onLogEvent?.({
-            event_type: "intercept_continue_to_app",
-            source_type: "empty_card",
-            card_source: "empty_card",
-            app_id: interceptVersion.id,
-            app_name: interceptVersion.name,
-            launcher_context: interceptVersion.id,
-            action_taken: "continued_to_app",
-            metadata: { href },
-          });
+          onContinueToApp?.(interceptVersion.id, { source: "empty_card", reason: "user_pressed_continue_after_no_eligible_cards" });
           onClose();
         }
       });
@@ -5958,7 +5898,7 @@ function Overlay({
         type="empty"
         greeting={isIntercept ? interceptVersion?.name || "MyBishBash" : "MyBishBash"}
         icon="heart"
-        headline="You're all caught up for now."
+        headline={isIntercept ? "You're all caught up." : "You're all caught up for now."}
         subtitle="See you later."
         actions={actions}
         launcherVersions={isIntercept ? [] : fakeLauncherVersions}
@@ -5977,6 +5917,7 @@ function Overlay({
         onChooseElse={onChooseElse}
         onLogEvent={onLogEvent}
         onLogLauncherEvent={onLogLauncherEvent}
+        onContinueToApp={onContinueToApp}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
       />
     );
@@ -6008,6 +5949,7 @@ function Overlay({
         onClose={onClose}
         onLogEvent={onLogEvent}
         onCreateActionCard={onCreateActionCard}
+        onContinueToApp={onContinueToApp}
         fakeLauncherVersions={fakeLauncherVersions}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
       />
@@ -6018,9 +5960,9 @@ function Overlay({
     return (
       <ActionSuccessOverlay
         overlay={overlay}
+        version={version}
         onClose={onClose}
-        fakeLauncherVersions={fakeLauncherVersions}
-        onFakeLauncherLaunch={onFakeLauncherLaunch}
+        onContinueToApp={onContinueToApp}
       />
     );
   }
@@ -6417,16 +6359,9 @@ function ActionCardOverlay({
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, fakeLauncherVersions, onFakeLauncherLaunch }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch }) {
   function handleContinueToApp() {
     if (!version) return;
-
-    const href = getVersionOpenHref(version);
-    console.log("[LAUNCHER] clicked", version.id, href);
-    if (href) {
-      console.log("[LAUNCHER] opening", href);
-      window.location.assign(href);
-    }
 
     void onLogEvent({
       event_type: "intercept_continue_to_app",
@@ -6437,6 +6372,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
       launcher_context: version.id,
       action_taken: "continued_to_app",
     });
+    onContinueToApp?.(version.id, { source: "action_card_empty", reason: "user_pressed_continue" });
   }
 
   return (
@@ -6449,7 +6385,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         subtitle="Make one for yourself."
         actions={[
           { label: "Back home", variant: "secondary", onClick: onClose },
-          ...(version ? [{ label: `Continue to ${version.name}`, variant: "secondary", onClick: handleContinueToApp }] : []),
+          ...(version ? [{ label: "Continue to App", variant: "secondary", onClick: handleContinueToApp }] : []),
           { label: "Create action card", variant: "primary", onClick: onCreateActionCard },
         ]}
         launcherVersions={fakeLauncherVersions}
@@ -6461,7 +6397,14 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
   );
 }
 
-function ActionSuccessOverlay({ onClose }) {
+function ActionSuccessOverlay({ version, onClose, onContinueToApp }) {
+  const actions = version
+    ? [
+        { label: "Continue to App", variant: "primary", onClick: () => onContinueToApp?.(version.id, { source: "action_card_success", reason: "user_pressed_continue" }) },
+        { label: "Back home", variant: "secondary", onClick: onClose },
+      ]
+    : [{ label: "Back home", variant: "primary", onClick: onClose }];
+
   return (
     <PremiumCardScreen
       type="action"
@@ -6469,7 +6412,7 @@ function ActionSuccessOverlay({ onClose }) {
       icon="heart"
       headline="Nice choice."
       subtitle="Take all the time you need."
-      actions={[{ label: "Back home", variant: "primary", onClick: onClose }]}
+      actions={actions}
       showHomeButton={true}
       onHome={onClose}
     />
@@ -6536,7 +6479,7 @@ function CustomPackOverlay({ overlay, onClose }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onFakeLauncherLaunch }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -6619,24 +6562,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
 
   function handleContinueToApp() {
     if (!version) return;
-
-    const href = getVersionOpenHref(version);
-    console.log("[LAUNCHER] clicked", version.id, href);
-    if (href) {
-      console.log("[LAUNCHER] opening", href);
-      window.location.assign(href);
-    }
-
-    void onLogLauncherEvent?.("intercept_continue_to_app", version.id, { href });
-    void onLogLauncherEvent?.("fake_launcher_real_app_opened", version.id, { href });
-    void onLogEvent({
-      event_type: "intercept_continue_to_app",
-      app_id: version.id,
-      app_name: version.name,
-      launcher_context: version.id,
-      action_taken: "continued_to_app",
-      metadata: { href },
-    });
+    onContinueToApp?.(version.id, { source: "interruption_card", reason: "user_pressed_continue" });
   }
 
   const activeMessage = messages[activeIndex] ?? "Pause for a second.";
@@ -6664,11 +6590,6 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         headline={activeMessage}
         subtitle="A little pause before the app opens."
         actions={[
-          {
-            label: "Continue to app",
-            variant: "secondary",
-            onClick: handleContinueToApp,
-          },
           {
             label: "Do something else",
             variant: "primary",
@@ -6699,9 +6620,9 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
       {showFallbackLink && version?.manualUrl ? (
         <p className="manual-open-copy premium-manual-open-copy">
           App didn&apos;t open?{" "}
-          <a href={getVersionOpenHref(version)} target="_blank" rel="noopener noreferrer">
+          <button type="button" className="link-button" onClick={handleContinueToApp}>
             Open {version.name} manually
-          </a>
+          </button>
         </p>
       ) : null}
     </div>
@@ -7023,15 +6944,7 @@ function LegalPage({ title, docUrl }) {
   );
 }
 
-function ContinueToAppCard({ appName, appIcon, destinationUrl, onContinue, onBack }) {
-  const handleContinue = () => {
-    if (onContinue) {
-      onContinue();
-    } else if (destinationUrl) {
-      window.location.assign(destinationUrl);
-    }
-  };
-
+function ContinueToAppCard({ appName, appIcon, onContinue, onBack }) {
   return (
     <div className="premium-card-screen premium-card-personal">
       <main className="premium-card-main" aria-live="polite">
@@ -7047,7 +6960,7 @@ function ContinueToAppCard({ appName, appIcon, destinationUrl, onContinue, onBac
         <div className="premium-card-spacer" aria-hidden="true" />
         <section className="premium-card-cta no-launchers">
           <PremiumActionStack actions={[
-            { label: `Continue to ${appName}`, variant: "primary", onClick: handleContinue },
+            { label: `Continue to ${appName}`, variant: "primary", onClick: onContinue },
             { label: "Back to MyBishBash", variant: "secondary", onClick: onBack }
           ]} />
         </section>

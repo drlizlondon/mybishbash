@@ -4,7 +4,6 @@ import "./ContinueToAppCard.css";
 export function ContinueToAppCard({
   appName,
   appIcon,
-  destinationUrl,
   onContinue,
   onBack,
 }) {
@@ -17,14 +16,6 @@ export function ContinueToAppCard({
     return () => cancelAnimationFrame(frameId);
   }, []);
 
-  const handleContinue = () => {
-    if (onContinue) {
-      onContinue();
-    } else if (destinationUrl) {
-      window.location.assign(destinationUrl);
-    }
-  };
-
   return (
     <div className="continue-to-app-container">
       <div className={`continue-to-app-card ${mounted ? "mounted" : ""}`}>
@@ -36,7 +27,7 @@ export function ContinueToAppCard({
           Continue to {appName}?
         </h1>
 
-        <button className="continue-to-app-primary-btn" onClick={handleContinue} type="button">
+        <button className="continue-to-app-primary-btn" onClick={onContinue} type="button">
           Continue to {appName}
         </button>
 

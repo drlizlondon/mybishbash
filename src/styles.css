@@ -1466,9 +1466,19 @@ textarea {
   text-align: center;
 }
 
-.manual-open-copy a {
+.manual-open-copy a,
+.manual-open-copy .link-button {
   color: var(--coral);
   text-decoration: none;
+}
+
+.manual-open-copy .link-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .completion,
