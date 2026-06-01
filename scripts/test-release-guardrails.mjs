@@ -5,6 +5,7 @@ const storageSource = await readFile(new URL("../src/storage.js", import.meta.ur
 const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
 const launcherFlowSource = await readFile(new URL("../src/lib/launcherFlow.js", import.meta.url), "utf8");
+const launcherRegistrySource = await readFile(new URL("../src/lib/launcherRegistry.js", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -302,6 +303,13 @@ assertSourcePattern(
 assertSourcePattern(
   "launcherState",
   launcherStateSource,
+  "iOS Safari fast launcher destinations preserve x-safari before web fallback",
+  /if \(preferFastDestination\) \{[\s\S]{0,180}merged\.id === "safari" && platform === "ios"[\s\S]{0,220}merged\.iosAppUrl[\s\S]{0,260}return href;/g,
+);
+
+assertSourcePattern(
+  "launcherState",
+  launcherStateSource,
   "fast launcher destinations use app-capable web fallbacks before slow native deep links",
   /if \(preferFastDestination\) \{[\s\S]{0,500}merged\.webFallbackUrl[\s\S]{0,500}return href;/g,
 );
@@ -311,6 +319,20 @@ assertSourcePattern(
   launcherStateSource,
   "fast launcher destinations strip x-safari prefixes",
   /function normalizeWebHref\(value\)[\s\S]{0,180}x-safari-/g,
+);
+
+assertSourcePattern(
+  "launcherRegistry",
+  launcherRegistrySource,
+  "Safari default destinations distinguish desktop web fallback from iOS x-safari launch",
+  /id:\s*"safari"[\s\S]{0,900}webFallbackUrl:\s*"https:\/\/www\.google\.com"[\s\S]{0,260}iosAppUrl:\s*"x-safari-https:\/\/www\.google\.com"/g,
+);
+
+assertSourcePattern(
+  "launcherRegistry",
+  launcherRegistrySource,
+  "Safari default block does not point at the Apple Safari marketing page",
+  /id:\s*"safari"(?:(?!id:\s*"youtube")[\s\S])*manualUrl:\s*"x-safari-https:\/\/www\.google\.com"/g,
 );
 
 assertSourcePattern(

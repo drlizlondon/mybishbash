@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 
 declare global {
   interface Window {
@@ -8,6 +8,10 @@ declare global {
 }
 
 const now = '2026-06-01T12:00:00.000Z';
+const safariDesktopDestination = /^https:\/\/www\.google\.com$/;
+const safariIOSDestination = /^x-safari-https:\/\/www\.google\.com$/;
+const safariDestination = /^(https:\/\/www\.google\.com|x-safari-https:\/\/www\.google\.com)$/;
+const safariMarketingDestination = /apple\.com\/safari/i;
 
 type SeedOptions = {
   cards?: Array<Record<string, unknown>>;
@@ -36,8 +40,16 @@ async function installConsoleErrorGuard(page: Page) {
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') {
+      if (/^Failed to load resource:/i.test(message.text())) return;
       errors.push(message.text());
     }
+  });
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    const request = response.request();
+    const isSpaDocumentFallback = request.resourceType() === 'document' && response.status() === 404 && response.url().includes('/mybishbash/');
+    if (isSpaDocumentFallback) return;
+    errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
   page.on('pageerror', (error) => {
     errors.push(error.message);
@@ -102,7 +114,7 @@ test('in-app fake launchers open real destinations without showing interruption 
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   const expectedDestinations = {
-    safari: /^https:\/\/www\.google\.com/,
+    safari: safariDesktopDestination,
     youtube: /^https:\/\/www\.youtube\.com/,
     instagram: /^https:\/\/www\.instagram\.com/,
   };
@@ -122,6 +134,51 @@ test('in-app fake launchers open real destinations without showing interruption 
   }
 
   await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Safari desktop fake launcher uses web fallback destination', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await page.getByTestId('fake-launcher-safari').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariDesktopDestination);
+  expect(attempt.href).not.toMatch(safariMarketingDestination);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    reason: 'fake_launcher_icon_clicked',
+  });
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Safari iOS fake launcher attempts Safari-specific x-safari destination', async ({ browser }) => {
+  const context = await browser.newContext({ ...devices['iPhone 12'] });
+  const page = await context.newPage();
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await page.getByTestId('fake-launcher-safari').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariIOSDestination);
+  expect(attempt.href).not.toMatch(safariMarketingDestination);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    reason: 'fake_launcher_icon_clicked',
+  });
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+  await context.close();
 });
 
 test('intercept route shows interruption flow and does not auto-open destination', async ({ page }) => {
@@ -145,7 +202,8 @@ test('continue-to-app opens the destination from no-card intercept state', async
 
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
   const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(/google\.com|x-safari-/);
+  expect(attempt.href).toMatch(safariDestination);
+  expect(attempt.href).not.toMatch(safariMarketingDestination);
   expect(attempt.metadata).toMatchObject({
     versionId: 'safari',
     reason: 'user_pressed_continue_after_no_eligible_cards',

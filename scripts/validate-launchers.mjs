@@ -51,6 +51,21 @@ assert.notEqual(normalLaunchEvent.event_type, "fake_launcher_opened");
 
 const safari = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "safari");
 const instagram = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "instagram");
+assert.equal(
+  safari.webFallbackUrl,
+  "https://www.google.com",
+  "Safari desktop fallback defaults to Google as the browsing/search destination",
+);
+assert.equal(
+  safari.iosAppUrl,
+  "x-safari-https://www.google.com",
+  "Safari uses x-safari for the iOS app URL default",
+);
+assert.doesNotMatch(
+  [safari.webFallbackUrl, safari.androidWebFallbackUrl, safari.iosWebFallbackUrl, safari.iosAppUrl, safari.manualUrl].join("\n"),
+  /apple\.com\/safari/i,
+  "Safari must not default to the Apple Safari marketing page",
+);
 const safariWithEmptyCloudFields = mergeLauncherConfig(safari, {
   displayName: "",
   iosAppUrl: "",

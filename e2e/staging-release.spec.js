@@ -28,6 +28,10 @@ const report = {
   qaCardName: '',
   qaEditedCardName: '',
 };
+const safariDesktopDestination = /^https:\/\/www\.google\.com$/i;
+const safariIOSDestination = /^x-safari-https:\/\/www\.google\.com$/i;
+const safariDestination = /^(https:\/\/www\.google\.com|x-safari-https:\/\/www\.google\.com)$/i;
+const safariMarketingDestination = /apple\.com\/safari/i;
 
 test.describe('MyBishBash staging release E2E', () => {
   test.skip(Boolean(skipReason), skipReason ?? '');
@@ -128,7 +132,7 @@ test.describe('MyBishBash staging release E2E', () => {
     await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD, '/home');
 
     for (const [launcherId, expected] of Object.entries({
-      safari: /^https:\/\/www\.google\.com/i,
+      safari: safariDesktopDestination,
       youtube: /^https:\/\/www\.youtube\.com/i,
       instagram: /^https:\/\/www\.instagram\.com/i,
     })) {
@@ -161,7 +165,8 @@ test.describe('MyBishBash staging release E2E', () => {
     await clickContinueToApp(page);
 
     const latest = await waitForDestinationAttempt(page);
-    expect(latest.href).toMatch(/google\.com|x-safari-/i);
+    expect(latest.href).toMatch(safariDestination);
+    expect(latest.href).not.toMatch(safariMarketingDestination);
     await expectNoConsoleErrors(consoleErrors);
     report.checks.push({ status: 'PASS', name: '/intercept/safari interruption and continue-to-app' });
 
@@ -213,7 +218,8 @@ test.describe('MyBishBash staging release E2E', () => {
     await navigateWithinStaging(page, '/home');
     await page.getByTestId('fake-launcher-safari').click();
     const latest = await waitForDestinationAttempt(page);
-    expect(latest.href).toMatch(/^https:\/\/www\.google\.com/i);
+    expect(latest.href).toMatch(safariIOSDestination);
+    expect(latest.href).not.toMatch(safariMarketingDestination);
 
     await expectNoConsoleErrors(consoleErrors);
     report.checks.push({ status: 'PASS', name: 'Mobile Safari/PWA approximation' });
@@ -225,7 +231,17 @@ test.describe('MyBishBash staging release E2E', () => {
 function installConsoleErrorGuard(page) {
   const errors = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (message.type() === 'error') {
+      if (/^Failed to load resource:/i.test(message.text())) return;
+      errors.push(message.text());
+    }
+  });
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    const request = response.request();
+    const isSpaDocumentFallback = request.resourceType() === 'document' && response.status() === 404 && response.url().includes('/mybishbash/');
+    if (isSpaDocumentFallback) return;
+    errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
   page.on('pageerror', (error) => errors.push(error.message));
   return errors;

@@ -77,6 +77,19 @@ export function getVersionOpenHref(version, { preferFastDestination = false } = 
   let href = "";
 
   if (preferFastDestination) {
+    if (merged.id === "safari" && platform === "ios") {
+      href = firstNonEmpty(merged.iosAppUrl, merged.manualUrl, merged.webFallbackUrl);
+      if (href) {
+        console.log("[LAUNCHER_URL_RESOLVED]", {
+          versionId: merged.id,
+          platform,
+          href,
+          preferFastDestination,
+        });
+        return href;
+      }
+    }
+
     href = normalizeWebHref(firstNonEmpty(
       merged.webFallbackUrl,
       merged.iosWebFallbackUrl,
