@@ -72,6 +72,7 @@ import {
   getStatusMeta,
   getThemeClass,
   isEligible,
+  isPackCardAvailable,
   normalizeCards,
   getTodayKey,
 } from "./utils";
@@ -393,7 +394,7 @@ function pickRandomHomeCardForDisplay(
   const packMap = new Map();
   normalized.forEach((card) => {
     if (excludedCardIds.has(card.id)) return;
-    if (!card.sourcePackId || !isEligible(card, new Date(), timezone)) return;
+    if (!isPackCardAvailable(card)) return;
     if (!packMap.has(card.sourcePackId)) {
       packMap.set(card.sourcePackId, []);
     }
@@ -457,12 +458,12 @@ function pickRandomPersonalCardForLauncher(currentCards, timezone, excludedCardI
 function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set()) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const activePackCards = normalized.filter((card) =>
-    card.sourcePackId && !card.deletedAt && !card.paused && !card.disliked && !excludedCardIds.has(card.id)
+    isPackCardAvailable(card) && !excludedCardIds.has(card.id)
   );
   const eligiblePersonalCards = normalized.filter((card) =>
     !card.sourcePackId && !card.deletedAt && !excludedCardIds.has(card.id) && isEligible(card, new Date(), timezone)
   );
-  const eligiblePackCards = activePackCards.filter((card) => isEligible(card, new Date(), timezone));
+  const eligiblePackCards = activePackCards;
   return {
     totalCardsCount: normalized.length,
     personalCardsCount: normalized.filter((card) => !card.sourcePackId && !card.deletedAt).length,
@@ -475,7 +476,7 @@ function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set(
 
 function countEligibleGeneralCards(currentCards, timezone) {
   return normalizeCards(currentCards, new Date(), timezone).filter((card) =>
-    isEligible(card, new Date(), timezone) && !card.deletedAt
+    card.sourcePackId ? isPackCardAvailable(card) : isEligible(card, new Date(), timezone) && !card.deletedAt
   ).length;
 }
 
@@ -718,10 +719,17 @@ function App() {
 
   const initialState = useMemo(() => {
     const base = buildInitialState();
+    const dislikedPackCardIds = loadDislikedPackCardIds();
+    const cards = base.cards.map((card) =>
+      card.sourcePackId
+        ? { ...card, disliked: dislikedPackCardIds.includes(getPackDislikeKey(card)) }
+        : card,
+    );
     return {
       ...base,
+      cards,
       cardPacks: loadCardPacks(),
-      dislikedPackCardIds: loadDislikedPackCardIds(),
+      dislikedPackCardIds,
       globalInterruptionMode: loadGlobalInterruptionMode(),
       homeScreenVersions: loadHomeScreenVersions(),
       launcherBehaviorSettings: loadLauncherBehaviorSettings(),
@@ -1098,7 +1106,11 @@ function App() {
       : null;
     const normalizedCards = normalizeCards(cards, new Date(), profile.timezone);
     const hasUsableCachedLauncherState =
-      normalizedCards.some((card) => !card.deletedAt && isEligible(card, new Date(), profile.timezone)) ||
+      normalizedCards.some((card) =>
+        card.sourcePackId
+          ? isPackCardAvailable(card)
+          : !card.deletedAt && isEligible(card, new Date(), profile.timezone)
+      ) ||
       (routeInterruptionPack?.cards?.length ?? 0) > 0;
     const readiness = getLauncherDecisionReadiness({
       routeKind: route.kind,
@@ -1765,7 +1777,7 @@ function App() {
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
       const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
       const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
-      const eligiblePackCount = normalizedDiagCards.filter((c) => c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
+      const eligiblePackCount = normalizedDiagCards.filter(isPackCardAvailable).length;
       const routeInterruptionPack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
@@ -2251,7 +2263,7 @@ function App() {
     const packCards = cards.filter((card) => card.sourcePackId === packId && !card.deletedAt);
     if (packCards.length === 0) return;
 
-    const eligiblePackCards = packCards.filter((card) => isEligible(card, new Date(), profile.timezone));
+    const eligiblePackCards = packCards.filter(isPackCardAvailable);
     if (eligiblePackCards.length === 0) return;
     const source = eligiblePackCards;
     const selected = source[Math.floor(Math.random() * source.length)];
@@ -3389,7 +3401,7 @@ function App() {
         const packHasEligible = cards.some(
           (candidate) =>
             candidate.sourcePackId === card.sourcePackId &&
-            isEligible(candidate, new Date(), profile.timezone),
+            isPackCardAvailable(candidate),
         );
         if (packHasEligible) {
           seenPackIds.add(card.sourcePackId);

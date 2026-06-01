@@ -359,6 +359,10 @@ export function isEligible(card, date = new Date(), timeZone) {
   return true;
 }
 
+export function isPackCardAvailable(card) {
+  return Boolean(card?.sourcePackId) && !card.deletedAt && !card.paused && !card.disliked;
+}
+
 export function normalizeCards(cards, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
 
@@ -420,6 +424,10 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
     return { badge: "paused", detail: "hidden for now" };
   }
 
+  if (isPackCard && (card.deletedAt || card.disliked)) {
+    return { badge: "paused", detail: "hidden for now" };
+  }
+
   if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) {
     return { badge: "done", detail: "see you tomorrow" };
   }
@@ -429,6 +437,10 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
       badge: "pending",
       detail: `returns in ${formatTimeRemaining(new Date(card.notYetUntil).getTime() - date.getTime())}`,
     };
+  }
+
+  if (isPackCard) {
+    return { badge: "ready", detail: "available from active pack" };
   }
 
   if (!windows.includes(currentWindow)) {
