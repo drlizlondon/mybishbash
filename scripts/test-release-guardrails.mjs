@@ -1,0 +1,342 @@
+import { readFile } from "node:fs/promises";
+
+const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const storageSource = await readFile(new URL("../src/storage.js", import.meta.url), "utf8");
+const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import.meta.url), "utf8");
+const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
+const launcherFlowSource = await readFile(new URL("../src/lib/launcherFlow.js", import.meta.url), "utf8");
+
+const failures = [];
+
+function normalizeSnippet(snippet) {
+  return snippet.replace(/\s+/g, " ").trim();
+}
+
+function matchingSnippets(source, pattern) {
+  return [...source.matchAll(pattern)].map((match) => normalizeSnippet(match[0]));
+}
+
+function findCallWithSource(functionName, source) {
+  const pattern = new RegExp(`${functionName}\\([\\s\\S]{0,400}source:\\s*"${source}"[\\s\\S]{0,240}?\\)`, "g");
+  return matchingSnippets(appSource, pattern);
+}
+
+function findFunctionBody(source, functionName) {
+  const startPattern = new RegExp(`function\\s+${functionName}\\s*\\(`);
+  const startMatch = startPattern.exec(source);
+  if (!startMatch) return "";
+
+  const nextFunction = source.indexOf("\n  function ", startMatch.index + 1);
+  return source.slice(startMatch.index, nextFunction === -1 ? source.length : nextFunction);
+}
+
+function pass(message) {
+  console.log(`PASS ${message}`);
+}
+
+function fail(message, offendingSource = null) {
+  failures.push({ message, offendingSource });
+  console.error(`FAIL ${message}`);
+  if (offendingSource) {
+    console.error(`  Offending source: ${offendingSource}`);
+  }
+}
+
+function assertNoInterceptionSource(source) {
+  const calls = findCallWithSource("beginInterceptionFlow", source);
+  if (calls.length > 0) {
+    fail(`${source} must not be wired to beginInterceptionFlow`, calls[0]);
+    return;
+  }
+  pass(`${source} is not wired to beginInterceptionFlow`);
+}
+
+function assertAppPattern(message, pattern) {
+  const matches = matchingSnippets(appSource, pattern);
+  if (matches.length === 0) {
+    fail(message);
+    return;
+  }
+  pass(message);
+}
+
+function assertAppDoesNotMatch(message, pattern) {
+  const matches = matchingSnippets(appSource, pattern);
+  if (matches.length > 0) {
+    fail(message, matches[0]);
+    return;
+  }
+  pass(message);
+}
+
+function assertSourcePattern(label, source, message, pattern) {
+  const matches = matchingSnippets(source, pattern);
+  if (matches.length === 0) {
+    fail(`${label}: ${message}`);
+    return;
+  }
+  pass(`${label}: ${message}`);
+}
+
+assertNoInterceptionSource("home_fake_launcher_bar");
+assertNoInterceptionSource("overlay_fake_launcher");
+assertNoInterceptionSource("settings_fake_launcher");
+
+assertAppPattern(
+  "home_fake_launcher_bar calls openDestinationApp",
+  /source:\s*"home_fake_launcher_bar"[\s\S]{0,160}reason:\s*"fake_launcher_icon_clicked"/g,
+);
+
+assertAppPattern(
+  "overlay_fake_launcher calls openDestinationApp",
+  /function handleOverlayFakeLauncherLaunch\(versionId\) \{[\s\S]{0,300}openDestinationApp\(versionId,[\s\S]{0,120}source:\s*"overlay_fake_launcher"[\s\S]{0,120}reason:\s*"fake_launcher_icon_clicked"/g,
+);
+
+assertAppPattern(
+  "settings_fake_launcher calls openDestinationApp",
+  /source:\s*"settings_fake_launcher"[\s\S]{0,160}reason:\s*"fake_launcher_icon_clicked"/g,
+);
+
+assertAppDoesNotMatch(
+  "home fake launcher bar must not mention beginInterceptionFlow in its launch prop",
+  /onLaunch=\{\(versionId\)[\s\S]{0,220}beginInterceptionFlow[\s\S]{0,120}home_fake_launcher_bar/g,
+);
+
+assertAppPattern(
+  "openDestinationApp still calls window.location.assign(href)",
+  /function openDestinationApp[\s\S]{0,1800}window\.location\.assign\(href\)/g,
+);
+
+const openDestinationAppBody = findFunctionBody(appSource, "openDestinationApp");
+if (!openDestinationAppBody) {
+  fail("openDestinationApp function still exists");
+} else {
+  pass("openDestinationApp function still exists");
+
+  if (!/getVersionOpenHref\(version,\s*\{\s*preferFastDestination\s*\}\)/.test(openDestinationAppBody)) {
+    fail("openDestinationApp still resolves the real destination href from launcher state with the fast-destination flag", normalizeSnippet(openDestinationAppBody));
+  } else {
+    pass("openDestinationApp still resolves the real destination href from launcher state with the fast-destination flag");
+  }
+
+  if (!/const preferFastDestination = reason === "fake_launcher_icon_clicked";/.test(openDestinationAppBody)) {
+    fail("in-app fake launcher clicks still prefer fast app-capable destinations", normalizeSnippet(openDestinationAppBody));
+  } else {
+    pass("in-app fake launcher clicks still prefer fast app-capable destinations");
+  }
+
+  if (!/logLauncherEvent\("intercept_continue_to_app"/.test(openDestinationAppBody)) {
+    fail("openDestinationApp still logs intercept_continue_to_app", normalizeSnippet(openDestinationAppBody));
+  } else {
+    pass("openDestinationApp still logs intercept_continue_to_app");
+  }
+
+  if (!/logLauncherEvent\("fake_launcher_real_app_opened"/.test(openDestinationAppBody)) {
+    fail("openDestinationApp still logs fake_launcher_real_app_opened", normalizeSnippet(openDestinationAppBody));
+  } else {
+    pass("openDestinationApp still logs fake_launcher_real_app_opened");
+  }
+
+  if (!/if \(href\)[\s\S]{0,420}window\.location\.assign\(href\)/.test(openDestinationAppBody)) {
+    fail("openDestinationApp only attempts navigation when href exists", normalizeSnippet(openDestinationAppBody));
+  } else {
+    pass("openDestinationApp only attempts navigation when href exists");
+  }
+}
+
+assertAppPattern(
+  "/intercept/:launcherId still calls beginInterceptionFlow",
+  /if \(route\.kind === "intercept"\)[\s\S]{0,5000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g,
+);
+
+assertAppPattern(
+  "/intercept/:launcherId still waits for launcher readiness before interception",
+  /if \(route\.kind === "intercept"\)[\s\S]{0,2200}if \(!launcherReadiness\.ready\)/g,
+);
+
+assertAppPattern(
+  "/intercept/:launcherId still writes launcher context while waiting for readiness",
+  /if \(route\.kind === "intercept"\)[\s\S]{0,2600}if \(!launcherReadiness\.ready\)[\s\S]{0,160}setLauncherContext\(route\.versionId\)/g,
+);
+
+assertAppPattern(
+  "beginInterceptionFlow still sets launcher context",
+  /function beginInterceptionFlow\(versionId,[\s\S]{0,260}setLauncherContext\(versionId\)/g,
+);
+
+assertAppPattern(
+  "continue-to-app still calls openDestinationApp",
+  /onContinueToApp=\{\(versionId,\s*options\)\s*=>\s*openDestinationApp\(versionId,\s*options\)\}/g,
+);
+
+assertAppPattern(
+  "continue card button still delegates to onContinueToApp",
+  /onContinueToApp\?\.\(version\?\.id,\s*\{\s*source:\s*"continue_card",\s*reason:\s*"user_pressed_continue"\s*\}\)/g,
+);
+
+assertAppPattern(
+  "interruption continue button still delegates to onContinueToApp",
+  /onContinueToApp\?\.\(version\.id,\s*\{\s*source:\s*"interruption_card",\s*reason:\s*"user_pressed_continue"\s*\}\)/g,
+);
+
+assertAppPattern(
+  "home auto-launch suppression still prevents card loops after intentional in-app actions",
+  /if \(isHomeRoute && shouldLaunchOverlay\)[\s\S]{0,240}if \(suppressNextHomeAutoLaunchRef\.current\)[\s\S]{0,260}setShouldLaunchOverlay\(false\)/g,
+);
+
+assertAppPattern(
+  "non-launcher completion still suppresses the next home auto-launch",
+  /debugLaunch\("\[CONTINUE_DECISION\] home -> falling back to home"\);[\s\S]{0,160}suppressNextHomeAutoLaunchRef\.current = true;[\s\S]{0,120}setShouldLaunchOverlay\(false\)/g,
+);
+
+assertAppPattern(
+  "launcher completion records completed card ids before choosing another card",
+  /launchCompletedCardIdsRef\.current = new Set\(\[\.\.\.launchCompletedCardIdsRef\.current, completedCardId\]\);[\s\S]{0,260}const excludedCardIds = launchCompletedCardIdsRef\.current/g,
+);
+
+assertAppPattern(
+  "local card changes still persist through saveCards(cards)",
+  /saveCards\(cards\);/g,
+);
+
+assertAppPattern(
+  "sync status still has a ready-gated cloud save path",
+  /syncStatus !== "ready"[\s\S]{0,1600}saveSharedState\(session\.user\.id, stateToSave\)/g,
+);
+
+assertAppPattern(
+  "offline event queue is still processed when sync is ready",
+  /if \(syncStatus === "ready"\) \{\s*void processEventQueue\(\);/g,
+);
+
+assertAppPattern(
+  "sync load still applies cloud shared state after login",
+  /loadSharedState\(session\.user\.id\)[\s\S]{0,600}applySharedState\(sharedState/g,
+);
+
+assertAppPattern(
+  "polling still skips cloud loads while local changes are dirty",
+  /if \(localDirtyRef\.current\) \{[\s\S]{0,180}\[POLLING\] skipped: local state has unsynced changes/g,
+);
+
+assertAppPattern(
+  "polling still rejects stale cloud state",
+  /incomingTime < highestKnownCloudTimeRef\.current[\s\S]{0,160}\[POLLING\] skipped: stale cloud state/g,
+);
+
+assertAppPattern(
+  "shared state merge still merges local and cloud cards by id",
+  /setCards\(\(currentCards\) => \{[\s\S]{0,180}mergeEntitiesById\(currentCards, next\.cards\)/g,
+);
+
+assertAppPattern(
+  "shared state merge still merges action cards by id",
+  /setActionCards\(\(current\) => \{[\s\S]{0,160}mergeEntitiesById\(current, next\.actionCards\)/g,
+);
+
+assertAppPattern(
+  "shared state merge still preserves offline events",
+  /setEvents\(\(currentEvents\) => \{[\s\S]{0,160}mergeEventsById\(currentEvents, next\.events\)/g,
+);
+
+assertAppPattern(
+  "entity merge still preserves newer local tombstones",
+  /if \(localItem\.deletedAt\) console\.log\(`\[MERGE\] Tombstone preserved/g,
+);
+
+assertAppPattern(
+  "entity merge still rejects stale cloud tombstones",
+  /else if \(cloudItem\.deletedAt\) console\.log\(`\[MERGE\] Rejecting stale cloud tombstone/g,
+);
+
+assertAppPattern(
+  "login handler still uses logIn and sets the returned session",
+  /async function handleLogIn\(email, password\)[\s\S]{0,220}await logIn\(email, password\)[\s\S]{0,260}setSession\(nextSession\)/g,
+);
+
+assertAppPattern(
+  "invalid login path still sets a safe sync error instead of throwing through the UI",
+  /async function handleLogIn\(email, password\)[\s\S]{0,700}catch \(error\)[\s\S]{0,180}setSyncError\(getSyncErrorMessage\(error, "Could not log in\."\)\)/g,
+);
+
+assertAppPattern(
+  "logout handler still calls logOut and clears session",
+  /async function handleLogOut\(\)[\s\S]{0,280}await logOut\(\)[\s\S]{0,240}setSession\(null\)/g,
+);
+
+assertSourcePattern(
+  "storage",
+  storageSource,
+  "offline event queue key still exists",
+  /mybishbash\.offline-event-queue\.v1/g,
+);
+
+assertSourcePattern(
+  "sync",
+  syncSource,
+  "cloud state save helper still exists",
+  /export async function saveSharedState\(userId, state\)/g,
+);
+
+assertSourcePattern(
+  "sync",
+  syncSource,
+  "login helper still exists",
+  /export async function logIn\(email, password\)/g,
+);
+
+assertSourcePattern(
+  "sync",
+  syncSource,
+  "logout helper still exists",
+  /export async function logOut\(\)/g,
+);
+
+assertSourcePattern(
+  "launcherState",
+  launcherStateSource,
+  "destination href helper still exists",
+  /export function getVersionOpenHref\(version,\s*\{\s*preferFastDestination = false\s*\} = \{\}\)/g,
+);
+
+assertSourcePattern(
+  "launcherState",
+  launcherStateSource,
+  "fast launcher destinations use app-capable web fallbacks before slow native deep links",
+  /if \(preferFastDestination\) \{[\s\S]{0,500}merged\.webFallbackUrl[\s\S]{0,500}return href;/g,
+);
+
+assertSourcePattern(
+  "launcherState",
+  launcherStateSource,
+  "fast launcher destinations strip x-safari prefixes",
+  /function normalizeWebHref\(value\)[\s\S]{0,180}x-safari-/g,
+);
+
+assertSourcePattern(
+  "launcherState",
+  launcherStateSource,
+  "intercept launcher context guard still exists",
+  /route\.kind === "intercept" && isInterruptionLauncherContext\(route\.versionId\)/g,
+);
+
+assertSourcePattern(
+  "launcherFlow",
+  launcherFlowSource,
+  "intercept readiness still blocks auth-pending launches",
+  /if \(!authReady\) return \{ ready: false, reason: "auth_pending" \};/g,
+);
+
+assertSourcePattern(
+  "launcherFlow",
+  launcherFlowSource,
+  "intercept readiness still blocks sync-pending launches",
+  /syncStatus === "loading"[\s\S]{0,120}reason: "sync_pending"/g,
+);
+
+if (failures.length > 0) {
+  console.error(`\nRelease guardrails failed: ${failures.length}`);
+  process.exit(1);
+}
+
+console.log("\nRelease guardrails passed");

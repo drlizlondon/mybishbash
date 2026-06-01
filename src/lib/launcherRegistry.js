@@ -18,7 +18,7 @@ export const FAKE_APP_LAUNCHERS = [
     iconSrc: "/mybishbash/icons/apple-touch-icon.png",
     customIconSrc: "",
     nativeAppUrl: "",
-    webFallbackUrl: "x-safari-https://www.google.com",
+    webFallbackUrl: "https://www.google.com",
     appUrl: "",
     androidIntentUrl: "",
     androidWebFallbackUrl: "https://www.google.com",

@@ -128,6 +128,7 @@ function resolveTheme(theme) {
 
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const LEGACY_BASE_PATHS = ["/bishbash"];
+const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -138,6 +139,19 @@ const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(SIGNUP_ONBOARDING_PENDING_KEY) === "true";
+}
+
+function isE2EModeEnabled() {
+  return typeof window !== "undefined" && window.localStorage.getItem(E2E_MODE_KEY) === "true";
+}
+
+function buildE2ESession() {
+  return {
+    user: {
+      id: "e2e-user",
+      email: "e2e@mybishbash.local",
+    },
+  };
 }
 
 function setSignupOnboardingPending(value) {
@@ -739,6 +753,7 @@ function App() {
       notificationSettings: loadNotificationSettings(),
     };
   }, []);
+  const e2eMode = isE2EModeEnabled();
   const [cards, setCards] = useState(initialState.cards);
   const [mood, setMood] = useState(initialState.mood);
   const [profile, setProfile] = useState(initialState.profile);
@@ -981,6 +996,15 @@ function App() {
   useEffect(() => {
     let mounted = true;
 
+    if (e2eMode) {
+      setSession(buildE2ESession());
+      setSyncStatus("ready");
+      setSyncError("");
+      setAuthReady(true);
+      setShouldLaunchOverlay(false);
+      return undefined;
+    }
+
     getSession()
       .then((currentSession) => {
         console.log("[AUTH] Session check complete. Found:", !!currentSession);
@@ -1011,9 +1035,13 @@ function App() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [e2eMode]);
 
   useEffect(() => {
+    if (e2eMode) {
+      setIsAdmin(false);
+      return;
+    }
     if (session?.user?.id) {
       if (session.user.email && HQ_ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
         setIsAdmin(true);
@@ -1023,9 +1051,13 @@ function App() {
     } else {
       setIsAdmin(false);
     }
-  }, [session?.user?.email, session?.user?.id]);
+  }, [e2eMode, session?.user?.email, session?.user?.id]);
 
   useEffect(() => {
+    if (e2eMode) {
+      setTesterStatus({ is_tester: false });
+      return undefined;
+    }
     if (!session?.user?.id) {
       setTesterStatus({ is_tester: false });
       return undefined;
@@ -1043,10 +1075,14 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id]);
+  }, [e2eMode, session?.user?.id]);
 
   useEffect(() => {
     if (!authReady) return;
+    if (e2eMode) {
+      setGlobalPacks([]);
+      return;
+    }
     if (!session?.user?.id) {
       setGlobalPacks([]);
       return;
@@ -1054,9 +1090,10 @@ function App() {
     fetchGlobalPacks()
       .then(setGlobalPacks)
       .catch((err) => console.warn("Could not load global packs", err));
-  }, [authReady, session?.user?.id]);
+  }, [authReady, e2eMode, session?.user?.id]);
 
   useEffect(() => {
+    if (e2eMode) return undefined;
     let cancelled = false;
     fetchLauncherConfigs()
       .then((configs) => {
@@ -1090,7 +1127,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [e2eMode]);
 
   useEffect(() => {
     setLauncherDataWaitExpired(false);
@@ -1150,9 +1187,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (e2eMode) return;
     if (!session?.user) return;
     touchUserProfile(session.user);
-  }, [session?.user?.email, session?.user?.id]);
+  }, [e2eMode, session?.user?.email, session?.user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1178,6 +1216,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (e2eMode) return undefined;
     if (!session?.user?.id) return undefined;
 
     let cancelled = false;
@@ -1233,7 +1272,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, applySharedState]);
+  }, [e2eMode, session?.user?.id, applySharedState]);
 
   useEffect(() => {
     if (syncStatus !== "ready" || !session?.user?.id || isApplyingSharedStateRef.current) return undefined;
@@ -1283,6 +1322,7 @@ function App() {
   }, [syncStatus, session?.user?.id, currentSharedState]);
 
   useEffect(() => {
+    if (e2eMode) return undefined;
     if (screen === "hq" || syncStatus !== "ready" || !session?.user?.id) return undefined;
 
     const pollInterval = window.setInterval(() => {
@@ -1326,7 +1366,7 @@ function App() {
     }, 5000);
 
     return () => window.clearInterval(pollInterval);
-  }, [screen, syncStatus, session?.user?.id, applySharedState]);
+  }, [e2eMode, screen, syncStatus, session?.user?.id, applySharedState]);
 
   useEffect(() => {
     saveSetupComplete(setupComplete);
@@ -1907,6 +1947,12 @@ function App() {
     }
 
     if (isHomeRoute && shouldLaunchOverlay) {
+      if (e2eMode) {
+        setShouldLaunchOverlay(false);
+        setOverlay(null);
+        return;
+      }
+
       if (suppressNextHomeAutoLaunchRef.current) {
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
@@ -1991,7 +2037,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent, e2eMode]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -2075,7 +2121,8 @@ function App() {
       homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
       launcherBehaviorSettings[versionId],
     );
-    const href = getVersionOpenHref(version);
+    const preferFastDestination = reason === "fake_launcher_icon_clicked";
+    const href = getVersionOpenHref(version, { preferFastDestination });
 
     void logLauncherEvent("intercept_continue_to_app", versionId, {
       launched_from: source,
@@ -2100,6 +2147,11 @@ function App() {
 
     if (href) {
       console.log("[LAUNCHER] opening destination", { versionId, href, source, reason });
+      const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
+      if (typeof captureNavigation === "function") {
+        const handled = captureNavigation(href, { versionId, source, reason });
+        if (handled) return;
+      }
       window.location.assign(href);
     }
   }
@@ -2111,7 +2163,10 @@ function App() {
   }
 
   function handleOverlayFakeLauncherLaunch(versionId) {
-    beginInterceptionFlow(versionId, { source: "overlay_fake_launcher" });
+    openDestinationApp(versionId, {
+      source: "overlay_fake_launcher",
+      reason: "fake_launcher_icon_clicked",
+    });
   }
 
   function updateCards(updater) {
@@ -3542,7 +3597,7 @@ function App() {
     >
       <div className="grain" />
       {screen === "library" && !hideAppShell ? (
-      <div className={`app-shell app-mood theme-${getThemeClass(mood)}`}>
+      <div className={`app-shell app-mood theme-${getThemeClass(mood)}`} data-testid="app-shell">
           <div className="app-inner">
             <Masthead
               onCreate={() => {
@@ -3637,30 +3692,35 @@ function App() {
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
                   onLogLauncherEvent={logLauncherEvent}
-                  onFakeLauncherLaunch={(versionId) => beginInterceptionFlow(versionId, { source: "settings_fake_launcher" })}
+                  onFakeLauncherLaunch={(versionId) =>
+                    openDestinationApp(versionId, {
+                      source: "settings_fake_launcher",
+                      reason: "fake_launcher_icon_clicked",
+                    })
+                  }
                 />
               ) : null}
             </main>
           </div>
 
           <nav className="bottom-nav" aria-label="Primary">
-            <button type="button" className={`nav-item ${activeTab === "home" ? "active" : ""}`} onClick={() => navigateTo("/home")}>
+            <button type="button" className={`nav-item ${activeTab === "home" ? "active" : ""}`} data-testid="bottom-nav-home" onClick={() => navigateTo("/home")}>
               <HomeGlyph />
               <span>Home</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} onClick={() => navigateTo("/library")}>
+            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => navigateTo("/library")}>
               <BookGlyph />
               <span>Library</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} onClick={() => navigateTo("/log")}>
+            <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} data-testid="bottom-nav-log" onClick={() => navigateTo("/log")}>
               <LogGlyph />
               <span>Log</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "packs" ? "active" : ""}`} onClick={() => navigateTo("/packs")}>
+            <button type="button" className={`nav-item ${activeTab === "packs" ? "active" : ""}`} data-testid="bottom-nav-packs" onClick={() => navigateTo("/packs")}>
               <PacksGlyph />
               <span>Packs</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "settings" ? "active" : ""}`} onClick={() => navigateTo("/settings")}>
+            <button type="button" className={`nav-item ${activeTab === "settings" ? "active" : ""}`} data-testid="bottom-nav-settings" onClick={() => navigateTo("/settings")}>
               <SettingsGlyph />
               <span>Settings</span>
             </button>
@@ -3845,7 +3905,12 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={false}
-          onLaunch={(versionId) => beginInterceptionFlow(versionId, { source: "home_fake_launcher_bar" })}
+          onLaunch={(versionId) =>
+            openDestinationApp(versionId, {
+              source: "home_fake_launcher_bar",
+              reason: "fake_launcher_icon_clicked",
+            })
+          }
         />
       ) : null}
 
@@ -3925,7 +3990,7 @@ function Composer({ initialCard, onClose, onSave }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <form className="composer" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
+      <form className="composer" data-testid="card-composer" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <div className="composer-heading">
           <p className="eyebrow">{initialCard ? "Edit your MyBishBash" : "Make a MyBishBash"}</p>
           <button type="button" className="text-button" onClick={onClose}>
@@ -3986,6 +4051,7 @@ function Composer({ initialCard, onClose, onSave }) {
             <label className="field">
               <span>What does future-you need nudging towards?</span>
               <textarea
+                data-testid="card-prompt-input"
                 value={promptText}
                 onChange={(event) => {
                   setPromptText(event.target.value);
@@ -4091,6 +4157,7 @@ function Composer({ initialCard, onClose, onSave }) {
             <button
               type="submit"
               className="save-button"
+              data-testid="save-card-button"
             >
               Save MyBishBash
             </button>
@@ -4112,6 +4179,7 @@ function Masthead({ onCreate }) {
       <button
         type="button"
         className="add-button"
+        data-testid="create-card-button"
         onClick={onCreate}
         aria-label="Create a MyBishBash"
       >
@@ -4138,7 +4206,7 @@ function HomePanel({
   onCreate,
 }) {
   return (
-    <section className="library">
+    <section className="library" data-testid="home-panel">
       <div className="section-heading solo">
         <div>
           <h2>Your MyBishBash list</h2>
@@ -4150,7 +4218,7 @@ function HomePanel({
           <article className="home-empty-card">
             <h3>No cards yet</h3>
             <p>Start by creating one small nudge</p>
-            <button type="button" className="pack-button" onClick={onCreate}>
+            <button type="button" className="pack-button" data-testid="empty-create-card-button" onClick={onCreate}>
               Create card
             </button>
           </article>
@@ -4173,6 +4241,7 @@ function HomePanel({
             <article
               key={item.id}
               className={`library-card ${menuOpenId === item.id ? "menu-open" : ""} theme-${getThemeClass(item.representative.theme)}`}
+              data-testid={`home-card-${item.id}`}
               onClick={openItem}
               role="button"
               tabIndex={0}
@@ -4196,6 +4265,7 @@ function HomePanel({
                 <button
                   type="button"
                   className="menu-trigger"
+                  data-testid={`card-menu-${item.id}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     setMenuOpenId((current) => (current === item.id ? null : item.id));
@@ -4208,6 +4278,7 @@ function HomePanel({
                   <div className="menu">
                     <button
                       type="button"
+                      data-testid={`card-edit-${item.id}`}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (item.type === "interruption-card" || item.type === "interruption-version") {
@@ -4265,6 +4336,7 @@ function HomePanel({
                     <button
                       type="button"
                       className="danger-soft"
+                      data-testid={`card-delete-${item.id}`}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (item.type === "interruption-card" || item.type === "interruption-version") {
@@ -5161,7 +5233,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   }
 
   return (
-    <main className="sync-screen">
+    <main className="sync-screen" data-testid="sync-screen">
       <section className="sync-card">
         <span className="sync-heart" aria-hidden="true">
           <HeartGlyph />
@@ -6077,7 +6149,7 @@ function CardRevealTemplate({
   const hasActions = actions?.length > 0;
 
   return (
-    <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()}>
+    <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
       {showHomeButton ? <PremiumHomeButton href={homeHref} onClick={onHome} /> : null}
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header">
@@ -6242,17 +6314,18 @@ function PremiumActionStack({ actions = [] }) {
 
 function PremiumActionButton({ label, variant = "secondary", onClick, href }) {
   const className = `premium-action-button premium-action-button-${variant === "primary" ? "primary" : "secondary"}`;
+  const testId = `card-action-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
 
   if (href) {
     return (
-      <a className={className} href={href} onClick={(event) => onClick?.(event)}>
+      <a className={className} href={href} data-testid={testId} onClick={(event) => onClick?.(event)}>
         {label}
       </a>
     );
   }
 
   return (
-    <button type="button" className={className} onClick={(event) => onClick?.(event)}>
+    <button type="button" className={className} data-testid={testId} onClick={(event) => onClick?.(event)}>
       {label}
     </button>
   );
@@ -6973,7 +7046,7 @@ function LegalPage({ title, docUrl }) {
 
 function ContinueToAppCard({ appName, appIcon, onContinue, onBack, className = "" }) {
   return (
-    <div className={`premium-card-screen premium-card-personal ${className}`.trim()}>
+    <div className={`premium-card-screen premium-card-personal ${className}`.trim()} data-testid="continue-to-app-card">
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header" />
         <section className="premium-card-message-section" style={{ alignItems: 'center', textAlign: 'center' }}>

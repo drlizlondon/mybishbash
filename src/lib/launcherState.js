@@ -62,7 +62,12 @@ function firstNonEmpty(...values) {
   return values.find((value) => typeof value === "string" && value.trim()) || "";
 }
 
-export function getVersionOpenHref(version) {
+function normalizeWebHref(value) {
+  if (!value) return "";
+  return value.startsWith("x-safari-") ? value.replace(/^x-safari-/, "") : value;
+}
+
+export function getVersionOpenHref(version, { preferFastDestination = false } = {}) {
   if (!version) return "";
 
   const launcher = getLauncherConfig(version.id) ?? getLauncherConfig(version.type);
@@ -70,6 +75,24 @@ export function getVersionOpenHref(version) {
   const platform = getLauncherPlatform();
 
   let href = "";
+
+  if (preferFastDestination) {
+    href = normalizeWebHref(firstNonEmpty(
+      merged.webFallbackUrl,
+      merged.iosWebFallbackUrl,
+      merged.androidWebFallbackUrl,
+      merged.manualUrl
+    ));
+    if (href) {
+      console.log("[LAUNCHER_URL_RESOLVED]", {
+        versionId: merged.id,
+        platform,
+        href,
+        preferFastDestination,
+      });
+      return href;
+    }
+  }
 
   if (platform === "android") {
     href = firstNonEmpty(
@@ -110,6 +133,7 @@ export function getVersionOpenHref(version) {
     versionId: merged.id,
     platform,
     href,
+    preferFastDestination,
   });
 
   return href;

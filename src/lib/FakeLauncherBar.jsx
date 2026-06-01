@@ -17,6 +17,7 @@ export default function FakeLauncherBar({ versions, raised = false, onLaunch }) 
             key={version.id}
             type="button"
             className="fake-launcher-button"
+            data-testid={`fake-launcher-${version.id}`}
             onClick={() => {
               onLaunch?.(version.id);
             }}
