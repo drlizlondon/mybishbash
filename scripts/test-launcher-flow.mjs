@@ -76,6 +76,7 @@ assert.equal(
 );
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 assert.match(appSource, /buildFakeLauncherPreparingOverlay/);
 assert.match(appSource, /\[\"intercept-pack\", "continue-to-app"\]\.includes\(overlay\?\.type\)/);
 assert.match(appSource, /if \(!launcherReadiness\.ready\)/);
@@ -93,5 +94,10 @@ assert.doesNotMatch(appSource, /if \(!card\.sourcePackId \|\| !isEligible\(card,
 assert.match(appSource, /launchCompletedCardIdsRef/);
 assert.match(appSource, /selectedNextOverlayType/);
 assert.match(appSource, /cardsOverride/);
+assert.match(appSource, /onLaunch=\{startInterceptionFlow\}/);
+assert.match(appSource, /function handleOverlayFakeLauncherLaunch/);
+assert.match(appSource, /onFakeLauncherLaunch=\{handleOverlayFakeLauncherLaunch\}/);
+assert.doesNotMatch(fakeLauncherBarSource, /window\.location\.assign/);
+assert.doesNotMatch(fakeLauncherBarSource, /opened: Boolean\(href\)/);
 
 console.log("Launcher flow checks passed");

@@ -22,12 +22,7 @@ export default function FakeLauncherBar({ versions, raised = false, onLaunch }) 
             type="button"
             className="fake-launcher-button"
             onClick={() => {
-              console.log("[LAUNCHER] clicked", version.id, href);
-              if (href) {
-                console.log("[LAUNCHER] opening", href);
-                window.location.assign(href);
-              }
-              onLaunch?.(version.id, { href, opened: Boolean(href) });
+              onLaunch?.(version.id, { href });
             }}
             aria-label={`Launch ${version.realAppLabel}`}
           >

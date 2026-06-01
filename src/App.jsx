@@ -2118,6 +2118,14 @@ function App() {
     });
   }
 
+  function handleOverlayFakeLauncherLaunch(versionId, launch = {}) {
+    if (overlay?.launchSource === "fake_launcher" || overlay?.versionId) {
+      handleFakeLauncherLaunch(versionId, launch);
+      return;
+    }
+    startInterceptionFlow(versionId);
+  }
+
   function updateCards(updater) {
     setCards((current) =>
       normalizeCards(typeof updater === "function" ? updater(current) : updater, new Date(), profile.timezone),
@@ -3849,7 +3857,7 @@ function App() {
             setIsActionCardEditorOpen(true);
           }}
           fakeLauncherVersions={fakeLauncherVersions}
-          onFakeLauncherLaunch={handleFakeLauncherLaunch}
+          onFakeLauncherLaunch={handleOverlayFakeLauncherLaunch}
         />
       ) : null}
 
@@ -3857,7 +3865,7 @@ function App() {
         <FakeAppLauncherBar
           versions={fakeLauncherVersions}
           raised={false}
-          onLaunch={handleFakeLauncherLaunch}
+          onLaunch={startInterceptionFlow}
         />
       ) : null}
 
