@@ -96,6 +96,10 @@ import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/l
 import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "./lib/launcherFlow";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
+  getWeightedLauncherFlowGate,
+  selectWeightedLauncherCard,
+} from "./lib/cardSelection";
+import {
   DiagnosticsModal,
   FeedbackModal,
   MyReportsModal,
@@ -1587,11 +1591,21 @@ function App() {
   function selectLauncherActivationCard(versionId, source = "route") {
     const activationKey = createInterceptActivation(versionId, source);
     launchCompletedCardIdsRef.current = new Set();
+    const weightedFlowGate = getWeightedLauncherFlowGate({
+      testerStatus,
+      storage: typeof window === "undefined" ? null : window.localStorage,
+    });
+    const useWeightedFlow = weightedFlowGate.weightedFlowEnabled;
     debugLaunch("[LAUNCH_ATTEMPT] intercept started", {
       route: route.path,
       launcherContext: versionId,
       launchAttemptId: activationKey,
       source,
+      weightedFlowEnabled: weightedFlowGate.weightedFlowEnabled,
+      weightedFlowUsed: useWeightedFlow,
+      testerStatusIsTester: weightedFlowGate.testerIsTester,
+      devOverride: weightedFlowGate.devOverride,
+      selectedPath: weightedFlowGate.selectedPath,
     });
     const selectionEvents =
       overlay?.type === "intercept-pack" && overlay?.versionId === versionId
@@ -1622,17 +1636,26 @@ function App() {
         }
       : null;
 
-    const fallbackDisplay = pickRandomPersonalCardForLauncher(
-      cards,
-      profile.timezone,
-      launchCompletedCardIdsRef.current,
-    );
+    const fallbackDisplay = useWeightedFlow
+      ? selectWeightedLauncherCard({
+          cards,
+          timezone: profile.timezone,
+          events: selectionEvents,
+          excludedCardIds: launchCompletedCardIdsRef.current,
+        })
+      : pickRandomPersonalCardForLauncher(
+          cards,
+          profile.timezone,
+          launchCompletedCardIdsRef.current,
+        );
     const selected = fallbackDisplay.selected;
     const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
+    const plannedInterruption = useWeightedFlow && !selected ? null : interruption;
+    const selectedSource = useWeightedFlow
+      ? fallbackDisplay.selectedSource
+      : selected?.sourcePackId ? "pack" : selected ? "personal" : interruption ? "interruption" : "none";
 
-    const selectedCard = interruption
-      ? interruption.pack?.cards?.[interruption.activeIndex ?? 0]
-      : selected;
+    const selectedCard = selected ?? plannedInterruption?.pack?.cards?.[plannedInterruption.activeIndex ?? 0] ?? null;
     debugLaunch("[LAUNCH_ATTEMPT] intercept resolved", {
       route: route.path,
       launcherContext: versionId,
@@ -1640,22 +1663,66 @@ function App() {
       versionId,
       source,
       eligibleCardCount,
-      overlayType: interruption ? "intercept-pack" : selected ? "reveal" : "empty",
-      packId: interruption?.pack?.id ?? null,
+      weightedFlowEnabled: weightedFlowGate.weightedFlowEnabled,
+      weightedFlowUsed: useWeightedFlow,
+      testerStatusIsTester: weightedFlowGate.testerIsTester,
+      devOverride: weightedFlowGate.devOverride,
+      selectedPath: weightedFlowGate.selectedPath,
+      configuredWeights: fallbackDisplay.weights ?? null,
+      selectedSource,
+      availablePersonalCount: fallbackDisplay.availablePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
+      availablePackCount: fallbackDisplay.availablePackCount ?? launcherStats.eligiblePackCardsCount,
+      overlayType: selected ? "reveal" : plannedInterruption ? "intercept-pack" : "empty",
+      packId: selected?.sourcePackId ?? plannedInterruption?.pack?.id ?? null,
       cardId: selectedCard?.id ?? null,
       selectedCardId: selectedCard?.id ?? null,
-      selectedCardSource: selected?.sourcePackId ? "library_pack" : selected ? "personal" : interruption ? "interruption" : null,
-      activeIndex: interruption?.activeIndex ?? null,
+      selectedCardSource: selected?.sourcePackId ? "library_pack" : selected ? "personal" : plannedInterruption ? "interruption" : null,
+      activeIndex: plannedInterruption?.activeIndex ?? null,
       ...launcherStats,
-      caughtUpReason: interruption ? null : "no eligible interrupter cards",
-      fallbackReason: selected || interruption ? null : "no eligible personal, active pack, or interruption cards",
+      caughtUpReason: plannedInterruption ? null : "no eligible interrupter cards",
+      fallbackReason: selected || plannedInterruption ? null : "no eligible personal, active pack, or interruption cards",
+    });
+    void logEvent({
+      event_type: useWeightedFlow ? "launcher_weighted_session_started" : "launcher_session_started",
+      source_type: "fake_launcher",
+      card_source: "fake_launcher",
+      card_id: selected?.id ?? null,
+      card_title: selected?.dashboardTitle ?? selected?.promptText ?? null,
+      card_text: selected?.promptText ?? null,
+      pack_id: selected?.sourcePackId ?? null,
+      app_id: versionId,
+      app_name: homeScreenVersions[versionId]?.displayName ?? homeScreenVersions[versionId]?.name ?? versionId,
+      launcher_context: versionId,
+      action_taken: "started",
+      metadata: {
+        activationKey,
+        launcherId: versionId,
+        launchedFrom: source,
+        weightedFlowEnabled: weightedFlowGate.weightedFlowEnabled,
+        weightedFlowUsed: useWeightedFlow,
+        testerStatusIsTester: weightedFlowGate.testerIsTester,
+        devOverride: weightedFlowGate.devOverride,
+        selectedPath: weightedFlowGate.selectedPath,
+        selectedSource,
+        configuredWeights: fallbackDisplay.weights ?? null,
+        availablePersonalCount: fallbackDisplay.availablePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
+        availablePackCount: fallbackDisplay.availablePackCount ?? launcherStats.eligiblePackCardsCount,
+        selectedCardId: selected?.id ?? null,
+        selectedPackId: selected?.sourcePackId ?? null,
+        interruptionShown: Boolean(plannedInterruption),
+        actionCardShown: false,
+        destinationOpened: false,
+      },
     });
     interceptActivationRef.current = {
       activationKey,
       versionId,
       source,
       selected,
-      interruption,
+      interruption: plannedInterruption,
+      weightedFlowUsed: useWeightedFlow,
+      weightedFlowGate,
+      weightedDecision: fallbackDisplay,
     };
     return interceptActivationRef.current;
   }
@@ -2142,7 +2209,13 @@ function App() {
       app_name: version?.name,
       launcher_context: version?.id,
       action_taken: "continued_to_app",
-      metadata: { href, reason },
+      metadata: {
+        href,
+        reason,
+        weightedFlowUsed: Boolean(interceptActivationRef.current?.weightedFlowUsed),
+        activationKey: interceptActivationRef.current?.activationKey ?? null,
+        destinationOpened: Boolean(href),
+      },
     });
 
     if (href) {
@@ -2332,14 +2405,58 @@ function App() {
       if (completedCardId) {
         launchCompletedCardIdsRef.current = new Set([...launchCompletedCardIdsRef.current, completedCardId]);
       }
-      const cardsForDecision = options.cardsOverride ?? cards;
       const excludedCardIds = launchCompletedCardIdsRef.current;
+      const activation = interceptActivationRef.current;
+      const activationKey = overlay.activationKey || activation?.activationKey || Date.now().toString();
+      if (activation?.weightedFlowUsed && activation.versionId === versionId && activation.activationKey === activationKey) {
+        if (activation.interruption) {
+          setScreen("interception");
+          const nextOverlay = {
+            ...buildCustomPackOverlay(activation.interruption.pack, activation.interruption.activeIndex, "intercept-pack"),
+            ...buildFakeLauncherOverlayContext(versionId, activationKey),
+          };
+          setOverlay(nextOverlay);
+          debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+          debugLaunch("[CONTINUE_DECISION] weighted intercept -> routing to interruption decision", nextOverlay);
+          void logEvent({
+            event_type: "launcher_weighted_interruption_shown",
+            source_type: "fake_launcher",
+            card_source: "fake_launcher",
+            app_id: versionId,
+            app_name: homeScreenVersions[versionId]?.displayName ?? homeScreenVersions[versionId]?.name ?? versionId,
+            launcher_context: versionId,
+            pack_id: activation.interruption.pack?.id ?? null,
+            card_id: activation.interruption.pack?.cards?.[activation.interruption.activeIndex ?? 0]?.id ?? null,
+            action_taken: "shown",
+            metadata: {
+              activationKey,
+              weightedFlowUsed: true,
+              selectedSource: activation.weightedDecision?.selectedSource ?? null,
+              selectedCardId: activation.selected?.id ?? null,
+              selectedPackId: activation.selected?.sourcePackId ?? null,
+              interruptionShown: true,
+              actionCardShown: false,
+              destinationOpened: false,
+            },
+          });
+          navigateTo(`/intercept/${versionId}`, { replace: true });
+          return;
+        }
+
+        setScreen("interception");
+        const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
+        setOverlay(nextOverlay);
+        debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+        debugLaunch("[CONTINUE_DECISION] weighted intercept -> routing to ContinueToAppCard", nextOverlay);
+        navigateTo(`/intercept/${versionId}`, { replace: true });
+        return;
+      }
+      const cardsForDecision = options.cardsOverride ?? cards;
       const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: dislikedPackCardIds,
         globalEnabled: globalInterruptionMode,
       });
       const hasNextInterruptionPack = overlay.type !== "intercept-pack" && Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0));
-      const activationKey = overlay.activationKey || interceptActivationRef.current?.activationKey || Date.now().toString();
       const launcherStats = getLauncherCardStats(cardsForDecision, profile.timezone, excludedCardIds);
       const fallbackDisplay = hasNextInterruptionPack || overlay.type === "reveal"
         ? { selected: null }
@@ -3866,6 +3983,11 @@ function App() {
               app_name: activeOverlayVersion?.name,
               launcher_context: activeOverlayVersion?.id,
               action_taken: "chose_something_else",
+              metadata: {
+                weightedFlowUsed: Boolean(interceptActivationRef.current?.weightedFlowUsed),
+                activationKey: overlay?.activationKey ?? interceptActivationRef.current?.activationKey ?? null,
+                actionCardShown: visibleActionCards.length > 0,
+              },
             });
             if (visibleActionCards.length === 0) {
               console.log("[ACTION CARDS] Opening empty fallback.");

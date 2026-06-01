@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {
+  DEFAULT_WEIGHTED_FLOW_SETTINGS,
+  getWeightedLauncherFlowGate,
+  isWeightedLauncherFlowEnabled,
+  normalizeWeightedFlowSettings,
+  selectWeightedLauncherCard,
+} from "../src/lib/cardSelection.js";
 import { getLauncherDecisionReadiness } from "../src/lib/launcherFlow.js";
 import { buildCardsFromPack, getStatusMeta, isEligible, isPackCardAvailable } from "../src/utils.js";
 
@@ -79,6 +86,7 @@ assert.equal(
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
+const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
 assert.match(appSource, /buildFakeLauncherPreparingOverlay/);
 assert.match(appSource, /\[\"intercept-pack\", "continue-to-app"\]\.includes\(overlay\?\.type\)/);
 assert.match(appSource, /if \(!launcherReadiness\.ready\)/);
@@ -114,6 +122,11 @@ assert.match(appSource, /source: "overlay_fake_launcher",\s*reason: "fake_launch
 assert.match(appSource, /source: "settings_fake_launcher",\s*reason: "fake_launcher_icon_clicked"/);
 assert.match(appSource, /onTryLauncher=\{\(launcherId\) => finishOnboarding\("try", launcherId\)\}/);
 assert.match(appSource, /pickRandomPersonalCardForLauncher/);
+assert.match(appSource, /getWeightedLauncherFlowGate/);
+assert.match(appSource, /selectWeightedLauncherCard/);
+assert.match(appSource, /testerStatus/);
+assert.match(cardSelectionSource, /mybishbash\.weightedFlow\.enabled/);
+assert.match(cardSelectionSource, /env\?\.DEV === true/);
 assert.doesNotMatch(appSource, /function handleFakeLauncherLaunch/);
 assert.doesNotMatch(appSource, /startInterceptionFlow/);
 assert.doesNotMatch(appSource, /source: "home_fake_launcher_bar" \}\)\}/);
@@ -165,5 +178,230 @@ const activatedPackCards = buildCardsFromPack({
 assert.equal(activatedPackCards.length, 1);
 assert.equal(isEligible(activatedPackCards[0], nightDate, "Europe/London"), false, "Default activated pack card can be outside its timing window");
 assert.equal(isPackCardAvailable(activatedPackCards[0]), true, "Default activated pack card is still available when active");
+
+const selectorNow = new Date("2026-01-01T13:00:00.000Z");
+const personalCard = {
+  id: "personal-ready",
+  promptText: "Personal ready",
+  timingWindows: ["day"],
+  paused: false,
+  disliked: false,
+  deletedAt: null,
+  sourcePackId: null,
+  doneDate: null,
+  notYetUntil: null,
+  lastShownAt: null,
+};
+const packCard = (id, packId, extra = {}) => ({
+  id,
+  promptText: id,
+  timingWindows: ["morning"],
+  paused: false,
+  disliked: false,
+  deletedAt: null,
+  sourcePackId: packId,
+  ...extra,
+});
+const sequenceRandom = (values) => {
+  let index = 0;
+  return () => values[index++] ?? values[values.length - 1] ?? 0;
+};
+
+assert.deepEqual(
+  normalizeWeightedFlowSettings({ personalWeight: -5, packWeight: "nope" }),
+  DEFAULT_WEIGHTED_FLOW_SETTINGS,
+  "Invalid weighted flow settings fall back to 70/30 and 30 minute timeout",
+);
+assert.deepEqual(
+  normalizeWeightedFlowSettings({ personalWeight: 70.9, packWeight: 30.2, packCardTimeoutMs: 5.8 }),
+  { personalWeight: 70, packWeight: 30, packCardTimeoutMs: 5 },
+  "Weights are normalized as whole numbers",
+);
+assert.deepEqual(
+  getWeightedLauncherFlowGate({
+    testerStatus: { is_tester: true },
+    storage: { getItem: () => "false" },
+    env: { DEV: false },
+  }),
+  {
+    weightedFlowEnabled: true,
+    testerIsTester: true,
+    devOverride: false,
+    selectedPath: "weighted",
+  },
+  "Tester user enters weighted flow even in production",
+);
+assert.deepEqual(
+  getWeightedLauncherFlowGate({
+    testerStatus: { is_tester: false },
+    storage: { getItem: () => "true" },
+    env: { DEV: false },
+  }),
+  {
+    weightedFlowEnabled: false,
+    testerIsTester: false,
+    devOverride: false,
+    selectedPath: "legacy",
+  },
+  "Production build ignores the localStorage override for non-testers",
+);
+assert.deepEqual(
+  getWeightedLauncherFlowGate({
+    testerStatus: undefined,
+    storage: { getItem: () => "false" },
+    env: { DEV: false },
+  }),
+  {
+    weightedFlowEnabled: false,
+    testerIsTester: false,
+    devOverride: false,
+    selectedPath: "legacy",
+  },
+  "Missing tester status defaults to legacy flow",
+);
+assert.deepEqual(
+  getWeightedLauncherFlowGate({
+    testerStatus: null,
+    storage: { getItem: () => "false" },
+    env: { DEV: false },
+  }),
+  {
+    weightedFlowEnabled: false,
+    testerIsTester: false,
+    devOverride: false,
+    selectedPath: "legacy",
+  },
+  "Supabase/tester-status failure defaults to legacy flow",
+);
+assert.deepEqual(
+  getWeightedLauncherFlowGate({
+    testerStatus: { is_tester: false },
+    storage: { getItem: () => "true" },
+    env: { DEV: true },
+  }),
+  {
+    weightedFlowEnabled: true,
+    testerIsTester: false,
+    devOverride: true,
+    selectedPath: "weighted",
+  },
+  "Development build localStorage override enables weighted flow",
+);
+assert.equal(
+  isWeightedLauncherFlowEnabled({
+    testerStatus: { is_tester: true },
+    storage: { getItem: () => "false" },
+    env: { DEV: false },
+  }),
+  true,
+);
+assert.equal(
+  isWeightedLauncherFlowEnabled({
+    testerStatus: { is_tester: false },
+    storage: { getItem: () => "true" },
+    env: { DEV: false },
+  }),
+  false,
+  "Boolean helper also ignores production localStorage override",
+);
+assert.equal(
+  isWeightedLauncherFlowEnabled({
+    testerStatus: { is_tester: false },
+    storage: { getItem: () => "false" },
+    env: { DEV: true },
+  }),
+  false,
+  "Non-testers stay on legacy flow without the dev override",
+);
+
+const largePack = Array.from({ length: 100 }, (_, index) => packCard(`large-pack-${index}`, "large-pack"));
+const weightedPersonal = selectWeightedLauncherCard({
+  cards: [personalCard, ...largePack],
+  timezone: "Europe/London",
+  now: selectorNow,
+  random: sequenceRandom([0.69, 0]),
+});
+assert.equal(weightedPersonal.selectedSource, "personal", "70/30 draw is source-level, not card-count-level");
+assert.equal(weightedPersonal.selected.id, "personal-ready");
+assert.equal(weightedPersonal.availablePackCount, 100);
+
+const weightedPack = selectWeightedLauncherCard({
+  cards: [personalCard, ...largePack],
+  timezone: "Europe/London",
+  now: selectorNow,
+  random: sequenceRandom([0.71, 0, 0]),
+});
+assert.equal(weightedPack.selectedSource, "pack", "Pack wins only when source draw lands in pack weight");
+assert.equal(weightedPack.selectedPackId, "large-pack");
+
+assert.equal(
+  selectWeightedLauncherCard({
+    cards: [personalCard],
+    timezone: "Europe/London",
+    now: selectorNow,
+    random: sequenceRandom([0.99, 0]),
+  }).selectedSource,
+  "personal",
+  "Empty pack pool falls back to personal",
+);
+assert.equal(
+  selectWeightedLauncherCard({
+    cards: [packCard("pack-only", "pack-only")],
+    timezone: "Europe/London",
+    now: selectorNow,
+    random: sequenceRandom([0.01, 0]),
+  }).selectedSource,
+  "pack",
+  "Empty personal pool falls back to pack",
+);
+assert.equal(
+  selectWeightedLauncherCard({
+    cards: [],
+    timezone: "Europe/London",
+    now: selectorNow,
+  }).selectedSource,
+  "none",
+  "Both pools empty returns no selected source",
+);
+
+const rotatedPack = selectWeightedLauncherCard({
+  cards: [
+    packCard("pack-a-card", "pack-a"),
+    packCard("pack-b-card", "pack-b"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  events: [
+    { card_id: "pack-a-card", pack_id: "pack-a", created_at: "2026-01-01T12:59:00.000Z" },
+    { card_id: "pack-b-card", pack_id: "pack-b", created_at: "2026-01-01T12:00:00.000Z" },
+  ],
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(rotatedPack.selectedPackId, "pack-b", "Pack rotation chooses the least recently exposed pack");
+
+const timeoutSelection = selectWeightedLauncherCard({
+  cards: [
+    packCard("recent-pack-card", "timeout-pack"),
+    packCard("older-pack-card", "timeout-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  events: [
+    { card_id: "recent-pack-card", pack_id: "timeout-pack", created_at: "2026-01-01T12:45:00.000Z" },
+    { card_id: "older-pack-card", pack_id: "timeout-pack", created_at: "2026-01-01T12:00:00.000Z" },
+  ],
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(timeoutSelection.selected.id, "older-pack-card", "Pack card timeout prevents immediate repeat");
+
+assert.equal(
+  selectWeightedLauncherCard({
+    cards: [{ ...personalCard, id: "done-personal", doneDate: "2026-01-01", statusToday: "doneToday" }],
+    timezone: "Europe/London",
+    now: selectorNow,
+  }).selected,
+  null,
+  "Done personal cards are not shown again today",
+);
 
 console.log("Launcher flow checks passed");
