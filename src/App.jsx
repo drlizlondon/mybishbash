@@ -138,6 +138,8 @@ const LEGACY_BASE_PATHS = ["/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
+const INSTALLED_LAUNCHER_SHELL_KEY = "mybishbash.installed-launcher-shell.v1";
+const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalone-launcher-recovery.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -165,6 +167,44 @@ function consumeHomeAutoLaunchSuppressedAfterDestination() {
     const value = window.sessionStorage.getItem(SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY) === "true";
     if (value) {
       window.sessionStorage.removeItem(SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY);
+    }
+    return value;
+  } catch {
+    return false;
+  }
+}
+
+function isStandaloneDisplayMode() {
+  if (typeof window === "undefined") return false;
+  return Boolean(window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true || window.Capacitor);
+}
+
+function getInstalledLauncherShellId() {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(INSTALLED_LAUNCHER_SHELL_KEY) || "null");
+    const launcherId = parsed?.launcher_id ?? parsed?.launcherId ?? parsed?.id ?? null;
+    return isKnownLauncher(launcherId) ? launcherId : null;
+  } catch {
+    return null;
+  }
+}
+
+function suppressStandaloneLauncherRecoveryOnce() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY, "true");
+  } catch {
+    // Session storage can be unavailable in constrained browser contexts.
+  }
+}
+
+function consumeStandaloneLauncherRecoverySuppression() {
+  if (typeof window === "undefined") return false;
+  try {
+    const value = window.sessionStorage.getItem(SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY) === "true";
+    if (value) {
+      window.sessionStorage.removeItem(SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY);
     }
     return value;
   } catch {
@@ -586,10 +626,7 @@ function countEligibleGeneralCards(currentCards, timezone) {
 
 function getBrowserSafeDestinationHref(href) {
   if (!href) return "";
-  const isStandalone =
-    typeof window !== "undefined" &&
-    (window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true);
-  if (!isStandalone && href.startsWith("x-safari-")) {
+  if (!isStandaloneDisplayMode() && href.startsWith("x-safari-")) {
     return href.replace(/^x-safari-/, "");
   }
   return href;
@@ -944,7 +981,7 @@ function App() {
     const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
     const normalizedPath = normalizeRoutePath(rawPath);
     const hasAppRouteParam = params.has("route");
-    const isStandaloneMode = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone || !!window.Capacitor;
+    const isStandaloneMode = isStandaloneDisplayMode();
 
     if (normalizedPath === "/early-access") {
       return <EarlyAccessPage />;
@@ -2278,6 +2315,27 @@ function App() {
       return;
     }
 
+    if (isHomeRoute && testerStatus?.is_tester === true && isStandaloneDisplayMode()) {
+      const installedLauncherId = getInstalledLauncherShellId();
+      if (installedLauncherId && !consumeStandaloneLauncherRecoverySuppression()) {
+        debugLaunch("[STANDALONE_LAUNCHER_RECOVERY] restarting launcher shell from home", {
+          route: route.path,
+          launcherContext: installedLauncherId,
+        });
+        interceptActivationRef.current = null;
+        launchCompletedCardIdsRef.current = new Set();
+        suppressNextHomeAutoLaunchRef.current = false;
+        setShouldLaunchOverlay(false);
+        setOverlay(null);
+        beginInterceptionFlow(installedLauncherId, {
+          source: "standalone_home_recovery",
+          replace: true,
+          navigate: true,
+        });
+        return;
+      }
+    }
+
     if (isHomeRoute && shouldLaunchOverlay) {
       if (e2eMode) {
         setShouldLaunchOverlay(false);
@@ -2485,6 +2543,7 @@ function App() {
 
     if (href) {
       markHomeAutoLaunchSuppressedAfterDestination();
+      suppressStandaloneLauncherRecoveryOnce();
       suppressResumeHomeAutoLaunchRef.current = true;
       suppressNextHomeAutoLaunchRef.current = true;
       setShouldLaunchOverlay(false);
@@ -4211,6 +4270,7 @@ function App() {
               return;
             }
             suppressNextHomeAutoLaunchRef.current = true;
+            suppressStandaloneLauncherRecoveryOnce();
             setShouldLaunchOverlay(false);
             setScreen("library");
             navigateTo("/home", { replace: true });

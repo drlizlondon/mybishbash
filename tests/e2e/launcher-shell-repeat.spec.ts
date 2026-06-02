@@ -78,6 +78,42 @@ async function seedDownloadedShellState(page: Page, { interruptionOn = false } =
   );
 }
 
+async function simulateStandaloneDisplayMode(page: Page) {
+  await page.addInitScript(() => {
+    const originalMatchMedia = window.matchMedia?.bind(window);
+    window.matchMedia = ((query: string) => {
+      if (query === '(display-mode: standalone)') {
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => false,
+        } as MediaQueryList;
+      }
+      return originalMatchMedia
+        ? originalMatchMedia(query)
+        : ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+          } as MediaQueryList);
+    }) as typeof window.matchMedia;
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true,
+    });
+  });
+}
+
 async function waitForLauncherCard(page: Page) {
   const launcherCard = page.getByTestId('card-overlay-pack').or(page.getByTestId('card-overlay-personal'));
   await expect(launcherCard, 'Downloaded shell open should render a selectable personal/pack card, not caught-up').toBeVisible();
@@ -155,4 +191,30 @@ test('downloaded shell resume rebuilds the launcher flow on the same intercept r
   );
   expect(trace.visible).toMatch(/^(pack|personal)$/);
   expect(trace.counts.eligiblePackCards).toBeGreaterThan(0);
+});
+
+test('tester standalone home launch recovers the installed Safari shell flow', async ({ page }) => {
+  await simulateStandaloneDisplayMode(page);
+  await seedDownloadedShellState(page, { interruptionOn: false });
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'mybishbash.installed-launcher-shell.v1',
+      JSON.stringify({
+        launcher_id: 'safari',
+        launch_path: '/intercept/safari',
+        updated_at: '2026-06-01T12:00:00.000Z',
+      }),
+    );
+  });
+
+  await page.goto('/mybishbash/home');
+  await waitForLauncherCard(page);
+  await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
+  await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
+
+  await page.getByTestId('card-overlay-pack').getByTestId('card-action-continue').click();
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+  await page.getByTestId('card-action-back-to-mybishbash').click();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('card-overlay-pack'), 'Back home should not instantly restart the recovered shell').toHaveCount(0);
 });

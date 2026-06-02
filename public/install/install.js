@@ -21,6 +21,10 @@
     window.matchMedia?.("(display-mode: standalone)").matches ||
     window.navigator.standalone === true;
 
+  if (launcher.id !== "mybishbash" && launcher.launchPath) {
+    storeInstalledLauncherShell(launcher);
+  }
+
   if (isStandalone && launcher.launchPath) {
     window.location.replace(`${appBasePath}${launcher.launchPath}`);
     return;
@@ -58,6 +62,9 @@
     }
     launchLink.href = launchUrl.toString();
     launchLink.addEventListener("click", () => {
+      if (version.id !== "mybishbash") {
+        storeInstalledLauncherShell(version);
+      }
       const pendingEvents = loadPendingEvents();
       pendingEvents.push({
         event_type: "launcher_installed",
@@ -133,4 +140,15 @@ function loadPendingEvents() {
   } catch {
     return [];
   }
+}
+
+function storeInstalledLauncherShell(launcher) {
+  window.localStorage.setItem(
+    "mybishbash.installed-launcher-shell.v1",
+    JSON.stringify({
+      launcher_id: launcher.id,
+      launch_path: launcher.launchPath,
+      updated_at: new Date().toISOString(),
+    }),
+  );
 }
