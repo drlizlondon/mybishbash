@@ -2412,16 +2412,17 @@ function App() {
       const completedCard = completedCardId
         ? cardsForDecision.find((card) => card.id === completedCardId) ?? cards.find((card) => card.id === completedCardId)
         : null;
-      if (activation?.weightedFlowUsed && activation.versionId === versionId && activation.activationKey === activationKey) {
+      if (overlay.type === "reveal") {
         setScreen("interception");
         const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
         setOverlay(nextOverlay);
         debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-        debugLaunch("[CONTINUE_DECISION] weighted handled card -> routing to ContinueToAppCard", {
+        debugLaunch("[CONTINUE_DECISION] launcher handled card -> routing to ContinueToAppCard", {
           ...nextOverlay,
           completedCardId,
           completedCardSource: completedCard?.sourcePackId ? "pack" : completedCard ? "personal" : null,
           completedPackId: completedCard?.sourcePackId ?? null,
+          weightedFlowUsed: Boolean(activation?.weightedFlowUsed),
         });
         navigateTo(`/intercept/${versionId}`, { replace: true });
         return;

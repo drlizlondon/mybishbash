@@ -224,8 +224,23 @@ assertAppPattern(
 );
 
 assertAppPattern(
-  "weighted launcher handled cards route to ContinueToAppCard instead of another card",
-  /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\) \{[\s\S]{0,700}weighted handled card -> routing to ContinueToAppCard[\s\S]{0,320}return;/g,
+  "fake launcher reveal cards route to ContinueToAppCard after handling instead of another card",
+  /if \(overlay\.type === "reveal"\) \{/g,
+);
+
+assertAppPattern(
+  "fake launcher reveal completion builds ContinueToAppCard overlay",
+  /const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);/g,
+);
+
+assertAppPattern(
+  "fake launcher reveal completion logs ContinueToAppCard transition",
+  /\[CONTINUE_DECISION\] launcher handled card -> routing to ContinueToAppCard/g,
+);
+
+assertAppDoesNotMatch(
+  "fake launcher handled-card completion must not depend on weighted activation state",
+  /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\)/g,
 );
 
 assertAppDoesNotMatch(

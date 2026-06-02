@@ -125,11 +125,10 @@ assert.match(appSource, /pickRandomPersonalCardForLauncher/);
 assert.match(appSource, /getWeightedLauncherFlowGate/);
 assert.match(appSource, /selectWeightedLauncherCard/);
 assert.match(appSource, /testerStatus/);
-assert.match(
-  appSource,
-  /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\) \{[\s\S]{0,700}weighted handled card -> routing to ContinueToAppCard[\s\S]{0,320}return;/,
-  "Weighted launcher handled cards route to ContinueToAppCard instead of selecting another card",
-);
+assert.match(appSource, /if \(overlay\.type === "reveal"\) \{/);
+assert.match(appSource, /const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);/);
+assert.match(appSource, /\[CONTINUE_DECISION\] launcher handled card -> routing to ContinueToAppCard/);
+assert.doesNotMatch(appSource, /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\)/);
 assert.doesNotMatch(appSource, /\[CONTINUE_DECISION\] weighted intercept -> routing to next weighted card/);
 assert.doesNotMatch(appSource, /\[WEIGHTED_GUARD\] Active pack cards remained after selector returned empty/);
 assert.match(cardSelectionSource, /mybishbash\.weightedFlow\.enabled/);
