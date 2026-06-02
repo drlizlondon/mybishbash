@@ -197,8 +197,8 @@ async function waitForAnyLauncherStep(page) {
 
 async function completeVisibleCard(page) {
   if (await page.getByTestId("card-overlay-pack").isVisible()) {
-    await page.getByTestId("card-overlay-pack").getByTestId("card-action-like").click();
-    return "Like";
+    await page.getByTestId("card-overlay-pack").getByTestId("card-action-continue").click();
+    return "Continue";
   }
 
   if (await page.getByTestId("card-overlay-personal").isVisible()) {
@@ -314,7 +314,7 @@ async function main() {
   printStep(1, first);
 
   if (options.usePack) {
-    await page.getByTestId("card-overlay-pack").getByTestId("card-action-like").click();
+    await page.getByTestId("card-overlay-pack").getByTestId("card-action-continue").click();
   } else {
     await page.getByTestId("card-overlay-personal").getByTestId("card-action-done").click();
   }

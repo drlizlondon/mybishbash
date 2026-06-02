@@ -100,6 +100,15 @@ const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "ut
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+
+function sourceBetween(source, start, end) {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `Missing source marker: ${start}`);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `Missing source marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
 assert.match(appSource, /buildFakeLauncherPreparingOverlay/);
 assert.match(appSource, /\[\"intercept-pack\", "continue-to-app"\]\.includes\(overlay\?\.type\)/);
 assert.match(appSource, /if \(!launcherReadiness\.ready\)/);
@@ -139,6 +148,40 @@ assert.match(appSource, /getWeightedLauncherFlowGate/);
 assert.match(appSource, /selectWeightedLauncherCard/);
 assert.match(appSource, /testerStatus/);
 assert.match(appSource, /return e2eMode \? \{ is_tester: e2eTesterMode \} : null;/);
+
+const packOverlayActionsSource = sourceBetween(appSource, "actions={\n        card.sourcePackId", ": [\n              { label: \"Not done\"");
+assert.match(packOverlayActionsSource, /label: "Continue", variant: "primary", onClick: onPackContinue/);
+assert.match(packOverlayActionsSource, /label: "I really like this one", variant: "secondary", onClick: onPackLike/);
+assert.doesNotMatch(packOverlayActionsSource, /label: "(Like|Dislike|Not for me|Hide this)"/);
+
+const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
+assert.match(
+  packContinueHandlerSource,
+  /handleRevealCompletion\(\{ completedCardId: activeRevealCard\?\.id \}\);/,
+  "Clicking Continue on a pack card continues via the neutral reveal-completion path",
+);
+assert.doesNotMatch(
+  packContinueHandlerSource,
+  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|dislikedPackCardIds|deletedAt|paused|disliked:/,
+  "Clicking Continue must not hide, dislike, pause, delete, or suppress the pack card",
+);
+
+const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
+assert.match(packPositiveHandlerSource, /event_type: "pack_card_liked"/);
+assert.match(packPositiveHandlerSource, /action_taken: "liked"/);
+assert.doesNotMatch(
+  packPositiveHandlerSource,
+  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|deletedAt|paused|disliked:/,
+  "I really like this one records positive feedback without hiding the pack card",
+);
+assert.match(appSource, /function setPackCardHidden\(packId, text, hidden\)/);
+assert.match(appSource, /\{hidden \? "Restore card" : "Hide card"\}/);
+assert.match(
+  appSource,
+  /\{ label: "Not done", variant: "secondary", onClick: \(\) => onAction\("later"\) \},\s*\{ label: "I’ll do it now", variant: "secondary", onClick: \(\) => onAction\("now"\) \},\s*\{ label: "Done", variant: "primary", onClick: \(\) => onAction\("done"\) \}/,
+  "Non-pack personal card actions are unchanged",
+);
+
 assert.match(appSource, /testerStatusReady: !session\?\.user\?\.id \|\| testerStatus !== null/);
 assert.match(appSource, /const plannedInterruption = interruption;/);
 assert.doesNotMatch(appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/);

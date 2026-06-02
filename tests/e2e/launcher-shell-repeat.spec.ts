@@ -112,7 +112,7 @@ async function completeRoundToHome(page: Page, round: number) {
   );
 
   if (await page.getByTestId('card-overlay-pack').isVisible()) {
-    await page.getByTestId('card-overlay-pack').getByTestId('card-action-like').click();
+    await page.getByTestId('card-overlay-pack').getByTestId('card-action-continue').click();
   } else {
     await page.getByTestId('card-overlay-personal').getByTestId('card-action-done').click();
   }

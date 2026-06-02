@@ -35,6 +35,14 @@ function findFunctionBody(source, functionName) {
   return source.slice(startMatch.index, nextFunction === -1 ? source.length : nextFunction);
 }
 
+function sourceBetween(source, start, end) {
+  const startIndex = source.indexOf(start);
+  if (startIndex === -1) return "";
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  if (endIndex === -1) return "";
+  return source.slice(startIndex, endIndex);
+}
+
 function pass(message) {
   console.log(`PASS ${message}`);
 }
@@ -111,6 +119,73 @@ function assertTruthy(message, value) {
 assertNoInterceptionSource("home_fake_launcher_bar");
 assertNoInterceptionSource("overlay_fake_launcher");
 assertNoInterceptionSource("settings_fake_launcher");
+
+const packOverlayActionsSource = sourceBetween(appSource, "actions={\n        card.sourcePackId", ": [\n              { label: \"Not done\"");
+if (!packOverlayActionsSource) {
+  fail("pack overlay actions are discoverable for feedback guardrails");
+} else {
+  pass("pack overlay actions are discoverable for feedback guardrails");
+}
+assertSourcePattern(
+  "App",
+  packOverlayActionsSource,
+  "pack overlay primary action is Continue",
+  /label: "Continue", variant: "primary", onClick: onPackContinue/g,
+);
+assertSourcePattern(
+  "App",
+  packOverlayActionsSource,
+  "pack overlay positive action says I really like this one",
+  /label: "I really like this one", variant: "secondary", onClick: onPackLike/g,
+);
+assertSourceDoesNotMatch(
+  "App",
+  packOverlayActionsSource,
+  "pack overlay does not expose Like/Dislike/Hide wording",
+  /label: "(Like|Dislike|Not for me|Hide this)"/g,
+);
+
+const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
+assertSourcePattern(
+  "App",
+  packContinueHandlerSource,
+  "Continue uses neutral reveal completion",
+  /handleRevealCompletion\(\{ completedCardId: activeRevealCard\?\.id \}\);/g,
+);
+assertSourceDoesNotMatch(
+  "App",
+  packContinueHandlerSource,
+  "Continue does not hide, dislike, pause, delete, or suppress pack cards",
+  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|dislikedPackCardIds|deletedAt|paused|disliked:/g,
+);
+
+const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
+assertSourcePattern(
+  "App",
+  packPositiveHandlerSource,
+  "I really like this one logs the existing positive pack-card event",
+  /event_type: "pack_card_liked"[\s\S]{0,700}action_taken: "liked"/g,
+);
+assertSourceDoesNotMatch(
+  "App",
+  packPositiveHandlerSource,
+  "I really like this one does not hide the pack card",
+  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|deletedAt|paused|disliked:/g,
+);
+assertAppPattern(
+  "intentional hide/restore behaviour still exists in pack detail settings",
+  /function setPackCardHidden\(packId, text, hidden\)[\s\S]*\{hidden \? "Restore card" : "Hide card"\}/g,
+);
+assertAppPattern(
+  "non-pack personal card actions are unchanged",
+  /\{ label: "Not done", variant: "secondary", onClick: \(\) => onAction\("later"\) \},\s*\{ label: "I’ll do it now", variant: "secondary", onClick: \(\) => onAction\("now"\) \},\s*\{ label: "Done", variant: "primary", onClick: \(\) => onAction\("done"\) \}/g,
+);
+assertSourcePattern(
+  "HQ",
+  await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8"),
+  "positive pack feedback displays as Really liked",
+  /pack_card_liked: "Really liked"/g,
+);
 
 assertAppPattern(
   "home_fake_launcher_bar calls openDestinationApp",

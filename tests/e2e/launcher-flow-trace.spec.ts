@@ -206,7 +206,7 @@ test('QA trace: fake home launcher, interruption OFF, pack card then continue-to
     name: 'interruption OFF / pack first',
     cards: [packCard('qa-pack-off', 'QA pack card before continue')],
     firstOverlay: 'pack',
-    firstActionTestId: 'card-action-like',
+    firstActionTestId: 'card-action-continue',
     interruptionOn: false,
   });
 });
@@ -217,7 +217,7 @@ test('QA trace: fake home launcher, interruption ON, pack card then interruption
     name: 'interruption ON / pack first',
     cards: [packCard('qa-pack-on', 'QA pack card before interruption')],
     firstOverlay: 'pack',
-    firstActionTestId: 'card-action-like',
+    firstActionTestId: 'card-action-continue',
     interruptionOn: true,
   });
 });

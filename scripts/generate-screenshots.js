@@ -351,7 +351,7 @@ async function shot(page, name, { fullPage = false } = {}) {
 }
 
 async function movePastInterruption(page) {
-  const labels = ["Not yet", "Done", "Like", "Dislike", "Back home"];
+  const labels = ["Not yet", "Done", "Continue", "I really like this one", "Back home"];
   for (const label of labels) {
     const button = page.locator(".overlay-screen .action-button", { hasText: label }).first();
     if (await button.isVisible().catch(() => false)) {

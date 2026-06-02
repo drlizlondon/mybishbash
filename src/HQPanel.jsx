@@ -974,7 +974,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
             {filtered.slice(0, 100).map((event) => (
               <div key={event.id} className="grid gap-2 border-b border-slate-100 px-3 py-2 text-xs md:grid-cols-[120px_1fr_120px_120px]">
                 <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
-                <span className="font-semibold text-slate-800">{event.event_type}</span>
+                <span className="font-semibold text-slate-800">{getEventDisplayLabel(event)}</span>
                 <span className="text-slate-600">{event.launcher_id}</span>
                 <span className="text-slate-600">{event.app_display_mode || "unknown"}</span>
               </div>
@@ -1012,7 +1012,7 @@ const EventsPage = memo(function EventsPage({ events, expandedEventId, setExpand
               >
                 <div className="grid gap-2 md:grid-cols-[150px_1.1fr_0.9fr_0.8fr]">
                   <span className="text-slate-400">{formatTime(event.created_at)}</span>
-                  <span className="font-semibold text-blue-200">{event.event_type}</span>
+                  <span className="font-semibold text-blue-200">{getEventDisplayLabel(event)}</span>
                   <span className="truncate text-slate-300">{pseudoUser(event.user_id)}</span>
                   <span className="truncate text-slate-300">{event.launcher_context || event.target_app || event.app_name || "none"}</span>
                 </div>
@@ -1372,7 +1372,7 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
                   {(stats.latestEvents ?? []).map((event) => (
                     <div key={event.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs">
                       <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
-                      <span className="truncate font-semibold text-slate-700">{event.event_type}</span>
+                      <span className="truncate font-semibold text-slate-700">{getEventDisplayLabel(event)}</span>
                       <span className="truncate text-slate-500">{event.launcher_context || event.target_app || "none"}</span>
                     </div>
                   ))}
@@ -1853,7 +1853,11 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
     metric("Avg Interventions Per User", avgInterventionsPerUser, 0, interventionsOverTime.map((item) => item.interruptions), `Across active users in ${dayCount}d`, TELEMETRY_BLUE),
   ];
 
-  const eventFrequency = rowsFromCounts(countBy(events, (event) => event.event_type || "unknown"));
+  const rawEventFrequency = rowsFromCounts(countBy(events, (event) => event.event_type || "unknown"));
+  const eventFrequency = rawEventFrequency.map((row) => ({
+    ...row,
+    label: getEventDisplayLabel({ event_type: row.label }),
+  }));
   const topLaunchers = rowsFromCounts(countBy(events, (event) => getEventLauncher(event) || "unknown"));
   const notificationRows = eventFrequency.filter((row) => row.label.includes("notification"));
   const deviceRows = rowsFromCounts(countBy(events, (event) => event.metadata?.deviceType || event.metadata?.platform || "not_reported"));
@@ -2039,6 +2043,11 @@ function getEventDisplayLabel(event) {
     intercept_do_something_else: "Do Something Else clicked",
     intercept_continue_to_app: "Continue to app clicked",
     action_card_completed: "Action card completed",
+    pack_card_liked: "Really liked",
+    pack_card_disliked: "Hidden card",
+    pack_card_restored: "Restored card",
+    intercept_card_disliked: "Hidden interruption card",
+    intercept_card_restored: "Restored interruption card",
     return_session_24h: "User returned after 24h",
     return_session_7d: "User returned after 7d",
   };

@@ -100,7 +100,7 @@ async function arriveAtTerminal(page: Page, mode: LayerOneMode) {
   }
   if (mode === 'pack') {
     await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
-    await page.getByTestId('card-action-like').click();
+    await page.getByTestId('card-action-continue').click();
     await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
     return;
   }

@@ -183,7 +183,7 @@ async function completeFirstCard(page: Page, kind: 'personal' | 'pack') {
   if (kind === 'personal') {
     await page.getByTestId('card-overlay-personal').getByTestId('card-action-done').click();
   } else {
-    await page.getByTestId('card-overlay-pack').getByTestId('card-action-like').click();
+    await page.getByTestId('card-overlay-pack').getByTestId('card-action-continue').click();
   }
 }
 

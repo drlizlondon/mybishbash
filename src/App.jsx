@@ -383,6 +383,10 @@ function getWeeklyShiftCount(events, now = new Date()) {
 }
 
 function describeLogEvent(event) {
+  if (event.event_type === "pack_card_liked") {
+    return `Really liked: ${event.card_title || event.card_text || "a pack card"}`;
+  }
+
   if (event.event_type === "intercept_do_something_else") {
     return `You chose something else instead of opening ${event.app_name || "that app"}.`;
   }
@@ -404,6 +408,17 @@ function describeLogEvent(event) {
   }
 
   return "A little MyBishBash moment was recorded.";
+}
+
+function getLogEventDisplayLabel(event) {
+  const labels = {
+    pack_card_liked: "Really liked",
+    pack_card_disliked: "Hidden card",
+    pack_card_restored: "Restored card",
+    intercept_card_disliked: "Hidden interruption card",
+    intercept_card_restored: "Restored interruption card",
+  };
+  return labels[event.event_type] ?? event.event_type;
 }
 
 function isCompletionEvent(event) {
@@ -4202,6 +4217,10 @@ function App() {
               openExternalActionUrl(card.launchUrl, { source: "action_card", cardId: card.id });
             }
           }}
+          onPackContinue={() => {
+            handleRevealCompletion({ completedCardId: activeRevealCard?.id });
+            return;
+          }}
           onPackLike={() => {
             if (activeRevealCard?.sourcePackId) {
               void logEvent({
@@ -4220,7 +4239,6 @@ function App() {
             handleRevealCompletion();
             return;
           }}
-          onPackDislike={dislikePackCard}
           onChooseElse={() => {
             console.log("[INTERCEPT] Choose something else", {
               versionId: overlay?.versionId,
@@ -6258,7 +6276,7 @@ function EventDetailModal({ event, timezone, onClose }) {
             ) : null}
             <div>
               <dt>Event type</dt>
-              <dd>{event.event_type}</dd>
+              <dd>{getLogEventDisplayLabel(event)}</dd>
             </div>
           </dl>
         </div>
@@ -6275,8 +6293,8 @@ function Overlay({
   timezone,
   onClose,
   onAction,
+  onPackContinue,
   onPackLike,
-  onPackDislike,
   onChooseElse,
   onLogEvent,
   onLogLauncherEvent,
@@ -6467,8 +6485,8 @@ function Overlay({
       actions={
         card.sourcePackId
           ? [
-              { label: "Dislike", variant: "secondary", onClick: () => onPackDislike(card.id) },
-              { label: "Like", variant: "primary", onClick: onPackLike },
+              { label: "I really like this one", variant: "secondary", onClick: onPackLike },
+              { label: "Continue", variant: "primary", onClick: onPackContinue },
             ]
           : [
               { label: "Not done", variant: "secondary", onClick: () => onAction("later") },

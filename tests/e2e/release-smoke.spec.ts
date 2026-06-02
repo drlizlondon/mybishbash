@@ -370,7 +370,7 @@ test('tester weighted launcher with interruption off shows active pack card inst
   await expect(page.getByTestId('card-overlay-pack').getByRole('heading', { name: 'E2E active pack card' })).toBeVisible();
   await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
   await expect(page.getByText("You're all caught up.")).toHaveCount(0);
-  await page.getByTestId('card-action-like').click();
+  await page.getByTestId('card-action-continue').click();
 
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
   await page.getByTestId('card-action-continue-to-safari').click();
@@ -403,7 +403,7 @@ test('tester weighted launcher with exhausted personal cards still shows active 
   await expect(page.getByTestId('card-overlay-pack').getByRole('heading', { name: 'E2E pack after exhausted personal' })).toBeVisible();
   await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
   await expect(page.getByText("You're all caught up.")).toHaveCount(0);
-  await page.getByTestId('card-action-like').click();
+  await page.getByTestId('card-action-continue').click();
 
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
   await expect(page.getByTestId('card-overlay-pack')).toHaveCount(0);
