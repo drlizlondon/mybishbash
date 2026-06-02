@@ -114,6 +114,19 @@ async function simulateStandaloneDisplayMode(page: Page) {
   });
 }
 
+async function installLauncherShell(page: Page, launcherId: 'safari' | 'instagram' | 'youtube') {
+  await page.addInitScript((installedLauncherId) => {
+    window.localStorage.setItem(
+      'mybishbash.installed-launcher-shell.v1',
+      JSON.stringify({
+        launcher_id: installedLauncherId,
+        launch_path: `/intercept/${installedLauncherId}`,
+        updated_at: '2026-06-01T12:00:00.000Z',
+      }),
+    );
+  }, launcherId);
+}
+
 async function waitForLauncherCard(page: Page) {
   const launcherCard = page.getByTestId('card-overlay-pack').or(page.getByTestId('card-overlay-personal'));
   await expect(launcherCard, 'Downloaded shell open should render a selectable personal/pack card, not caught-up').toBeVisible();
@@ -155,7 +168,7 @@ async function completeRoundToHome(page: Page, round: number) {
 
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
   console.log(`[downloaded-shell:${round}] terminal=back-to-mybishbash`);
-  await page.getByTestId('card-action-back-to-mybishbash').click();
+  await page.getByRole('button', { name: 'Back to MyBishBash' }).click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 }
@@ -196,25 +209,56 @@ test('downloaded shell resume rebuilds the launcher flow on the same intercept r
 test('tester standalone home launch recovers the installed Safari shell flow', async ({ page }) => {
   await simulateStandaloneDisplayMode(page);
   await seedDownloadedShellState(page, { interruptionOn: false });
-  await page.addInitScript(() => {
-    window.localStorage.setItem(
-      'mybishbash.installed-launcher-shell.v1',
-      JSON.stringify({
-        launcher_id: 'safari',
-        launch_path: '/intercept/safari',
-        updated_at: '2026-06-01T12:00:00.000Z',
-      }),
-    );
-  });
+  await installLauncherShell(page, 'safari');
 
   await page.goto('/mybishbash/home');
   await waitForLauncherCard(page);
   await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
   await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
+});
 
-  await page.getByTestId('card-overlay-pack').getByTestId('card-action-continue').click();
-  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
-  await page.getByTestId('card-action-back-to-mybishbash').click();
-  await expect(page).toHaveURL(/\/mybishbash\/home$/);
-  await expect(page.getByTestId('card-overlay-pack'), 'Back home should not instantly restart the recovered shell').toHaveCount(0);
+for (const launcherId of ['safari', 'instagram', 'youtube'] as const) {
+  test(`tester ${launcherId} installed shell keeps pack cards on Continue after home icon and launcher reopen`, async ({ page }) => {
+    await seedDownloadedShellState(page, { interruptionOn: false });
+    await installLauncherShell(page, launcherId);
+
+    await page.goto(`/mybishbash/intercept/${launcherId}`);
+    await waitForLauncherCard(page);
+    await expect(page).toHaveURL(new RegExp(`/mybishbash/intercept/${launcherId}$`));
+    await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
+    await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toHaveCount(0);
+
+    await page.goto('/mybishbash/home');
+    await expect(page).toHaveURL(/\/mybishbash\/home$/);
+    await expect(page.getByTestId('home-panel')).toBeVisible();
+
+    await page.getByTestId('home-card-downloaded-shell-pack').click();
+    await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+    await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
+    await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toHaveCount(0);
+
+    await page.getByTestId('card-overlay-pack').locator('.premium-home-button').evaluate((element) => {
+      (element as HTMLElement).click();
+    });
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page).toHaveURL(/\/mybishbash\/home$/);
+
+    await page.goto(`/mybishbash/intercept/${launcherId}`);
+    await waitForLauncherCard(page);
+    await expect(page).toHaveURL(new RegExp(`/mybishbash/intercept/${launcherId}$`));
+    await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
+    await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toHaveCount(0);
+  });
+}
+
+test('normal MyBishBash home pack browsing keeps Back to home neutral CTA', async ({ page }) => {
+  await seedDownloadedShellState(page, { interruptionOn: false });
+
+  await page.goto('/mybishbash/home');
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await page.getByTestId('home-card-downloaded-shell-pack').click();
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toBeVisible();
+  await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Continue' })).toHaveCount(0);
 });

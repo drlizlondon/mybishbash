@@ -1145,6 +1145,29 @@ function App() {
   const isPreparingCaughtUp = route.kind === "caught-up" && overlay == null;
   const hideAppShell = isLaunchingHomeOverlay || isPreparingIntercept || isPreparingSpecificCard || isPreparingCaughtUp;
 
+  function getFakeLauncherShellContextId() {
+    if (testerStatus?.is_tester !== true) return null;
+    const installedLauncherId = getInstalledLauncherShellId();
+    if (!installedLauncherId || installedLauncherId === NORMAL_LAUNCHER_CONTEXT) return null;
+    return installedLauncherId;
+  }
+
+  function isFakeLauncherShellContext() {
+    return Boolean(getFakeLauncherShellContextId());
+  }
+
+  function buildRevealOverlayForCurrentShell(cardId) {
+    const installedLauncherId = getFakeLauncherShellContextId();
+    if (installedLauncherId) {
+      return buildFakeLauncherRevealOverlay(
+        cardId,
+        installedLauncherId,
+        interceptActivationRef.current?.activationKey ?? null,
+      );
+    }
+    return { ...buildRevealOverlay(cardId), origin: "home" };
+  }
+
   const currentSharedState = useCallback(
     () =>
       buildSharedState({
@@ -2309,8 +2332,13 @@ function App() {
       if (overlay?.type === "reveal" && overlay.cardId === route.cardId) {
         return;
       }
-      const nextOverlay = { ...buildRevealOverlay(route.cardId), origin: "home" };
-      debugLaunch("[CARD_ORIGIN] home card created", nextOverlay);
+      const nextOverlay = buildRevealOverlayForCurrentShell(route.cardId);
+      debugLaunch(
+        isFakeLauncherShellContext()
+          ? "[CARD_ORIGIN] launcher shell card created"
+          : "[CARD_ORIGIN] home card created",
+        nextOverlay,
+      );
       setOverlay(nextOverlay);
       return;
     }
