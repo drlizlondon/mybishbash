@@ -8,6 +8,10 @@ function normalizeSnippet(snippet) {
   return snippet.replace(/\s+/g, " ").trim();
 }
 
+function matchingSnippets(pattern) {
+  return [...appSource.matchAll(pattern)].map((match) => normalizeSnippet(match[0]));
+}
+
 function findCallWithSource(functionName, source) {
   const pattern = new RegExp(`${functionName}\\([\\s\\S]{0,400}source:\\s*"${source}"[\\s\\S]{0,200}?\\)`, "g");
   return [...appSource.matchAll(pattern)].map((match) => normalizeSnippet(match[0]));
@@ -25,25 +29,38 @@ function fail(message, offendingSource = null) {
   }
 }
 
-function assertInAppLauncherOpensDestination(source) {
-  const interceptionCalls = findCallWithSource("beginInterceptionFlow", source);
-  if (interceptionCalls.length > 0) {
-    fail(`${source} must not call beginInterceptionFlow`, interceptionCalls[0]);
+function assertPattern(message, pattern) {
+  const matches = matchingSnippets(pattern);
+  if (matches.length === 0) {
+    fail(message);
     return;
   }
-
-  const destinationCalls = findCallWithSource("openDestinationApp", source);
-  if (destinationCalls.length === 0) {
-    fail(`${source} must call openDestinationApp, or be made clearly preview-only`);
-    return;
-  }
-
-  pass(`${source} opens the real destination through openDestinationApp`);
+  pass(message);
 }
 
-assertInAppLauncherOpensDestination("home_fake_launcher_bar");
-assertInAppLauncherOpensDestination("overlay_fake_launcher");
-assertInAppLauncherOpensDestination("settings_fake_launcher");
+function assertInAppLauncherUsesSharedHandler(source) {
+  const handlerCalls = matchingSnippets(new RegExp(`handleFakeLauncherLaunch\\(versionId, "${source}"\\)`, "g"));
+  if (handlerCalls.length === 0) {
+    fail(`${source} must use handleFakeLauncherLaunch`);
+    return;
+  }
+
+  pass(`${source} uses handleFakeLauncherLaunch`);
+}
+
+assertInAppLauncherUsesSharedHandler("home_fake_launcher_bar");
+assertInAppLauncherUsesSharedHandler("overlay_fake_launcher");
+assertInAppLauncherUsesSharedHandler("settings_fake_launcher");
+
+assertPattern(
+  "tester fake launcher clicks start a launcher interception session",
+  /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId,[\s\S]{0,180}source,[\s\S]{0,80}replace: true,[\s\S]{0,80}navigate: true/g,
+);
+
+assertPattern(
+  "non-tester fake launcher clicks still open real destinations",
+  /openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
+);
 
 const interceptRouteCalls = [...appSource.matchAll(/if \(route\.kind === "intercept"\)[\s\S]{0,5000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g)].map((match) =>
   normalizeSnippet(match[0]),
