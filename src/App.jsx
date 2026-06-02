@@ -1032,6 +1032,17 @@ function buildLaunchSessionForRoute(route) {
   return buildLaunchSession("mybishbash_home");
 }
 
+function getLaunchSessionForOverlay(launchSession, overlay) {
+  if (overlay?.launchSource === "fake_launcher" && isKnownLauncher(overlay.versionId)) {
+    return normalizeLaunchSession({
+      ...launchSession,
+      entrySurface: "fake_launcher",
+      launcherId: overlay.versionId,
+    });
+  }
+  return normalizeLaunchSession(launchSession);
+}
+
 function isFakeLauncherSession(launchSession) {
   return launchSession?.entrySurface === "fake_launcher";
 }
@@ -1249,11 +1260,15 @@ function App() {
       launcherBehaviorSettings,
     ]
   );
+  const effectiveLaunchSession = useMemo(
+    () => getLaunchSessionForOverlay(launchSession, overlay),
+    [launchSession, overlay],
+  );
   const overlayLauncherVersions = useMemo(
-    () => getVisibleDestinationChips(launchSession, fakeLauncherVersions),
+    () => getVisibleDestinationChips(effectiveLaunchSession, fakeLauncherVersions),
     [
+      effectiveLaunchSession,
       fakeLauncherVersions,
-      launchSession,
     ],
   );
   const [logFilter, setLogFilter] = useState("all");
@@ -2240,11 +2255,17 @@ function App() {
       }
 
       if (resumeRoute.kind === "intercept") {
+        const nextSession = buildLaunchSession("fake_launcher", resumeRoute.versionId);
         interceptActivationRef.current = null;
+        launchCompletedCardIdsRef.current = new Set();
         loggedLauncherOpenRef.current = "";
         suppressNextHomeAutoLaunchRef.current = false;
         setShouldLaunchOverlay(false);
         setLauncherContext(resumeRoute.versionId);
+        persistLaunchSession(nextSession);
+        setLaunchSession(nextSession);
+        setScreen("interception");
+        setOverlay(null);
         setResumeLaunchNonce((current) => current + 1);
         debugLaunch("[LAUNCH_ATTEMPT] intercept resume", {
           route: resumeRoute.path,
@@ -4053,6 +4074,36 @@ function App() {
     [activeInterceptionVersion, homeScreenVersions, launcherBehaviorSettings, overlay?.versionId],
   );
 
+  useEffect(() => {
+    if (!e2eMode || typeof window === "undefined") return;
+    const cardType = activeRevealCard?.sourcePackId ? "pack" : activeRevealCard ? "personal" : null;
+    const actionLabels = cardType
+      ? getLauncherCardActions({ launchSession: effectiveLaunchSession, cardType }).actions.map((action) => action.label)
+      : [];
+    window.__MYBISHBASH_OVERLAY_DEBUG = {
+      route: {
+        kind: route.kind,
+        path: route.path,
+      },
+      overlay: overlay
+        ? {
+            type: overlay.type,
+            origin: overlay.origin ?? null,
+            launchSource: overlay.launchSource ?? null,
+            versionId: overlay.versionId ?? null,
+            activationKey: overlay.activationKey ?? null,
+          }
+        : null,
+      launchSession: {
+        entrySurface: effectiveLaunchSession.entrySurface,
+        launcherId: effectiveLaunchSession.launcherId,
+        allowBackHome: effectiveLaunchSession.allowBackHome,
+      },
+      visibleDestinationChips: overlayLauncherVersions.map((version) => version.id),
+      selectedCtaLabels: actionLabels,
+    };
+  }, [activeRevealCard, e2eMode, effectiveLaunchSession, overlay, overlayLauncherVersions, route.kind, route.path]);
+
   const homeItems = useMemo(() => {
     const items = cards
       .filter((card) => !card.sourcePackId && !card.disliked && !card.deletedAt)
@@ -4457,7 +4508,7 @@ function App() {
           overlay={overlay}
           card={activeRevealCard}
           route={route}
-          launchSession={launchSession}
+          launchSession={effectiveLaunchSession}
           version={activeOverlayVersion}
           timezone={profile.timezone}
           onClose={() => {

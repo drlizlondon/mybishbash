@@ -10,6 +10,13 @@ declare global {
     __MYBISHBASH_LEGACY_PACK_LABELS?: string[];
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
+    __MYBISHBASH_OVERLAY_DEBUG?: {
+      route: { kind?: string; path?: string };
+      overlay: { type?: string; origin?: string | null; launchSource?: string | null; versionId?: string | null; activationKey?: string | null } | null;
+      launchSession: { entrySurface?: string; launcherId?: string | null; allowBackHome?: boolean };
+      visibleDestinationChips: string[];
+      selectedCtaLabels: string[];
+    };
   }
 }
 
@@ -174,6 +181,31 @@ async function expectFakeLauncherPackCard(page: Page, launcherId: 'safari' | 'in
   await expectOnlyLauncherChip(page, launcherId);
 }
 
+async function readOverlayDebug(page: Page) {
+  return page.evaluate(() => window.__MYBISHBASH_OVERLAY_DEBUG ?? null);
+}
+
+async function expectSafariFakeLauncherPackContext(page: Page) {
+  await expectFakeLauncherPackCard(page, 'safari');
+  const debug = await readOverlayDebug(page);
+  expect(debug).toMatchObject({
+    overlay: {
+      launchSource: 'fake_launcher',
+      versionId: 'safari',
+    },
+    launchSession: {
+      entrySurface: 'fake_launcher',
+      launcherId: 'safari',
+      allowBackHome: false,
+    },
+    visibleDestinationChips: ['safari'],
+    selectedCtaLabels: ['I really like this one', 'Continue'],
+  });
+  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-youtube')).toHaveCount(0);
+  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-instagram')).toHaveCount(0);
+  return debug;
+}
+
 async function readTrace(page: Page) {
   return page.evaluate(() => {
     const audit = window.__lastLauncherSelectionAudit ?? null;
@@ -258,6 +290,74 @@ test('tester standalone home launch recovers the installed Safari shell flow', a
   await waitForLauncherCard(page);
   await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
   await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
+});
+
+test('installed Safari shell pack card keeps fake launcher context for chips and CTA', async ({ page }) => {
+  await simulateStandaloneDisplayMode(page);
+  await seedDownloadedShellState(page, { interruptionOn: false });
+  await installLauncherShell(page, 'safari');
+
+  await page.goto('/mybishbash/home');
+  await waitForLauncherCard(page);
+  await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
+  await expectFakeLauncherPackCard(page, 'safari');
+
+  const debug = await readOverlayDebug(page);
+  expect(debug).toMatchObject({
+    route: {
+      kind: 'intercept',
+      path: '/intercept/safari',
+    },
+    overlay: {
+      type: 'reveal',
+      origin: 'intercept',
+      launchSource: 'fake_launcher',
+      versionId: 'safari',
+    },
+    launchSession: {
+      entrySurface: 'fake_launcher',
+      launcherId: 'safari',
+      allowBackHome: false,
+    },
+    visibleDestinationChips: ['safari'],
+    selectedCtaLabels: ['I really like this one', 'Continue'],
+  });
+});
+
+test('installed Safari shell repeat entry refreshes fake launcher card context after continuing to real app', async ({ page }) => {
+  await simulateStandaloneDisplayMode(page);
+  await seedDownloadedShellState(page, { interruptionOn: false });
+  await installLauncherShell(page, 'safari');
+
+  await page.goto('/mybishbash/intercept/safari');
+  await waitForLauncherCard(page);
+  const firstDebug = await expectSafariFakeLauncherPackContext(page);
+  expect(firstDebug?.overlay).toMatchObject({
+    type: 'reveal',
+    origin: 'intercept',
+    launchSource: 'fake_launcher',
+    versionId: 'safari',
+  });
+
+  await page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+  await page.getByTestId('continue-to-app-card').getByRole('link', { name: /Continue to Safari/ }).click();
+  await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_NAVIGATION_ATTEMPTS?.length ?? 0)).toBe(1);
+
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+
+  await waitForLauncherCard(page);
+  const secondDebug = await expectSafariFakeLauncherPackContext(page);
+  expect(secondDebug?.overlay).toMatchObject({
+    type: 'reveal',
+    origin: 'intercept',
+    launchSource: 'fake_launcher',
+    versionId: 'safari',
+  });
+  expect(secondDebug?.overlay?.activationKey).toBeTruthy();
+  expect(secondDebug?.overlay?.activationKey).not.toBe(firstDebug?.overlay?.activationKey);
 });
 
 for (const launcherId of ['safari', 'instagram', 'youtube'] as const) {
