@@ -133,6 +133,7 @@ function resolveTheme(theme) {
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const LEGACY_BASE_PATHS = ["/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
+const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -777,7 +778,10 @@ function App() {
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [testerStatus, setTesterStatus] = useState({ is_tester: false });
+  const [testerStatus, setTesterStatus] = useState(() => {
+    const e2eTesterMode = e2eMode && typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
+    return { is_tester: e2eTesterMode };
+  });
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
@@ -1059,7 +1063,8 @@ function App() {
 
   useEffect(() => {
     if (e2eMode) {
-      setTesterStatus({ is_tester: false });
+      const e2eTesterMode = typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
+      setTesterStatus({ is_tester: e2eTesterMode });
       return undefined;
     }
     if (!session?.user?.id) {
@@ -1650,7 +1655,7 @@ function App() {
         );
     const selected = fallbackDisplay.selected;
     const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
-    const plannedInterruption = useWeightedFlow && !selected ? null : interruption;
+    const plannedInterruption = interruption;
     const selectedSource = useWeightedFlow
       ? fallbackDisplay.selectedSource
       : selected?.sourcePackId ? "pack" : selected ? "personal" : interruption ? "interruption" : "none";
@@ -2232,6 +2237,11 @@ function App() {
   function openExternalActionUrl(url, { source = "action_card", cardId = null } = {}) {
     if (!url) return;
     console.log("[ACTION_CARD] opening external URL", { source, cardId, url });
+    const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
+    if (typeof captureNavigation === "function") {
+      const handled = captureNavigation(url, { source, cardId });
+      if (handled) return;
+    }
     window.location.assign(url);
   }
 
@@ -2413,6 +2423,25 @@ function App() {
         ? cardsForDecision.find((card) => card.id === completedCardId) ?? cards.find((card) => card.id === completedCardId)
         : null;
       if (overlay.type === "reveal") {
+        if (activation?.interruption && activation.versionId === versionId && activation.activationKey === activationKey) {
+          setScreen("interception");
+          const nextOverlay = {
+            ...buildCustomPackOverlay(activation.interruption.pack, activation.interruption.activeIndex, "intercept-pack"),
+            ...buildFakeLauncherOverlayContext(versionId, activationKey),
+          };
+          setOverlay(nextOverlay);
+          debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
+          debugLaunch("[CONTINUE_DECISION] launcher handled card -> routing to interruption card", {
+            ...nextOverlay,
+            completedCardId,
+            completedCardSource: completedCard?.sourcePackId ? "pack" : completedCard ? "personal" : null,
+            completedPackId: completedCard?.sourcePackId ?? null,
+            weightedFlowUsed: Boolean(activation?.weightedFlowUsed),
+          });
+          navigateTo(`/intercept/${versionId}`, { replace: true });
+          return;
+        }
+
         setScreen("interception");
         const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
         setOverlay(nextOverlay);

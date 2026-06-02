@@ -15,7 +15,11 @@ const safariMarketingDestination = /apple\.com\/safari/i;
 
 type SeedOptions = {
   cards?: Array<Record<string, unknown>>;
+  actionCards?: Array<Record<string, unknown>>;
+  dislikedPackCardIds?: string[];
+  launcherBehaviorSettings?: Record<string, Record<string, unknown>>;
   setupComplete?: boolean;
+  testerMode?: boolean;
 };
 
 function smokeCard(id: string, promptText: string) {
@@ -34,6 +38,56 @@ function smokeCard(id: string, promptText: string) {
     updatedAt: now,
     sourcePackId: null,
   };
+}
+
+function packSmokeCard(id: string, promptText: string, sourcePackId = 'e2e-pack') {
+  return {
+    ...smokeCard(id, promptText),
+    sourcePackId,
+    sourcePackTitle: 'E2E Pack',
+    attribution: 'E2E Pack',
+  };
+}
+
+function actionCard(id: string, title: string, launchUrl: string) {
+  return {
+    id,
+    title,
+    body: `${title} instead`,
+    category: 'Action',
+    launchUrl,
+    hidden: false,
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function hiddenStarterActionCards() {
+  return ['ac-1', 'ac-2', 'ac-3'].map((id) => ({
+    id,
+    source: 'starter',
+    hidden: true,
+    deletedAt: null,
+    updatedAt: now,
+  }));
+}
+
+function launcherSettings(interruptionOn: boolean) {
+  return {
+    mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+    safari: { useInterruptionPack: interruptionOn, interruptionPaused: false, interruptionPackId: '' },
+    youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+    instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+  };
+}
+
+function hiddenSafariInterruptionCardIds() {
+  return [
+    'Do you want the internet, or a little pause first?',
+    'What were you hoping to find online just now?',
+    'Could your attention belong to real life for one more minute?',
+  ].map((promptText) => `safari-interruption:${promptText}`);
 }
 
 async function installConsoleErrorGuard(page: Page) {
@@ -58,30 +112,41 @@ async function installConsoleErrorGuard(page: Page) {
 }
 
 async function seedE2EState(page: Page, options: SeedOptions = {}) {
-  const { cards = [], setupComplete = true } = options;
+  const {
+    actionCards = [],
+    cards = [],
+    dislikedPackCardIds = [],
+    launcherBehaviorSettings = launcherSettings(false),
+    setupComplete = true,
+    testerMode = false,
+  } = options;
   await page.addInitScript(
-    ({ seededCards, seededSetupComplete }) => {
+    ({ seededActionCards, seededCards, seededDislikedPackCardIds, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
+      window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', String(seededTesterMode));
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
       window.localStorage.setItem('mybishbash.setup-complete.v1', String(seededSetupComplete));
       window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'E2E', timezone: 'Europe/London' }));
       window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(seededCards));
       window.localStorage.setItem('mybishbash.event-log.v1', '[]');
       window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
-      window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
-      window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify({
-        mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-        safari: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-        youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-        instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-      }));
+      window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', JSON.stringify(seededDislikedPackCardIds));
+      window.localStorage.setItem('mybishbash.action-cards.v1', JSON.stringify(seededActionCards));
+      window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(seededLauncherBehaviorSettings));
       window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
       window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION = (href, metadata) => {
         window.__MYBISHBASH_NAVIGATION_ATTEMPTS.push({ href, metadata });
         return true;
       };
     },
-    { seededCards: cards, seededSetupComplete: setupComplete },
+    {
+      seededActionCards: actionCards,
+      seededCards: cards,
+      seededDislikedPackCardIds: dislikedPackCardIds,
+      seededLauncherBehaviorSettings: launcherBehaviorSettings,
+      seededSetupComplete: setupComplete,
+      seededTesterMode: testerMode,
+    },
   );
 }
 
@@ -235,6 +300,220 @@ test('launcher-origin card completion does not create an immediate card loop', a
 
   await expect(page.getByTestId('continue-to-app-card').or(page.getByTestId('card-action-continue-to-app')).or(page.getByTestId('app-shell'))).toBeVisible();
   await expect(page.getByText('E2E loop card')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with interruption off shows one Layer 1 card then ContinueToAppCard', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [smokeCard('tester-off-card', 'E2E tester interruption off card')],
+    launcherBehaviorSettings: launcherSettings(false),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'E2E tester interruption off card' })).toBeVisible();
+  await page.getByTestId('card-action-done').click();
+
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
+  await page.getByTestId('card-action-continue-to-safari').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariDestination);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    source: 'continue_card',
+    reason: 'user_pressed_continue',
+  });
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with interruption off and no Layer 1 card shows caught-up with continue action', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [],
+    launcherBehaviorSettings: launcherSettings(false),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  await expect(page.getByText("You're all caught up.")).toBeVisible();
+  await page.getByTestId('card-action-continue-to-app').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariDestination);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    reason: 'user_pressed_continue_after_no_eligible_cards',
+  });
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with interruption off shows active pack card instead of caught-up', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [packSmokeCard('pack-active-card', 'E2E active pack card')],
+    launcherBehaviorSettings: launcherSettings(false),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-pack').getByRole('heading', { name: 'E2E active pack card' })).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up.")).toHaveCount(0);
+  await page.getByTestId('card-action-like').click();
+
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+  await page.getByTestId('card-action-continue-to-safari').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariDestination);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    source: 'continue_card',
+    reason: 'user_pressed_continue',
+  });
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with exhausted personal cards still shows active pack card before caught-up', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [
+      { ...smokeCard('exhausted-personal-card', 'E2E exhausted personal card'), notYetUntil: '2026-06-03T12:00:00.000Z' },
+      packSmokeCard('pack-after-exhausted-personal', 'E2E pack after exhausted personal'),
+    ],
+    launcherBehaviorSettings: launcherSettings(false),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-pack').getByRole('heading', { name: 'E2E pack after exhausted personal' })).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up.")).toHaveCount(0);
+  await page.getByTestId('card-action-like').click();
+
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-pack')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with interruption on shows Layer 1 card then interruption continue opens destination directly', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [smokeCard('tester-on-card', 'E2E tester interruption on card')],
+    launcherBehaviorSettings: launcherSettings(true),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'E2E tester interruption on card' })).toBeVisible();
+  await page.getByTestId('card-action-done').click();
+
+  await expect(page.getByTestId('card-overlay-interruption')).toBeVisible();
+  await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+  await page.getByTestId('card-action-continue-to-safari').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariDestination);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    source: 'interruption_card',
+    reason: 'user_pressed_continue',
+  });
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with interruption on and no Layer 1 card shows interruption directly', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [],
+    launcherBehaviorSettings: launcherSettings(true),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-interruption')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up.")).toHaveCount(0);
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher with interruption on and no valid interruption may show caught-up with continue action', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [],
+    dislikedPackCardIds: hiddenSafariInterruptionCardIds(),
+    launcherBehaviorSettings: launcherSettings(true),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up.")).toBeVisible();
+  await expect(page.getByTestId('card-action-continue-to-app')).toBeVisible();
+  await page.getByTestId('card-action-continue-to-app').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toMatch(safariDestination);
+  expect(attempt.href).not.toMatch(/example\.com\/e2e-action/);
+  expect(attempt.metadata).toMatchObject({
+    versionId: 'safari',
+    source: 'empty_card',
+    reason: 'user_pressed_continue_after_no_eligible_cards',
+  });
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester weighted launcher interruption alternative path opens action URL instead of fake launcher destination', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  const actionUrl = 'https://example.com/e2e-action';
+  await seedE2EState(page, {
+    actionCards: [...hiddenStarterActionCards(), actionCard('action-e2e', 'E2E action card', actionUrl)],
+    cards: [smokeCard('tester-action-card', 'E2E tester action path card')],
+    launcherBehaviorSettings: launcherSettings(true),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await page.getByTestId('card-action-done').click();
+  await expect(page.getByTestId('card-overlay-interruption')).toBeVisible();
+  await page.getByTestId('card-action-do-something-else').click();
+
+  await expect(page.getByTestId('card-overlay-action')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-action').getByRole('heading', { name: 'E2E action card' })).toBeVisible();
+  await page.getByTestId('card-action-i-ll-do-this').click();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+  const [attempt] = await getNavigationAttempts(page);
+  expect(attempt.href).toBe(actionUrl);
+  expect(attempt.href).not.toMatch(safariDestination);
+  expect(attempt.metadata).toMatchObject({
+    source: 'action_card',
+    cardId: 'action-e2e',
+  });
   await expectNoConsoleErrors(consoleErrors);
 });
 

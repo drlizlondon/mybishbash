@@ -229,12 +229,27 @@ assertAppPattern(
 );
 
 assertAppPattern(
-  "fake launcher reveal completion builds ContinueToAppCard overlay",
+  "tester weighted flow keeps interruption planned as the second layer",
+  /const plannedInterruption = interruption;/g,
+);
+
+assertAppDoesNotMatch(
+  "tester weighted flow must not disable interruption when no weighted card is selected",
+  /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/g,
+);
+
+assertAppPattern(
+  "fake launcher reveal completion routes to interruption first when configured",
+  /activation\?\.interruption && activation\.versionId === versionId && activation\.activationKey === activationKey[\s\S]{0,1200}buildCustomPackOverlay\(activation\.interruption\.pack, activation\.interruption\.activeIndex, "intercept-pack"\)[\s\S]{0,1200}\[CONTINUE_DECISION\] launcher handled card -> routing to interruption card[\s\S]{0,400}return;/g,
+);
+
+assertAppPattern(
+  "fake launcher reveal completion still builds ContinueToAppCard overlay when no interruption is configured",
   /const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);/g,
 );
 
 assertAppPattern(
-  "fake launcher reveal completion logs ContinueToAppCard transition",
+  "fake launcher reveal completion still logs ContinueToAppCard transition",
   /\[CONTINUE_DECISION\] launcher handled card -> routing to ContinueToAppCard/g,
 );
 
