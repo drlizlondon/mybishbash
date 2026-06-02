@@ -7,7 +7,7 @@ import {
   normalizeWeightedFlowSettings,
   selectWeightedLauncherCard,
 } from "../src/lib/cardSelection.js";
-import { getLauncherDecisionReadiness } from "../src/lib/launcherFlow.js";
+import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "../src/lib/launcherFlow.js";
 import { buildCardsFromPack, getStatusMeta, isEligible, isPackCardAvailable } from "../src/utils.js";
 
 assert.deepEqual(
@@ -44,7 +44,7 @@ assert.deepEqual(
     hasUsableCachedLauncherState: false,
     waitExpired: true,
   }),
-  { ready: false, reason: "tester_status_pending" },
+  { ready: true, reason: "wait_expired" },
 );
 
 assert.equal(
@@ -68,8 +68,10 @@ assert.deepEqual(
     hasUsableCachedLauncherState: false,
     waitExpired: true,
   }),
-  { ready: false, reason: "sync_pending" },
+  { ready: true, reason: "wait_expired" },
 );
+
+assert.equal(LAUNCHER_DATA_WAIT_TIMEOUT_MS <= 300, true, "Launcher data wait timeout stays within the perceived-performance budget");
 
 assert.equal(
   getLauncherDecisionReadiness({
@@ -110,6 +112,15 @@ function sourceBetween(source, start, end) {
 }
 
 assert.match(appSource, /buildFakeLauncherPreparingOverlay/);
+assert.match(appSource, /initialRoute\.kind === "intercept" \? buildFakeLauncherPreparingOverlay\(initialRoute\.versionId\) : null/);
+assert.match(appSource, /recordLaunchTiming\("route detected"/);
+assert.match(appSource, /recordLaunchTiming\("first overlay visible"/);
+assert.match(appSource, /recordLaunchTiming\("auth ready"/);
+assert.match(appSource, /recordLaunchTiming\("sync ready"/);
+assert.match(appSource, /recordLaunchTiming\("tester status ready"/);
+assert.match(appSource, /recordLaunchTiming\("card selection started"/);
+assert.match(appSource, /recordLaunchTiming\("card selection finished"/);
+assert.match(appSource, /recordLaunchTiming\("final overlay type rendered"/);
 assert.match(appSource, /\[\"intercept-pack\", "continue-to-app"\]\.includes\(overlay\?\.type\)/);
 assert.match(appSource, /if \(!launcherReadiness\.ready\)/);
 assert.match(appSource, /finalDecision: "personal_card"/);

@@ -146,6 +146,7 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
+const LAUNCH_TIMING_LOG_KEY = "bishbash.launchTiming.v1";
 
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
@@ -258,6 +259,34 @@ function debugLaunch(label, payload) {
 
 function isSameJsonValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isLaunchTimingEnabled(testerStatus = null) {
+  if (typeof window === "undefined") return false;
+  if (testerStatus?.is_tester === true) return true;
+  return window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
+}
+
+function recordLaunchTiming(label, payload = {}, testerStatus = null) {
+  if (!isLaunchTimingEnabled(testerStatus)) return;
+  const entry = {
+    label,
+    payload,
+    at: new Date().toISOString(),
+    t: performance.now(),
+  };
+  window.__MYBISHBASH_LAUNCH_TIMINGS = [
+    ...(window.__MYBISHBASH_LAUNCH_TIMINGS ?? []),
+    entry,
+  ].slice(-200);
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(LAUNCH_TIMING_LOG_KEY) || "[]");
+    stored.push(entry);
+    if (stored.length > 200) stored.splice(0, stored.length - 200);
+    window.localStorage.setItem(LAUNCH_TIMING_LOG_KEY, JSON.stringify(stored));
+  } catch {
+    // Timing logs are diagnostic only.
+  }
 }
 
 if (typeof window !== "undefined") {
@@ -1185,10 +1214,12 @@ function App() {
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
-  const [screen, setScreen] = useState(initialState.setupComplete ? "library" : "onboarding");
-  const [overlay, setOverlay] = useState(null);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
   const initialRoute = useMemo(() => parseRoute(routePath), []);
+  const [screen, setScreen] = useState(initialRoute.kind === "intercept" ? "interception" : initialState.setupComplete ? "library" : "onboarding");
+  const [overlay, setOverlay] = useState(() =>
+    initialRoute.kind === "intercept" ? buildFakeLauncherPreparingOverlay(initialRoute.versionId) : null
+  );
   const [launchSession, setLaunchSession] = useState(() => {
     const session = buildLaunchSessionForRoute(initialRoute);
     persistLaunchSession(session);
@@ -1279,6 +1310,7 @@ function App() {
   const handledResumeLaunchNonceRef = useRef(0);
   const suppressNextHomeAutoLaunchRef = useRef(false);
   const suppressResumeHomeAutoLaunchRef = useRef(false);
+  const launcherTimingSeenRef = useRef(new Set());
   const visibleActionCards = useMemo(
     () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
     [actionCards],
@@ -1295,6 +1327,75 @@ function App() {
     if (!e2eMode || typeof window === "undefined") return;
     window.__MYBISHBASH_LAUNCH_SESSION = launchSession;
   }, [e2eMode, launchSession]);
+
+  useEffect(() => {
+    if (route.kind !== "intercept") {
+      launcherTimingSeenRef.current = new Set();
+    }
+  }, [route.kind]);
+
+  useLayoutEffect(() => {
+    if (route.kind !== "intercept") return;
+    if (!overlay) {
+      setLauncherContext(route.versionId);
+      setScreen("interception");
+      setOverlay(buildFakeLauncherPreparingOverlay(route.versionId));
+    }
+    const key = `route:${route.versionId}:${route.path}`;
+    if (launcherTimingSeenRef.current.has(key)) return;
+    launcherTimingSeenRef.current.add(key);
+    recordLaunchTiming("route detected", {
+      route: route.path,
+      versionId: route.versionId,
+    }, testerStatus);
+    if (authReady) {
+      recordLaunchTiming("auth ready", {
+        route: route.path,
+        versionId: route.versionId,
+        sessionPresent: Boolean(session?.user?.id),
+        source: "route_snapshot",
+      }, testerStatus);
+    }
+    if (syncStatus === "ready") {
+      recordLaunchTiming("sync ready", {
+        route: route.path,
+        versionId: route.versionId,
+        sessionPresent: Boolean(session?.user?.id),
+        source: "route_snapshot",
+      }, testerStatus);
+    }
+    if (!session?.user?.id || testerStatus !== null) {
+      recordLaunchTiming("tester status ready", {
+        route: route.path,
+        versionId: route.versionId,
+        sessionPresent: Boolean(session?.user?.id),
+        isTester: testerStatus?.is_tester === true,
+        source: "route_snapshot",
+      }, testerStatus);
+    }
+  }, [authReady, overlay, route.kind, route.path, route.versionId, session?.user?.id, syncStatus, testerStatus]);
+
+  useLayoutEffect(() => {
+    if (overlay?.launchSource !== "fake_launcher") return;
+    const visibleKey = `first-overlay:${overlay.versionId}`;
+    if (!launcherTimingSeenRef.current.has(visibleKey)) {
+      launcherTimingSeenRef.current.add(visibleKey);
+      recordLaunchTiming("first overlay visible", {
+        route: route.path,
+        versionId: overlay.versionId,
+        overlayType: overlay.type,
+      }, testerStatus);
+    }
+    if (overlay.type === "launcher-preparing") return;
+    const finalKey = `final-overlay:${overlay.activationKey ?? overlay.versionId}:${overlay.type}`;
+    if (launcherTimingSeenRef.current.has(finalKey)) return;
+    launcherTimingSeenRef.current.add(finalKey);
+    recordLaunchTiming("final overlay type rendered", {
+      route: route.path,
+      versionId: overlay.versionId,
+      overlayType: overlay.type,
+    }, testerStatus);
+  }, [overlay?.activationKey, overlay?.launchSource, overlay?.type, overlay?.versionId, route.path, testerStatus]);
 
   useEffect(() => {
     if (route.kind === "intercept" && isKnownLauncher(route.versionId)) {
@@ -1479,12 +1580,15 @@ function App() {
 
   useEffect(() => {
     let mounted = true;
+    let authSessionForTiming = null;
 
     if (e2eMode) {
       setSession(buildE2ESession());
       setSyncStatus("ready");
+      recordLaunchTiming("sync ready", { source: "e2e" }, { is_tester: true });
       setSyncError("");
       setAuthReady(true);
+      recordLaunchTiming("auth ready", { source: "e2e" }, { is_tester: true });
       setShouldLaunchOverlay(false);
       return undefined;
     }
@@ -1496,6 +1600,7 @@ function App() {
         if (typeof window !== "undefined") console.log("[AUTH] Storage key present:", !!window.localStorage.getItem("mybishbash.supabase.auth.v1"));
 
         if (mounted) {
+          authSessionForTiming = currentSession;
           setSession(currentSession);
           if (!currentSession) setSyncStatus("needs-connection");
         }
@@ -1505,6 +1610,7 @@ function App() {
       })
       .finally(() => {
         if (mounted) setAuthReady(true);
+        if (mounted) recordLaunchTiming("auth ready", { sessionPresent: Boolean(authSessionForTiming?.user?.id) }, testerStatus);
       });
 
     const { data: { subscription } } = onAuthStateChange((_event, newSession) => {
@@ -1512,6 +1618,7 @@ function App() {
         setSession(newSession);
         if (!newSession) setSyncStatus("needs-connection");
         setAuthReady(true);
+        recordLaunchTiming("auth ready", { sessionPresent: Boolean(newSession?.user?.id), event: _event }, testerStatus);
       }
     });
 
@@ -1541,10 +1648,12 @@ function App() {
     if (e2eMode) {
       const e2eTesterMode = typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
       setTesterStatus({ is_tester: e2eTesterMode });
+      recordLaunchTiming("tester status ready", { source: "e2e", isTester: e2eTesterMode }, { is_tester: e2eTesterMode });
       return undefined;
     }
     if (!session?.user?.id) {
       setTesterStatus({ is_tester: false });
+      recordLaunchTiming("tester status ready", { sessionPresent: false, isTester: false }, { is_tester: false });
       return undefined;
     }
 
@@ -1552,11 +1661,18 @@ function App() {
     setTesterStatus(null);
     fetchTesterStatus(session.user.id)
       .then((status) => {
-        if (!cancelled) setTesterStatus(status ?? { is_tester: false });
+        if (!cancelled) {
+          const nextStatus = status ?? { is_tester: false };
+          setTesterStatus(nextStatus);
+          recordLaunchTiming("tester status ready", { sessionPresent: true, isTester: nextStatus.is_tester === true }, nextStatus);
+        }
       })
       .catch((error) => {
         console.warn("Could not load tester status", error);
-        if (!cancelled) setTesterStatus({ is_tester: false });
+        if (!cancelled) {
+          setTesterStatus({ is_tester: false });
+          recordLaunchTiming("tester status ready", { sessionPresent: true, isTester: false, error: true }, { is_tester: false });
+        }
       });
     return () => {
       cancelled = true;
@@ -1740,6 +1856,7 @@ function App() {
           setShouldLaunchOverlay(false);
         }
         setSyncStatus("ready");
+        recordLaunchTiming("sync ready", { sessionPresent: true }, testerStatus);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -2118,6 +2235,13 @@ function App() {
         }
       : null;
 
+    recordLaunchTiming("card selection started", {
+      route: route.path,
+      versionId,
+      activationKey,
+      weightedFlowUsed: useWeightedFlow,
+      selectedPath: weightedFlowGate.selectedPath,
+    }, testerStatus);
     const fallbackDisplay = useWeightedFlow
       ? selectWeightedLauncherCard({
           cards,
@@ -2130,6 +2254,15 @@ function App() {
           profile.timezone,
           launchCompletedCardIdsRef.current,
         );
+    recordLaunchTiming("card selection finished", {
+      route: route.path,
+      versionId,
+      activationKey,
+      weightedFlowUsed: useWeightedFlow,
+      selectedPath: weightedFlowGate.selectedPath,
+      selectedCardId: fallbackDisplay.selected?.id ?? null,
+      selectedSource: fallbackDisplay.selectedSource ?? null,
+    }, testerStatus);
     const selected = fallbackDisplay.selected;
     const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
     const plannedInterruption = interruption;
@@ -2483,6 +2616,19 @@ function App() {
       if (isResumeInterceptLaunch) {
         handledResumeLaunchNonceRef.current = resumeLaunchNonce;
         interceptActivationRef.current = null;
+      }
+      if (
+        !isResumeInterceptLaunch &&
+        overlay?.type === "launcher-preparing" &&
+        overlay?.versionId === route.versionId &&
+        interceptActivationRef.current?.versionId === route.versionId
+      ) {
+        debugLaunch("[INTERCEPT] skipped duplicate rebuild while launcher decision is settling", {
+          versionId: route.versionId,
+          activationKey: interceptActivationRef.current?.activationKey ?? null,
+        });
+        setScreen("interception");
+        return;
       }
       const launcherOpenKey = `${route.versionId}:${route.path}:${session?.user?.id ?? "anon"}`;
       if (loggedLauncherOpenRef.current !== launcherOpenKey) {
