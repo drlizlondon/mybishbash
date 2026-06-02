@@ -6284,7 +6284,6 @@ function CardRevealTemplate({
           {subtitle ? <p className="premium-subtitle">{subtitle}</p> : null}
           {children}
         </section>
-        <div className="premium-card-spacer" aria-hidden="true" />
         {hasLaunchers || hasActions ? (
           <section className={`premium-card-cta ${hasLaunchers ? "has-launchers" : "no-launchers"}`}>
             {hasLaunchers ? (
@@ -6336,7 +6335,7 @@ function CardRevealMessage({ message }) {
 
       while (
         nextSize > minSize &&
-        (headline.scrollHeight > frame.clientHeight || headline.scrollWidth > frame.clientWidth)
+        headline.scrollWidth > frame.clientWidth
       ) {
         nextSize -= 1;
         headline.style.fontSize = `${nextSize}px`;
@@ -6812,15 +6811,23 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         subtitle="A little pause before the app opens."
         actions={[
           {
-            label: "Do something else",
+            label: `Continue to ${version?.name ?? "App"}`,
             variant: "primary",
+            onClick: (event) => {
+              event?.stopPropagation?.();
+              handleContinueToApp();
+            },
+          },
+          {
+            label: "Do something else",
+            variant: "secondary",
             onClick: (event) => {
               event?.stopPropagation?.();
               onChooseElse();
             },
           },
         ]}
-        launcherVersions={version ? [version] : []}
+        launcherVersions={[]}
         onLauncherLaunch={onFakeLauncherLaunch}
         showHomeButton={false}
         className="launcher-interception-card"
@@ -7179,7 +7186,6 @@ function ContinueToAppCard({ appName, appIcon, onContinue, onBack, className = "
             Continue to {appName}?
           </h2>
         </section>
-        <div className="premium-card-spacer" aria-hidden="true" />
         <section className="premium-card-cta no-launchers">
           <PremiumActionStack actions={[
             { label: `Continue to ${appName}`, variant: "primary", onClick: onContinue },

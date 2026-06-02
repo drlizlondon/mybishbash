@@ -4043,7 +4043,6 @@ body {
 .premium-card-screen {
   --screen-x: clamp(20px, 5vw, 40px);
   --content-max: 390px;
-  --message-frame-height: clamp(116px, 17svh, 136px);
   --message-font-size: 40px;
   --button-width: min(86vw, 350px);
   --home-size: clamp(50px, 12vw, 58px);
@@ -4051,8 +4050,8 @@ body {
   inset: 0;
   z-index: 99999;
   width: 100%;
-  height: 100svh;
-  min-height: 100svh;
+  height: 100dvh;
+  min-height: 100dvh;
   overflow: hidden;
   padding: 0;
   background:
@@ -4094,8 +4093,8 @@ body {
   z-index: 1;
   width: min(calc(100% - (var(--screen-x) * 2)), var(--content-max));
   max-width: var(--content-max);
-  height: 100svh;
-  min-height: 100svh;
+  height: 100dvh;
+  min-height: 0;
   margin-inline: auto;
   padding:
     calc(env(safe-area-inset-top) + clamp(36px, 5.6svh, 54px))
@@ -4110,7 +4109,6 @@ body {
 
 .premium-card-header {
   width: 100%;
-  min-height: clamp(82px, 12svh, 96px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4119,13 +4117,16 @@ body {
 
 .premium-card-message-section {
   width: 100%;
-  min-height: clamp(218px, 31svh, 258px);
-  max-height: clamp(218px, 31svh, 258px);
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 18px 0 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  flex: 0 0 auto;
 }
 
 .premium-home-button {
@@ -4195,9 +4196,8 @@ body {
 
 .premium-title-box {
   width: min(88vw, 390px);
-  min-height: var(--message-frame-height);
-  max-height: var(--message-frame-height);
-  margin-top: 28px;
+  min-height: 0;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4236,7 +4236,6 @@ body {
 .premium-subtitle {
   width: 100%;
   max-width: 300px;
-  max-height: 42px;
   margin: 20px auto 0;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: clamp(15px, 3.9vw, 17px);
@@ -4244,24 +4243,13 @@ body {
   line-height: 1.25;
   color: #6B625B;
   text-align: center;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.premium-card-spacer {
-  width: 100%;
-  flex: 1 1 auto;
-  min-height: 12px;
 }
 
 .premium-card-cta {
   width: 100%;
   max-width: var(--content-max);
   margin-inline: auto;
-  margin-top: auto;
-  padding-top: 0;
+  padding-top: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4270,7 +4258,6 @@ body {
 }
 
 .premium-card-cta.no-launchers {
-  margin-top: auto;
   justify-content: center;
 }
 
@@ -4453,6 +4440,9 @@ body {
   position: fixed;
   inset: 0;
   z-index: 100000;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
   background: var(--bb-bg);
 }
 
@@ -4510,22 +4500,9 @@ body {
 }
 
 @media (max-height: 720px) {
-  .premium-card-screen {
-    --message-frame-height: 100px;
-  }
-
   .premium-card-main {
     padding-top: calc(env(safe-area-inset-top) + 30px);
     padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
-  }
-
-  .premium-card-header {
-    min-height: 70px;
-  }
-
-  .premium-card-message-section {
-    min-height: 198px;
-    max-height: 198px;
   }
 
   .premium-greeting {
@@ -4539,9 +4516,7 @@ body {
   }
 
   .premium-title-box {
-    min-height: var(--message-frame-height);
-    max-height: var(--message-frame-height);
-    margin-top: 22px;
+    margin-top: 8px;
   }
 
   .premium-divider {
@@ -4582,7 +4557,6 @@ body {
 @media (min-width: 600px) and (max-width: 1024px) {
   .premium-card-screen {
     --content-max: 460px;
-    --message-frame-height: 130px;
     --button-width: min(76vw, 360px);
     --home-size: 58px;
   }
@@ -4600,8 +4574,6 @@ body {
 
   .premium-title-box {
     width: min(88vw, 390px);
-    min-height: var(--message-frame-height);
-    max-height: var(--message-frame-height);
   }
 
   .premium-subtitle {
@@ -4612,10 +4584,9 @@ body {
 @media (min-width: 1025px) {
   .premium-card-screen {
     --content-max: 480px;
-    --message-frame-height: 132px;
     --button-width: min(360px, 78vw);
     --home-size: 58px;
-    min-height: 100svh;
+    min-height: 100dvh;
   }
 
   .premium-card-main {
@@ -4642,8 +4613,6 @@ body {
 
   .premium-title-box {
     width: min(88vw, 390px);
-    min-height: var(--message-frame-height);
-    max-height: var(--message-frame-height);
   }
 
   .premium-subtitle {
