@@ -6470,6 +6470,9 @@ function Overlay({
   }
 
   if (!card) return null;
+  const packNeutralActionLabel = overlay?.launchSource === "fake_launcher" || overlay?.versionId || route?.kind === "intercept"
+    ? "Continue"
+    : "Back to home";
 
   return (
     <PremiumCardScreen
@@ -6486,7 +6489,7 @@ function Overlay({
         card.sourcePackId
           ? [
               { label: "I really like this one", variant: "secondary", onClick: onPackLike },
-              { label: "Continue", variant: "primary", onClick: onPackContinue },
+              { label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue },
             ]
           : [
               { label: "Not done", variant: "secondary", onClick: () => onAction("later") },

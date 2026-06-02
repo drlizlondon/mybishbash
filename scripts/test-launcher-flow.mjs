@@ -150,9 +150,10 @@ assert.match(appSource, /testerStatus/);
 assert.match(appSource, /return e2eMode \? \{ is_tester: e2eTesterMode \} : null;/);
 
 const packOverlayActionsSource = sourceBetween(appSource, "actions={\n        card.sourcePackId", ": [\n              { label: \"Not done\"");
-assert.match(packOverlayActionsSource, /label: "Continue", variant: "primary", onClick: onPackContinue/);
+assert.match(packOverlayActionsSource, /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/);
 assert.match(packOverlayActionsSource, /label: "I really like this one", variant: "secondary", onClick: onPackLike/);
 assert.doesNotMatch(packOverlayActionsSource, /label: "(Like|Dislike|Not for me|Hide this)"/);
+assert.match(appSource, /const packNeutralActionLabel = overlay\?\.launchSource === "fake_launcher" \|\| overlay\?\.versionId \|\| route\?\.kind === "intercept"\s*\? "Continue"\s*: "Back to home";/);
 
 const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
 assert.match(

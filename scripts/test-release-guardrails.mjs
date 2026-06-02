@@ -129,8 +129,12 @@ if (!packOverlayActionsSource) {
 assertSourcePattern(
   "App",
   packOverlayActionsSource,
-  "pack overlay primary action is Continue",
-  /label: "Continue", variant: "primary", onClick: onPackContinue/g,
+  "pack overlay primary action uses the contextual neutral label",
+  /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/g,
+);
+assertAppPattern(
+  "pack overlay says Continue for launcher flow and Back to home for home/direct card flow",
+  /const packNeutralActionLabel = overlay\?\.launchSource === "fake_launcher" \|\| overlay\?\.versionId \|\| route\?\.kind === "intercept"\s*\? "Continue"\s*: "Back to home";/g,
 );
 assertSourcePattern(
   "App",
