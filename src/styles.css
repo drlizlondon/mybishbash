@@ -4045,7 +4045,7 @@ body {
   --content-max: 390px;
   --message-font-size: 40px;
   --button-width: min(86vw, 350px);
-  --home-size: clamp(50px, 12vw, 58px);
+  --dashboard-shortcut-size: clamp(44px, 11vw, 50px);
   position: fixed;
   inset: 0;
   z-index: 99999;
@@ -4129,18 +4129,18 @@ body {
   text-align: center;
 }
 
-.premium-home-button {
+.premium-dashboard-shortcut {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 20px);
   right: max(18px, env(safe-area-inset-right));
   z-index: 5;
-  width: var(--home-size);
-  height: var(--home-size);
+  width: var(--dashboard-shortcut-size);
+  height: var(--dashboard-shortcut-size);
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.65);
-  background: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.62);
   color: var(--bb-text);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.045);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.035);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4154,7 +4154,7 @@ body {
     opacity 160ms ease;
 }
 
-.premium-home-button svg {
+.premium-dashboard-shortcut svg {
   width: 22px;
   height: 22px;
   stroke: currentColor;
@@ -4315,18 +4315,18 @@ body {
   background: linear-gradient(180deg, #C95E45 0%, #BE543D 100%);
 }
 
-.premium-home-button:hover,
+.premium-dashboard-shortcut:hover,
 .premium-action-button:hover {
   transform: translateY(-1px);
 }
 
-.premium-home-button:active,
+.premium-dashboard-shortcut:active,
 .premium-action-button:active {
   transform: translateY(1px) scale(0.99);
   box-shadow: var(--bb-shadow-soft);
 }
 
-.premium-home-button:focus-visible,
+.premium-dashboard-shortcut:focus-visible,
 .premium-action-button:focus-visible {
   outline: 2px solid rgba(217, 101, 76, 0.38);
   outline-offset: 4px;
@@ -4469,7 +4469,7 @@ body {
     transform: none;
   }
 
-  .premium-home-button,
+  .premium-dashboard-shortcut,
   .premium-action-button {
     transition: opacity 160ms ease, background-color 160ms ease;
   }
@@ -4545,7 +4545,7 @@ body {
   .premium-card-screen {
     --content-max: 460px;
     --button-width: min(76vw, 360px);
-    --home-size: 58px;
+    --dashboard-shortcut-size: 50px;
   }
 
   .premium-card-main {
@@ -4554,7 +4554,7 @@ body {
     padding-top: calc(env(safe-area-inset-top) + clamp(42px, 6svh, 64px));
   }
 
-  .premium-home-button {
+  .premium-dashboard-shortcut {
     top: calc(env(safe-area-inset-top) + 22px);
     right: 28px;
   }
@@ -4572,7 +4572,7 @@ body {
   .premium-card-screen {
     --content-max: 480px;
     --button-width: min(360px, 78vw);
-    --home-size: 58px;
+    --dashboard-shortcut-size: 50px;
     min-height: 100dvh;
   }
 
@@ -4582,12 +4582,12 @@ body {
     padding-top: calc(env(safe-area-inset-top) + clamp(42px, 6svh, 64px));
   }
 
-  .premium-home-button {
+  .premium-dashboard-shortcut {
     top: calc(env(safe-area-inset-top) + 22px);
     right: 32px;
   }
 
-  .premium-home-button svg {
+  .premium-dashboard-shortcut svg {
     width: 22px;
     height: 22px;
   }

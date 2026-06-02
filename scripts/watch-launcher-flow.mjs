@@ -74,7 +74,7 @@ function getOptions() {
     interruptionOn: args.has("--interruption-on"),
     usePack: args.has("--pack"),
     shellRepeat: Math.max(1, Number(getValue("--shell-repeat", "1")) || 1),
-    shellTerminal: getValue("--terminal", "back-home"),
+    shellTerminal: getValue("--terminal", "dashboard"),
     shellLifecycle: args.has("--lifecycle"),
   };
 }
@@ -231,16 +231,16 @@ async function clickIfPresent(page, locator) {
   return false;
 }
 
-async function goHomeFromCurrentStep(page) {
-  if (await clickIfPresent(page, page.getByLabel("Go home"))) return;
+async function openDashboardFromCurrentStep(page) {
+  if (await clickIfPresent(page, page.getByLabel("Open dashboard"))) return;
   if (await clickIfPresent(page, page.getByTestId("card-action-back-to-mybishbash"))) return;
   if (await clickIfPresent(page, page.getByTestId("card-action-do-something-else"))) {
     await waitForAnyLauncherStep(page);
     await sleep(STEP_DELAY_MS);
-    if (await clickIfPresent(page, page.getByLabel("Go home"))) return;
+    if (await clickIfPresent(page, page.getByLabel("Open dashboard"))) return;
     if (await clickIfPresent(page, page.getByTestId("card-action-back-to-mybishbash"))) return;
   }
-  throw new Error("No route back home found from current launcher step.");
+  throw new Error("No route to the dashboard found from current launcher step.");
 }
 
 async function runDownloadedShellRepeats(page, options) {
@@ -270,21 +270,21 @@ async function runDownloadedShellRepeats(page, options) {
       const attempts = await page.evaluate(() => window.__MYBISHBASH_NAVIGATION_ATTEMPTS ?? []);
       console.log(`   destination: ${attempts.at(-1)?.href ?? "(no destination captured)"}`);
       await page.goto(`${BASE_URL}/home`);
-    } else if (options.shellTerminal === "action-home") {
+    } else if (options.shellTerminal === "action-dashboard") {
       await page.getByTestId("card-action-do-something-else").click();
       await waitForAnyLauncherStep(page);
       await sleep(STEP_DELAY_MS);
       const actionStep = await readStep(page);
       printStep(`${round}.3`, actionStep, await readAudit(page));
-      await goHomeFromCurrentStep(page);
-    } else if (options.shellTerminal === "home") {
-      await goHomeFromCurrentStep(page);
+      await openDashboardFromCurrentStep(page);
+    } else if (options.shellTerminal === "dashboard") {
+      await openDashboardFromCurrentStep(page);
     } else {
-      await goHomeFromCurrentStep(page);
+      await openDashboardFromCurrentStep(page);
     }
 
     await page.waitForURL(/\/mybishbash\/home$/);
-    console.log(`   terminal: home (${page.url()})`);
+    console.log(`   terminal: dashboard (${page.url()})`);
     await sleep(2000);
   }
 }

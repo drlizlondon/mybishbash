@@ -4,6 +4,7 @@ declare global {
   interface Window {
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
+    __MYBISHBASH_LAUNCH_SESSION?: { entrySurface?: string; launcherId?: string | null };
   }
 }
 
@@ -158,6 +159,42 @@ async function gotoApp(page: Page, path: string) {
   await page.goto(`/mybishbash${path}`);
 }
 
+async function simulateStandaloneDisplayMode(page: Page) {
+  await page.addInitScript(() => {
+    const originalMatchMedia = window.matchMedia?.bind(window);
+    window.matchMedia = ((query: string) => {
+      if (query === '(display-mode: standalone)') {
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => false,
+        } as MediaQueryList;
+      }
+      return originalMatchMedia
+        ? originalMatchMedia(query)
+        : ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+          } as MediaQueryList);
+    }) as typeof window.matchMedia;
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true,
+    });
+  });
+}
+
 async function expectNoConsoleErrors(errors: string[]) {
   expect(errors, `Unexpected console/page errors:\n${errors.join('\n')}`).toEqual([]);
 }
@@ -222,7 +259,7 @@ test('Safari desktop fake launcher uses web fallback destination', async ({ page
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester fake launcher click starts a fresh launcher card session every time', async ({ page }) => {
+test('tester in-app fake launcher shortcuts open destinations without starting intervention', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [
@@ -236,19 +273,31 @@ test('tester fake launcher click starts a fresh launcher card session every time
   await gotoApp(page, '/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  for (const round of [1, 2]) {
-    await page.getByTestId('fake-launcher-safari').click();
-    await expect(page, `round ${round} should enter Safari launcher route`).toHaveURL(/\/mybishbash\/intercept\/safari$/);
-    await expect(page.getByTestId('card-overlay-pack'), `round ${round} should show a launcher pack card`).toBeVisible();
-    await expect(page.getByTestId('card-action-continue'), `round ${round} should keep launcher Continue wording`).toBeVisible();
-    await expect(page.getByTestId('card-action-back-to-home'), `round ${round} must not fall back to home-card wording`).toHaveCount(0);
-    expect(await getNavigationAttempts(page), `round ${round} should not directly open the real app for testers`).toHaveLength(0);
+  const expectedDestinations = {
+    safari: safariDesktopDestination,
+    instagram: /^https:\/\/www\.instagram\.com/,
+    youtube: /^https:\/\/www\.youtube\.com/,
+  };
 
-    await page.getByTestId('card-action-continue').click();
-    await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
-    await page.getByTestId('card-action-back-to-mybishbash').click();
-    await expect(page.getByTestId('app-shell')).toBeVisible();
+  for (const [launcherId, expectedDestination] of Object.entries(expectedDestinations)) {
+    const attemptsBefore = (await getNavigationAttempts(page)).length;
+    await page.getByTestId(`fake-launcher-${launcherId}`).click();
+    await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(attemptsBefore + 1);
+    const attempts = await getNavigationAttempts(page);
+    const latest = attempts[attempts.length - 1];
+    expect(latest.href).toMatch(expectedDestination);
+    expect(latest.metadata).toMatchObject({
+      versionId: launcherId,
+      source: 'home_fake_launcher_bar',
+      reason: 'fake_launcher_icon_clicked',
+    });
     await expect(page).toHaveURL(/\/mybishbash\/home$/);
+    await expect(page.getByTestId('card-overlay-pack')).toHaveCount(0);
+    await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+    await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
+    await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+    await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.entrySurface)).toBe('mybishbash_home');
+    await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.launcherId ?? null)).toBe(null);
   }
 
   await expectNoConsoleErrors(consoleErrors);
@@ -257,6 +306,7 @@ test('tester fake launcher click starts a fresh launcher card session every time
 test('Safari iOS fake launcher attempts Safari-specific x-safari destination', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 12'] });
   const page = await context.newPage();
+  await simulateStandaloneDisplayMode(page);
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
@@ -286,6 +336,8 @@ test('intercept route shows interruption flow and does not auto-open destination
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'E2E intercept card' })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.entrySurface)).toBe('fake_launcher');
+  await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.launcherId ?? null)).toBe('safari');
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
   await expectNoConsoleErrors(consoleErrors);
 });

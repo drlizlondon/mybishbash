@@ -138,8 +138,10 @@ assert.match(appSource, /launchCompletedCardIdsRef/);
 assert.match(appSource, /selectedNextOverlayType/);
 assert.match(appSource, /cardsOverride/);
 assert.match(appSource, /function handleFakeLauncherLaunch\(versionId, source\)/);
-assert.match(appSource, /if \(testerStatus\?\.is_tester === true\) \{/);
-assert.match(appSource, /beginInterceptionFlow\(versionId,[\s\S]{0,180}source,[\s\S]{0,80}replace: true,[\s\S]{0,80}navigate: true/);
+assert.match(appSource, /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"/);
+assert.match(appSource, /const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/);
+assert.match(appSource, /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId/);
+assert.doesNotMatch(appSource, /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId/);
 assert.match(appSource, /openDestinationApp\(versionId,[\s\S]{0,80}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/);
 assert.match(appSource, /handleFakeLauncherLaunch\(versionId, "home_fake_launcher_bar"\)/);
 assert.match(appSource, /function handleOverlayFakeLauncherLaunch/);
@@ -152,16 +154,20 @@ assert.match(appSource, /getWeightedLauncherFlowGate/);
 assert.match(appSource, /selectWeightedLauncherCard/);
 assert.match(appSource, /testerStatus/);
 assert.match(appSource, /return e2eMode \? \{ is_tester: e2eTesterMode \} : null;/);
-assert.match(appSource, /useSoftPackFeedbackActions=\{testerStatus\?\.is_tester === true\}/);
 
-const packActionsSource = sourceBetween(appSource, "const packActions = useSoftPackFeedbackActions", "return (\n    <PremiumCardScreen");
-assert.match(packActionsSource, /label: "I really like this one", variant: "secondary", onClick: onPackLike/);
-assert.match(packActionsSource, /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/);
-assert.match(packActionsSource, /label: "Dislike", variant: "secondary", onClick: \(\) => onPackDislike\(card\.id\)/);
-assert.match(packActionsSource, /label: "Like", variant: "primary", onClick: onPackLike/);
-assert.doesNotMatch(packActionsSource, /label: "(Not for me|Hide this)"/);
-assert.match(appSource, /const packNeutralActionLabel = overlay\?\.launchSource === "fake_launcher" \|\| overlay\?\.versionId \|\| route\?\.kind === "intercept"\s*\? "Continue"\s*: "Back to home";/);
-assert.match(appSource, /card\.sourcePackId\s*\? packActions\s*: \[/);
+const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");
+assert.match(launcherCardActionsSource, /cardType === "pack"/);
+assert.match(launcherCardActionsSource, /label: "I really like this one", variant: "secondary"/);
+assert.match(launcherCardActionsSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
+assert.doesNotMatch(launcherCardActionsSource, /label: "Dislike"/);
+assert.doesNotMatch(launcherCardActionsSource, /label: "Like"/);
+assert.doesNotMatch(launcherCardActionsSource, /label: "(Not for me|Hide this)"/);
+assert.match(appSource, /function normalizeLaunchSession/);
+assert.match(appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
+assert.match(appSource, /allowedDestinationIds: \[launcherId\]/);
+assert.match(appSource, /const cardActionConfig = getLauncherCardActions\(\{ launchSession, cardType \}\);/);
+assert.match(appSource, /action\.id === "really_like_pack_card"[\s\S]{0,100}onClick: onPackLike/);
+assert.match(appSource, /action\.id === LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \|\| action\.id === LAUNCH_PRIMARY_ACTIONS\.BACK_TO_HOME[\s\S]{0,140}onClick: onPackContinue/);
 
 const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
 assert.match(
@@ -171,23 +177,23 @@ assert.match(
 );
 assert.doesNotMatch(
   packContinueHandlerSource,
-  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|dislikedPackCardIds|deletedAt|paused|disliked:/,
+  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|dislikedPackCardIds|hiddenPackCardIdsCompat|deletedAt|paused|disliked:/,
   "Clicking Continue must not hide, dislike, pause, delete, or suppress the pack card",
 );
 
-const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onPackDislike={dislikePackCard}");
+const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
 assert.match(packPositiveHandlerSource, /event_type: "pack_card_liked"/);
 assert.match(packPositiveHandlerSource, /action_taken: "liked"/);
 assert.doesNotMatch(
   packPositiveHandlerSource,
-  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|deletedAt|paused|disliked:/,
+  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|deletedAt|paused|disliked:/,
   "I really like this one records positive feedback without hiding the pack card",
 );
 assert.match(appSource, /function setPackCardHidden\(packId, text, hidden\)/);
 assert.match(appSource, /\{hidden \? "Restore card" : "Hide card"\}/);
 assert.match(
   appSource,
-  /\{ label: "Not done", variant: "secondary", onClick: \(\) => onAction\("later"\) \},\s*\{ label: "I’ll do it now", variant: "secondary", onClick: \(\) => onAction\("now"\) \},\s*\{ label: "Done", variant: "primary", onClick: \(\) => onAction\("done"\) \}/,
+  /\{ id: "not_done", label: "Not done", variant: "secondary" \},\s*\{ id: "do_now", label: "I’ll do it now", variant: "secondary" \},\s*\{ id: "done", label: "Done", variant: "primary" \}/,
   "Non-pack personal card actions are unchanged",
 );
 

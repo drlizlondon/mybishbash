@@ -16,7 +16,7 @@ const destinationByLauncher = {
 
 type LauncherId = keyof typeof destinationByLauncher;
 type CardKind = 'personal' | 'pack' | 'caught-up';
-type TerminalAction = 'home' | 'back-after-card' | 'continue' | 'action-exit' | 'action-home';
+type TerminalAction = 'dashboard' | 'continue' | 'action-exit' | 'action-dashboard';
 
 function personalCard(id: string, promptText: string) {
   return {
@@ -130,16 +130,9 @@ async function expectOverlay(page: Page, kind: CardKind) {
 }
 
 async function clickTerminal(page: Page, launcherId: LauncherId, action: TerminalAction) {
-  if (action === 'home') {
-    await page.getByLabel('Go home').click();
-    await expect(page.getByTestId('app-shell'), 'Back-home terminal should return to MyBishBash').toBeVisible();
-    await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
-    return;
-  }
-
-  if (action === 'back-after-card') {
-    await page.getByTestId('card-action-back-to-mybishbash').click();
-    await expect(page.getByTestId('app-shell'), 'Back-to-MyBishBash terminal should return home').toBeVisible();
+  if (action === 'dashboard') {
+    await page.getByLabel('Open dashboard').click();
+    await expect(page.getByTestId('app-shell'), 'Dashboard shortcut should return to MyBishBash').toBeVisible();
     await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
     return;
   }
@@ -155,9 +148,9 @@ async function clickTerminal(page: Page, launcherId: LauncherId, action: Termina
 
   await page.getByTestId('card-action-do-something-else').click();
   await expect(page.getByTestId('card-overlay-action'), 'Action-card terminal should appear').toBeVisible();
-  if (action === 'action-home') {
-    await page.getByLabel('Go home').click();
-    await expect(page.getByTestId('app-shell'), 'Action-card home terminal should return to MyBishBash').toBeVisible();
+  if (action === 'action-dashboard') {
+    await page.getByLabel('Open dashboard').click();
+    await expect(page.getByTestId('app-shell'), 'Action-card dashboard shortcut should return to MyBishBash').toBeVisible();
     await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
     return;
   }
@@ -203,7 +196,7 @@ async function exerciseLayerOneFlow({
   const card = kind === 'personal'
     ? personalCard(`${name}-personal`, `${name} personal card`)
     : packCard(`${name}-pack`, `${name} pack card`);
-  const actionCards = ['action-exit', 'action-home'].includes(terminal)
+  const actionCards = ['action-exit', 'action-dashboard'].includes(terminal)
     ? [...hiddenStarterActionCards(), actionCard('before-push-action', 'Before push action', 'https://example.com/before-push-action')]
     : [];
 
@@ -211,7 +204,7 @@ async function exerciseLayerOneFlow({
   await openLauncher(page);
   await expectOverlay(page, kind);
 
-  if (terminal === 'home') {
+  if (terminal === 'dashboard') {
     await clickTerminal(page, 'safari', terminal);
     return;
   }
@@ -234,18 +227,15 @@ const buttonBranches: Array<{
   terminal: TerminalAction;
   interruptionOn?: boolean;
 }> = [
-  { name: 'personal card -> home', kind: 'personal', terminal: 'home' },
+  { name: 'personal card -> dashboard', kind: 'personal', terminal: 'dashboard' },
   { name: 'personal card -> continue to app', kind: 'personal', terminal: 'continue' },
-  { name: 'personal card -> back home', kind: 'personal', terminal: 'back-after-card' },
-  { name: 'pack card -> home', kind: 'pack', terminal: 'home' },
+  { name: 'pack card -> dashboard', kind: 'pack', terminal: 'dashboard' },
   { name: 'pack card -> continue to app', kind: 'pack', terminal: 'continue' },
-  { name: 'pack card -> back home', kind: 'pack', terminal: 'back-after-card' },
   { name: 'caught-up -> continue to app', initial: 'caught-up', terminal: 'continue' },
-  { name: 'caught-up -> back to MyBishBash', initial: 'caught-up', terminal: 'back-after-card' },
   { name: 'interruption direct -> continue', initial: 'interruption', terminal: 'continue', interruptionOn: true },
   { name: 'interruption direct -> action card -> external/app exit', initial: 'interruption', terminal: 'action-exit', interruptionOn: true },
   { name: 'personal card -> interruption -> continue', kind: 'personal', terminal: 'continue', interruptionOn: true },
-  { name: 'pack card -> interruption -> action card -> home', kind: 'pack', terminal: 'action-home', interruptionOn: true },
+  { name: 'pack card -> interruption -> action card -> dashboard', kind: 'pack', terminal: 'action-dashboard', interruptionOn: true },
 ];
 
 for (const branch of buttonBranches) {
@@ -261,7 +251,7 @@ for (const branch of buttonBranches) {
       return;
     }
 
-    const actionCards = ['action-exit', 'action-home'].includes(branch.terminal)
+    const actionCards = ['action-exit', 'action-dashboard'].includes(branch.terminal)
       ? [...hiddenStarterActionCards(), actionCard('before-push-action', 'Before push action', 'https://example.com/before-push-action')]
       : [];
     await seedState(page, { cards: [], actionCards, interruptionOn: branch.interruptionOn });
@@ -294,20 +284,20 @@ test('before-push launcher state does not leak between sequential launches', asy
   await expect(page.getByTestId('card-overlay-interruption')).toBeVisible();
   await page.getByTestId('card-action-do-something-else').click();
   await expect(page.getByTestId('card-overlay-action')).toBeVisible();
-  await page.getByLabel('Go home').click();
+  await page.getByLabel('Open dashboard').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   await openLauncher(page, 'safari');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Same launcher relaunch should show a fresh eligible card').toBeVisible();
-  await page.getByLabel('Go home').click();
+  await page.getByLabel('Open dashboard').click();
 
   await openLauncher(page, 'youtube');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Different launcher sequence should show a valid card').toBeVisible();
-  await page.getByLabel('Go home').click();
+  await page.getByLabel('Open dashboard').click();
 
   await openLauncher(page, 'instagram');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Pack/personal sequence should not inherit stale overlay state').toBeVisible();
-  await page.getByLabel('Go home').click();
+  await page.getByLabel('Open dashboard').click();
 
   await openLauncher(page, 'youtube');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Personal/pack sequence should stay selectable').toBeVisible();
@@ -320,7 +310,7 @@ test('before-push caught-up on one launcher does not leak into another valid lau
   });
   await openLauncher(page, 'safari');
   await expectOverlay(page, 'caught-up');
-  await page.getByTestId('card-action-back-to-mybishbash').click();
+  await page.getByLabel('Open dashboard').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await page.getByTestId('create-card-button').click();
   await page.getByTestId('card-prompt-input').fill('Fresh after caught up');

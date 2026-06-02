@@ -53,14 +53,29 @@ assertInAppLauncherUsesSharedHandler("overlay_fake_launcher");
 assertInAppLauncherUsesSharedHandler("settings_fake_launcher");
 
 assertPattern(
-  "tester fake launcher clicks start a launcher interception session",
-  /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId,[\s\S]{0,180}source,[\s\S]{0,80}replace: true,[\s\S]{0,80}navigate: true/g,
+  "in-app fake launcher sources are separated from installed launcher entries",
+  /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"[\s\S]{0,120}\]\);[\s\S]{0,260}const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/g,
 );
 
 assertPattern(
-  "non-tester fake launcher clicks still open real destinations",
-  /openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
+  "in-app fake launcher clicks still open real destinations",
+  /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
 );
+
+for (const source of ["home_fake_launcher_bar", "overlay_fake_launcher", "settings_fake_launcher"]) {
+  const calls = findCallWithSource("beginInterceptionFlow", source);
+  if (calls.length > 0) {
+    fail(`${source} must not call beginInterceptionFlow`, calls[0]);
+  } else {
+    pass(`${source} does not call beginInterceptionFlow`);
+  }
+}
+
+if (/if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId/.test(appSource)) {
+  fail("tester in-app fake launcher clicks must not start a launcher interception session");
+} else {
+  pass("tester in-app fake launcher clicks do not start a launcher interception session");
+}
 
 const interceptRouteCalls = [...appSource.matchAll(/if \(route\.kind === "intercept"\)[\s\S]{0,5000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g)].map((match) =>
   normalizeSnippet(match[0]),

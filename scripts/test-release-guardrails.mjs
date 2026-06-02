@@ -116,47 +116,76 @@ function assertTruthy(message, value) {
   pass(message);
 }
 
-const packActionsSource = sourceBetween(appSource, "const packActions = useSoftPackFeedbackActions", "return (\n    <PremiumCardScreen");
-if (!packActionsSource) {
-  fail("pack overlay actions are discoverable for feedback guardrails");
+const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");
+if (!launcherCardActionsSource) {
+  fail("central launcher card actions are discoverable for feedback guardrails");
 } else {
-  pass("pack overlay actions are discoverable for feedback guardrails");
+  pass("central launcher card actions are discoverable for feedback guardrails");
 }
-assertAppPattern(
-  "soft pack feedback actions are gated to tester accounts",
-  /useSoftPackFeedbackActions=\{testerStatus\?\.is_tester === true\}/g,
-);
 assertSourcePattern(
   "App",
-  packActionsSource,
-  "tester pack overlay primary action uses the contextual neutral label",
-  /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/g,
+  launcherCardActionsSource,
+  "pack overlay primary action uses the normalized session action",
+  /label: normalizedSession\.primaryAction === LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/g,
 );
 assertAppPattern(
-  "pack overlay says Continue for launcher flow and Back to home for home/direct card flow",
-  /const packNeutralActionLabel = overlay\?\.launchSource === "fake_launcher" \|\| overlay\?\.versionId \|\| route\?\.kind === "intercept"\s*\? "Continue"\s*: "Back to home";/g,
+  "pack overlay uses the central action helper",
+  /const cardActionConfig = getLauncherCardActions\(\{ launchSession, cardType \}\);/g,
 );
+assertAppPattern(
+  "fake launcher sessions never allow Back to home",
+  /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/g,
+);
+const actionSuccessOverlaySource = sourceBetween(appSource, "function ActionSuccessOverlay", "function CustomPackOverlay");
 assertSourcePattern(
   "App",
-  packActionsSource,
-  "tester pack overlay positive action says I really like this one",
-  /label: "I really like this one", variant: "secondary", onClick: onPackLike/g,
-);
-assertSourcePattern(
-  "App",
-  packActionsSource,
-  "non-tester pack overlay keeps Dislike",
-  /label: "Dislike", variant: "secondary", onClick: \(\) => onPackDislike\(card\.id\)/g,
-);
-assertSourcePattern(
-  "App",
-  packActionsSource,
-  "non-tester pack overlay keeps Like",
-  /label: "Like", variant: "primary", onClick: onPackLike/g,
+  actionSuccessOverlaySource,
+  "action-success Back-home CTA is gated by allowBackHome",
+  /\.\.\.\(allowBackHome \? \[\{ label: "Back home", variant: "secondary", onClick: onClose \}\] : \[\]\)/g,
 );
 assertSourceDoesNotMatch(
   "App",
-  packActionsSource,
+  actionSuccessOverlaySource,
+  "action-success must not hardcode the dashboard-era home button on",
+  /showHomeButton/g,
+);
+assertAppPattern(
+  "card screens expose the persistent dashboard shortcut",
+  /function PremiumDashboardShortcut[\s\S]{0,900}aria-label="Open dashboard"[\s\S]{0,300}data-testid="dashboard-shortcut"/g,
+);
+assertAppPattern(
+  "card reveal template renders the dashboard shortcut independently",
+  /\{showDashboardShortcut \? <PremiumDashboardShortcut href=\{dashboardHref\} onClick=\{onDashboard\} \/> : null\}/g,
+);
+assertAppDoesNotMatch(
+  "legacy top-right home icon component is not rendered",
+  /<PremiumHomeButton/g,
+);
+assertAppDoesNotMatch(
+  "legacy top-right home icon class is not rendered",
+  /premium-home-button/g,
+);
+assertSourcePattern(
+  "App",
+  launcherCardActionsSource,
+  "pack overlay positive action says I really like this one",
+  /label: "I really like this one", variant: "secondary"/g,
+);
+assertSourceDoesNotMatch(
+  "App",
+  launcherCardActionsSource,
+  "pack overlay never renders Dislike",
+  /label: "Dislike"/g,
+);
+assertSourceDoesNotMatch(
+  "App",
+  launcherCardActionsSource,
+  "pack overlay never renders Like",
+  /label: "Like"/g,
+);
+assertSourceDoesNotMatch(
+  "App",
+  launcherCardActionsSource,
   "pack overlay does not expose old negative replacement wording",
   /label: "(Not for me|Hide this)"/g,
 );
@@ -172,10 +201,10 @@ assertSourceDoesNotMatch(
   "App",
   packContinueHandlerSource,
   "Continue does not hide, dislike, pause, delete, or suppress pack cards",
-  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|dislikedPackCardIds|deletedAt|paused|disliked:/g,
+  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|dislikedPackCardIds|hiddenPackCardIdsCompat|deletedAt|paused|disliked:/g,
 );
 
-const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onPackDislike={dislikePackCard}");
+const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
 assertSourcePattern(
   "App",
   packPositiveHandlerSource,
@@ -186,7 +215,7 @@ assertSourceDoesNotMatch(
   "App",
   packPositiveHandlerSource,
   "I really like this one does not hide the pack card",
-  /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|deletedAt|paused|disliked:/g,
+  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|deletedAt|paused|disliked:/g,
 );
 assertAppPattern(
   "intentional hide/restore behaviour still exists in pack detail settings",
@@ -194,7 +223,7 @@ assertAppPattern(
 );
 assertAppPattern(
   "non-pack personal card actions are unchanged",
-  /\{ label: "Not done", variant: "secondary", onClick: \(\) => onAction\("later"\) \},\s*\{ label: "I’ll do it now", variant: "secondary", onClick: \(\) => onAction\("now"\) \},\s*\{ label: "Done", variant: "primary", onClick: \(\) => onAction\("done"\) \}/g,
+  /\{ id: "not_done", label: "Not done", variant: "secondary" \},\s*\{ id: "do_now", label: "I’ll do it now", variant: "secondary" \},\s*\{ id: "done", label: "Done", variant: "primary" \}/g,
 );
 assertSourcePattern(
   "HQ",
@@ -209,13 +238,22 @@ assertAppPattern(
 );
 
 assertAppPattern(
-  "tester fake launcher clicks start a fresh interception flow",
-  /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId,[\s\S]{0,180}source,[\s\S]{0,80}replace: true,[\s\S]{0,80}navigate: true/g,
+  "in-app fake launcher sources are classified separately from installed launcher entries",
+  /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"[\s\S]{0,120}\]\);[\s\S]{0,260}const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/g,
 );
 
 assertAppPattern(
-  "non-tester fake launcher clicks still open real destinations",
-  /openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
+  "in-app fake launcher clicks open real destinations directly",
+  /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
+);
+
+assertNoInterceptionSource("home_fake_launcher_bar");
+assertNoInterceptionSource("overlay_fake_launcher");
+assertNoInterceptionSource("settings_fake_launcher");
+
+assertAppDoesNotMatch(
+  "tester in-app fake launcher clicks must not start interception",
+  /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId/g,
 );
 
 assertAppPattern(
@@ -291,8 +329,8 @@ assertAppPattern(
 );
 
 assertAppPattern(
-  "beginInterceptionFlow still sets launcher context",
-  /function beginInterceptionFlow\(versionId,[\s\S]{0,260}setLauncherContext\(versionId\)/g,
+  "beginInterceptionFlow rejects non-installed sources before setting launcher context",
+  /function beginInterceptionFlow\(versionId,[\s\S]{0,180}if \(!isInstalledFakeLauncherEntry\(source\)\)[\s\S]{0,900}setLauncherContext\(versionId\)/g,
 );
 
 assertAppPattern(

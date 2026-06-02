@@ -5,7 +5,7 @@ import {
   clearSharedMyBishBashState,
   loadCards,
   loadCardPacks,
-  loadDislikedPackCardIds,
+  loadDislikedPackCardIds as loadHiddenPackCardIdsCompat,
   loadGlobalInterruptionMode,
   loadHiddenLibraryPacks,
   loadHomeScreenVersions,
@@ -17,7 +17,7 @@ import {
   loadSetupComplete,
   saveCards,
   saveCardPacks,
-  saveDislikedPackCardIds,
+  saveDislikedPackCardIds as saveHiddenPackCardIdsCompat,
   saveGlobalInterruptionMode,
   saveHiddenLibraryPacks,
   saveHomeScreenVersions,
@@ -84,7 +84,7 @@ import {
   getLauncherContextFromRoute,
   normalizeInterruptionPack,
   getStoredInterruptionPackForTarget,
-  getPackDislikeKey,
+  getPackDislikeKey as getLegacyHiddenPackCardKey,
   buildInterruptionFolder,
   getInterruptionPackForLauncher,
   resolveVersionConfig,
@@ -802,7 +802,7 @@ function buildSharedState({
   profile,
   cardPacks,
   hiddenLibraryPacks,
-  dislikedPackCardIds,
+  hiddenPackCardIdsCompat,
   globalInterruptionMode,
   events,
   actionCards,
@@ -815,7 +815,7 @@ function buildSharedState({
     profile,
     cardPacks,
     hiddenLibraryPacks,
-    dislikedPackCardIds,
+    dislikedPackCardIds: hiddenPackCardIdsCompat,
     globalInterruptionMode,
     events,
     actionCards,
@@ -833,7 +833,7 @@ function normalizeSharedState(state, fallback) {
     profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
     cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
     hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
-    dislikedPackCardIds: Array.isArray(source.dislikedPackCardIds)
+    hiddenPackCardIdsCompat: Array.isArray(source.dislikedPackCardIds)
       ? source.dislikedPackCardIds
       : fallback.dislikedPackCardIds,
     globalInterruptionMode:
@@ -958,6 +958,125 @@ function buildFakeLauncherPreparingOverlay(versionId) {
   };
 }
 
+const LAUNCH_SESSION_STORAGE_KEY = "mybishbash.launch-session.v1";
+
+const LAUNCH_ENTRY_SURFACES = new Set(["fake_launcher", "mybishbash_home", "unknown"]);
+const LAUNCH_PRIMARY_ACTIONS = {
+  CONTINUE_TO_APP: "continue_to_app",
+  BACK_TO_HOME: "back_to_home",
+};
+const IN_APP_SHORTCUT_SOURCES = new Set([
+  "home_fake_launcher_bar",
+  "overlay_fake_launcher",
+  "settings_fake_launcher",
+]);
+const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set([
+  "route",
+  "home_screen_resume",
+  "standalone_home_recovery",
+]);
+
+function normalizeLaunchSession(source = {}) {
+  const entrySurface = LAUNCH_ENTRY_SURFACES.has(source.entrySurface) ? source.entrySurface : "unknown";
+  const launcherId = isKnownLauncher(source.launcherId) ? source.launcherId : null;
+
+  if (entrySurface === "fake_launcher" && launcherId) {
+    return {
+      entrySurface,
+      launcherId,
+      allowBackHome: false,
+      allowedDestinationIds: [launcherId],
+      primaryAction: LAUNCH_PRIMARY_ACTIONS.CONTINUE_TO_APP,
+      startedAt: source.startedAt ?? new Date().toISOString(),
+    };
+  }
+
+  if (entrySurface === "mybishbash_home") {
+    return {
+      entrySurface,
+      launcherId: null,
+      allowBackHome: true,
+      allowedDestinationIds: [...INTERRUPTION_LAUNCHER_CONTEXTS],
+      primaryAction: LAUNCH_PRIMARY_ACTIONS.BACK_TO_HOME,
+      startedAt: source.startedAt ?? new Date().toISOString(),
+    };
+  }
+
+  return {
+    entrySurface: "unknown",
+    launcherId: null,
+    allowBackHome: false,
+    allowedDestinationIds: [],
+    primaryAction: LAUNCH_PRIMARY_ACTIONS.CONTINUE_TO_APP,
+    startedAt: source.startedAt ?? new Date().toISOString(),
+  };
+}
+
+function buildLaunchSession(entrySurface, launcherId = null) {
+  return normalizeLaunchSession({ entrySurface, launcherId });
+}
+
+function persistLaunchSession(session) {
+  if (typeof window === "undefined" || !session) return;
+  try {
+    window.localStorage.setItem(LAUNCH_SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // Local storage can be unavailable in private or embedded contexts.
+  }
+}
+
+function buildLaunchSessionForRoute(route) {
+  if (route?.kind === "intercept" && isKnownLauncher(route.versionId)) {
+    return buildLaunchSession("fake_launcher", route.versionId);
+  }
+  return buildLaunchSession("mybishbash_home");
+}
+
+function isFakeLauncherSession(launchSession) {
+  return launchSession?.entrySurface === "fake_launcher";
+}
+
+function isInAppShortcutClick(source) {
+  return IN_APP_SHORTCUT_SOURCES.has(source);
+}
+
+function isInstalledFakeLauncherEntry(source) {
+  return INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES.has(source);
+}
+
+function getVisibleDestinationChips(launchSession, versions) {
+  const normalizedSession = normalizeLaunchSession(launchSession);
+  const byId = new Map((versions ?? []).map((version) => [version.id, version]));
+  return normalizedSession.allowedDestinationIds
+    .map((destinationId) => byId.get(destinationId))
+    .filter((version) => Boolean(version?.realAppLabel));
+}
+
+function getLauncherCardActions({ launchSession, cardType }) {
+  const normalizedSession = normalizeLaunchSession(launchSession);
+
+  if (cardType === "pack") {
+    return {
+      actions: [
+        { id: "really_like_pack_card", label: "I really like this one", variant: "secondary" },
+        {
+          id: normalizedSession.primaryAction,
+          label: normalizedSession.primaryAction === LAUNCH_PRIMARY_ACTIONS.CONTINUE_TO_APP ? "Continue" : "Back to home",
+          variant: "primary",
+        },
+      ],
+    };
+  }
+
+  return {
+    actions: [
+      { id: "not_done", label: "Not done", variant: "secondary" },
+      { id: "do_now", label: "I’ll do it now", variant: "secondary" },
+      { id: "done", label: "Done", variant: "primary" },
+    ],
+  };
+}
+
 function buildEmptyOverlay(versionId = null) {
   return { type: "empty", versionId };
 }
@@ -1008,17 +1127,17 @@ function App() {
 
   const initialState = useMemo(() => {
     const base = buildInitialState();
-    const dislikedPackCardIds = loadDislikedPackCardIds();
+    const hiddenPackCardIdsCompat = loadHiddenPackCardIdsCompat();
     const cards = base.cards.map((card) =>
       card.sourcePackId
-        ? { ...card, disliked: dislikedPackCardIds.includes(getPackDislikeKey(card)) }
+        ? { ...card, disliked: hiddenPackCardIdsCompat.includes(getLegacyHiddenPackCardKey(card)) }
         : card,
     );
     return {
       ...base,
       cards,
       cardPacks: loadCardPacks(),
-      dislikedPackCardIds,
+      hiddenPackCardIdsCompat,
       globalInterruptionMode: loadGlobalInterruptionMode(),
       homeScreenVersions: loadHomeScreenVersions(),
       launcherBehaviorSettings: loadLauncherBehaviorSettings(),
@@ -1035,7 +1154,7 @@ function App() {
   const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
   const [launcherBehaviorSettings, setLauncherBehaviorSettings] = useState(initialState.launcherBehaviorSettings);
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
-  const [dislikedPackCardIds, setDislikedPackCardIds] = useState(initialState.dislikedPackCardIds);
+  const [hiddenPackCardIdsCompat, setHiddenPackCardIdsCompat] = useState(initialState.hiddenPackCardIdsCompat);
   const [globalInterruptionMode, setGlobalInterruptionMode] = useState(initialState.globalInterruptionMode);
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
@@ -1059,6 +1178,11 @@ function App() {
   const [overlay, setOverlay] = useState(null);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
   const initialRoute = useMemo(() => parseRoute(routePath), []);
+  const [launchSession, setLaunchSession] = useState(() => {
+    const session = buildLaunchSessionForRoute(initialRoute);
+    persistLaunchSession(session);
+    return session;
+  });
   const [launcherContext, setLauncherContext] = useState(() => getLauncherContextFromRoute(initialRoute));
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -1125,6 +1249,13 @@ function App() {
       launcherBehaviorSettings,
     ]
   );
+  const overlayLauncherVersions = useMemo(
+    () => getVisibleDestinationChips(launchSession, fakeLauncherVersions),
+    [
+      fakeLauncherVersions,
+      launchSession,
+    ],
+  );
   const [logFilter, setLogFilter] = useState("all");
   const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete && !initialState.suppressInitialHomeLaunch);
   const [resumeLaunchNonce, setResumeLaunchNonce] = useState(0);
@@ -1145,6 +1276,36 @@ function App() {
   const isPreparingCaughtUp = route.kind === "caught-up" && overlay == null;
   const hideAppShell = isLaunchingHomeOverlay || isPreparingIntercept || isPreparingSpecificCard || isPreparingCaughtUp;
 
+  useEffect(() => {
+    if (!e2eMode || typeof window === "undefined") return;
+    window.__MYBISHBASH_LAUNCH_SESSION = launchSession;
+  }, [e2eMode, launchSession]);
+
+  useEffect(() => {
+    if (route.kind === "intercept" && isKnownLauncher(route.versionId)) {
+      setLaunchSession((current) => {
+        if (current?.entrySurface === "fake_launcher" && current?.launcherId === route.versionId) {
+          return current;
+        }
+        const nextSession = buildLaunchSession("fake_launcher", route.versionId);
+        persistLaunchSession(nextSession);
+        return nextSession;
+      });
+      return;
+    }
+
+    if (isAppTabRoute && overlay?.launchSource !== "fake_launcher") {
+      setLaunchSession((current) => {
+        if (current?.entrySurface === "mybishbash_home") {
+          return current;
+        }
+        const nextSession = buildLaunchSession("mybishbash_home");
+        persistLaunchSession(nextSession);
+        return nextSession;
+      });
+    }
+  }, [isAppTabRoute, overlay?.launchSource, route.kind, route.versionId]);
+
   function getFakeLauncherShellContextId() {
     if (testerStatus?.is_tester !== true) return null;
     const installedLauncherId = getInstalledLauncherShellId();
@@ -1159,12 +1320,18 @@ function App() {
   function buildRevealOverlayForCurrentShell(cardId) {
     const installedLauncherId = getFakeLauncherShellContextId();
     if (installedLauncherId) {
+      const nextSession = buildLaunchSession("fake_launcher", installedLauncherId);
+      persistLaunchSession(nextSession);
+      setLaunchSession(nextSession);
       return buildFakeLauncherRevealOverlay(
         cardId,
         installedLauncherId,
         interceptActivationRef.current?.activationKey ?? null,
       );
     }
+    const nextSession = buildLaunchSession("mybishbash_home");
+    persistLaunchSession(nextSession);
+    setLaunchSession(nextSession);
     return { ...buildRevealOverlay(cardId), origin: "home" };
   }
 
@@ -1177,7 +1344,7 @@ function App() {
         profile,
         cardPacks,
         hiddenLibraryPacks,
-        dislikedPackCardIds,
+        hiddenPackCardIdsCompat,
         globalInterruptionMode,
         events,
         actionCards,
@@ -1189,7 +1356,7 @@ function App() {
       profile,
       cardPacks,
       hiddenLibraryPacks,
-      dislikedPackCardIds,
+      hiddenPackCardIdsCompat,
       globalInterruptionMode,
       events,
       actionCards,
@@ -1211,7 +1378,7 @@ function App() {
       profile: initialState.profile,
       cardPacks: initialState.cardPacks,
       hiddenLibraryPacks: initialState.hiddenLibraryPacks,
-      dislikedPackCardIds: initialState.dislikedPackCardIds,
+      hiddenPackCardIdsCompat: initialState.hiddenPackCardIdsCompat,
       globalInterruptionMode: initialState.globalInterruptionMode,
       events: initialState.events,
       actionCards: initialState.actionCards,
@@ -1243,7 +1410,7 @@ function App() {
       return isSameJsonValue(currentPacks, merged) ? currentPacks : merged;
     });
     setHiddenLibraryPacks((current) => (isSameJsonValue(current, next.hiddenLibraryPacks) ? current : next.hiddenLibraryPacks));
-    setDislikedPackCardIds((current) => (isSameJsonValue(current, next.dislikedPackCardIds) ? current : next.dislikedPackCardIds));
+    setHiddenPackCardIdsCompat((current) => (isSameJsonValue(current, next.hiddenPackCardIdsCompat) ? current : next.hiddenPackCardIdsCompat));
     setGlobalInterruptionMode(next.globalInterruptionMode);
 
     // Merge incoming cloud events with current local events to prevent data loss.
@@ -1441,7 +1608,7 @@ function App() {
     if (route.kind !== "intercept") return undefined;
     const routeInterruptionPack = route.kind === "intercept"
       ? getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-          hiddenCardIds: dislikedPackCardIds,
+          hiddenCardIds: hiddenPackCardIdsCompat,
           globalEnabled: globalInterruptionMode,
         })
       : null;
@@ -1482,7 +1649,7 @@ function App() {
       setLauncherDataWaitExpired(true);
     }, LAUNCHER_DATA_WAIT_TIMEOUT_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [authReady, cardPacks, cards, dislikedPackCardIds, globalInterruptionMode, homeScreenVersions, launcherBehaviorSettings, launcherDataWaitExpired, profile.timezone, route.kind, route.versionId, session?.user?.id, syncStatus]);
+  }, [authReady, cardPacks, cards, hiddenPackCardIdsCompat, globalInterruptionMode, homeScreenVersions, launcherBehaviorSettings, launcherDataWaitExpired, profile.timezone, route.kind, route.versionId, session?.user?.id, syncStatus]);
 
   const refreshGlobalPacks = useCallback(() => {
     return fetchGlobalPacks()
@@ -1717,8 +1884,8 @@ function App() {
   }, [cardPacks]);
 
   useEffect(() => {
-    saveDislikedPackCardIds(dislikedPackCardIds);
-  }, [dislikedPackCardIds]);
+    saveHiddenPackCardIdsCompat(hiddenPackCardIdsCompat);
+  }, [hiddenPackCardIdsCompat]);
 
   useEffect(() => {
     saveGlobalInterruptionMode(globalInterruptionMode);
@@ -1788,10 +1955,10 @@ function App() {
     setCards((current) =>
       normalizeCards(current, new Date(), profile.timezone).map((card) => ({
         ...card,
-        disliked: card.sourcePackId ? dislikedPackCardIds.includes(getPackDislikeKey(card)) : card.disliked ?? false,
+        disliked: card.sourcePackId ? hiddenPackCardIdsCompat.includes(getLegacyHiddenPackCardKey(card)) : card.disliked ?? false,
       })),
     );
-  }, [dislikedPackCardIds, profile.timezone]);
+  }, [hiddenPackCardIdsCompat, profile.timezone]);
 
   useEffect(() => {
     if (activeTab !== "log" && logFilter !== "all") {
@@ -1923,7 +2090,7 @@ function App() {
           ]
         : events;
     const interruptionPack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-      hiddenCardIds: dislikedPackCardIds,
+      hiddenCardIds: hiddenPackCardIdsCompat,
       globalEnabled: globalInterruptionMode,
     });
     const eligibleCardCount = interruptionPack?.cards?.length ?? 0;
@@ -2208,7 +2375,7 @@ function App() {
       const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
       const eligiblePackCount = normalizedDiagCards.filter(isPackCardAvailable).length;
       const routeInterruptionPack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-        hiddenCardIds: dislikedPackCardIds,
+        hiddenCardIds: hiddenPackCardIdsCompat,
         globalEnabled: globalInterruptionMode,
       });
       const hasUsableCachedLauncherState =
@@ -2402,7 +2569,7 @@ function App() {
         homeScreenVersions,
         launcherBehaviorSettings,
         cardPacks,
-        dislikedPackCardIds,
+        hiddenPackCardIdsCompat,
         globalInterruptionMode,
         events,
       );
@@ -2455,7 +2622,7 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, dislikedPackCardIds, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent, e2eMode]);
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, hiddenPackCardIdsCompat, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent, e2eMode]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
@@ -2519,7 +2686,14 @@ function App() {
   }
 
   function beginInterceptionFlow(versionId, { source = "launcher", replace = true, navigate = true } = {}) {
+    if (!isInstalledFakeLauncherEntry(source)) {
+      console.warn("[LAUNCHER] Ignoring non-installed interception request", { versionId, source });
+      return null;
+    }
     debugLaunch("[INTERCEPT] Starting interception flow", { versionId, source });
+    const nextSession = buildLaunchSession("fake_launcher", versionId);
+    persistLaunchSession(nextSession);
+    setLaunchSession(nextSession);
     suppressNextHomeAutoLaunchRef.current = false;
     setShouldLaunchOverlay(false);
     setLauncherContext(versionId);
@@ -2600,16 +2774,8 @@ function App() {
   }
 
   function handleFakeLauncherLaunch(versionId, source) {
-    if (testerStatus?.is_tester === true) {
-      interceptActivationRef.current = null;
-      launchCompletedCardIdsRef.current = new Set();
-      suppressNextHomeAutoLaunchRef.current = false;
-      setShouldLaunchOverlay(false);
-      beginInterceptionFlow(versionId, {
-        source,
-        replace: true,
-        navigate: true,
-      });
+    if (!isInAppShortcutClick(source)) {
+      console.warn("[LAUNCHER] Ignoring unknown in-app shortcut source", { versionId, source });
       return;
     }
 
@@ -2828,7 +2994,7 @@ function App() {
         return;
       }
       const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-        hiddenCardIds: dislikedPackCardIds,
+        hiddenCardIds: hiddenPackCardIdsCompat,
         globalEnabled: globalInterruptionMode,
       });
       const hasNextInterruptionPack = overlay.type !== "intercept-pack" && Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0));
@@ -3196,13 +3362,13 @@ function App() {
   }
 
   function setPackCardHidden(packId, text, hidden) {
-    const dislikeKey = getPackDislikeKey({ sourcePackId: packId, promptText: text });
-    if (!dislikeKey) return;
-    setDislikedPackCardIds((current) => {
+    const hiddenCardKeyCompat = getLegacyHiddenPackCardKey({ sourcePackId: packId, promptText: text });
+    if (!hiddenCardKeyCompat) return;
+    setHiddenPackCardIdsCompat((current) => {
       if (hidden) {
-        return current.includes(dislikeKey) ? current : [...current, dislikeKey];
+        return current.includes(hiddenCardKeyCompat) ? current : [...current, hiddenCardKeyCompat];
       }
-      return current.filter((item) => item !== dislikeKey);
+      return current.filter((item) => item !== hiddenCardKeyCompat);
     });
     const isInterruption = packId.endsWith("-interruption");
     void logEvent({
@@ -3211,7 +3377,7 @@ function App() {
         : hidden ? "pack_card_disliked" : "pack_card_restored",
       source_type: isInterruption ? "interruption" : "library",
       card_source: isInterruption ? "interruption" : "library",
-      card_id: dislikeKey,
+      card_id: hiddenCardKeyCompat,
       card_title: text,
       card_text: text,
       pack_id: packId,
@@ -3220,11 +3386,11 @@ function App() {
     });
   }
 
-  function dislikePackCard(cardId) {
+  function hidePackCardCompat(cardId) {
     const card = cards.find((item) => item.id === cardId);
-    const dislikeKey = getPackDislikeKey(card);
-    if (!dislikeKey) return;
-    setDislikedPackCardIds((current) => (current.includes(dislikeKey) ? current : [...current, dislikeKey]));
+    const hiddenCardKeyCompat = getLegacyHiddenPackCardKey(card);
+    if (!hiddenCardKeyCompat) return;
+    setHiddenPackCardIdsCompat((current) => (current.includes(hiddenCardKeyCompat) ? current : [...current, hiddenCardKeyCompat]));
     void logEvent({
       event_type: "pack_card_disliked",
       source_type: "library",
@@ -3241,15 +3407,15 @@ function App() {
     return;
   }
 
-  function dislikeInterruptionPackCard(packId, card) {
-    const dislikeKey = getPackDislikeKey({ sourcePackId: packId, promptText: card?.text });
-    if (!dislikeKey) return;
-    setDislikedPackCardIds((current) => (current.includes(dislikeKey) ? current : [...current, dislikeKey]));
+  function hideInterruptionPackCardCompat(packId, card) {
+    const hiddenCardKeyCompat = getLegacyHiddenPackCardKey({ sourcePackId: packId, promptText: card?.text });
+    if (!hiddenCardKeyCompat) return;
+    setHiddenPackCardIdsCompat((current) => (current.includes(hiddenCardKeyCompat) ? current : [...current, hiddenCardKeyCompat]));
     void logEvent({
       event_type: "intercept_card_disliked",
       source_type: "interruption",
       card_source: "interruption",
-      card_id: card?.id ?? dislikeKey,
+      card_id: card?.id ?? hiddenCardKeyCompat,
       card_title: card?.title ?? card?.text ?? null,
       card_text: card?.text ?? null,
       pack_id: packId,
@@ -3393,9 +3559,9 @@ function App() {
 
     const defaultMessages = DEFAULT_INTERRUPTION_PACKS[supportedLauncherId]?.messages ?? [];
     const defaultPackId = DEFAULT_INTERRUPTION_PACKS[supportedLauncherId]?.id ?? `${supportedLauncherId}-interruption`;
-    setDislikedPackCardIds((current) => {
+    setHiddenPackCardIdsCompat((current) => {
       const hiddenDefaultCards = defaultMessages.map((message) =>
-        getPackDislikeKey({ sourcePackId: defaultPackId, promptText: message }),
+        getLegacyHiddenPackCardKey({ sourcePackId: defaultPackId, promptText: message }),
       );
       return Array.from(new Set([...current, ...hiddenDefaultCards]));
     });
@@ -3583,7 +3749,7 @@ function App() {
       launcherBehaviorSettings[versionId]
     );
     const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-      hiddenCardIds: dislikedPackCardIds,
+      hiddenCardIds: hiddenPackCardIdsCompat,
       globalEnabled: globalInterruptionMode,
     });
     if (version.interruptionPaused || !pack || pack.messages.length === 0) return;
@@ -3653,7 +3819,7 @@ function App() {
     setHomeScreenVersions(loadHomeScreenVersions());
     setLauncherBehaviorSettings(loadLauncherBehaviorSettings());
     setCardPacks([]);
-    setDislikedPackCardIds([]);
+    setHiddenPackCardIdsCompat([]);
     setGlobalInterruptionMode(true);
     setHiddenLibraryPacks([]);
     setEvents([]);
@@ -3914,7 +4080,7 @@ function App() {
       const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
       if (resolvedVersion.id !== launcherContext) return;
       const pack = getInterruptionPackForLauncher(resolvedVersion.id, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-        hiddenCardIds: dislikedPackCardIds,
+        hiddenCardIds: hiddenPackCardIdsCompat,
         globalEnabled: globalInterruptionMode,
       });
       if (!pack || pack.messages.length === 0) return;
@@ -3936,7 +4102,7 @@ function App() {
       const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
       return rightCreated - leftCreated;
     });
-  }, [cards, profile.timezone, homeScreenVersions, launcherBehaviorSettings, cardPacks, launcherContext, dislikedPackCardIds, globalInterruptionMode]);
+  }, [cards, profile.timezone, homeScreenVersions, launcherBehaviorSettings, cardPacks, launcherContext, hiddenPackCardIdsCompat, globalInterruptionMode]);
   const eligibleHomeCount = useMemo(() => {
     let count = 0;
     const seenPackIds = new Set();
@@ -4013,12 +4179,12 @@ function App() {
     () =>
       INTERRUPTION_LAUNCHER_CONTEXTS.map((targetApp) =>
         buildInterruptionFolder(targetApp, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-          hiddenCardIds: dislikedPackCardIds,
+          hiddenCardIds: hiddenPackCardIdsCompat,
           globalEnabled: globalInterruptionMode,
           includeHidden: true,
         }),
       ).filter(Boolean),
-    [homeScreenVersions, launcherBehaviorSettings, cardPacks, dislikedPackCardIds, globalInterruptionMode],
+    [homeScreenVersions, launcherBehaviorSettings, cardPacks, hiddenPackCardIdsCompat, globalInterruptionMode],
   );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
@@ -4066,6 +4232,7 @@ function App() {
         appIcon="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
         onContinue={() => openDestinationApp("instagram", { source: "preview_continue", reason: "user_pressed_continue" })}
         onBack={() => navigateTo("/home", { replace: true })}
+        onDashboard={() => navigateTo("/home", { replace: true })}
       />
     );
   }
@@ -4273,7 +4440,7 @@ function App() {
           cards={cards}
           libraryPacks={visibleLibraryPacks}
           interruptionPacks={interruptionPacks}
-          hiddenCardIds={dislikedPackCardIds}
+          hiddenCardIds={hiddenPackCardIdsCompat}
           isPackActive={isPackActive}
           onActivateLibraryPack={activatePack}
           onDeactivateLibraryPack={deactivatePack}
@@ -4290,6 +4457,7 @@ function App() {
           overlay={overlay}
           card={activeRevealCard}
           route={route}
+          launchSession={launchSession}
           version={activeOverlayVersion}
           timezone={profile.timezone}
           onClose={() => {
@@ -4297,6 +4465,14 @@ function App() {
               setOverlay(null);
               return;
             }
+            suppressNextHomeAutoLaunchRef.current = true;
+            suppressStandaloneLauncherRecoveryOnce();
+            setShouldLaunchOverlay(false);
+            setScreen("library");
+            navigateTo("/home", { replace: true });
+            setOverlay(null);
+          }}
+          onDashboard={() => {
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             setShouldLaunchOverlay(false);
@@ -4341,8 +4517,6 @@ function App() {
             handleRevealCompletion();
             return;
           }}
-          onPackDislike={dislikePackCard}
-          useSoftPackFeedbackActions={testerStatus?.is_tester === true}
           onChooseElse={() => {
             console.log("[INTERCEPT] Choose something else", {
               versionId: overlay?.versionId,
@@ -4396,7 +4570,7 @@ function App() {
             setOverlay(null);
             setIsActionCardEditorOpen(true);
           }}
-          fakeLauncherVersions={fakeLauncherVersions}
+          fakeLauncherVersions={overlayLauncherVersions}
           onFakeLauncherLaunch={handleOverlayFakeLauncherLaunch}
         />
       ) : null}
@@ -5599,7 +5773,7 @@ function PackDetailModal({
             <div className="custom-pack-message-grid">
               {libraryPack.entries.map((entry, index) => {
                 const hidden = hiddenCardIds.includes(
-                  getPackDislikeKey({ sourcePackId: libraryPack.id, promptText: entry.promptText }),
+                  getLegacyHiddenPackCardKey({ sourcePackId: libraryPack.id, promptText: entry.promptText }),
                 );
                 const activeCard = cards.find(
                   (card) => card.sourcePackId === libraryPack.id && card.promptText === entry.promptText && !card.deletedAt,
@@ -6390,14 +6564,14 @@ function Overlay({
   overlay,
   card,
   route,
+  launchSession,
   version,
   timezone,
   onClose,
+  onDashboard,
   onAction,
   onPackContinue,
   onPackLike,
-  onPackDislike,
-  useSoftPackFeedbackActions = false,
   onChooseElse,
   onLogEvent,
   onLogLauncherEvent,
@@ -6422,7 +6596,7 @@ function Overlay({
         subtitle="One moment."
         actions={[]}
         launcherVersions={[]}
-        showHomeButton={false}
+        onDashboard={onDashboard}
         className={launcherInterceptionClass}
       />
     );
@@ -6430,6 +6604,7 @@ function Overlay({
 
   if (overlay.type === "continue-to-app") {
     const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version));
+    const canGoBackHome = normalizeLaunchSession(launchSession).allowBackHome;
     const handleContinue = (event) => {
       const handled = onContinueToApp?.(version?.id, {
         source: "continue_card",
@@ -6458,7 +6633,8 @@ function Overlay({
         appIcon={version?.customIconSrc || version?.iconSrc}
         href={continueHref}
         onContinue={handleContinue}
-        onBack={handleBack}
+        onBack={canGoBackHome ? handleBack : null}
+        onDashboard={onDashboard}
         className={launcherInterceptionClass}
       />
     );
@@ -6468,6 +6644,7 @@ function Overlay({
     const isIntercept = !!overlay.versionId;
     const interceptVersion = isIntercept ? version : null;
     const appName = interceptVersion?.name ?? "App";
+    const canGoBackHome = normalizeLaunchSession(launchSession).allowBackHome;
 
     const actions = [];
     if (isIntercept && interceptVersion) {
@@ -6485,13 +6662,17 @@ function Overlay({
           if (handled !== false) event?.preventDefault?.();
         }
       });
-      actions.push({
-        label: "Back to MyBishBash",
-        variant: "secondary",
-        onClick: onClose
-      });
+      if (canGoBackHome) {
+        actions.push({
+          label: "Back to MyBishBash",
+          variant: "secondary",
+          onClick: onClose
+        });
+      }
     } else {
-      actions.push({ label: "Back home", variant: "primary", onClick: onClose });
+      if (canGoBackHome) {
+        actions.push({ label: "Back home", variant: "primary", onClick: onClose });
+      }
     }
 
     return (
@@ -6504,8 +6685,7 @@ function Overlay({
         actions={actions}
         launcherVersions={isIntercept ? [] : fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
-        showHomeButton={!isIntercept}
-        onHome={onClose}
+        onDashboard={onDashboard}
         className={launcherInterceptionClass}
       />
     );
@@ -6521,12 +6701,13 @@ function Overlay({
         onLogLauncherEvent={onLogLauncherEvent}
         onContinueToApp={onContinueToApp}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
+        onDashboard={onDashboard}
       />
     );
   }
 
   if (overlay.type === "custom-pack-preview") {
-    return <CustomPackOverlay overlay={overlay} onClose={onClose} />;
+    return <CustomPackOverlay overlay={overlay} onClose={onClose} onDashboard={onDashboard} />;
   }
 
   if (overlay.type === "action-card") {
@@ -6539,6 +6720,8 @@ function Overlay({
         onLogEvent={onLogEvent}
         fakeLauncherVersions={fakeLauncherVersions}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
+        allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
+        onDashboard={onDashboard}
         className={launcherInterceptionClass}
       />
     );
@@ -6555,6 +6738,8 @@ function Overlay({
         onContinueToApp={onContinueToApp}
         fakeLauncherVersions={fakeLauncherVersions}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
+        allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
+        onDashboard={onDashboard}
         className={launcherInterceptionClass}
       />
     );
@@ -6567,28 +6752,30 @@ function Overlay({
         version={version}
         onClose={onClose}
         onContinueToApp={onContinueToApp}
+        allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
+        onDashboard={onDashboard}
         className={launcherInterceptionClass}
       />
     );
   }
 
   if (!card) return null;
-  const packNeutralActionLabel = overlay?.launchSource === "fake_launcher" || overlay?.versionId || route?.kind === "intercept"
-    ? "Continue"
-    : "Back to home";
-  const packActions = useSoftPackFeedbackActions
-    ? [
-        { label: "I really like this one", variant: "secondary", onClick: onPackLike },
-        { label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue },
-      ]
-    : [
-        { label: "Dislike", variant: "secondary", onClick: () => onPackDislike(card.id) },
-        { label: "Like", variant: "primary", onClick: onPackLike },
-      ];
+  const cardType = card.sourcePackId ? "pack" : "personal";
+  const cardActionConfig = getLauncherCardActions({ launchSession, cardType });
+  const resolvedActions = cardActionConfig.actions.map((action) => {
+    if (action.id === "really_like_pack_card") return { ...action, onClick: onPackLike };
+    if (action.id === LAUNCH_PRIMARY_ACTIONS.CONTINUE_TO_APP || action.id === LAUNCH_PRIMARY_ACTIONS.BACK_TO_HOME) {
+      return { ...action, onClick: onPackContinue };
+    }
+    if (action.id === "not_done") return { ...action, onClick: () => onAction("later") };
+    if (action.id === "do_now") return { ...action, onClick: () => onAction("now") };
+    if (action.id === "done") return { ...action, onClick: () => onAction("done") };
+    return action;
+  });
 
   return (
     <PremiumCardScreen
-      type={card.sourcePackId ? "pack" : "personal"}
+      type={cardType}
       greeting={getGreeting(new Date(), timezone)}
       icon="heart"
       headline={card.promptText}
@@ -6597,19 +6784,10 @@ function Overlay({
           ? card.attribution || card.sourceTitle || "A card from your pack."
           : "A gentle nudge from the version of you that cares."
       }
-      actions={
-        card.sourcePackId
-          ? packActions
-          : [
-              { label: "Not done", variant: "secondary", onClick: () => onAction("later") },
-              { label: "I’ll do it now", variant: "secondary", onClick: () => onAction("now") },
-              { label: "Done", variant: "primary", onClick: () => onAction("done") },
-            ]
-      }
+      actions={resolvedActions}
       launcherVersions={fakeLauncherVersions}
       onLauncherLaunch={onFakeLauncherLaunch}
-      showHomeButton={true}
-      onHome={onClose}
+      onDashboard={onDashboard}
       className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
     />
   );
@@ -6624,9 +6802,9 @@ function PremiumCardScreen({
   actions = [],
   launcherVersions = [],
   onLauncherLaunch,
-  showHomeButton = false,
-  homeHref,
-  onHome,
+  showDashboardShortcut = true,
+  dashboardHref,
+  onDashboard,
   children,
   className = "",
 }) {
@@ -6640,9 +6818,9 @@ function PremiumCardScreen({
       launchers={launcherVersions}
       actions={actions}
       onLauncherLaunch={onLauncherLaunch}
-      showHomeButton={showHomeButton}
-      homeHref={homeHref}
-      onHome={onHome}
+      showDashboardShortcut={showDashboardShortcut}
+      dashboardHref={dashboardHref}
+      onDashboard={onDashboard}
       className={className}
     >
       {children}
@@ -6659,9 +6837,9 @@ function CardRevealTemplate({
   actions = [],
   variant = "personal",
   onLauncherLaunch,
-  showHomeButton = false,
-  homeHref,
-  onHome,
+  showDashboardShortcut = true,
+  dashboardHref,
+  onDashboard,
   children,
   className = "",
 }) {
@@ -6670,7 +6848,7 @@ function CardRevealTemplate({
 
   return (
     <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
-      {showHomeButton ? <PremiumHomeButton href={homeHref} onClick={onHome} /> : null}
+      {showDashboardShortcut ? <PremiumDashboardShortcut href={dashboardHref} onClick={onDashboard} /> : null}
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header">
           {greeting ? <p className="premium-greeting">{greeting}</p> : null}
@@ -6786,28 +6964,31 @@ function PremiumCardIcon({ icon }) {
   );
 }
 
-function PremiumHomeButton({ href, onClick }) {
+function PremiumDashboardShortcut({ href, onClick }) {
   const content = (
     <>
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4.75 10.5 12 4.25l7.25 6.25" />
-        <path d="M6.75 9.25v9.5h10.5v-9.5" />
-        <path d="M10 18.75v-5.5h4v5.5" />
+        <rect x="4.75" y="4.75" width="5.75" height="5.75" rx="1.25" />
+        <rect x="13.5" y="4.75" width="5.75" height="5.75" rx="1.25" />
+        <rect x="4.75" y="13.5" width="5.75" height="5.75" rx="1.25" />
+        <rect x="13.5" y="13.5" width="5.75" height="5.75" rx="1.25" />
       </svg>
-      <span className="sr-only">Go home</span>
+      <span className="sr-only">Open dashboard</span>
     </>
   );
 
-  if (href) {
+  const dashboardHref = href ?? `${BASE_PATH}/home`;
+
+  if (href || !onClick) {
     return (
-      <a className="premium-home-button" href={href} onClick={(event) => onClick?.(event)} aria-label="Go home">
+      <a className="premium-dashboard-shortcut" href={dashboardHref} onClick={(event) => onClick?.(event)} aria-label="Open dashboard" title="Dashboard" data-testid="dashboard-shortcut">
         {content}
       </a>
     );
   }
 
   return (
-    <button type="button" className="premium-home-button" onClick={(event) => onClick?.(event)} aria-label="Go home">
+    <button type="button" className="premium-dashboard-shortcut" onClick={(event) => onClick?.(event)} aria-label="Open dashboard" title="Dashboard" data-testid="dashboard-shortcut">
       {content}
     </button>
   );
@@ -6858,6 +7039,8 @@ function ActionCardOverlay({
   onLogEvent,
   fakeLauncherVersions,
   onFakeLauncherLaunch,
+  allowBackHome = false,
+  onDashboard,
   className = "",
 }) {
   console.log("[ACTION CARDS] Overlay rendered");
@@ -6971,15 +7154,14 @@ function ActionCardOverlay({
         ]}
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
-        showHomeButton={true}
-        onHome={onClose}
+        onDashboard={onDashboard}
         className={className}
       />
     </div>
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, className = "" }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, className = "" }) {
   function handleContinueToApp() {
     if (!version) return;
 
@@ -7004,27 +7186,26 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         headline="No action ideas yet."
         subtitle="Make one for yourself."
         actions={[
-          { label: "Back home", variant: "secondary", onClick: onClose },
+          ...(allowBackHome ? [{ label: "Back home", variant: "secondary", onClick: onClose }] : []),
           ...(version ? [{ label: "Continue to App", variant: "secondary", onClick: handleContinueToApp }] : []),
           { label: "Create action card", variant: "primary", onClick: onCreateActionCard },
         ]}
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
-        showHomeButton={true}
-        onHome={onClose}
+        onDashboard={onDashboard}
         className={className}
       />
     </div>
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onContinueToApp, className = "" }) {
+function ActionSuccessOverlay({ version, onClose, onContinueToApp, allowBackHome = false, onDashboard, className = "" }) {
   const actions = version
     ? [
         { label: "Continue to App", variant: "primary", onClick: () => onContinueToApp?.(version.id, { source: "action_card_success", reason: "user_pressed_continue" }) },
-        { label: "Back home", variant: "secondary", onClick: onClose },
+        ...(allowBackHome ? [{ label: "Back home", variant: "secondary", onClick: onClose }] : []),
       ]
-    : [{ label: "Back home", variant: "primary", onClick: onClose }];
+    : allowBackHome ? [{ label: "Back home", variant: "primary", onClick: onClose }] : [];
 
   return (
     <PremiumCardScreen
@@ -7034,14 +7215,13 @@ function ActionSuccessOverlay({ version, onClose, onContinueToApp, className = "
       headline="Nice choice."
       subtitle="Take all the time you need."
       actions={actions}
-      showHomeButton={true}
-      onHome={onClose}
+      onDashboard={onDashboard}
       className={className}
     />
   );
 }
 
-function CustomPackOverlay({ overlay, onClose }) {
+function CustomPackOverlay({ overlay, onClose, onDashboard }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const touchStartX = useRef(null);
   const messages = overlay.messages ?? [];
@@ -7080,8 +7260,7 @@ function CustomPackOverlay({ overlay, onClose }) {
         icon="heart"
         headline={messages[activeIndex] ?? "Your pack is ready."}
         subtitle="Swipe through these little interruptions."
-        showHomeButton={true}
-        onHome={onClose}
+        onDashboard={onDashboard}
       >
         {messages.length > 1 ? (
           <div className="premium-card-pagination">
@@ -7101,7 +7280,7 @@ function CustomPackOverlay({ overlay, onClose }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -7239,7 +7418,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         ]}
         launcherVersions={[]}
         onLauncherLaunch={onFakeLauncherLaunch}
-        showHomeButton={false}
+        onDashboard={onDashboard}
         className="launcher-interception-card"
       >
         {hasMultipleMessages ? (
@@ -7583,9 +7762,15 @@ function LegalPage({ title, docUrl }) {
   );
 }
 
-function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, className = "" }) {
+function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashboard, className = "" }) {
+  const actions = [
+    { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
+    ...(onBack ? [{ label: "Back to MyBishBash", variant: "secondary", onClick: onBack }] : []),
+  ];
+
   return (
     <div className={`premium-card-screen premium-card-personal ${className}`.trim()} data-testid="continue-to-app-card">
+      <PremiumDashboardShortcut onClick={onDashboard} />
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header" />
         <section className="premium-card-message-section" style={{ alignItems: 'center', textAlign: 'center' }}>
@@ -7597,10 +7782,7 @@ function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, classNa
           </h2>
         </section>
         <section className="premium-card-cta no-launchers">
-          <PremiumActionStack actions={[
-            { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
-            { label: "Back to MyBishBash", variant: "secondary", onClick: onBack }
-          ]} />
+          <PremiumActionStack actions={actions} />
         </section>
       </main>
     </div>
