@@ -77,7 +77,7 @@ if (/if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionF
   pass("tester in-app fake launcher clicks do not start a launcher interception session");
 }
 
-const interceptRouteCalls = [...appSource.matchAll(/if \(route\.kind === "intercept"\)[\s\S]{0,5000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g)].map((match) =>
+const interceptRouteCalls = [...appSource.matchAll(/if \(route\.kind === "intercept"\)[\s\S]{0,7000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g)].map((match) =>
   normalizeSnippet(match[0]),
 );
 if (interceptRouteCalls.length === 0) {

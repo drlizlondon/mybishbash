@@ -315,7 +315,7 @@ if (!openDestinationAppBody) {
 
 assertAppPattern(
   "/intercept/:launcherId still calls beginInterceptionFlow",
-  /if \(route\.kind === "intercept"\)[\s\S]{0,5000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g,
+  /if \(route\.kind === "intercept"\)[\s\S]{0,7000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g,
 );
 
 assertAppPattern(
@@ -595,15 +595,30 @@ assertSourcePattern(
 assertSourcePattern(
   "launcherFlow",
   launcherFlowSource,
-  "intercept readiness still blocks auth-pending launches",
-  /if \(!authReady\) return \{ ready: false, reason: "auth_pending" \};/g,
+  "intercept readiness has a sub-300ms wait budget",
+  /export const LAUNCHER_DATA_WAIT_TIMEOUT_MS = 300;/g,
 );
 
 assertSourcePattern(
   "launcherFlow",
   launcherFlowSource,
-  "intercept readiness still blocks sync-pending launches",
-  /syncStatus === "loading"[\s\S]{0,120}reason: "sync_pending"/g,
+  "intercept readiness timeout releases pending auth or sync",
+  /if \(waitExpired\) return \{ ready: true, reason: "wait_expired" \};[\s\S]{0,180}if \(!authReady\)/g,
+);
+
+assertAppPattern(
+  "intercept routes render preparing overlay from initial state",
+  /initialRoute\.kind === "intercept" \? buildFakeLauncherPreparingOverlay\(initialRoute\.versionId\) : null/g,
+);
+
+assertAppPattern(
+  "launcher tester timing instrumentation covers route through final overlay",
+  /recordLaunchTiming\("route detected"[\s\S]{0,1800}recordLaunchTiming\("first overlay visible"[\s\S]{0,2400}recordLaunchTiming\("final overlay type rendered"/g,
+);
+
+assertAppPattern(
+  "launcher selection timing instrumentation surrounds the existing selector",
+  /recordLaunchTiming\("card selection started"[\s\S]{0,700}selectWeightedLauncherCard\(\{[\s\S]{0,1200}recordLaunchTiming\("card selection finished"/g,
 );
 
 assertSourcePattern(
@@ -635,6 +650,11 @@ assertAppPattern(
 assertAppPattern(
   "intercept route reuses reveal and empty overlays before rebuilding selection",
   /if \(!isResumeInterceptLaunch && \["reveal", "empty"\]\.includes\(overlay\?\.type\) && overlay\?\.versionId === route\.versionId\) \{[\s\S]{0,80}return;[\s\S]{0,1500}beginInterceptionFlow\(route\.versionId/g,
+);
+
+assertAppPattern(
+  "intercept route does not rebuild selection while a preparing overlay has an activation",
+  /overlay\?\.type === "launcher-preparing"[\s\S]{0,180}interceptActivationRef\.current\?\.versionId === route\.versionId[\s\S]{0,420}skipped duplicate rebuild while launcher decision is settling[\s\S]{0,220}return;/g,
 );
 
 function createPerfCards(now) {

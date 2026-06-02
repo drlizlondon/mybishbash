@@ -4,6 +4,7 @@ declare global {
   interface Window {
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
+    __MYBISHBASH_LAUNCH_TIMINGS?: Array<{ label: string; t: number; payload: Record<string, unknown> }>;
   }
 }
 
@@ -95,6 +96,7 @@ async function seedState(
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+      window.localStorage.removeItem('bishbash.launchTiming.v1');
       if (window.localStorage.getItem('mybishbash.before-push-seeded.v1') !== 'true') {
         window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
         window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'Before Push', timezone: 'Europe/London' }));
@@ -107,6 +109,7 @@ async function seedState(
         window.localStorage.setItem('mybishbash.before-push-seeded.v1', 'true');
       }
       window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
+      window.__MYBISHBASH_LAUNCH_TIMINGS = [];
       window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION = (href, metadata) => {
         window.__MYBISHBASH_NAVIGATION_ATTEMPTS?.push({ href, metadata });
         return true;
@@ -122,6 +125,21 @@ async function seedState(
 
 async function openLauncher(page: Page, launcherId: LauncherId = 'safari') {
   await page.goto(`/mybishbash/intercept/${launcherId}`);
+}
+
+async function routeToLauncherInWarmApp(page: Page, launcherId: LauncherId = 'safari') {
+  return page.evaluate((id) => {
+    window.__MYBISHBASH_LAUNCH_TIMINGS = [];
+    window.localStorage.removeItem('bishbash.launchTiming.v1');
+    const startedAt = performance.now();
+    window.history.pushState({}, '', `/mybishbash/intercept/${id}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    return startedAt;
+  }, launcherId);
+}
+
+async function getLaunchTimings(page: Page) {
+  return page.evaluate(() => window.__MYBISHBASH_LAUNCH_TIMINGS ?? []);
 }
 
 async function expectOverlay(page: Page, kind: CardKind) {
@@ -364,4 +382,60 @@ test('before-push action-card cycling is capped at three cards and terminal butt
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
   const [attempt] = await getNavigationAttempts(page);
   expect(attempt.href, 'Terminal action-card button should still open the selected action URL').toMatch(/^https:\/\/example\.com\/cycle-/);
+});
+
+test('before-push launcher perceived performance stays inside cached-operation budgets', async ({ page }) => {
+  await seedState(page, {
+    cards: [
+      personalCard('perf-personal', 'Performance personal'),
+      packCard('perf-pack', 'Performance pack', 'perf-pack-source'),
+    ],
+    interruptionOn: false,
+  });
+  await page.goto('/mybishbash/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+
+  const startedAt = await routeToLauncherInWarmApp(page, 'safari');
+  const anyLauncherOverlay = page
+    .getByTestId('card-overlay-empty')
+    .or(page.getByTestId('card-overlay-personal'))
+    .or(page.getByTestId('card-overlay-pack'))
+    .or(page.getByTestId('card-overlay-interruption'))
+    .or(page.getByTestId('continue-to-app-card'));
+  await expect(anyLauncherOverlay, 'Launcher shell should be visible immediately').toBeVisible();
+  const visibleAt = await page.evaluate(() => performance.now());
+  const visibleMs = visibleAt - startedAt;
+
+  await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Cached cards should resolve to a final launcher overlay quickly').toBeVisible();
+  const finalAt = await page.evaluate(() => performance.now());
+  const finalMs = finalAt - startedAt;
+  const timings = await getLaunchTimings(page);
+  const labels = timings.map((entry) => entry.label);
+  console.log(`[launcher-perf] visible=${visibleMs.toFixed(1)}ms final=${finalMs.toFixed(1)}ms labels=${labels.join(' > ')}`);
+
+  expect(visibleMs, `tap/open to visible launcher overlay was ${visibleMs.toFixed(1)}ms`).toBeLessThanOrEqual(150);
+  expect(finalMs, `tap/open to selected card/interruption/empty overlay was ${finalMs.toFixed(1)}ms`).toBeLessThanOrEqual(500);
+  expect(labels).toContain('route detected');
+  expect(labels).toContain('first overlay visible');
+  expect(labels).toContain('auth ready');
+  expect(labels).toContain('sync ready');
+  expect(labels).toContain('tester status ready');
+  expect(labels).toContain('card selection started');
+  expect(labels).toContain('card selection finished');
+  expect(labels).toContain('final overlay type rendered');
+  expect(labels.filter((label) => label === 'card selection started'), 'One launcher activation should start selection once').toHaveLength(1);
+  expect(labels.filter((label) => label === 'card selection finished'), 'One launcher activation should finish selection once').toHaveLength(1);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const events = JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') || '[]');
+        return events.filter((event: { event_type?: string }) =>
+          event.event_type === 'launcher_session_started' || event.event_type === 'launcher_weighted_session_started',
+        ).length;
+      }),
+    )
+    .toBe(1);
+
+  const fullWaits = timings.filter((entry) => Number(entry.payload?.timeoutMs) >= 1800);
+  expect(fullWaits, 'Cached launcher operation must not wait for the old 1800ms timeout').toEqual([]);
 });
