@@ -219,13 +219,23 @@ assertAppPattern(
 );
 
 assertAppPattern(
-  "launcher completion records completed card ids before choosing another card",
+  "launcher completion records completed card ids for the current activation",
   /launchCompletedCardIdsRef\.current = new Set\(\[\.\.\.launchCompletedCardIdsRef\.current, completedCardId\]\);[\s\S]{0,500}const excludedCardIds = launchCompletedCardIdsRef\.current/g,
 );
 
 assertAppPattern(
-  "weighted launcher pack-card reactions route to ContinueToAppCard instead of another pack card",
-  /const completedCardIsPackCard = Boolean\(completedCard\?\.sourcePackId\);[\s\S]{0,180}if \(activation\?\.weightedFlowUsed[\s\S]{0,120}if \(completedCardIsPackCard\) \{[\s\S]{0,520}weighted pack reaction -> routing to ContinueToAppCard[\s\S]{0,220}return;[\s\S]{0,120}const nextWeightedDisplay = selectWeightedLauncherCard/g,
+  "weighted launcher handled cards route to ContinueToAppCard instead of another card",
+  /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\) \{[\s\S]{0,700}weighted handled card -> routing to ContinueToAppCard[\s\S]{0,320}return;/g,
+);
+
+assertAppDoesNotMatch(
+  "weighted launcher completion must not route to another weighted card",
+  /\[CONTINUE_DECISION\] weighted intercept -> routing to next weighted card/g,
+);
+
+assertAppDoesNotMatch(
+  "weighted launcher completion must not use active-pack fallback after a handled card",
+  /\[WEIGHTED_GUARD\] Active pack cards remained after selector returned empty/g,
 );
 
 assertAppPattern(
@@ -404,10 +414,10 @@ assertSourceDoesNotMatch(
 );
 
 const weightedSelectorCalls = [...appSource.matchAll(/selectWeightedLauncherCard\(\{/g)].length;
-if (weightedSelectorCalls !== 2) {
-  fail(`App should call selectWeightedLauncherCard only for initial launch and completion decisions; found ${weightedSelectorCalls}`);
+if (weightedSelectorCalls !== 1) {
+  fail(`App should call selectWeightedLauncherCard only for the initial launcher decision; found ${weightedSelectorCalls}`);
 } else {
-  pass("App calls selectWeightedLauncherCard only for initial launch and completion decisions");
+  pass("App calls selectWeightedLauncherCard only for the initial launcher decision");
 }
 
 assertAppPattern(

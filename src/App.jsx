@@ -2412,123 +2412,17 @@ function App() {
       const completedCard = completedCardId
         ? cardsForDecision.find((card) => card.id === completedCardId) ?? cards.find((card) => card.id === completedCardId)
         : null;
-      const completedCardIsPackCard = Boolean(completedCard?.sourcePackId);
       if (activation?.weightedFlowUsed && activation.versionId === versionId && activation.activationKey === activationKey) {
-        if (completedCardIsPackCard) {
-          setScreen("interception");
-          const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
-          setOverlay(nextOverlay);
-          debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-          debugLaunch("[CONTINUE_DECISION] weighted pack reaction -> routing to ContinueToAppCard", {
-            ...nextOverlay,
-            completedCardId,
-            completedPackId: completedCard.sourcePackId,
-          });
-          navigateTo(`/intercept/${versionId}`, { replace: true });
-          return;
-        }
-
-        const nextWeightedDisplay = selectWeightedLauncherCard({
-          cards: cardsForDecision,
-          timezone: profile.timezone,
-          events,
-          excludedCardIds,
-        });
-        const nextSelected = nextWeightedDisplay.selected;
-
-        if (nextSelected) {
-          const nextActivation = {
-            ...activation,
-            selected: nextSelected,
-            weightedDecision: nextWeightedDisplay,
-            interruption: null,
-          };
-          interceptActivationRef.current = nextActivation;
-          setScreen("library");
-          const nextOverlay = buildFakeLauncherRevealOverlay(nextSelected.id, versionId, activationKey);
-          setOverlay(nextOverlay);
-          debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-          debugLaunch("[CONTINUE_DECISION] weighted intercept -> routing to next weighted card", {
-            ...nextOverlay,
-            selectedSource: nextWeightedDisplay.selectedSource,
-            availablePersonalCount: nextWeightedDisplay.availablePersonalCount,
-            availablePackCount: nextWeightedDisplay.availablePackCount,
-            eligiblePackCount: nextWeightedDisplay.eligiblePackCount,
-          });
-          navigateTo(`/intercept/${versionId}`, { replace: true });
-          return;
-        }
-
-        if (nextWeightedDisplay.availablePackCount > 0) {
-          const fallbackPackCard = nextWeightedDisplay.normalized.find((card) =>
-            !excludedCardIds.has(card.id) && isPackCardAvailable(card)
-          );
-          if (fallbackPackCard) {
-            interceptActivationRef.current = {
-              ...activation,
-              selected: fallbackPackCard,
-              weightedDecision: {
-                ...nextWeightedDisplay,
-                selected: fallbackPackCard,
-                selectedSource: "pack",
-                selectedPackId: fallbackPackCard.sourcePackId,
-              },
-              interruption: null,
-            };
-            setScreen("library");
-            const nextOverlay = buildFakeLauncherRevealOverlay(fallbackPackCard.id, versionId, activationKey);
-            setOverlay(nextOverlay);
-            console.warn("[WEIGHTED_GUARD] Active pack cards remained after selector returned empty; showing fallback pack card", {
-              versionId,
-              activationKey,
-              availablePackCount: nextWeightedDisplay.availablePackCount,
-              fallbackCardId: fallbackPackCard.id,
-            });
-            debugLaunch("[CONTINUE_DECISION] weighted guard -> routing to active pack card", nextOverlay);
-            navigateTo(`/intercept/${versionId}`, { replace: true });
-            return;
-          }
-        }
-
-        if (activation.interruption) {
-          setScreen("interception");
-          const nextOverlay = {
-            ...buildCustomPackOverlay(activation.interruption.pack, activation.interruption.activeIndex, "intercept-pack"),
-            ...buildFakeLauncherOverlayContext(versionId, activationKey),
-          };
-          setOverlay(nextOverlay);
-          debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-          debugLaunch("[CONTINUE_DECISION] weighted intercept -> routing to interruption decision", nextOverlay);
-          void logEvent({
-            event_type: "launcher_weighted_interruption_shown",
-            source_type: "fake_launcher",
-            card_source: "fake_launcher",
-            app_id: versionId,
-            app_name: homeScreenVersions[versionId]?.displayName ?? homeScreenVersions[versionId]?.name ?? versionId,
-            launcher_context: versionId,
-            pack_id: activation.interruption.pack?.id ?? null,
-            card_id: activation.interruption.pack?.cards?.[activation.interruption.activeIndex ?? 0]?.id ?? null,
-            action_taken: "shown",
-            metadata: {
-              activationKey,
-              weightedFlowUsed: true,
-              selectedSource: activation.weightedDecision?.selectedSource ?? null,
-              selectedCardId: activation.selected?.id ?? null,
-              selectedPackId: activation.selected?.sourcePackId ?? null,
-              interruptionShown: true,
-              actionCardShown: false,
-              destinationOpened: false,
-            },
-          });
-          navigateTo(`/intercept/${versionId}`, { replace: true });
-          return;
-        }
-
         setScreen("interception");
         const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
         setOverlay(nextOverlay);
         debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
-        debugLaunch("[CONTINUE_DECISION] weighted intercept -> routing to ContinueToAppCard", nextOverlay);
+        debugLaunch("[CONTINUE_DECISION] weighted handled card -> routing to ContinueToAppCard", {
+          ...nextOverlay,
+          completedCardId,
+          completedCardSource: completedCard?.sourcePackId ? "pack" : completedCard ? "personal" : null,
+          completedPackId: completedCard?.sourcePackId ?? null,
+        });
         navigateTo(`/intercept/${versionId}`, { replace: true });
         return;
       }
