@@ -148,12 +148,16 @@ assert.match(appSource, /getWeightedLauncherFlowGate/);
 assert.match(appSource, /selectWeightedLauncherCard/);
 assert.match(appSource, /testerStatus/);
 assert.match(appSource, /return e2eMode \? \{ is_tester: e2eTesterMode \} : null;/);
+assert.match(appSource, /useSoftPackFeedbackActions=\{testerStatus\?\.is_tester === true\}/);
 
-const packOverlayActionsSource = sourceBetween(appSource, "actions={\n        card.sourcePackId", ": [\n              { label: \"Not done\"");
-assert.match(packOverlayActionsSource, /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/);
-assert.match(packOverlayActionsSource, /label: "I really like this one", variant: "secondary", onClick: onPackLike/);
-assert.doesNotMatch(packOverlayActionsSource, /label: "(Like|Dislike|Not for me|Hide this)"/);
+const packActionsSource = sourceBetween(appSource, "const packActions = useSoftPackFeedbackActions", "return (\n    <PremiumCardScreen");
+assert.match(packActionsSource, /label: "I really like this one", variant: "secondary", onClick: onPackLike/);
+assert.match(packActionsSource, /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/);
+assert.match(packActionsSource, /label: "Dislike", variant: "secondary", onClick: \(\) => onPackDislike\(card\.id\)/);
+assert.match(packActionsSource, /label: "Like", variant: "primary", onClick: onPackLike/);
+assert.doesNotMatch(packActionsSource, /label: "(Not for me|Hide this)"/);
 assert.match(appSource, /const packNeutralActionLabel = overlay\?\.launchSource === "fake_launcher" \|\| overlay\?\.versionId \|\| route\?\.kind === "intercept"\s*\? "Continue"\s*: "Back to home";/);
+assert.match(appSource, /card\.sourcePackId\s*\? packActions\s*: \[/);
 
 const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
 assert.match(
@@ -167,7 +171,7 @@ assert.doesNotMatch(
   "Clicking Continue must not hide, dislike, pause, delete, or suppress the pack card",
 );
 
-const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
+const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onPackDislike={dislikePackCard}");
 assert.match(packPositiveHandlerSource, /event_type: "pack_card_liked"/);
 assert.match(packPositiveHandlerSource, /action_taken: "liked"/);
 assert.doesNotMatch(

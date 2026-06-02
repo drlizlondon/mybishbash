@@ -120,16 +120,20 @@ assertNoInterceptionSource("home_fake_launcher_bar");
 assertNoInterceptionSource("overlay_fake_launcher");
 assertNoInterceptionSource("settings_fake_launcher");
 
-const packOverlayActionsSource = sourceBetween(appSource, "actions={\n        card.sourcePackId", ": [\n              { label: \"Not done\"");
-if (!packOverlayActionsSource) {
+const packActionsSource = sourceBetween(appSource, "const packActions = useSoftPackFeedbackActions", "return (\n    <PremiumCardScreen");
+if (!packActionsSource) {
   fail("pack overlay actions are discoverable for feedback guardrails");
 } else {
   pass("pack overlay actions are discoverable for feedback guardrails");
 }
+assertAppPattern(
+  "soft pack feedback actions are gated to tester accounts",
+  /useSoftPackFeedbackActions=\{testerStatus\?\.is_tester === true\}/g,
+);
 assertSourcePattern(
   "App",
-  packOverlayActionsSource,
-  "pack overlay primary action uses the contextual neutral label",
+  packActionsSource,
+  "tester pack overlay primary action uses the contextual neutral label",
   /label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue/g,
 );
 assertAppPattern(
@@ -138,15 +142,27 @@ assertAppPattern(
 );
 assertSourcePattern(
   "App",
-  packOverlayActionsSource,
-  "pack overlay positive action says I really like this one",
+  packActionsSource,
+  "tester pack overlay positive action says I really like this one",
   /label: "I really like this one", variant: "secondary", onClick: onPackLike/g,
+);
+assertSourcePattern(
+  "App",
+  packActionsSource,
+  "non-tester pack overlay keeps Dislike",
+  /label: "Dislike", variant: "secondary", onClick: \(\) => onPackDislike\(card\.id\)/g,
+);
+assertSourcePattern(
+  "App",
+  packActionsSource,
+  "non-tester pack overlay keeps Like",
+  /label: "Like", variant: "primary", onClick: onPackLike/g,
 );
 assertSourceDoesNotMatch(
   "App",
-  packOverlayActionsSource,
-  "pack overlay does not expose Like/Dislike/Hide wording",
-  /label: "(Like|Dislike|Not for me|Hide this)"/g,
+  packActionsSource,
+  "pack overlay does not expose old negative replacement wording",
+  /label: "(Not for me|Hide this)"/g,
 );
 
 const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
@@ -163,7 +179,7 @@ assertSourceDoesNotMatch(
   /setDislikedPackCardIds|dislikePackCard|pack_card_disliked|dislikedPackCardIds|deletedAt|paused|disliked:/g,
 );
 
-const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
+const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onPackDislike={dislikePackCard}");
 assertSourcePattern(
   "App",
   packPositiveHandlerSource,

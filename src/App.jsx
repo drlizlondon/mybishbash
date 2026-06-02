@@ -4239,6 +4239,8 @@ function App() {
             handleRevealCompletion();
             return;
           }}
+          onPackDislike={dislikePackCard}
+          useSoftPackFeedbackActions={testerStatus?.is_tester === true}
           onChooseElse={() => {
             console.log("[INTERCEPT] Choose something else", {
               versionId: overlay?.versionId,
@@ -6295,6 +6297,8 @@ function Overlay({
   onAction,
   onPackContinue,
   onPackLike,
+  onPackDislike,
+  useSoftPackFeedbackActions = false,
   onChooseElse,
   onLogEvent,
   onLogLauncherEvent,
@@ -6473,6 +6477,15 @@ function Overlay({
   const packNeutralActionLabel = overlay?.launchSource === "fake_launcher" || overlay?.versionId || route?.kind === "intercept"
     ? "Continue"
     : "Back to home";
+  const packActions = useSoftPackFeedbackActions
+    ? [
+        { label: "I really like this one", variant: "secondary", onClick: onPackLike },
+        { label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue },
+      ]
+    : [
+        { label: "Dislike", variant: "secondary", onClick: () => onPackDislike(card.id) },
+        { label: "Like", variant: "primary", onClick: onPackLike },
+      ];
 
   return (
     <PremiumCardScreen
@@ -6487,10 +6500,7 @@ function Overlay({
       }
       actions={
         card.sourcePackId
-          ? [
-              { label: "I really like this one", variant: "secondary", onClick: onPackLike },
-              { label: packNeutralActionLabel, variant: "primary", onClick: onPackContinue },
-            ]
+          ? packActions
           : [
               { label: "Not done", variant: "secondary", onClick: () => onAction("later") },
               { label: "I’ll do it now", variant: "secondary", onClick: () => onAction("now") },
