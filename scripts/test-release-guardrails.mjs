@@ -1,4 +1,6 @@
+import { performance } from "node:perf_hooks";
 import { readFile } from "node:fs/promises";
+import { selectWeightedLauncherCard } from "../src/lib/cardSelection.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const storageSource = await readFile(new URL("../src/storage.js", import.meta.url), "utf8");
@@ -6,6 +8,7 @@ const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
 const launcherFlowSource = await readFile(new URL("../src/lib/launcherFlow.js", import.meta.url), "utf8");
 const launcherRegistrySource = await readFile(new URL("../src/lib/launcherRegistry.js", import.meta.url), "utf8");
+const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -77,6 +80,31 @@ function assertSourcePattern(label, source, message, pattern) {
     return;
   }
   pass(`${label}: ${message}`);
+}
+
+function assertSourceDoesNotMatch(label, source, message, pattern) {
+  const matches = matchingSnippets(source, pattern);
+  if (matches.length > 0) {
+    fail(`${label}: ${message}`, matches[0]);
+    return;
+  }
+  pass(`${label}: ${message}`);
+}
+
+function assertLessThanOrEqual(message, actual, expected) {
+  if (actual > expected) {
+    fail(`${message}: ${actual.toFixed(2)}ms > ${expected}ms`);
+    return;
+  }
+  pass(`${message}: ${actual.toFixed(2)}ms <= ${expected}ms`);
+}
+
+function assertTruthy(message, value) {
+  if (!value) {
+    fail(message);
+    return;
+  }
+  pass(message);
 }
 
 assertNoInterceptionSource("home_fake_launcher_bar");
@@ -355,6 +383,183 @@ assertSourcePattern(
   "intercept readiness still blocks sync-pending launches",
   /syncStatus === "loading"[\s\S]{0,120}reason: "sync_pending"/g,
 );
+
+assertSourcePattern(
+  "cardSelection",
+  cardSelectionSource,
+  "selection builds one card exposure lookup per selection cycle",
+  /export function buildCardExposureLookup\(cards = \[\], events = \[\]\)[\s\S]{0,900}return exposureByCardId;/g,
+);
+
+assertSourceDoesNotMatch(
+  "cardSelection",
+  cardSelectionSource,
+  "selection must not scan event history inside each card exposure lookup",
+  /function getLastCardExposure\(card,[\s\S]{0,260}\.reduce\(/g,
+);
+
+const weightedSelectorCalls = [...appSource.matchAll(/selectWeightedLauncherCard\(\{/g)].length;
+if (weightedSelectorCalls !== 2) {
+  fail(`App should call selectWeightedLauncherCard only for initial launch and completion decisions; found ${weightedSelectorCalls}`);
+} else {
+  pass("App calls selectWeightedLauncherCard only for initial launch and completion decisions");
+}
+
+assertAppPattern(
+  "intercept route reuses active launcher overlays before rebuilding selection",
+  /if \(!isResumeInterceptLaunch && \["intercept-pack", "continue-to-app"\]\.includes\(overlay\?\.type\) && overlay\?\.versionId === route\.versionId\)[\s\S]{0,420}return;[\s\S]{0,1500}beginInterceptionFlow\(route\.versionId/g,
+);
+
+assertAppPattern(
+  "intercept route reuses reveal and empty overlays before rebuilding selection",
+  /if \(!isResumeInterceptLaunch && \["reveal", "empty"\]\.includes\(overlay\?\.type\) && overlay\?\.versionId === route\.versionId\) \{[\s\S]{0,80}return;[\s\S]{0,1500}beginInterceptionFlow\(route\.versionId/g,
+);
+
+function createPerfCards(now) {
+  const earlier = (minutesAgo) => new Date(now.getTime() - minutesAgo * 60 * 1000).toISOString();
+  const personalCards = Array.from({ length: 100 }, (_, index) => ({
+    id: `perf-personal-${index}`,
+    promptText: `Personal ${index}`,
+    dashboardTitle: `Personal ${index}`,
+    timingWindows: ["day"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+    doneDate: null,
+    notYetUntil: null,
+    lastShownAt: null,
+    statusToday: "fresh",
+  }));
+  const packCards = Array.from({ length: 500 }, (_, index) => ({
+    id: `perf-pack-${index}`,
+    promptText: `Pack ${index}`,
+    dashboardTitle: `Pack ${index}`,
+    timingWindows: ["morning"],
+    paused: false,
+    disliked: false,
+    hidden: false,
+    deletedAt: null,
+    sourcePackId: `perf-pack-group-${Math.floor(index / 25)}`,
+    lastShownAt: index % 11 === 0 ? earlier(45 + index) : null,
+  }));
+  return [...personalCards, ...packCards];
+}
+
+function createPerfEvents(now, count = 20000) {
+  return Array.from({ length: count }, (_, index) => {
+    const isPack = index % 3 !== 0;
+    const cardId = isPack ? `perf-pack-${index % 500}` : `perf-personal-${index % 100}`;
+    return {
+      id: `perf-event-${index}`,
+      event_type: isPack ? "first_interruption_seen" : "bash_done",
+      card_id: cardId,
+      bash_id: cardId,
+      created_at: new Date(now.getTime() - ((index % 1440) * 60 * 1000 + Math.floor(index / 1440) * 1000)).toISOString(),
+    };
+  });
+}
+
+function measureSelection(label, select, { thresholdMs }) {
+  select();
+  const runs = [];
+  let result = null;
+  for (let index = 0; index < 5; index += 1) {
+    const startedAt = performance.now();
+    result = select();
+    runs.push(performance.now() - startedAt);
+  }
+  const max = Math.max(...runs);
+  const avg = runs.reduce((total, value) => total + value, 0) / runs.length;
+  console.log(`PERF ${label}: avg=${avg.toFixed(2)}ms max=${max.toFixed(2)}ms runs=${runs.map((value) => value.toFixed(2)).join(",")}`);
+  assertLessThanOrEqual(label, max, thresholdMs);
+  return result;
+}
+
+const perfNow = new Date("2026-01-01T13:00:00.000Z");
+const perfCards = createPerfCards(perfNow);
+const perfEvents = createPerfEvents(perfNow, 20000);
+const excludedPerfIds = new Set(["perf-pack-0", "perf-pack-25", "perf-personal-0"]);
+
+const largeSelection = measureSelection(
+  "selectWeightedLauncherCard handles 100 personal, 500 pack, and 20k events under 50ms",
+  () =>
+    selectWeightedLauncherCard({
+      cards: perfCards,
+      timezone: "Europe/London",
+      events: perfEvents,
+      excludedCardIds: excludedPerfIds,
+      now: perfNow,
+      random: () => 0.99,
+    }),
+  { thresholdMs: 50 },
+);
+assertTruthy("large event-history selection returns a valid card", largeSelection.selected);
+assertTruthy("large event-history selection respects excluded cards", !excludedPerfIds.has(largeSelection.selected?.id));
+
+const packOnlyAfterPersonalExhausted = selectWeightedLauncherCard({
+  cards: [
+    ...perfCards.slice(0, 100).map((card) => ({ ...card, doneDate: "2026-01-01", statusToday: "doneToday" })),
+    ...perfCards.slice(100, 110),
+  ],
+  timezone: "Europe/London",
+  events: perfEvents,
+  now: perfNow,
+  random: () => 0.99,
+});
+assertTruthy(
+  "personal exhausted plus active pack cards returns a pack card, not caught-up",
+  packOnlyAfterPersonalExhausted.selectedSource === "pack" && packOnlyAfterPersonalExhausted.selected,
+);
+
+const insideTimeoutFallback = selectWeightedLauncherCard({
+  cards: [
+    { ...perfCards[100], id: "timeout-pack-a", sourcePackId: "timeout-pack" },
+    { ...perfCards[101], id: "timeout-pack-b", sourcePackId: "timeout-pack" },
+  ],
+  timezone: "Europe/London",
+  events: [
+    { card_id: "timeout-pack-a", created_at: "2026-01-01T12:55:00.000Z" },
+    { card_id: "timeout-pack-b", created_at: "2026-01-01T12:50:00.000Z" },
+  ],
+  now: perfNow,
+  random: () => 0,
+});
+assertTruthy(
+  "active pack cards inside timeout still use fallback pack behaviour",
+  insideTimeoutFallback.selectedSource === "pack" &&
+    insideTimeoutFallback.eligiblePackCount === 0 &&
+    insideTimeoutFallback.selected?.id === "timeout-pack-b",
+);
+
+const completionSelection = measureSelection(
+  "completion flow next-card selection stays under 50ms",
+  () =>
+    selectWeightedLauncherCard({
+      cards: perfCards,
+      timezone: "Europe/London",
+      events: perfEvents,
+      excludedCardIds: new Set(["perf-pack-10", "perf-pack-11", "perf-personal-3"]),
+      now: perfNow,
+      random: () => 0.99,
+    }),
+  { thresholdMs: 50 },
+);
+assertTruthy("completion flow quickly returns the next card", completionSelection.selected);
+
+const fakeLauncherDecisionStartedAt = performance.now();
+const fakeLauncherDecision = selectWeightedLauncherCard({
+  cards: perfCards,
+  timezone: "Europe/London",
+  events: perfEvents,
+  excludedCardIds: new Set(),
+  now: perfNow,
+  random: () => 0.99,
+});
+const fakeLauncherDecisionMs = performance.now() - fakeLauncherDecisionStartedAt;
+console.log(`PERF fake launcher local decision: ${fakeLauncherDecisionMs.toFixed(2)}ms`);
+assertTruthy("fake launcher decision returns reveal/pack/continue input", fakeLauncherDecision.selected || fakeLauncherDecision.selectedSource === "none");
+assertLessThanOrEqual("fake launcher local decision stays within 250ms experience budget", fakeLauncherDecisionMs, 250);
 
 if (failures.length > 0) {
   console.error(`\nRelease guardrails failed: ${failures.length}`);
