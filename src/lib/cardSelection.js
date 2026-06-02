@@ -89,18 +89,6 @@ function isPackCardOutsideTimeout(card, events, now, timeoutMs) {
   return lastExposure + timeoutMs <= now.getTime();
 }
 
-function getLastPackExposure(packId, packCards, events = []) {
-  const eventTimestamp = events.reduce((latest, event) => {
-    if ((event?.pack_id ?? event?.sourcePackId) !== packId) return latest;
-    return Math.max(latest, getEventTimestamp(event));
-  }, 0);
-  const cardTimestamp = packCards.reduce((latest, card) => {
-    const timestamp = new Date(card.lastShownAt ?? 0).getTime();
-    return Math.max(latest, Number.isFinite(timestamp) ? timestamp : 0);
-  }, 0);
-  return Math.max(eventTimestamp, cardTimestamp);
-}
-
 function groupPackCards(cards) {
   const map = new Map();
   cards.forEach((card) => {
@@ -110,16 +98,17 @@ function groupPackCards(cards) {
   return Array.from(map.entries()).map(([packId, packCards]) => ({ packId, packCards }));
 }
 
-function choosePackGroup(packGroups, events, random) {
-  if (packGroups.length === 0) return null;
-  const withExposure = packGroups.map((group) => ({
-    ...group,
-    lastExposure: getLastPackExposure(group.packId, group.packCards, events),
+function chooseLeastRecentlyExposedCard(cards, events, random) {
+  if (cards.length === 0) return null;
+  const withExposure = cards.map((card) => ({
+    card,
+    lastExposure: getLastCardExposure(card, events),
   }));
-  const hasHistory = withExposure.some((group) => group.lastExposure > 0);
-  if (!hasHistory) return randomItem(withExposure, random);
-  const oldestExposure = Math.min(...withExposure.map((group) => group.lastExposure));
-  return randomItem(withExposure.filter((group) => group.lastExposure === oldestExposure), random);
+  const oldestExposure = Math.min(...withExposure.map((entry) => entry.lastExposure));
+  return randomItem(
+    withExposure.filter((entry) => entry.lastExposure === oldestExposure),
+    random,
+  )?.card ?? null;
 }
 
 export function selectWeightedLauncherCard({
@@ -142,19 +131,22 @@ export function selectWeightedLauncherCard({
     isEligible(card, now, timezone)
   );
 
-  const eligiblePackPool = normalized.filter((card) =>
+  const activePackPool = normalized.filter((card) =>
     !excluded.has(card.id) &&
-    isPackCardAvailable(card) &&
+    isPackCardAvailable(card)
+  );
+  const eligiblePackPool = activePackPool.filter((card) =>
     isPackCardOutsideTimeout(card, events, now, config.packCardTimeoutMs)
   );
-  const packGroups = groupPackCards(eligiblePackPool);
+  const activePackGroups = groupPackCards(activePackPool);
+  const eligiblePackGroups = groupPackCards(eligiblePackPool);
 
   let selectedSource = "none";
-  if (eligiblePersonalPool.length > 0 && eligiblePackPool.length === 0) {
+  if (eligiblePersonalPool.length > 0 && activePackPool.length === 0) {
     selectedSource = "personal";
-  } else if (eligiblePersonalPool.length === 0 && eligiblePackPool.length > 0) {
+  } else if (eligiblePersonalPool.length === 0 && activePackPool.length > 0) {
     selectedSource = "pack";
-  } else if (eligiblePersonalPool.length > 0 && eligiblePackPool.length > 0) {
+  } else if (eligiblePersonalPool.length > 0 && activePackPool.length > 0) {
     const total = config.personalWeight + config.packWeight;
     selectedSource = random() * total < config.personalWeight ? "personal" : "pack";
   }
@@ -168,14 +160,17 @@ export function selectWeightedLauncherCard({
       selectedPackId: null,
       weights: config,
       availablePersonalCount: eligiblePersonalPool.length,
-      availablePackCount: eligiblePackPool.length,
-      availablePackGroupCount: packGroups.length,
+      availablePackCount: activePackPool.length,
+      eligiblePackCount: eligiblePackPool.length,
+      availablePackGroupCount: activePackGroups.length,
+      eligiblePackGroupCount: eligiblePackGroups.length,
     };
   }
 
   if (selectedSource === "pack") {
-    const selectedPack = choosePackGroup(packGroups, events, random);
-    const selected = selectedPack ? randomItem(selectedPack.packCards, random) : null;
+    const selected = eligiblePackPool.length > 0
+      ? chooseLeastRecentlyExposedCard(eligiblePackPool, events, random)
+      : chooseLeastRecentlyExposedCard(activePackPool, events, random);
     return {
       normalized,
       selected,
@@ -183,8 +178,10 @@ export function selectWeightedLauncherCard({
       selectedPackId: selected?.sourcePackId ?? null,
       weights: config,
       availablePersonalCount: eligiblePersonalPool.length,
-      availablePackCount: eligiblePackPool.length,
-      availablePackGroupCount: packGroups.length,
+      availablePackCount: activePackPool.length,
+      eligiblePackCount: eligiblePackPool.length,
+      availablePackGroupCount: activePackGroups.length,
+      eligiblePackGroupCount: eligiblePackGroups.length,
     };
   }
 
@@ -195,7 +192,9 @@ export function selectWeightedLauncherCard({
     selectedPackId: null,
     weights: config,
     availablePersonalCount: eligiblePersonalPool.length,
-    availablePackCount: eligiblePackPool.length,
-    availablePackGroupCount: packGroups.length,
+    availablePackCount: activePackPool.length,
+    eligiblePackCount: eligiblePackPool.length,
+    availablePackGroupCount: activePackGroups.length,
+    eligiblePackGroupCount: eligiblePackGroups.length,
   };
 }

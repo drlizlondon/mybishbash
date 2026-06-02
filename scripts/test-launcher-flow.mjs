@@ -167,6 +167,7 @@ assert.equal(getStatusMeta(morningPackCard, nightDate, "Europe/London").badge, "
 assert.equal(isPackCardAvailable({ ...morningPackCard, paused: true }), false);
 assert.equal(isPackCardAvailable({ ...morningPackCard, deletedAt: nightDate.toISOString() }), false);
 assert.equal(isPackCardAvailable({ ...morningPackCard, disliked: true }), false);
+assert.equal(isPackCardAvailable({ ...morningPackCard, hidden: true }), false);
 
 const activatedPackCards = buildCardsFromPack({
   id: "morning-pack",
@@ -394,6 +395,94 @@ const timeoutSelection = selectWeightedLauncherCard({
 });
 assert.equal(timeoutSelection.selected.id, "older-pack-card", "Pack card timeout prevents immediate repeat");
 
+const donePersonalWithPack = selectWeightedLauncherCard({
+  cards: [
+    { ...personalCard, id: "done-personal-with-pack", doneDate: "2026-01-01", statusToday: "doneToday" },
+    packCard("active-pack-card-after-done-personal", "active-pack-after-done"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(donePersonalWithPack.selectedSource, "pack", "Done personal cards do not force caught-up while active pack cards exist");
+assert.equal(donePersonalWithPack.selected.id, "active-pack-card-after-done-personal");
+assert.equal(donePersonalWithPack.availablePersonalCount, 0);
+assert.equal(donePersonalWithPack.availablePackCount, 1);
+
+const timeoutWithAlternativeSelection = selectWeightedLauncherCard({
+  cards: [
+    packCard("recent-pack-card-with-alternative", "repeat-pack"),
+    packCard("available-pack-card-with-alternative", "repeat-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  events: [
+    { card_id: "recent-pack-card-with-alternative", pack_id: "repeat-pack", created_at: "2026-01-01T12:45:00.000Z" },
+  ],
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(timeoutWithAlternativeSelection.selectedSource, "pack");
+assert.equal(
+  timeoutWithAlternativeSelection.selected.id,
+  "available-pack-card-with-alternative",
+  "Recently shown pack card respects timeout when another pack card is available",
+);
+assert.equal(timeoutWithAlternativeSelection.availablePackCount, 2);
+assert.equal(timeoutWithAlternativeSelection.eligiblePackCount, 1);
+
+const allPackCardsInsideTimeoutSelection = selectWeightedLauncherCard({
+  cards: [
+    packCard("less-recent-active-pack-card", "all-timeout-pack"),
+    packCard("more-recent-active-pack-card", "all-timeout-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  events: [
+    { card_id: "less-recent-active-pack-card", pack_id: "all-timeout-pack", created_at: "2026-01-01T12:36:00.000Z" },
+    { card_id: "more-recent-active-pack-card", pack_id: "all-timeout-pack", created_at: "2026-01-01T12:50:00.000Z" },
+  ],
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(
+  allPackCardsInsideTimeoutSelection.selectedSource,
+  "pack",
+  "Active pack cards inside timeout still beat caught-up",
+);
+assert.equal(
+  allPackCardsInsideTimeoutSelection.selected.id,
+  "less-recent-active-pack-card",
+  "When all active pack cards are inside timeout, choose the least recently shown card",
+);
+assert.equal(allPackCardsInsideTimeoutSelection.availablePackCount, 2);
+assert.equal(allPackCardsInsideTimeoutSelection.eligiblePackCount, 0);
+
+const outsideWindowPackSelection = selectWeightedLauncherCard({
+  cards: [packCard("night-unavailable-to-personal-pack-card", "outside-window-pack")],
+  timezone: "Europe/London",
+  now: selectorNow,
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(isEligible(outsideWindowPackSelection.selected, selectorNow, "Europe/London"), false);
+assert.equal(
+  outsideWindowPackSelection.selectedSource,
+  "pack",
+  "Pack cards outside personal timing windows remain available in weighted launcher flow",
+);
+
+const hiddenPackSelection = selectWeightedLauncherCard({
+  cards: [packCard("hidden-pack-card", "hidden-pack", { hidden: true })],
+  timezone: "Europe/London",
+  now: selectorNow,
+});
+assert.equal(hiddenPackSelection.selectedSource, "none", "Hidden pack cards are not treated as active");
+assert.equal(hiddenPackSelection.availablePackCount, 0);
+
+assert.notEqual(
+  allPackCardsInsideTimeoutSelection.selectedSource,
+  "none",
+  "Weighted selector must not return none while the active pack pool has cards",
+);
+
 assert.equal(
   selectWeightedLauncherCard({
     cards: [{ ...personalCard, id: "done-personal", doneDate: "2026-01-01", statusToday: "doneToday" }],
@@ -402,6 +491,16 @@ assert.equal(
   }).selected,
   null,
   "Done personal cards are not shown again today",
+);
+
+assert.equal(
+  getWeightedLauncherFlowGate({
+    testerStatus: { is_tester: false },
+    storage: { getItem: () => "false" },
+    env: { DEV: false },
+  }).selectedPath,
+  "legacy",
+  "Non-testers remain on the legacy launcher flow",
 );
 
 console.log("Launcher flow checks passed");

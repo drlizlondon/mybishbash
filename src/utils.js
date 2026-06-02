@@ -360,7 +360,7 @@ export function isEligible(card, date = new Date(), timeZone) {
 }
 
 export function isPackCardAvailable(card) {
-  return Boolean(card?.sourcePackId) && !card.deletedAt && !card.paused && !card.disliked;
+  return Boolean(card?.sourcePackId) && !card.deletedAt && !card.paused && !card.disliked && !card.hidden;
 }
 
 export function normalizeCards(cards, date = new Date(), timeZone) {
