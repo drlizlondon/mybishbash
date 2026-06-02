@@ -125,6 +125,10 @@ assert.match(appSource, /pickRandomPersonalCardForLauncher/);
 assert.match(appSource, /getWeightedLauncherFlowGate/);
 assert.match(appSource, /selectWeightedLauncherCard/);
 assert.match(appSource, /testerStatus/);
+assert.match(appSource, /\[CONTINUE_DECISION\] weighted intercept -> routing to next weighted card/);
+assert.match(appSource, /const nextWeightedDisplay = selectWeightedLauncherCard\(\{/);
+assert.match(appSource, /excludedCardIds,\s*\}\);/);
+assert.match(appSource, /\[WEIGHTED_GUARD\] Active pack cards remained after selector returned empty/);
 assert.match(cardSelectionSource, /mybishbash\.weightedFlow\.enabled/);
 assert.match(cardSelectionSource, /env\?\.DEV === true/);
 assert.doesNotMatch(appSource, /function handleFakeLauncherLaunch/);
@@ -409,6 +413,25 @@ assert.equal(donePersonalWithPack.selected.id, "active-pack-card-after-done-pers
 assert.equal(donePersonalWithPack.availablePersonalCount, 0);
 assert.equal(donePersonalWithPack.availablePackCount, 1);
 
+const nextPackAfterCompletionSelection = selectWeightedLauncherCard({
+  cards: [
+    { ...personalCard, id: "completed-personal-before-pack", doneDate: "2026-01-01", statusToday: "doneToday" },
+    packCard("completed-pack-card-in-cycle", "cycle-pack"),
+    packCard("next-pack-card-in-cycle", "cycle-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  excludedCardIds: new Set(["completed-pack-card-in-cycle"]),
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(
+  nextPackAfterCompletionSelection.selected.id,
+  "next-pack-card-in-cycle",
+  "After completing one pack card, tester weighted flow selects the next active pack card",
+);
+assert.equal(nextPackAfterCompletionSelection.selectedSource, "pack");
+assert.equal(nextPackAfterCompletionSelection.availablePackCount, 1);
+
 const timeoutWithAlternativeSelection = selectWeightedLauncherCard({
   cards: [
     packCard("recent-pack-card-with-alternative", "repeat-pack"),
@@ -429,6 +452,25 @@ assert.equal(
 );
 assert.equal(timeoutWithAlternativeSelection.availablePackCount, 2);
 assert.equal(timeoutWithAlternativeSelection.eligiblePackCount, 1);
+
+const noRepeatWhileUnshownSelection = selectWeightedLauncherCard({
+  cards: [
+    packCard("shown-pack-card", "no-repeat-pack"),
+    packCard("unshown-pack-card", "no-repeat-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  excludedCardIds: new Set(["shown-pack-card"]),
+  events: [
+    { card_id: "shown-pack-card", pack_id: "no-repeat-pack", created_at: "2026-01-01T12:59:00.000Z" },
+  ],
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(
+  noRepeatWhileUnshownSelection.selected.id,
+  "unshown-pack-card",
+  "Tester weighted flow does not repeat a pack card while another active pack card remains unshown",
+);
 
 const allPackCardsInsideTimeoutSelection = selectWeightedLauncherCard({
   cards: [
@@ -455,6 +497,41 @@ assert.equal(
 );
 assert.equal(allPackCardsInsideTimeoutSelection.availablePackCount, 2);
 assert.equal(allPackCardsInsideTimeoutSelection.eligiblePackCount, 0);
+
+const insideTimeoutUncycledSelection = selectWeightedLauncherCard({
+  cards: [
+    packCard("already-cycled-inside-timeout", "uncycled-timeout-pack"),
+    packCard("uncycled-inside-timeout", "uncycled-timeout-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  excludedCardIds: new Set(["already-cycled-inside-timeout"]),
+  events: [
+    { card_id: "already-cycled-inside-timeout", pack_id: "uncycled-timeout-pack", created_at: "2026-01-01T12:59:00.000Z" },
+    { card_id: "uncycled-inside-timeout", pack_id: "uncycled-timeout-pack", created_at: "2026-01-01T12:58:00.000Z" },
+  ],
+  random: sequenceRandom([0, 0]),
+});
+assert.equal(
+  insideTimeoutUncycledSelection.selected.id,
+  "uncycled-inside-timeout",
+  "Uncycled active pack card is selected inside timeout during the same launcher session",
+);
+assert.equal(insideTimeoutUncycledSelection.selectedSource, "pack");
+assert.equal(insideTimeoutUncycledSelection.availablePackCount, 1);
+assert.equal(insideTimeoutUncycledSelection.eligiblePackCount, 0);
+
+const completedCycleSelection = selectWeightedLauncherCard({
+  cards: [
+    packCard("cycled-pack-card-a", "completed-cycle-pack"),
+    packCard("cycled-pack-card-b", "completed-cycle-pack"),
+  ],
+  timezone: "Europe/London",
+  now: selectorNow,
+  excludedCardIds: new Set(["cycled-pack-card-a", "cycled-pack-card-b"]),
+});
+assert.equal(completedCycleSelection.selectedSource, "none", "Completed launcher cycle can end after all active pack cards are excluded");
+assert.equal(completedCycleSelection.availablePackCount, 0);
 
 const outsideWindowPackSelection = selectWeightedLauncherCard({
   cards: [packCard("night-unavailable-to-personal-pack-card", "outside-window-pack")],
