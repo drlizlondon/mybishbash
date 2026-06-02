@@ -4,6 +4,7 @@ export function getLauncherDecisionReadiness({
   routeKind,
   authReady,
   sessionPresent,
+  testerStatusReady = true,
   syncStatus,
   hasUsableCachedLauncherState = false,
   waitExpired,
@@ -14,6 +15,7 @@ export function getLauncherDecisionReadiness({
   if (hasUsableCachedLauncherState) return { ready: true, reason: "cached_launcher_state_available" };
   if (!authReady) return { ready: false, reason: "auth_pending" };
   if (sessionPresent && syncStatus === "loading") return { ready: false, reason: "sync_pending" };
+  if (sessionPresent && !testerStatusReady) return { ready: false, reason: "tester_status_pending" };
   if (waitExpired) return { ready: true, reason: "wait_expired" };
   return { ready: true, reason: "no_cards_after_ready" };
 }

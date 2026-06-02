@@ -200,12 +200,12 @@ assertAppPattern(
 
 assertAppPattern(
   "continue card button still delegates to onContinueToApp",
-  /onContinueToApp\?\.\(version\?\.id,\s*\{\s*source:\s*"continue_card",\s*reason:\s*"user_pressed_continue"\s*\}\)/g,
+  /onContinueToApp\?\.\(version\?\.id,\s*\{[\s\S]{0,180}source:\s*"continue_card",[\s\S]{0,120}reason:\s*"user_pressed_continue",[\s\S]{0,120}allowDefaultNavigation:\s*Boolean\(continueHref\)[\s\S]{0,80}\}\)/g,
 );
 
 assertAppPattern(
   "interruption continue button still delegates to onContinueToApp",
-  /onContinueToApp\?\.\(version\.id,\s*\{\s*source:\s*"interruption_card",\s*reason:\s*"user_pressed_continue"\s*\}\)/g,
+  /onContinueToApp\?\.\(version\.id,\s*\{[\s\S]{0,180}source:\s*"interruption_card",[\s\S]{0,120}reason:\s*"user_pressed_continue",[\s\S]{0,120}allowDefaultNavigation:\s*Boolean\(continueHref\)[\s\S]{0,80}\}\)/g,
 );
 
 assertAppPattern(

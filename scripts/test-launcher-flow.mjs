@@ -34,6 +34,19 @@ assert.deepEqual(
   { ready: false, reason: "sync_pending" },
 );
 
+assert.deepEqual(
+  getLauncherDecisionReadiness({
+    routeKind: "intercept",
+    authReady: true,
+    sessionPresent: true,
+    testerStatusReady: false,
+    syncStatus: "ready",
+    hasUsableCachedLauncherState: false,
+    waitExpired: true,
+  }),
+  { ready: false, reason: "tester_status_pending" },
+);
+
 assert.equal(
   getLauncherDecisionReadiness({
     routeKind: "intercept",
@@ -125,6 +138,8 @@ assert.match(appSource, /pickRandomPersonalCardForLauncher/);
 assert.match(appSource, /getWeightedLauncherFlowGate/);
 assert.match(appSource, /selectWeightedLauncherCard/);
 assert.match(appSource, /testerStatus/);
+assert.match(appSource, /return e2eMode \? \{ is_tester: e2eTesterMode \} : null;/);
+assert.match(appSource, /testerStatusReady: !session\?\.user\?\.id \|\| testerStatus !== null/);
 assert.match(appSource, /const plannedInterruption = interruption;/);
 assert.doesNotMatch(appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/);
 assert.match(appSource, /if \(overlay\.type === "reveal"\) \{/);

@@ -71,6 +71,7 @@ import {
   getHomeSortRank,
   getStatusMeta,
   getThemeClass,
+  getCurrentWindow,
   isEligible,
   isPackCardAvailable,
   normalizeCards,
@@ -96,6 +97,8 @@ import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/l
 import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "./lib/launcherFlow";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
+  DEFAULT_WEIGHTED_FLOW_SETTINGS,
+  buildCardExposureLookup,
   getWeightedLauncherFlowGate,
   selectWeightedLauncherCard,
 } from "./lib/cardSelection";
@@ -474,6 +477,50 @@ function pickRandomPersonalCardForLauncher(currentCards, timezone, excludedCardI
   };
 }
 
+function pickRandomGeneralCardForLauncher(currentCards, timezone, excludedCardIds = new Set()) {
+  const normalized = normalizeCards(currentCards, new Date(), timezone);
+  const singles = normalized
+    .filter((card) =>
+      !excludedCardIds.has(card.id) &&
+      !card.sourcePackId &&
+      !card.deletedAt &&
+      isEligible(card, new Date(), timezone)
+    )
+    .map((card) => ({ type: "single", card }));
+
+  const packMap = new Map();
+  normalized.forEach((card) => {
+    if (excludedCardIds.has(card.id)) return;
+    if (!isPackCardAvailable(card)) return;
+    if (!packMap.has(card.sourcePackId)) {
+      packMap.set(card.sourcePackId, []);
+    }
+    packMap.get(card.sourcePackId).push(card);
+  });
+
+  const packs = Array.from(packMap.values()).map((packCards) => ({
+    type: "pack",
+    packCards,
+  }));
+  const candidates = [...singles, ...packs];
+
+  if (candidates.length === 0) {
+    return { normalized, selected: null, selectedSource: "none" };
+  }
+
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  if (chosen.type === "single") {
+    return { normalized, selected: chosen.card, selectedSource: "personal" };
+  }
+  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
+  return {
+    normalized,
+    selected,
+    selectedSource: selected ? "pack" : "none",
+    selectedPackId: selected?.sourcePackId ?? null,
+  };
+}
+
 function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set()) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const activePackCards = normalized.filter((card) =>
@@ -497,6 +544,147 @@ function countEligibleGeneralCards(currentCards, timezone) {
   return normalizeCards(currentCards, new Date(), timezone).filter((card) =>
     card.sourcePackId ? isPackCardAvailable(card) : isEligible(card, new Date(), timezone) && !card.deletedAt
   ).length;
+}
+
+function getBrowserSafeDestinationHref(href) {
+  if (!href) return "";
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true);
+  if (!isStandalone && href.startsWith("x-safari-")) {
+    return href.replace(/^x-safari-/, "");
+  }
+  return href;
+}
+
+function isLauncherAuditEnabled() {
+  if (typeof window === "undefined") return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("launcherAudit") === "1" || window.localStorage.getItem("bishbash.launchAudit.enabled") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function getPackName(card, customPacks = []) {
+  if (!card?.sourcePackId) return null;
+  return customPacks.find((pack) => pack.id === card.sourcePackId)?.title
+    ?? customPacks.find((pack) => pack.id === card.sourcePackId)?.name
+    ?? PACKS.find((pack) => pack.id === card.sourcePackId)?.title
+    ?? card.sourcePackId;
+}
+
+function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = new Set(), packCardTimeoutMs = 0, exposureByCardId = new Map() }) {
+  const todayKey = getTodayKey(date, timezone);
+  const currentWindow = getCurrentWindow(date, timezone);
+  const isPack = Boolean(card.sourcePackId);
+  const windows = card.timingWindows ?? ["morning", "day", "evening"];
+  const lastExposure = exposureByCardId.get(card.id) ?? (card.lastShownAt ? new Date(card.lastShownAt).getTime() : 0);
+  const activePack = isPackCardAvailable(card) && !excludedCardIds.has(card.id);
+  const packOutsideTimeout = !isPack || packCardTimeoutMs <= 0 || !lastExposure || lastExposure + packCardTimeoutMs <= date.getTime();
+
+  const checks = [
+    { name: "excluded_by_launcher", pass: !excludedCardIds.has(card.id), appliesToPacks: true },
+    { name: "not_deleted", pass: !card.deletedAt, appliesToPacks: true },
+    { name: "not_paused", pass: !card.paused, appliesToPacks: true },
+    { name: "not_disliked", pass: !card.disliked, appliesToPacks: true },
+    { name: "not_hidden_pack_card", pass: !isPack || !card.hidden, appliesToPacks: true },
+    { name: "not_done_today", pass: isPack || (card.doneDate !== todayKey && card.statusToday !== "doneToday"), appliesToPacks: false },
+    { name: "personal_cooldown_expired", pass: isPack || !card.lastShownAt || new Date(card.lastShownAt).getTime() + 30 * 60 * 1000 <= date.getTime(), appliesToPacks: false },
+    { name: "not_yet_expired", pass: isPack || !card.notYetUntil || new Date(card.notYetUntil).getTime() <= date.getTime(), appliesToPacks: false },
+    { name: "timing_window_matches", pass: isPack || windows.includes(currentWindow), appliesToPacks: false },
+    { name: "pack_timeout_expired", pass: packOutsideTimeout, appliesToPacks: true },
+  ];
+  const failed = checks.filter((check) => !check.pass);
+  const legacyEligible = !isPack && !card.deletedAt && !excludedCardIds.has(card.id) && isEligible(card, date, timezone);
+  const generalEligible = isPack ? activePack : legacyEligible;
+  const weightedEligible = isPack ? activePack && packOutsideTimeout : legacyEligible;
+
+  return {
+    currentWindow,
+    legacyEligible,
+    generalEligible,
+    weightedEligible,
+    activePack,
+    checks,
+    excludedReason: failed.map((check) => check.name).join(", ") || null,
+  };
+}
+
+function logLauncherSelectionAudit({
+  versionId,
+  source,
+  cards,
+  timezone,
+  customPacks,
+  events,
+  excludedCardIds,
+  fallbackDisplay,
+  launcherStats,
+  weightedFlowGate,
+  interruptionPack,
+  selected,
+  plannedInterruption,
+}) {
+  if (!isLauncherAuditEnabled()) return;
+  const date = new Date();
+  const weights = fallbackDisplay.weights ?? DEFAULT_WEIGHTED_FLOW_SETTINGS;
+  const normalized = normalizeCards(cards, date, timezone);
+  const exposureByCardId = buildCardExposureLookup(normalized, events);
+  const cardAudits = normalized.map((card) => {
+    const eligibility = getLauncherEligibilityAudit(card, {
+      date,
+      timezone,
+      excludedCardIds,
+      packCardTimeoutMs: weights.packCardTimeoutMs,
+      exposureByCardId,
+    });
+    return {
+      id: card.id,
+      title: card.dashboardTitle ?? card.promptText ?? card.title ?? "",
+      sourcePackId: card.sourcePackId ?? null,
+      packName: getPackName(card, customPacks),
+      paused: Boolean(card.paused),
+      deleted: Boolean(card.deletedAt),
+      disliked: Boolean(card.disliked),
+      timingWindows: card.timingWindows ?? ["morning", "day", "evening"],
+      lastShownAt: card.lastShownAt ?? null,
+      notYetUntil: card.notYetUntil ?? null,
+      eligibility,
+    };
+  });
+  const activatedPacks = new Set(cardAudits.filter((card) => card.sourcePackId && !card.deleted).map((card) => card.sourcePackId));
+  const audit = {
+    path: "launcher tap -> interception flow -> card selection -> final rendered card",
+    versionId,
+    source,
+    selected: selected ? {
+      id: selected.id,
+      title: selected.dashboardTitle ?? selected.promptText ?? selected.title ?? "",
+      sourcePackId: selected.sourcePackId ?? null,
+      packName: getPackName(selected, customPacks),
+    } : null,
+    interruption: plannedInterruption ? {
+      packId: plannedInterruption.pack?.id ?? null,
+      packName: plannedInterruption.pack?.name ?? null,
+      cardId: plannedInterruption.pack?.cards?.[plannedInterruption.activeIndex ?? 0]?.id ?? null,
+    } : null,
+    finalRenderedCard: selected ? "personal_or_pack_card" : plannedInterruption ? "interruption_card" : "caught_up_empty",
+    weightedFlowGate,
+    summaryCounts: {
+      eligiblePersonalCards: cardAudits.filter((card) => !card.sourcePackId && card.eligibility.generalEligible).length,
+      eligiblePackCards: cardAudits.filter((card) => card.sourcePackId && card.eligibility.generalEligible).length,
+      activePackCards: launcherStats.activePackCardsCount,
+      activatedPacks: activatedPacks.size,
+      totalCardsEnteringWeightedSelection: (fallbackDisplay.availablePersonalCount ?? 0) + (fallbackDisplay.availablePackCount ?? 0),
+      totalCardsExcluded: cardAudits.filter((card) => !card.eligibility.generalEligible).length,
+      interruptionCardsAvailable: interruptionPack?.cards?.length ?? 0,
+    },
+    cards: cardAudits,
+  };
+  window.__lastLauncherSelectionAudit = audit;
+  console.log(`[CARD_SELECTION_AUDIT_JSON] ${JSON.stringify(audit)}`);
 }
 
 function buildInitialState() {
@@ -780,7 +968,7 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [testerStatus, setTesterStatus] = useState(() => {
     const e2eTesterMode = e2eMode && typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
-    return { is_tester: e2eTesterMode };
+    return e2eMode ? { is_tester: e2eTesterMode } : null;
   });
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
@@ -1073,6 +1261,7 @@ function App() {
     }
 
     let cancelled = false;
+    setTesterStatus(null);
     fetchTesterStatus(session.user.id)
       .then((status) => {
         if (!cancelled) setTesterStatus(status ?? { is_tester: false });
@@ -1648,7 +1837,7 @@ function App() {
           events: selectionEvents,
           excludedCardIds: launchCompletedCardIdsRef.current,
         })
-      : pickRandomPersonalCardForLauncher(
+      : pickRandomGeneralCardForLauncher(
           cards,
           profile.timezone,
           launchCompletedCardIdsRef.current,
@@ -1661,6 +1850,21 @@ function App() {
       : selected?.sourcePackId ? "pack" : selected ? "personal" : interruption ? "interruption" : "none";
 
     const selectedCard = selected ?? plannedInterruption?.pack?.cards?.[plannedInterruption.activeIndex ?? 0] ?? null;
+    logLauncherSelectionAudit({
+      versionId,
+      source,
+      cards,
+      timezone: profile.timezone,
+      customPacks: cardPacks,
+      events: selectionEvents,
+      excludedCardIds: launchCompletedCardIdsRef.current,
+      fallbackDisplay,
+      launcherStats,
+      weightedFlowGate,
+      interruptionPack,
+      selected,
+      plannedInterruption,
+    });
     debugLaunch("[LAUNCH_ATTEMPT] intercept resolved", {
       route: route.path,
       launcherContext: versionId,
@@ -1902,6 +2106,7 @@ function App() {
         routeKind: route.kind,
         authReady,
         sessionPresent: Boolean(session?.user?.id),
+        testerStatusReady: !session?.user?.id || testerStatus !== null,
         syncStatus,
         hasUsableCachedLauncherState,
         waitExpired: launcherDataWaitExpired,
@@ -1914,6 +2119,7 @@ function App() {
         isTestMode,
         authReady,
         sessionPresent: Boolean(session?.user?.id),
+        testerStatusReady: !session?.user?.id || testerStatus !== null,
         syncStatus,
         rawCardsCount: cards.length,
         eligiblePersonalCount,
@@ -1936,6 +2142,7 @@ function App() {
             isTestMode,
             authReady,
             sessionPresent: Boolean(session?.user?.id),
+            testerStatusReady: !session?.user?.id || testerStatus !== null,
             syncStatus,
             rawCardsCount: cards.length,
             eligiblePersonalCount,
@@ -2188,13 +2395,13 @@ function App() {
     return nextOverlay;
   }
 
-  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue" } = {}) {
+  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false } = {}) {
     const version = resolveVersionConfig(
       homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
       launcherBehaviorSettings[versionId],
     );
     const preferFastDestination = reason === "fake_launcher_icon_clicked";
-    const href = getVersionOpenHref(version, { preferFastDestination });
+    const href = getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferFastDestination }));
 
     void logLauncherEvent("intercept_continue_to_app", versionId, {
       launched_from: source,
@@ -2228,10 +2435,13 @@ function App() {
       const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
       if (typeof captureNavigation === "function") {
         const handled = captureNavigation(href, { versionId, source, reason });
-        if (handled) return;
+        if (handled) return true;
       }
+      if (allowDefaultNavigation) return false;
       window.location.assign(href);
+      return true;
     }
+    return true;
   }
 
   function openExternalActionUrl(url, { source = "action_card", cardId = null } = {}) {
@@ -6056,9 +6266,14 @@ function Overlay({
   }
 
   if (overlay.type === "continue-to-app") {
-    const handleContinue = () => {
-      onContinueToApp?.(version?.id, { source: "continue_card", reason: "user_pressed_continue" });
-      onClose();
+    const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version));
+    const handleContinue = (event) => {
+      const handled = onContinueToApp?.(version?.id, {
+        source: "continue_card",
+        reason: "user_pressed_continue",
+        allowDefaultNavigation: Boolean(continueHref),
+      });
+      if (handled !== false) event?.preventDefault?.();
     };
 
     const handleBack = () => {
@@ -6078,6 +6293,7 @@ function Overlay({
       <ContinueToAppCard
         appName={version?.name ?? "App"}
         appIcon={version?.customIconSrc || version?.iconSrc}
+        href={continueHref}
         onContinue={handleContinue}
         onBack={handleBack}
         className={launcherInterceptionClass}
@@ -6092,12 +6308,18 @@ function Overlay({
 
     const actions = [];
     if (isIntercept && interceptVersion) {
+      const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion));
       actions.push({
         label: "Continue to App",
         variant: "primary",
-        onClick: () => {
-          onContinueToApp?.(interceptVersion.id, { source: "empty_card", reason: "user_pressed_continue_after_no_eligible_cards" });
-          onClose();
+        href: continueHref,
+        onClick: (event) => {
+          const handled = onContinueToApp?.(interceptVersion.id, {
+            source: "empty_card",
+            reason: "user_pressed_continue_after_no_eligible_cards",
+            allowDefaultNavigation: Boolean(continueHref),
+          });
+          if (handled !== false) event?.preventDefault?.();
         }
       });
       actions.push({
@@ -6475,6 +6697,8 @@ function ActionCardOverlay({
 
   const [recentlyShown, setRecentlyShown] = useState([]);
   const [currentCard, setCurrentCard] = useState(null);
+  const maxCardsPerSession = Math.min(3, available.length);
+  const canShowAnotherIdea = maxCardsPerSession > 1 && recentlyShown.length < maxCardsPerSession;
 
   useEffect(() => {
     if (currentCard || available.length === 0) return;
@@ -6505,6 +6729,8 @@ function ActionCardOverlay({
   }
 
   function pickNext() {
+    if (!canShowAnotherIdea) return;
+
     if (currentCard) {
       void onLogEvent({
         event_type: "action_card_skipped",
@@ -6568,7 +6794,7 @@ function ActionCardOverlay({
         headline={currentCard.title}
         subtitle={currentCard.body || "An alternative to scrolling."}
         actions={[
-          { label: "Another idea", variant: "secondary", onClick: pickNext },
+          ...(canShowAnotherIdea ? [{ label: "Another idea", variant: "secondary", onClick: pickNext }] : []),
           { label: "I'll do this", variant: "primary", onClick: handleAccept },
         ]}
         launcherVersions={fakeLauncherVersions}
@@ -6784,9 +7010,16 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
     });
   }
 
-  function handleContinueToApp() {
+  const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version));
+
+  function handleContinueToApp(event) {
     if (!version) return;
-    onContinueToApp?.(version.id, { source: "interruption_card", reason: "user_pressed_continue" });
+    const handled = onContinueToApp?.(version.id, {
+      source: "interruption_card",
+      reason: "user_pressed_continue",
+      allowDefaultNavigation: Boolean(continueHref),
+    });
+    if (handled !== false) event?.preventDefault?.();
   }
 
   const activeMessage = messages[activeIndex] ?? "Pause for a second.";
@@ -6817,9 +7050,10 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
           {
             label: `Continue to ${version?.name ?? "App"}`,
             variant: "primary",
+            href: continueHref,
             onClick: (event) => {
               event?.stopPropagation?.();
-              handleContinueToApp();
+              handleContinueToApp(event);
             },
           },
           {
@@ -6853,9 +7087,9 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
       {showFallbackLink && version?.manualUrl ? (
         <p className="manual-open-copy premium-manual-open-copy">
           App didn&apos;t open?{" "}
-          <button type="button" className="link-button" onClick={handleContinueToApp}>
+          <a className="link-button" href={continueHref} onClick={handleContinueToApp}>
             Open {version.name} manually
-          </button>
+          </a>
         </p>
       ) : null}
     </div>
@@ -7177,7 +7411,7 @@ function LegalPage({ title, docUrl }) {
   );
 }
 
-function ContinueToAppCard({ appName, appIcon, onContinue, onBack, className = "" }) {
+function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, className = "" }) {
   return (
     <div className={`premium-card-screen premium-card-personal ${className}`.trim()} data-testid="continue-to-app-card">
       <main className="premium-card-main" aria-live="polite">
@@ -7192,7 +7426,7 @@ function ContinueToAppCard({ appName, appIcon, onContinue, onBack, className = "
         </section>
         <section className="premium-card-cta no-launchers">
           <PremiumActionStack actions={[
-            { label: `Continue to ${appName}`, variant: "primary", onClick: onContinue },
+            { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
             { label: "Back to MyBishBash", variant: "secondary", onClick: onBack }
           ]} />
         </section>

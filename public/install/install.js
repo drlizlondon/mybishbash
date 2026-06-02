@@ -50,7 +50,13 @@
 
   const launchLink = document.querySelector("[data-launch-link]");
   if (launchLink && version.launchPath) {
-    launchLink.href = `${window.location.origin}${appBasePath}${version.launchPath}`;
+    const launchUrl = new URL(`${window.location.origin}${appBasePath}${version.launchPath}`);
+    const currentParams = new URLSearchParams(window.location.search);
+    if (currentParams.get("launcherAudit") === "1") {
+      launchUrl.searchParams.set("launcherAudit", "1");
+      window.localStorage.setItem("bishbash.launchAudit.enabled", "true");
+    }
+    launchLink.href = launchUrl.toString();
     launchLink.addEventListener("click", () => {
       const pendingEvents = loadPendingEvents();
       pendingEvents.push({
