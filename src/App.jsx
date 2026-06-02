@@ -137,6 +137,7 @@ const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const LEGACY_BASE_PATHS = ["/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
+const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -147,6 +148,28 @@ const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(SIGNUP_ONBOARDING_PENDING_KEY) === "true";
+}
+
+function markHomeAutoLaunchSuppressedAfterDestination() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY, "true");
+  } catch {
+    // Session storage can be unavailable in constrained browser contexts.
+  }
+}
+
+function consumeHomeAutoLaunchSuppressedAfterDestination() {
+  if (typeof window === "undefined") return false;
+  try {
+    const value = window.sessionStorage.getItem(SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY) === "true";
+    if (value) {
+      window.sessionStorage.removeItem(SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY);
+    }
+    return value;
+  } catch {
+    return false;
+  }
 }
 
 function isE2EModeEnabled() {
@@ -690,6 +713,11 @@ function logLauncherSelectionAudit({
 function buildInitialState() {
   const profile = loadProfile();
   const setupComplete = loadSetupComplete();
+  const initialRoute = setupComplete ? parseRoute(getRouteFromLocation(setupComplete)) : null;
+  const suppressInitialHomeLaunch =
+    setupComplete &&
+    initialRoute?.kind !== "intercept" &&
+    consumeHomeAutoLaunchSuppressedAfterDestination();
   const mood = resolveTheme(loadMood());
   const cards = normalizeCards(loadCards(), new Date(), profile.timezone).map((card) => ({
     ...card,
@@ -702,6 +730,7 @@ function buildInitialState() {
       mood,
       profile,
       setupComplete,
+      suppressInitialHomeLaunch: false,
     };
   }
 
@@ -710,6 +739,7 @@ function buildInitialState() {
     mood,
     profile,
     setupComplete,
+    suppressInitialHomeLaunch,
   };
 }
 
@@ -1044,12 +1074,13 @@ function App() {
     ]
   );
   const [logFilter, setLogFilter] = useState("all");
-  const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete);
+  const [shouldLaunchOverlay, setShouldLaunchOverlay] = useState(initialState.setupComplete && !initialState.suppressInitialHomeLaunch);
   const [resumeLaunchNonce, setResumeLaunchNonce] = useState(0);
   const [launcherDataWaitExpired, setLauncherDataWaitExpired] = useState(false);
   const hiddenSinceRef = useRef(null);
   const handledResumeLaunchNonceRef = useRef(0);
   const suppressNextHomeAutoLaunchRef = useRef(false);
+  const suppressResumeHomeAutoLaunchRef = useRef(false);
   const visibleActionCards = useMemo(
     () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
     [actionCards],
@@ -1990,7 +2021,14 @@ function App() {
       suppressNextHomeAutoLaunchRef.current = false;
       interceptActivationRef.current = null;
       setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
-      setShouldLaunchOverlay(true);
+      if (suppressResumeHomeAutoLaunchRef.current) {
+        suppressResumeHomeAutoLaunchRef.current = false;
+        suppressNextHomeAutoLaunchRef.current = true;
+        setShouldLaunchOverlay(false);
+      } else {
+        suppressNextHomeAutoLaunchRef.current = false;
+        setShouldLaunchOverlay(true);
+      }
       setOverlay(null);
     };
 
@@ -2431,6 +2469,10 @@ function App() {
     });
 
     if (href) {
+      markHomeAutoLaunchSuppressedAfterDestination();
+      suppressResumeHomeAutoLaunchRef.current = true;
+      suppressNextHomeAutoLaunchRef.current = true;
+      setShouldLaunchOverlay(false);
       console.log("[LAUNCHER] opening destination", { versionId, href, source, reason });
       const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
       if (typeof captureNavigation === "function") {
@@ -4128,7 +4170,7 @@ function App() {
 
       {overlay ? (
         <Overlay
-          key={overlay.activationKey ?? `${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}`}
+          key={`${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}:${overlay.packId ?? ""}:${overlay.activationKey ?? ""}`}
           overlay={overlay}
           card={activeRevealCard}
           route={route}

@@ -6,6 +6,7 @@ const checks = [
   ["Launcher selector flow", ["npm", "run", "test:launcher-flow"]],
   ["Fake launcher destinations", ["npm", "run", "test:fake-launchers"]],
   ["Launcher button/state smoke", ["npx", "playwright", "test", "tests/e2e/launcher-before-push.spec.ts"]],
+  ["Downloaded shell repeat", ["npm", "run", "test:launcher-shell-repeat"]],
 ];
 
 function runCheck([label, command]) {

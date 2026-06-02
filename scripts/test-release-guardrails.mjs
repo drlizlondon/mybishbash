@@ -9,6 +9,7 @@ const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js"
 const launcherFlowSource = await readFile(new URL("../src/lib/launcherFlow.js", import.meta.url), "utf8");
 const launcherRegistrySource = await readFile(new URL("../src/lib/launcherRegistry.js", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -133,7 +134,7 @@ assertAppDoesNotMatch(
 
 assertAppPattern(
   "openDestinationApp still calls window.location.assign(href)",
-  /function openDestinationApp[\s\S]{0,1800}window\.location\.assign\(href\)/g,
+  /function openDestinationApp[\s\S]{0,2400}window\.location\.assign\(href\)/g,
 );
 
 const openDestinationAppBody = findFunctionBody(appSource, "openDestinationApp");
@@ -166,7 +167,7 @@ if (!openDestinationAppBody) {
     pass("openDestinationApp still logs fake_launcher_real_app_opened");
   }
 
-  if (!/if \(href\)[\s\S]{0,420}window\.location\.assign\(href\)/.test(openDestinationAppBody)) {
+  if (!/if \(href\)[\s\S]{0,720}window\.location\.assign\(href\)/.test(openDestinationAppBody)) {
     fail("openDestinationApp only attempts navigation when href exists", normalizeSnippet(openDestinationAppBody));
   } else {
     pass("openDestinationApp only attempts navigation when href exists");
@@ -214,6 +215,31 @@ assertAppPattern(
 );
 
 assertAppPattern(
+  "resume handler suppresses home auto-launch after launcher destination",
+  /if \(suppressResumeHomeAutoLaunchRef\.current\) \{[\s\S]{0,260}setShouldLaunchOverlay\(false\);[\s\S]{0,120}\} else \{[\s\S]{0,180}setShouldLaunchOverlay\(true\);/g,
+);
+
+assertAppPattern(
+  "continuing to destination marks home resume for launcher suppression",
+  /if \(href\) \{[\s\S]{0,120}markHomeAutoLaunchSuppressedAfterDestination\(\);[\s\S]{0,120}suppressResumeHomeAutoLaunchRef\.current = true;[\s\S]{0,120}suppressNextHomeAutoLaunchRef\.current = true;[\s\S]{0,120}setShouldLaunchOverlay\(false\);/g,
+);
+
+assertAppPattern(
+  "destination suppression is consumed while building initial state",
+  /const suppressInitialHomeLaunch =[\s\S]{0,260}consumeHomeAutoLaunchSuppressedAfterDestination\(\);/g,
+);
+
+assertAppPattern(
+  "initial state exposes destination suppression",
+  /suppressInitialHomeLaunch,/g,
+);
+
+assertAppPattern(
+  "initial home launch is disabled when destination suppression is present",
+  /const \[shouldLaunchOverlay, setShouldLaunchOverlay\] = useState\(initialState\.setupComplete && !initialState\.suppressInitialHomeLaunch\);/g,
+);
+
+assertAppPattern(
   "non-launcher completion still suppresses the next home auto-launch",
   /debugLaunch\("\[CONTINUE_DECISION\] home -> falling back to home"\);[\s\S]{0,160}suppressNextHomeAutoLaunchRef\.current = true;[\s\S]{0,120}setShouldLaunchOverlay\(false\)/g,
 );
@@ -226,6 +252,18 @@ assertAppPattern(
 assertAppPattern(
   "fake launcher reveal cards route to ContinueToAppCard after handling instead of another card",
   /if \(overlay\.type === "reveal"\) \{/g,
+);
+
+assertAppPattern(
+  "overlay key includes overlay type so launcher cards remount before continue/interruption",
+  /key=\{`\$\{overlay\.type\}:\$\{overlay\.versionId \?\? ""\}:\$\{overlay\.cardId \?\? ""\}:\$\{overlay\.packId \?\? ""\}:\$\{overlay\.activationKey \?\? ""\}`\}/g,
+);
+
+assertSourcePattern(
+  "styles",
+  stylesSource,
+  "launcher interception card pieces render atomically without staggered reveal",
+  /\.premium-card-screen\.launcher-interception-card \.premium-greeting,[\s\S]{0,500}animation:\s*none;/g,
 );
 
 assertAppPattern(

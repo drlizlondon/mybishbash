@@ -4369,22 +4369,9 @@ body {
 .premium-card-screen.launcher-interception-card .premium-divider,
 .premium-card-screen.launcher-interception-card .premium-subtitle,
 .premium-card-screen.launcher-interception-card .premium-card-cta {
-  transform: translateY(6px);
-  animation-duration: 120ms;
-}
-
-.premium-card-screen.launcher-interception-card .premium-card-icon,
-.premium-card-screen.launcher-interception-card .premium-title-box,
-.premium-card-screen.launcher-interception-card .premium-divider {
-  animation-delay: 16ms;
-}
-
-.premium-card-screen.launcher-interception-card .premium-subtitle {
-  animation-delay: 32ms;
-}
-
-.premium-card-screen.launcher-interception-card .premium-card-cta {
-  animation-delay: 48ms;
+  opacity: 1;
+  transform: none;
+  animation: none;
 }
 
 .premium-card-launchers {

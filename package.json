@@ -19,6 +19,7 @@
     "test:launcher-qa": "playwright test tests/e2e/launcher-flow-trace.spec.ts",
     "test:before-push": "node scripts/test-before-push.mjs",
     "test:launcher-exhaustive": "playwright test tests/e2e/launcher-terminal-exhaustive.spec.ts",
+    "test:launcher-shell-repeat": "playwright test tests/e2e/launcher-shell-repeat.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:staging-release": "playwright test e2e/staging-release.spec.js",
     "preview": "vite preview",
