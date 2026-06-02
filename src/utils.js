@@ -1,5 +1,5 @@
 const TWENTY_MINUTES = 20 * 60 * 1000;
-const THREE_HOURS = 3 * 60 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
 const THIRTY_MINUTES = 30 * 60 * 1000;
 
 export const THEMES = [
@@ -494,7 +494,7 @@ export function applyCardAction(card, action, date = new Date(), timeZone) {
 
   if (action === "later") {
     updated.statusToday = "pending";
-    updated.notYetUntil = new Date(date.getTime() + THREE_HOURS).toISOString();
+    updated.notYetUntil = new Date(date.getTime() + ONE_HOUR).toISOString();
     return updated;
   }
 

@@ -2,8 +2,8 @@ import { isEligible, isPackCardAvailable, normalizeCards } from "../utils.js";
 
 export const WEIGHTED_FLOW_LOCAL_STORAGE_KEY = "mybishbash.weightedFlow.enabled";
 export const DEFAULT_WEIGHTED_FLOW_SETTINGS = {
-  personalWeight: 70,
-  packWeight: 30,
+  personalWeight: 85,
+  packWeight: 15,
   packCardTimeoutMs: 30 * 60 * 1000,
 };
 

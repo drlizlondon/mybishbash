@@ -292,7 +292,7 @@ const sequenceRandom = (values) => {
 assert.deepEqual(
   normalizeWeightedFlowSettings({ personalWeight: -5, packWeight: "nope" }),
   DEFAULT_WEIGHTED_FLOW_SETTINGS,
-  "Invalid weighted flow settings fall back to 70/30 and 30 minute timeout",
+  "Invalid weighted flow settings fall back to 85/15 and 30 minute timeout",
 );
 assert.deepEqual(
   normalizeWeightedFlowSettings({ personalWeight: 70.9, packWeight: 30.2, packCardTimeoutMs: 5.8 }),
@@ -401,9 +401,9 @@ const weightedPersonal = selectWeightedLauncherCard({
   cards: [personalCard, ...largePack],
   timezone: "Europe/London",
   now: selectorNow,
-  random: sequenceRandom([0.69, 0]),
+  random: sequenceRandom([0.84, 0]),
 });
-assert.equal(weightedPersonal.selectedSource, "personal", "70/30 draw is source-level, not card-count-level");
+assert.equal(weightedPersonal.selectedSource, "personal", "85/15 draw is source-level, not card-count-level");
 assert.equal(weightedPersonal.selected.id, "personal-ready");
 assert.equal(weightedPersonal.availablePackCount, 100);
 
@@ -411,7 +411,7 @@ const weightedPack = selectWeightedLauncherCard({
   cards: [personalCard, ...largePack],
   timezone: "Europe/London",
   now: selectorNow,
-  random: sequenceRandom([0.71, 0, 0]),
+  random: sequenceRandom([0.86, 0, 0]),
 });
 assert.equal(weightedPack.selectedSource, "pack", "Pack wins only when source draw lands in pack weight");
 assert.equal(weightedPack.selectedPackId, "large-pack");
