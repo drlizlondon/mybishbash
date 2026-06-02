@@ -116,10 +116,6 @@ function assertTruthy(message, value) {
   pass(message);
 }
 
-assertNoInterceptionSource("home_fake_launcher_bar");
-assertNoInterceptionSource("overlay_fake_launcher");
-assertNoInterceptionSource("settings_fake_launcher");
-
 const packActionsSource = sourceBetween(appSource, "const packActions = useSoftPackFeedbackActions", "return (\n    <PremiumCardScreen");
 if (!packActionsSource) {
   fail("pack overlay actions are discoverable for feedback guardrails");
@@ -208,23 +204,33 @@ assertSourcePattern(
 );
 
 assertAppPattern(
-  "home_fake_launcher_bar calls openDestinationApp",
-  /source:\s*"home_fake_launcher_bar"[\s\S]{0,160}reason:\s*"fake_launcher_icon_clicked"/g,
+  "fake launcher handler exists",
+  /function handleFakeLauncherLaunch\(versionId, source\)/g,
 );
 
 assertAppPattern(
-  "overlay_fake_launcher calls openDestinationApp",
-  /function handleOverlayFakeLauncherLaunch\(versionId\) \{[\s\S]{0,300}openDestinationApp\(versionId,[\s\S]{0,120}source:\s*"overlay_fake_launcher"[\s\S]{0,120}reason:\s*"fake_launcher_icon_clicked"/g,
+  "tester fake launcher clicks start a fresh interception flow",
+  /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId,[\s\S]{0,180}source,[\s\S]{0,80}replace: true,[\s\S]{0,80}navigate: true/g,
 );
 
 assertAppPattern(
-  "settings_fake_launcher calls openDestinationApp",
-  /source:\s*"settings_fake_launcher"[\s\S]{0,160}reason:\s*"fake_launcher_icon_clicked"/g,
+  "non-tester fake launcher clicks still open real destinations",
+  /openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
 );
 
-assertAppDoesNotMatch(
-  "home fake launcher bar must not mention beginInterceptionFlow in its launch prop",
-  /onLaunch=\{\(versionId\)[\s\S]{0,220}beginInterceptionFlow[\s\S]{0,120}home_fake_launcher_bar/g,
+assertAppPattern(
+  "home fake launcher bar uses the shared fake launcher handler",
+  /handleFakeLauncherLaunch\(versionId, "home_fake_launcher_bar"\)/g,
+);
+
+assertAppPattern(
+  "overlay fake launcher uses the shared fake launcher handler",
+  /handleFakeLauncherLaunch\(versionId, "overlay_fake_launcher"\)/g,
+);
+
+assertAppPattern(
+  "settings fake launcher uses the shared fake launcher handler",
+  /handleFakeLauncherLaunch\(versionId, "settings_fake_launcher"\)/g,
 );
 
 assertAppPattern(

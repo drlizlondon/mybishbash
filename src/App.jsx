@@ -2512,11 +2512,28 @@ function App() {
     window.location.assign(url);
   }
 
-  function handleOverlayFakeLauncherLaunch(versionId) {
+  function handleFakeLauncherLaunch(versionId, source) {
+    if (testerStatus?.is_tester === true) {
+      interceptActivationRef.current = null;
+      launchCompletedCardIdsRef.current = new Set();
+      suppressNextHomeAutoLaunchRef.current = false;
+      setShouldLaunchOverlay(false);
+      beginInterceptionFlow(versionId, {
+        source,
+        replace: true,
+        navigate: true,
+      });
+      return;
+    }
+
     openDestinationApp(versionId, {
-      source: "overlay_fake_launcher",
+      source,
       reason: "fake_launcher_icon_clicked",
     });
+  }
+
+  function handleOverlayFakeLauncherLaunch(versionId) {
+    handleFakeLauncherLaunch(versionId, "overlay_fake_launcher");
   }
 
   function updateCards(updater) {
@@ -4081,10 +4098,7 @@ function App() {
                   launcherContext={launcherContext}
                   onLogLauncherEvent={logLauncherEvent}
                   onFakeLauncherLaunch={(versionId) =>
-                    openDestinationApp(versionId, {
-                      source: "settings_fake_launcher",
-                      reason: "fake_launcher_icon_clicked",
-                    })
+                    handleFakeLauncherLaunch(versionId, "settings_fake_launcher")
                   }
                 />
               ) : null}
@@ -4304,10 +4318,7 @@ function App() {
           versions={fakeLauncherVersions}
           raised={false}
           onLaunch={(versionId) =>
-            openDestinationApp(versionId, {
-              source: "home_fake_launcher_bar",
-              reason: "fake_launcher_icon_clicked",
-            })
+            handleFakeLauncherLaunch(versionId, "home_fake_launcher_bar")
           }
         />
       ) : null}

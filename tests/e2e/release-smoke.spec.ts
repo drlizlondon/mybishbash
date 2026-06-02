@@ -222,6 +222,38 @@ test('Safari desktop fake launcher uses web fallback destination', async ({ page
   await expectNoConsoleErrors(consoleErrors);
 });
 
+test('tester fake launcher click starts a fresh launcher card session every time', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [
+      packSmokeCard('tester-fake-launcher-pack-a', 'E2E tester fake launcher pack A'),
+      packSmokeCard('tester-fake-launcher-pack-b', 'E2E tester fake launcher pack B'),
+    ],
+    launcherBehaviorSettings: launcherSettings(false),
+    testerMode: true,
+  });
+
+  await gotoApp(page, '/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+
+  for (const round of [1, 2]) {
+    await page.getByTestId('fake-launcher-safari').click();
+    await expect(page, `round ${round} should enter Safari launcher route`).toHaveURL(/\/mybishbash\/intercept\/safari$/);
+    await expect(page.getByTestId('card-overlay-pack'), `round ${round} should show a launcher pack card`).toBeVisible();
+    await expect(page.getByTestId('card-action-continue'), `round ${round} should keep launcher Continue wording`).toBeVisible();
+    await expect(page.getByTestId('card-action-back-to-home'), `round ${round} must not fall back to home-card wording`).toHaveCount(0);
+    expect(await getNavigationAttempts(page), `round ${round} should not directly open the real app for testers`).toHaveLength(0);
+
+    await page.getByTestId('card-action-continue').click();
+    await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+    await page.getByTestId('card-action-back-to-mybishbash').click();
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  }
+
+  await expectNoConsoleErrors(consoleErrors);
+});
+
 test('Safari iOS fake launcher attempts Safari-specific x-safari destination', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 12'] });
   const page = await context.newPage();
