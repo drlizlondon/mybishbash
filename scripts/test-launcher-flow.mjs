@@ -128,6 +128,13 @@ assert.match(appSource, /testerStatus/);
 assert.match(appSource, /\[CONTINUE_DECISION\] weighted intercept -> routing to next weighted card/);
 assert.match(appSource, /const nextWeightedDisplay = selectWeightedLauncherCard\(\{/);
 assert.match(appSource, /excludedCardIds,\s*\}\);/);
+assert.match(appSource, /const completedCardIsPackCard = Boolean\(completedCard\?\.sourcePackId\);/);
+assert.match(appSource, /\[CONTINUE_DECISION\] weighted pack reaction -> routing to ContinueToAppCard/);
+assert.match(
+  appSource,
+  /if \(completedCardIsPackCard\) \{[\s\S]{0,360}buildFakeLauncherContinueOverlay\(versionId, activationKey\)[\s\S]{0,520}return;/,
+  "Weighted launcher pack-card Like/Dislike routes to ContinueToAppCard instead of selecting another pack card",
+);
 assert.match(appSource, /\[WEIGHTED_GUARD\] Active pack cards remained after selector returned empty/);
 assert.match(cardSelectionSource, /mybishbash\.weightedFlow\.enabled/);
 assert.match(cardSelectionSource, /env\?\.DEV === true/);
@@ -427,7 +434,7 @@ const nextPackAfterCompletionSelection = selectWeightedLauncherCard({
 assert.equal(
   nextPackAfterCompletionSelection.selected.id,
   "next-pack-card-in-cycle",
-  "After completing one pack card, tester weighted flow selects the next active pack card",
+  "Selector can still choose a remaining active pack card when initial launcher selection needs one",
 );
 assert.equal(nextPackAfterCompletionSelection.selectedSource, "pack");
 assert.equal(nextPackAfterCompletionSelection.availablePackCount, 1);

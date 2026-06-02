@@ -220,7 +220,12 @@ assertAppPattern(
 
 assertAppPattern(
   "launcher completion records completed card ids before choosing another card",
-  /launchCompletedCardIdsRef\.current = new Set\(\[\.\.\.launchCompletedCardIdsRef\.current, completedCardId\]\);[\s\S]{0,260}const excludedCardIds = launchCompletedCardIdsRef\.current/g,
+  /launchCompletedCardIdsRef\.current = new Set\(\[\.\.\.launchCompletedCardIdsRef\.current, completedCardId\]\);[\s\S]{0,500}const excludedCardIds = launchCompletedCardIdsRef\.current/g,
+);
+
+assertAppPattern(
+  "weighted launcher pack-card reactions route to ContinueToAppCard instead of another pack card",
+  /const completedCardIsPackCard = Boolean\(completedCard\?\.sourcePackId\);[\s\S]{0,180}if \(activation\?\.weightedFlowUsed[\s\S]{0,120}if \(completedCardIsPackCard\) \{[\s\S]{0,520}weighted pack reaction -> routing to ContinueToAppCard[\s\S]{0,220}return;[\s\S]{0,120}const nextWeightedDisplay = selectWeightedLauncherCard/g,
 );
 
 assertAppPattern(

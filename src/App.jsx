@@ -2409,7 +2409,25 @@ function App() {
       const activation = interceptActivationRef.current;
       const activationKey = overlay.activationKey || activation?.activationKey || Date.now().toString();
       const cardsForDecision = options.cardsOverride ?? cards;
+      const completedCard = completedCardId
+        ? cardsForDecision.find((card) => card.id === completedCardId) ?? cards.find((card) => card.id === completedCardId)
+        : null;
+      const completedCardIsPackCard = Boolean(completedCard?.sourcePackId);
       if (activation?.weightedFlowUsed && activation.versionId === versionId && activation.activationKey === activationKey) {
+        if (completedCardIsPackCard) {
+          setScreen("interception");
+          const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
+          setOverlay(nextOverlay);
+          debugLaunch("[CONTINUE-TO-APP DISPLAYED]", nextOverlay);
+          debugLaunch("[CONTINUE_DECISION] weighted pack reaction -> routing to ContinueToAppCard", {
+            ...nextOverlay,
+            completedCardId,
+            completedPackId: completedCard.sourcePackId,
+          });
+          navigateTo(`/intercept/${versionId}`, { replace: true });
+          return;
+        }
+
         const nextWeightedDisplay = selectWeightedLauncherCard({
           cards: cardsForDecision,
           timezone: profile.timezone,
