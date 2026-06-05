@@ -6,6 +6,7 @@ const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "ut
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const serviceWorkerSource = await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -86,6 +87,13 @@ assertNoMatch("launcherState keeps interruption logic separate from library pack
 const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default App;");
 assertMatch("ContinueToAppCard renders the continue-to-app test id", continueCardSource, /data-testid="continue-to-app-card"/);
 assertNoMatch("ContinueToAppCard does not assign window.location directly", continueCardSource, /window\.location\.assign/);
+
+assertMatch("update banner is suppressed while overlays are active", appSource, /const showAppUpdateBanner = appUpdate\.updateAvailable && !overlay;/);
+assertMatch("update banner uses deferred visibility guard", appSource, /\{showAppUpdateBanner \? \(/);
+const serviceWorkerInstallSource = sourceBetween(serviceWorkerSource, 'self.addEventListener("install"', 'self.addEventListener("activate"');
+assertNoMatch("service worker install does not force skipWaiting", serviceWorkerInstallSource, /self\.skipWaiting\(\)/);
+assertNoMatch("service worker activate does not always claim clients", serviceWorkerSource, /\.then\(\(\) => self\.clients\.claim\(\)\)/);
+assertMatch("service worker only claims clients after explicit update", serviceWorkerSource, /shouldClaimClients \? self\.clients\.claim\(\) : undefined/);
 
 const now = new Date("2026-01-01T13:00:00.000Z");
 const personal = (id, overrides = {}) => ({

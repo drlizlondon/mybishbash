@@ -1,4 +1,5 @@
 const CURRENT_VERSION = typeof __MYBISHBASH_VERSION__ === "string" ? __MYBISHBASH_VERSION__ : "dev";
+const CURRENT_SOURCE_SHA = import.meta.env.VITE_SOURCE_SHA || import.meta.env.VITE_GIT_SHA || "";
 const LEGACY_CACHE_PREFIX = "bish" + "bash-";
 
 export async function checkForAppUpdate(basePath = "/mybishbash") {
@@ -18,12 +19,16 @@ export async function checkForAppUpdate(basePath = "/mybishbash") {
 
     const deployed = await response.json();
     const deployedVersion = deployed?.version;
-
-    return {
+    const result = {
       currentVersion: CURRENT_VERSION,
+      currentSourceSha: CURRENT_SOURCE_SHA,
       deployedVersion,
+      sourceSha: deployed?.sourceSha ?? "",
       updateAvailable: Boolean(deployedVersion && deployedVersion !== CURRENT_VERSION),
     };
+
+    console.log("[APP_UPDATE] checked", result);
+    return result;
   } catch {
     return { updateAvailable: false, currentVersion: CURRENT_VERSION };
   }

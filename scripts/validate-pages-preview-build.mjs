@@ -47,6 +47,7 @@ assert.match(previewBuild.sourceVersion, new RegExp(escapeRegExp(expectedSourceS
 const version = readJson("dist/version.json");
 assert.equal(version.sourceSha, expectedSourceSha);
 assert.match(version.version, new RegExp(escapeRegExp(expectedSourceSha)));
+assert.match(appBundle, new RegExp(escapeRegExp(version.version)));
 
 const serviceWorker = readFileSync("dist/service-worker.js", "utf8");
 assert.match(serviceWorker, /const APP_BASE = "\/mybishbash-preview\/";/);

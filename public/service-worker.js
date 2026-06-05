@@ -8,6 +8,7 @@ const HTML_CACHE = `${CACHE_PREFIX}html-${SERVICE_WORKER_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${SERVICE_WORKER_VERSION}`;
 const MEDIA_CACHE = `${CACHE_PREFIX}media-${SERVICE_WORKER_VERSION}`;
 const INDEX_URL = "/mybishbash/index.html";
+let shouldClaimClients = false;
 
 const MEDIA_EXTENSIONS = [
   ".avif",
@@ -22,6 +23,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 self.addEventListener("install", (event) => {
+  console.log("[SERVICE_WORKER] install", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
   event.waitUntil(
     caches
       .open(HTML_CACHE)
@@ -33,11 +35,15 @@ self.addEventListener("install", (event) => {
           })
           .catch(() => undefined),
       )
-      .then(() => self.skipWaiting()),
   );
 });
 
 self.addEventListener("activate", (event) => {
+  console.log("[SERVICE_WORKER] activate", {
+    version: SERVICE_WORKER_VERSION,
+    appBase: APP_BASE,
+    shouldClaimClients,
+  });
   event.waitUntil(
     caches
       .keys()
@@ -48,12 +54,14 @@ self.addEventListener("activate", (event) => {
             .map((key) => caches.delete(key)),
         ),
       )
-      .then(() => self.clients.claim()),
+      .then(() => (shouldClaimClients ? self.clients.claim() : undefined)),
   );
 });
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
+    shouldClaimClients = true;
+    console.log("[SERVICE_WORKER] skip waiting requested", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
     self.skipWaiting();
     return;
   }

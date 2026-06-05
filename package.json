@@ -7,7 +7,7 @@
     "prebuild": "node scripts/generate-launchers.mjs",
     "dev": "vite",
     "build": "vite build",
-    "build:pages-preview": "npm run build && node scripts/prepare-pages-preview-build.mjs && node scripts/validate-pages-preview-build.mjs",
+    "build:pages-preview": "node scripts/build-pages-preview.mjs",
     "test": "npm run build && npm run test:launcher-flow && npm run test:launchers && npm run test:testpilot && npm run test:fake-launchers && npm run test:release-guardrails",
     "test:release": "npm run build && npm run test:launcher-flow && npm run test:launchers && npm run test:testpilot && npm run test:fake-launchers && npm run test:release-guardrails && npm run test:e2e",
     "test:release:staging": "npm run test:release && npm run test:staging-release",

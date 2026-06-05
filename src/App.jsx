@@ -265,6 +265,17 @@ function debugLaunch(label, payload) {
   }
 }
 
+function getOverlayDebugSnapshot(overlay, routePath = "") {
+  return {
+    type: overlay?.type ?? null,
+    versionId: overlay?.versionId ?? null,
+    activationKey: overlay?.activationKey ?? null,
+    cardId: overlay?.cardId ?? null,
+    routePath,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 function isSameJsonValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -1118,6 +1129,7 @@ function App() {
   const [selectedPackDetail, setSelectedPackDetail] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
+  const previousOverlayDebugRef = useRef(null);
   const loggedLauncherOpenRef = useRef("");
   const loggedOnboardingStartedRef = useRef(false);
   const signupOnboardingPendingRef = useRef(hasSignupOnboardingPending());
@@ -1133,6 +1145,29 @@ function App() {
   const highestKnownCloudTimeRef = useRef(0);
   const activeLauncherOverlayRef = useRef(null);
   const route = useMemo(() => parseRoute(routePath), [routePath]);
+
+  useEffect(() => {
+    const previous = previousOverlayDebugRef.current;
+    const next = getOverlayDebugSnapshot(overlay, route.path);
+    if (
+      previous?.type !== next.type ||
+      previous?.versionId !== next.versionId ||
+      previous?.activationKey !== next.activationKey ||
+      previous?.cardId !== next.cardId
+    ) {
+      debugLaunch("[OVERLAY_CHANGE]", {
+        previousOverlayType: previous?.type ?? null,
+        nextOverlayType: next.type,
+        versionId: next.versionId,
+        activationKey: next.activationKey,
+        cardId: next.cardId,
+        routePath: next.routePath,
+        timestamp: next.timestamp,
+      });
+    }
+    previousOverlayDebugRef.current = next;
+  }, [overlay, route.path]);
+
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
     () =>
@@ -4256,6 +4291,7 @@ function App() {
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
   const isFakeLauncherFlow = route.kind === "intercept" || overlay?.launchSource === "fake_launcher";
+  const showAppUpdateBanner = appUpdate.updateAvailable && !overlay;
 
   if (!authReady && !isFakeLauncherFlow) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
@@ -4657,7 +4693,7 @@ function App() {
         />
       ) : null}
 
-      {appUpdate.updateAvailable ? (
+      {showAppUpdateBanner ? (
         <div style={{ position: "fixed", left: "16px", right: "16px", bottom: "calc(16px + env(safe-area-inset-bottom))", zIndex: 80, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", maxWidth: "420px", width: "100%", padding: "12px 14px", borderRadius: "16px", background: "rgba(255,255,255,0.96)", boxShadow: "0 14px 40px rgba(0,0,0,0.18)", pointerEvents: "auto" }}>
             <span style={{ flex: 1, color: "var(--charcoal)", fontWeight: 700 }}>Update available</span>
@@ -6918,6 +6954,18 @@ function CardRevealTemplate({
   const hasLaunchers = launchers?.length > 0;
   const hasActions = actions?.length > 0;
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.__MYBISHBASH_CARD_OVERLAY_MOUNTS = [
+      ...(window.__MYBISHBASH_CARD_OVERLAY_MOUNTS ?? []),
+      {
+        variant,
+        at: new Date().toISOString(),
+        route: window.location.pathname + window.location.search,
+      },
+    ];
+  }, [variant]);
+
   return (
     <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
       {showDashboardShortcut ? <PremiumDashboardShortcut href={dashboardHref} onClick={onDashboard} /> : null}
@@ -7836,6 +7884,19 @@ function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashb
     { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
     ...(onBack ? [{ label: "Back to MyBishBash", variant: "secondary", onClick: onBack }] : []),
   ];
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.__MYBISHBASH_CONTINUE_CARD_MOUNTS = [
+      ...(window.__MYBISHBASH_CONTINUE_CARD_MOUNTS ?? []),
+      {
+        appName,
+        href,
+        at: new Date().toISOString(),
+        route: window.location.pathname + window.location.search,
+      },
+    ];
+  }, [appName, href]);
 
   return (
     <div className={`premium-card-screen premium-card-personal ${className}`.trim()} data-testid="continue-to-app-card">

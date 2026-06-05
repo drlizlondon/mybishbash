@@ -27,6 +27,21 @@ export function registerServiceWorker() {
       .register("/mybishbash/service-worker.js", { scope: "/mybishbash/" })
       .then((registration) => {
         console.log("[NOTIFICATIONS] Service worker registered", registration.scope);
+        registration.addEventListener("updatefound", () => {
+          console.log("[SERVICE_WORKER] updatefound", {
+            scope: registration.scope,
+            state: registration.installing?.state,
+          });
+          registration.installing?.addEventListener("statechange", () => {
+            console.log("[SERVICE_WORKER] installing statechange", {
+              scope: registration.scope,
+              state: registration.installing?.state,
+            });
+          });
+        });
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          console.log("[SERVICE_WORKER] controllerchange", { scope: registration.scope });
+        });
         registration.update().catch(() => {});
       })
       .catch((error) => {
