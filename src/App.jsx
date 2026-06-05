@@ -155,6 +155,7 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .filter(Boolean);
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 const LAUNCH_TIMING_LOG_KEY = "bishbash.launchTiming.v1";
+const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;
 
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
@@ -6690,22 +6691,73 @@ function Overlay({
   onFakeLauncherLaunch,
   onContinueToApp,
 }) {
+  const [showLauncherPreparingFallback, setShowLauncherPreparingFallback] = useState(false);
+  const launcherPreparingPaintedRef = useRef(false);
   const launcherInterceptionClass = overlay?.launchSource === "fake_launcher" || overlay?.versionId
     ? "launcher-interception-card"
     : "";
 
+  useEffect(() => {
+    if (overlay.type !== "launcher-preparing") {
+      setShowLauncherPreparingFallback(false);
+      launcherPreparingPaintedRef.current = false;
+      return undefined;
+    }
+
+    const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+    launcherPreparingPaintedRef.current = false;
+    setShowLauncherPreparingFallback(false);
+    debugLaunch("[LAUNCHER_PREPARING_DELAY_STARTED]", {
+      currentPath: typeof window === "undefined" ? route?.path : window.location.pathname,
+      routeKind: route?.kind,
+      routePath: route?.path,
+      versionId: overlay.versionId,
+      launcherContext: overlay.versionId,
+      overlayTypeBefore: overlay.type,
+      delayMs: LAUNCHER_PREPARING_VISIBLE_DELAY_MS,
+      basePath: BASE_PATH,
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      launcherPreparingPaintedRef.current = true;
+      setShowLauncherPreparingFallback(true);
+      const elapsedMs = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt);
+      debugLaunch("[LAUNCHER_PREPARING_PAINTED]", {
+        currentPath: window.location.pathname,
+        routeKind: route?.kind,
+        routePath: route?.path,
+        versionId: overlay.versionId,
+        launcherContext: overlay.versionId,
+        overlayTypeAfter: overlay.type,
+        elapsedMs,
+        basePath: BASE_PATH,
+      });
+    }, LAUNCHER_PREPARING_VISIBLE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (!launcherPreparingPaintedRef.current) {
+        const elapsedMs = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt);
+        debugLaunch("[LAUNCHER_PREPARING_CANCELLED_BEFORE_PAINT]", {
+          currentPath: typeof window === "undefined" ? route?.path : window.location.pathname,
+          routeKind: route?.kind,
+          routePath: route?.path,
+          versionId: overlay.versionId,
+          launcherContext: overlay.versionId,
+          elapsedMs,
+          basePath: BASE_PATH,
+        });
+      }
+    };
+  }, [overlay.activationKey, overlay.type, overlay.versionId, route?.kind, route?.path]);
+
   if (overlay.type === "launcher-preparing") {
+    if (!showLauncherPreparingFallback) return null;
     return (
-      <PremiumCardScreen
-        type="empty"
-        greeting={version?.name ?? "MyBishBash"}
-        icon="heart"
-        headline="Getting your card ready..."
-        subtitle="One moment."
-        actions={[]}
-        launcherVersions={[]}
-        onDashboard={onDashboard}
-        className={launcherInterceptionClass}
+      <div
+        aria-hidden="true"
+        className={`launcher-preparing-placeholder ${launcherInterceptionClass}`.trim()}
+        data-testid="launcher-preparing-placeholder"
       />
     );
   }

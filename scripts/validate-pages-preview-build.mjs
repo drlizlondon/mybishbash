@@ -26,6 +26,8 @@ assert.ok(appBundlePath, "index.html references the preview app bundle");
 const appBundle = readFileSync(`dist/${appBundlePath}`, "utf8");
 assert.match(appBundle, /continue-to-app-card/);
 assert.match(appBundle, /CONTINUE-TO-APP DISPLAYED|routing to ContinueToAppCard/);
+assert.doesNotMatch(appBundle, /Getting your card ready/);
+assert.doesNotMatch(appBundle, /One moment\./);
 
 for (const launcherId of ["safari", "youtube", "instagram"]) {
   const manifest = readJson(`dist/launchers/${launcherId}/manifest.webmanifest`);

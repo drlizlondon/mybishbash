@@ -30,7 +30,7 @@ function personalCard(id: string, title: string) {
     theme: 'Minimal',
     icon: 'heart',
     frequency: 'once_daily',
-    timingWindows: ['morning', 'day', 'evening'],
+    timingWindows: ['morning', 'day', 'evening', 'night'],
     paused: false,
     disliked: false,
     deletedAt: null,
@@ -99,6 +99,8 @@ async function openFromFakeHomeLauncher(page: Page) {
   await expect(page.getByRole('link', { name: 'Open Safari launcher' })).toBeVisible();
   await page.getByRole('link', { name: 'Open Safari launcher' }).click();
   await expect(page).toHaveURL(/\/mybishbash(?:-preview)?\/intercept\/safari$/);
+  await expect(page.getByText('Getting your card ready...', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('One moment.', { exact: true })).toHaveCount(0);
 }
 
 async function readVisibleStep(page: Page): Promise<OverlayStep> {

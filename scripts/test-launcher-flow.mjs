@@ -35,6 +35,13 @@ assert.deepEqual(
 
 assert.equal(LAUNCHER_DATA_WAIT_TIMEOUT_MS <= 300, true, "Launcher data wait timeout stays within perceived-performance budget");
 assert.match(appSource, /initialRoute\.kind === "intercept" \? buildFakeLauncherPreparingOverlay\(initialRoute\.versionId\) : null/);
+assert.match(appSource, /const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;/);
+assert.match(appSource, /window\.setTimeout\(\(\) => \{/);
+assert.match(appSource, /setShowLauncherPreparingFallback\(true\);/);
+assert.match(appSource, /\}, LAUNCHER_PREPARING_VISIBLE_DELAY_MS\);/);
+assert.match(appSource, /data-testid="launcher-preparing-placeholder"/);
+assert.doesNotMatch(appSource, /headline="Getting your card ready\.\.\."/);
+assert.doesNotMatch(appSource, /subtitle="One moment\."/);
 assert.match(appSource, /selectPersonalFirstLauncherCard/);
 assert.doesNotMatch(appSource, /selectWeightedLauncherCard/);
 assert.doesNotMatch(cardSelectionSource, /selectWeightedLauncherCard/);
