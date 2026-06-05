@@ -1,6 +1,6 @@
 # GitHub Pages Branch Preview
 
-This branch uses a separate GitHub Pages project for installed-PWA testing before merging to `main`.
+The permanent `staging` branch uses a separate GitHub Pages project for installed-PWA testing before merging to `main`.
 
 Production stays at:
 
@@ -52,7 +52,7 @@ PAGES_PREVIEW_APP_NAME=MyBishBash Test
 PAGES_PREVIEW_SHORT_NAME=BishBash Test
 ```
 
-Run the manual workflow from the branch you want to test:
+Push to `staging` to deploy the preview automatically, or run the manual workflow from `staging`:
 
 ```text
 Deploy GitHub Pages Preview
