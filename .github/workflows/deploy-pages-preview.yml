@@ -1,0 +1,62 @@
+name: Deploy GitHub Pages Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    env:
+      PAGES_PREVIEW_REPOSITORY: ${{ vars.PAGES_PREVIEW_REPOSITORY || 'drlizlondon/mybishbash-preview' }}
+      PAGES_PREVIEW_ORIGIN: ${{ vars.PAGES_PREVIEW_ORIGIN || 'https://drlizlondon.github.io' }}
+      PAGES_PREVIEW_BASE_PATH: ${{ vars.PAGES_PREVIEW_BASE_PATH || '/mybishbash-preview/' }}
+      PAGES_PREVIEW_APP_NAME: ${{ vars.PAGES_PREVIEW_APP_NAME || 'MyBishBash Test' }}
+      PAGES_PREVIEW_SHORT_NAME: ${{ vars.PAGES_PREVIEW_SHORT_NAME || 'BishBash Test' }}
+    steps:
+      - name: Checkout preview branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build preview artifact
+        run: npm run build:pages-preview
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
+          VITE_APP_VERSION: preview-${{ github.sha }}
+
+      - name: Deploy to separate GitHub Pages preview repository
+        env:
+          PAGES_PREVIEW_TOKEN: ${{ secrets.PAGES_PREVIEW_TOKEN }}
+        run: |
+          test -n "$PAGES_PREVIEW_TOKEN"
+          test -n "$PAGES_PREVIEW_REPOSITORY"
+          touch dist/.nojekyll
+          git -C dist init
+          git -C dist config user.name "github-actions[bot]"
+          git -C dist config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C dist checkout -b gh-pages
+          git -C dist add .
+          git -C dist commit -m "Deploy MyBishBash preview ${GITHUB_SHA}"
+          git -C dist remote add origin "https://x-access-token:${PAGES_PREVIEW_TOKEN}@github.com/${PAGES_PREVIEW_REPOSITORY}.git"
+          git -C dist push --force origin gh-pages
+
+      - name: Preview URL
+        run: |
+          echo "Preview home: ${PAGES_PREVIEW_ORIGIN}${PAGES_PREVIEW_BASE_PATH}home"
+          echo "Safari install: ${PAGES_PREVIEW_ORIGIN}${PAGES_PREVIEW_BASE_PATH}install/safari/"
