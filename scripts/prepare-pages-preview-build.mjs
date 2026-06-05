@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join, relative } from "node:path";
 
 const DIST_DIR = "dist";
@@ -10,6 +11,8 @@ const previewBasePath = normalizeBasePath(process.env.PAGES_PREVIEW_BASE_PATH ||
 const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "MyBishBash Test";
 const previewShortName = process.env.PAGES_PREVIEW_SHORT_NAME || "BishBash Test";
 const previewRoot = `${previewOrigin}${previewBasePath.replace(/\/$/, "")}`;
+const sourceSha = process.env.VITE_SOURCE_SHA || process.env.GITHUB_SHA || gitSourceSha();
+const previewVersion = process.env.VITE_APP_VERSION || (sourceSha ? `preview-${sourceSha}` : "preview-local");
 
 const textExtensions = new Set([
   ".css",
@@ -26,6 +29,7 @@ const textExtensions = new Set([
 rewriteDistPaths();
 rewriteHtmlAppTitles();
 rewriteManifests();
+rewriteVersionMarker();
 writeFileSync(
   join(DIST_DIR, "preview-build.json"),
   `${JSON.stringify(
@@ -38,6 +42,9 @@ writeFileSync(
       homeUrl: `${previewRoot}/home`,
       safariInstallUrl: `${previewRoot}/install/safari/`,
       safariStartUrl: `${previewRoot}/intercept/safari`,
+      sourceSha,
+      sourceVersion: previewVersion,
+      builtAt: new Date().toISOString(),
     },
     null,
     2,
@@ -62,6 +69,13 @@ function rewriteDistPaths() {
       writeFileSync(filePath, next);
     }
   }
+
+  const serviceWorkerPath = join(DIST_DIR, "service-worker.js");
+  const serviceWorker = readFileSync(serviceWorkerPath, "utf8");
+  writeFileSync(
+    serviceWorkerPath,
+    serviceWorker.replace(/const SERVICE_WORKER_VERSION = "dev";/, `const SERVICE_WORKER_VERSION = ${JSON.stringify(previewVersion)};`),
+  );
 }
 
 function rewriteHtmlAppTitles() {
@@ -116,6 +130,24 @@ function rewriteManifests() {
   }
 }
 
+function rewriteVersionMarker() {
+  const versionPath = join(DIST_DIR, "version.json");
+  const version = JSON.parse(readFileSync(versionPath, "utf8"));
+  writeFileSync(
+    versionPath,
+    `${JSON.stringify(
+      {
+        ...version,
+        version: previewVersion,
+        sourceSha,
+        builtAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 function* listFiles(dir) {
   for (const entry of readdirSync(dir)) {
     const filePath = join(dir, entry);
@@ -143,4 +175,12 @@ function normalizeBasePath(value) {
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function gitSourceSha() {
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
 }

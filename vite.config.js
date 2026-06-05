@@ -1,12 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appVersion = process.env.VITE_APP_VERSION || new Date().toISOString();
+const sourceSha = process.env.VITE_SOURCE_SHA || process.env.VITE_GIT_SHA || getGitSha();
 
 const EDITABLE_CONTENT_FILES = {
   "/__save-landing-content": ["src/content/landingContent.js", "landingContent"],
@@ -75,13 +77,15 @@ function appVersionPlugin() {
   return {
     name: "mybishbash-version",
     generateBundle() {
+      const builtAt = new Date().toISOString();
       this.emitFile({
         type: "asset",
         fileName: "version.json",
         source: JSON.stringify(
           {
             version: appVersion,
-            builtAt: appVersion,
+            sourceSha,
+            builtAt,
           },
           null,
           2,
@@ -89,6 +93,14 @@ function appVersionPlugin() {
       });
     },
   };
+}
+
+function getGitSha() {
+  try {
+    return execSync("git rev-parse HEAD", { cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
 }
 
 export default defineConfig({

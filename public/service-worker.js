@@ -1,10 +1,12 @@
-const CACHE_PREFIX = "mybishbash-";
+const APP_BASE = "/mybishbash/";
+const APP_BASE_SLUG = APP_BASE.replace(/^\/+|\/+$/g, "") || "root";
+const SERVICE_WORKER_VERSION = "dev";
+const CACHE_PREFIX = `mybishbash-${APP_BASE_SLUG}-`;
 const LEGACY_CACHE_PREFIX = "bish" + "bash-";
 const LEGACY_APP_BASE = "/" + "bish" + "bash/";
-const HTML_CACHE = `${CACHE_PREFIX}html-v1`;
-const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v1`;
-const MEDIA_CACHE = `${CACHE_PREFIX}media-v1`;
-const APP_BASE = "/mybishbash/";
+const HTML_CACHE = `${CACHE_PREFIX}html-${SERVICE_WORKER_VERSION}`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${SERVICE_WORKER_VERSION}`;
+const MEDIA_CACHE = `${CACHE_PREFIX}media-${SERVICE_WORKER_VERSION}`;
 const INDEX_URL = "/mybishbash/index.html";
 
 const MEDIA_EXTENSIONS = [
@@ -138,7 +140,7 @@ function normalizeNotificationUrl(rawUrl) {
       const route = url.searchParams.get("route");
       if (route) {
         const normalizedRoute = route.startsWith("/") ? route : `/${route}`;
-        url.pathname = `/mybishbash${normalizedRoute}`;
+        url.pathname = `${APP_BASE.replace(/\/$/, "")}${normalizedRoute}`;
         url.searchParams.delete("route");
       }
     }
@@ -147,7 +149,7 @@ function normalizeNotificationUrl(rawUrl) {
       url.pathname = url.pathname.replace(LEGACY_APP_BASE, "/mybishbash/");
     }
 
-    if (!url.pathname.startsWith("/mybishbash/")) return fallback.toString();
+    if (!url.pathname.startsWith(APP_BASE)) return fallback.toString();
     return url.toString();
   } catch (error) {
     console.warn("[NOTIFICATIONS] Invalid notification URL", rawUrl, error);

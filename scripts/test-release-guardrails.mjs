@@ -53,6 +53,7 @@ assertNoMatch("FakeLauncherBar does not navigate by itself", fakeLauncherBarSour
 assertMatch("/intercept/:launcherId still starts the interception flow", appSource, /beginInterceptionFlow\(route\.versionId/);
 assertMatch("continue-to-app still opens the real destination through openDestinationApp", appSource, /onContinueToApp=\{\(versionId, options\) => openDestinationApp\(versionId, options\)\}/);
 assertMatch("openDestinationApp is the single destination href assignment", appSource, /window\.location\.assign\(href\)/);
+assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
 assertNoMatch("old weighted launcher selector is not used by the app", appSource, /selectWeightedLauncherCard\(\{/);
 assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
 assertMatch("App uses personal-first fallback for launcher and home decisions", appSource, /selectPersonalFirstLauncherCard\(\{[\s\S]{0,500}cards,[\s\S]{0,500}timezone: profile\.timezone/);
@@ -78,8 +79,13 @@ assertNoMatch("pack Continue does not hide/dislike/delete the card", packContinu
 
 const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
 assertMatch("I really like this one logs positive feedback", packPositiveHandlerSource, /event_type: "pack_card_liked"[\s\S]{0,700}action_taken: "liked"/);
+assertMatch("I really like this one completes the reveal instead of cycling pack cards", packPositiveHandlerSource, /handleRevealCompletion\(\);/);
 assertNoMatch("I really like this one does not hide/dislike/delete the card", packPositiveHandlerSource, /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|deletedAt|paused|disliked:/);
 assertNoMatch("launcherState keeps interruption logic separate from library pack availability", launcherStateSource, /isPackCardAvailable/);
+
+const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default App;");
+assertMatch("ContinueToAppCard renders the continue-to-app test id", continueCardSource, /data-testid="continue-to-app-card"/);
+assertNoMatch("ContinueToAppCard does not assign window.location directly", continueCardSource, /window\.location\.assign/);
 
 const now = new Date("2026-01-01T13:00:00.000Z");
 const personal = (id, overrides = {}) => ({
