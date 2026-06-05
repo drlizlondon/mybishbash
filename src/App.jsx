@@ -7271,13 +7271,10 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onContinueToApp, allowBackHome = false, onDashboard, className = "" }) {
-  const actions = version
-    ? [
-        { label: `Continue to ${version.name}`, variant: "primary", onClick: () => onContinueToApp?.(version.id, { source: "action_card_success", reason: "user_pressed_continue" }) },
-        ...(allowBackHome ? [{ label: "Back home", variant: "secondary", onClick: onClose }] : []),
-      ]
-    : allowBackHome ? [{ label: "Back home", variant: "primary", onClick: onClose }] : [];
+function ActionSuccessOverlay({ version, onClose, onDashboard, className = "" }) {
+  const actions = [
+    { label: "Back home", variant: "primary", onClick: onClose },
+  ];
 
   return (
     <PremiumCardScreen

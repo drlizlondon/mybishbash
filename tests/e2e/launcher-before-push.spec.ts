@@ -296,7 +296,7 @@ for (const launcherId of Object.keys(destinationByLauncher) as LauncherId[]) {
   }
 }
 
-test('before-push action card after Do Something Else resolves to a launcher continue state', async ({ page }) => {
+test('before-push action card without launchUrl completes and returns home instead of original launcher', async ({ page }) => {
   await seedState(page, {
     cards: [personalCard('action-flow-personal', 'Action flow personal')],
     actionCards: [...hiddenStarterActionCards(), actionCard('action-flow-no-url', 'Action flow no URL')],
@@ -311,9 +311,12 @@ test('before-push action card after Do Something Else resolves to a launcher con
   await expect(page.getByTestId('card-overlay-action')).toBeVisible();
   await page.getByTestId('card-action-i-ll-do-this').click();
   await expect(page.getByTestId('card-overlay-action')).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-instagram')).toBeVisible();
-  await page.getByTestId('card-action-continue-to-instagram').click();
-  await expectDestinationAttempt(page, 'instagram');
+  await expect(page.getByTestId('card-overlay-action').getByRole('heading', { name: 'Nice choice.' })).toBeVisible();
+  await expect(page.getByTestId('card-action-continue-to-instagram')).toHaveCount(0);
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
+  await page.getByTestId('card-action-back-home').click();
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
 });
 
 test('before-push launcher state does not leak between sequential launches', async ({ page }) => {

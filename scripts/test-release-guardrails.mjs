@@ -63,6 +63,8 @@ assertNoMatch("interruption on with no layer-one card uses caught-up instead of 
 assertMatch("fake launcher empty state uses caught-up headline", appSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
 assertMatch("fake launcher empty state has launcher-specific Continue", appSource, /label: `Continue to \$\{appName\}`/);
 assertMatch("real app empty state stays softer than fake launcher empty state", appSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
+assertNoMatch("action success does not continue to the original launcher", appSource, /source: "action_card_success"[\s\S]{0,220}onContinueToApp/);
+assertMatch("action success returns home after no-url alternatives", appSource, /function ActionSuccessOverlay[\s\S]{0,180}label: "Back home"/);
 
 const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");
 assertMatch("pack card positive action says I really like this one", launcherCardActionsSource, /label: "I really like this one", variant: "secondary"/);
