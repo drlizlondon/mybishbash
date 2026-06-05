@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { assertKnownLauncherId } from "./launcherRegistry";
 
 function requireSupabase() {
   if (!supabase) {
@@ -596,6 +597,8 @@ export async function fetchAdminLauncherConfigs() {
 }
 
 export async function saveAdminLauncherConfig(config, userId) {
+  assertKnownLauncherId(config?.id);
+
   const client = requireSupabase();
   const now = new Date().toISOString();
   const payload = {

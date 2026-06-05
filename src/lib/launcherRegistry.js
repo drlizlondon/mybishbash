@@ -183,6 +183,12 @@ export function isKnownLauncher(launcherId) {
   return Boolean(getLauncherConfig(launcherId));
 }
 
+export function assertKnownLauncherId(launcherId) {
+  if (!isKnownLauncher(launcherId)) {
+    throw new Error("Only supported launcher IDs can be saved as live launcher configs.");
+  }
+}
+
 export function getEnabledLaunchers() {
   return FAKE_APP_LAUNCHERS.filter((launcher) => launcher.enabled);
 }

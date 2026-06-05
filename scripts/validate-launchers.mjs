@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { FAKE_APP_LAUNCHERS, buildManifestForLauncher, mergeLauncherConfig } from "../src/lib/launcherRegistry.js";
+import {
+  FAKE_APP_LAUNCHERS,
+  assertKnownLauncherId,
+  buildManifestForLauncher,
+  mergeLauncherConfig,
+  mergeLauncherConfigs,
+} from "../src/lib/launcherRegistry.js";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFields = [
@@ -92,6 +98,36 @@ assert.equal(instagramWithEmptyCloudFields.appUrl, instagram.appUrl);
 assert.equal(instagramWithEmptyCloudFields.iosAppUrl, instagram.iosAppUrl);
 assert.equal(instagramWithEmptyCloudFields.androidIntentUrl, instagram.androidIntentUrl);
 assert.equal(instagramWithEmptyCloudFields.webFallbackUrl, instagram.webFallbackUrl);
+
+const launchersWithUnknownCloudConfig = mergeLauncherConfigs([
+  {
+    id: "tiktok",
+    displayName: "TikTok",
+    enabled: true,
+    hqVisible: true,
+    webFallbackUrl: "https://www.tiktok.com",
+  },
+  {
+    id: "instagram",
+    displayName: "Instagram Test Name",
+  },
+]);
+assert.equal(
+  launchersWithUnknownCloudConfig.some((launcher) => launcher.id === "tiktok"),
+  false,
+  "Unknown HQ launcher config IDs must not become live launchers",
+);
+assert.equal(
+  launchersWithUnknownCloudConfig.find((launcher) => launcher.id === "instagram")?.displayName,
+  "Instagram Test Name",
+  "Known HQ launcher configs should still override supported launchers",
+);
+
+assert.throws(
+  () => assertKnownLauncherId("tiktok"),
+  /Only supported launcher IDs can be saved as live launcher configs/,
+  "Unknown launcher IDs must be rejected before Supabase save",
+);
 
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
 assert.match(syncSource, /withTimeout\(query,\s*1200,\s*\{ data: \[\], error: null \}/);
