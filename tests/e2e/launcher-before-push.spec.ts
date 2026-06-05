@@ -73,9 +73,12 @@ function hiddenStarterActionCards() {
 function launcherSettings(interruptionOn: boolean) {
   return {
     mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-    safari: { useInterruptionPack: interruptionOn, interruptionPaused: false, interruptionPackId: '' },
-    youtube: { useInterruptionPack: interruptionOn, interruptionPaused: false, interruptionPackId: '' },
-    instagram: { useInterruptionPack: interruptionOn, interruptionPaused: false, interruptionPackId: '' },
+    ...Object.fromEntries(
+      Object.keys(destinationByLauncher).map((launcherId) => [
+        launcherId,
+        { useInterruptionPack: interruptionOn, interruptionPaused: false, interruptionPackId: '' },
+      ]),
+    ),
   };
 }
 

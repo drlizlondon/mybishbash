@@ -58,6 +58,7 @@ const registry = {
   launchers: [
     { id: "mybishbash", launchPath: "/home" },
     { id: "safari", launchPath: "/intercept/safari" },
+    { id: "bbc-news", launchPath: "/intercept/bbc-news" },
   ],
 };
 
@@ -73,6 +74,21 @@ assert.equal(
 assert.equal(
   context.resolveLauncherIdFromPath("/mybishbash/safari/index.html", registry, "/mybishbash"),
   "safari",
+);
+assert.equal(
+  context.resolveLauncherIdFromPath("/mybishbash-preview/install/bbc-news/index.html", registry, "/mybishbash-preview"),
+  "bbc-news",
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(context.fallbackFakeLauncher("bbc-news", "/mybishbash-preview"))),
+  {
+    id: "bbc-news",
+    displayName: "Bbc News",
+    name: "Bbc News",
+    iconSrc: "/mybishbash-preview/icons/mybishbash-cover.png",
+    manifestPath: "/mybishbash-preview/launchers/bbc-news/manifest.webmanifest",
+    launchPath: "/intercept/bbc-news",
+  },
 );
 const safariPayload = context.buildLauncherPayload({
   previewNamespace: "mybishbash",

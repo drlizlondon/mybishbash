@@ -905,6 +905,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
   const [launcherFilter, setLauncherFilter] = useState("all");
   const [identityFilter, setIdentityFilter] = useState("all");
   const [displayFilter, setDisplayFilter] = useState("all");
+  const supportedLauncherNames = FAKE_APP_LAUNCHERS.map((launcher) => launcher.displayName).join(", ");
   const launcherIds = Array.from(new Set(telemetry.events.map(getEventLauncher).filter(Boolean))).sort();
   const filtered = telemetry.events.filter((event) => {
     const launcherId = getEventLauncher(event);
@@ -923,7 +924,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
         title="Supported Launcher Performance"
         subtitle="Install views, installs, interruption opens, Do Something Else, Continue to app, and settings for supported launchers."
       />
-      <GlassPanel title="Supported Launchers" subtitle="HQ can edit Safari, YouTube and Instagram only. New apps need a reviewed release because routing, install pages, manifests, interruption contexts and tests are still static-ID based. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.">
+      <GlassPanel title="Supported Launchers" subtitle={`HQ can edit supported code-reviewed launchers only: ${supportedLauncherNames}. New apps need a reviewed release because routing, install pages, manifests, interruption contexts and tests are still static-ID based. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
         <div className="grid gap-4 xl:grid-cols-3">
           {(launchers.length ? launchers : FAKE_APP_LAUNCHERS).map((launcher) => (
             <LauncherConfigCard
@@ -1042,6 +1043,7 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
 
   const packOptions = interruptionPacks.filter((pack) => pack.targetApp === launcher.id || pack.linkedVersionId === launcher.id);
   const iconPreview = form.customIconSrc || form.iconSrc;
+  const needsQa = form.enabled === false && form.hqVisible !== false;
 
   return (
     <article className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-sm">
@@ -1050,7 +1052,8 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}</p>
           <h4 className="text-base font-semibold text-slate-950">{form.displayName || form.name}</h4>
-          <p className="text-xs text-slate-500">{form.enabled ? "Enabled" : "Disabled"} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
+          <p className="text-xs text-slate-500">{form.enabled ? "Live for users" : "Not live for users"} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
+          {needsQa ? <p className="mt-1 text-xs font-semibold text-amber-700">Needs icon/device QA before enabling</p> : null}
         </div>
       </div>
       <div className="mt-4 grid gap-2">

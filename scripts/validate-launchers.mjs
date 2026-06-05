@@ -7,6 +7,7 @@ import {
   buildManifestForLauncher,
   mergeLauncherConfig,
   mergeLauncherConfigs,
+  sanitizeLauncherUrl,
 } from "../src/lib/launcherRegistry.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -25,6 +26,28 @@ const requiredFields = [
   "enabled",
   "hqVisible",
 ];
+const launcherIds = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
+const liveLauncherIds = ["safari", "youtube", "instagram"];
+const acceptedPhaseTwoLauncherIds = ["chrome", "reddit", "linkedin", "whatsapp", "bbc-news", "duolingo"];
+
+assert.equal(new Set(launcherIds).size, launcherIds.length, "Launcher IDs must be unique");
+for (const id of acceptedPhaseTwoLauncherIds) {
+  assert.equal(launcherIds.includes(id), true, `${id} should be a supported code-reviewed launcher`);
+}
+assert.equal(launcherIds.includes("tiktok"), false, "TikTok should wait for a follow-up branch");
+assert.equal(launcherIds.includes("hinge"), false, "Hinge should wait for a follow-up branch");
+
+for (const id of liveLauncherIds) {
+  const launcher = FAKE_APP_LAUNCHERS.find((item) => item.id === id);
+  assert.equal(launcher?.enabled, true, `${id} should remain enabled`);
+  assert.equal(launcher?.hqVisible, true, `${id} should remain visible in HQ`);
+}
+
+for (const id of acceptedPhaseTwoLauncherIds) {
+  const launcher = FAKE_APP_LAUNCHERS.find((item) => item.id === id);
+  assert.equal(launcher?.enabled, false, `${id} should stay disabled until icon/device QA`);
+  assert.equal(launcher?.hqVisible, true, `${id} should stay visible in HQ for review`);
+}
 
 for (const launcher of FAKE_APP_LAUNCHERS) {
   for (const field of requiredFields) {
@@ -123,6 +146,10 @@ assert.equal(
   "Known HQ launcher configs should still override supported launchers",
 );
 
+assert.equal(sanitizeLauncherUrl("googlechromes://www.google.com"), "googlechromes://www.google.com");
+assert.equal(sanitizeLauncherUrl("tiktok://"), "");
+assert.equal(sanitizeLauncherUrl("hinge://"), "");
+
 assert.throws(
   () => assertKnownLauncherId("tiktok"),
   /Only supported launcher IDs can be saved as live launcher configs/,
@@ -131,5 +158,22 @@ assert.throws(
 
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
 assert.match(syncSource, /withTimeout\(query,\s*1200,\s*\{ data: \[\], error: null \}/);
+
+const appSource = readFileSync(resolve(root, "src", "App.jsx"), "utf8");
+assert.match(
+  appSource,
+  /filter\(\(version\) => Boolean\(version\?\.realAppLabel && version\.enabled !== false\)\)/,
+  "Fake launcher bar options must exclude disabled launchers",
+);
+assert.match(
+  appSource,
+  /installableHomeScreenVersions = Object\.values\(homeScreenVersions\)\.filter\([\s\S]*version\.id === "mybishbash" \|\| version\.enabled !== false/,
+  "Settings install options must exclude disabled launchers",
+);
+assert.match(
+  appSource,
+  /const selectedPreviewVersion = installableHomeScreenVersions\.some/,
+  "Settings preview must fall back when the selected launcher is disabled",
+);
 
 console.log(`Validated ${FAKE_APP_LAUNCHERS.length} launchers.`);

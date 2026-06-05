@@ -29,26 +29,31 @@ assert.match(appBundle, /CONTINUE-TO-APP DISPLAYED|routing to ContinueToAppCard/
 assert.doesNotMatch(appBundle, /Getting your card ready/);
 assert.doesNotMatch(appBundle, /One moment\./);
 
-for (const launcherId of ["safari", "youtube", "instagram"]) {
+const launcherRegistry = readJson("dist/launchers/registry.json");
+const supportedLauncherIds = launcherRegistry.launchers.map((launcher) => launcher.id);
+assert.ok(supportedLauncherIds.length > 3, "preview validation should cover expanded supported launchers");
+
+for (const launcherId of supportedLauncherIds) {
   const manifest = readJson(`dist/launchers/${launcherId}/manifest.webmanifest`);
   assert.match(manifest.name, /MyBishBash Test$/);
   assert.equal(manifest.start_url, `${previewRoot}/intercept/${launcherId}`);
   assert.equal(manifest.scope, `${previewRoot}/`);
+
+  const installHtml = readFileSync(`dist/install/${launcherId}/index.html`, "utf8");
+  assert.match(installHtml, new RegExp(`href="${escapeRegExp(previewBasePath)}launchers/${escapeRegExp(launcherId)}/manifest\\.webmanifest"`));
+  assert.match(installHtml, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
+
+  const legacyShell = readFileSync(`dist/${launcherId}/index.html`, "utf8");
+  assert.match(legacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
+  assert.match(legacyShell, new RegExp(`launcherContext "<span data-launcher-context>${escapeRegExp(launcherId)}</span>"`));
 }
-
-const safariInstall = readFileSync("dist/install/safari/index.html", "utf8");
-assert.match(safariInstall, new RegExp(`href="${escapeRegExp(previewBasePath)}launchers/safari/manifest\\.webmanifest"`));
-assert.match(safariInstall, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/safari"`));
-
-const safariLegacyShell = readFileSync("dist/safari/index.html", "utf8");
-assert.match(safariLegacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/safari"`));
-assert.match(safariLegacyShell, /launcherContext "<span data-launcher-context>safari<\/span>"/);
 
 const installScript = readFileSync("dist/install/install.js", "utf8");
 assert.match(installScript, /detectAppBasePath\(window\.location\.pathname\)/);
 assert.match(installScript, /resolveLauncherIdFromPath\(window\.location\.pathname, registry, appBasePath\)/);
 assert.match(installScript, /event_type: "launcher_navigation_resolved"/);
 assert.doesNotMatch(installScript, /pathParts\[0\] === "mybishbash"/);
+assert.doesNotMatch(installScript, /\["safari", "youtube", "instagram"\]/);
 await validatePreviewSafariClick(installScript, previewRoot);
 
 const previewBuild = readJson("dist/preview-build.json");
