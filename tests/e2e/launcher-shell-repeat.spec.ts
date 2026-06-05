@@ -21,7 +21,7 @@ declare global {
 }
 
 const now = '2026-06-01T12:00:00.000Z';
-const launcherIds = ['safari', 'instagram', 'youtube', 'chrome', 'reddit', 'linkedin', 'whatsapp', 'bbc-news', 'duolingo'] as const;
+const launcherIds = ['safari', 'instagram', 'youtube'] as const;
 type LauncherId = (typeof launcherIds)[number];
 
 function packCard(id: string, promptText: string, sourcePackId = 'downloaded-shell-pack') {

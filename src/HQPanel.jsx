@@ -1043,6 +1043,7 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
 
   const packOptions = interruptionPacks.filter((pack) => pack.targetApp === launcher.id || pack.linkedVersionId === launcher.id);
   const iconPreview = form.customIconSrc || form.iconSrc;
+  const needsQa = form.enabled === false && form.hqVisible !== false;
 
   return (
     <article className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-sm">
@@ -1051,7 +1052,8 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}</p>
           <h4 className="text-base font-semibold text-slate-950">{form.displayName || form.name}</h4>
-          <p className="text-xs text-slate-500">{form.enabled ? "Enabled" : "Disabled"} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
+          <p className="text-xs text-slate-500">{form.enabled ? "Live for users" : "Not live for users"} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
+          {needsQa ? <p className="mt-1 text-xs font-semibold text-amber-700">Needs icon/device QA before enabling</p> : null}
         </div>
       </div>
       <div className="mt-4 grid gap-2">

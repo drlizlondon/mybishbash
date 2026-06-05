@@ -13,12 +13,6 @@ const destinationByLauncher = {
   safari: /^https:\/\/www\.google\.com$/,
   youtube: /^https:\/\/www\.youtube\.com/,
   instagram: /^https:\/\/www\.instagram\.com/,
-  chrome: /^https:\/\/www\.google\.com$/,
-  reddit: /^https:\/\/www\.reddit\.com/,
-  linkedin: /^https:\/\/www\.linkedin\.com\/feed\//,
-  whatsapp: /^https:\/\/web\.whatsapp\.com\//,
-  'bbc-news': /^https:\/\/www\.bbc\.co\.uk\/news/,
-  duolingo: /^https:\/\/www\.duolingo\.com\/learn/,
 };
 
 type LauncherId = keyof typeof destinationByLauncher;

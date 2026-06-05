@@ -1192,7 +1192,7 @@ function App() {
             DEFAULT_HOME_SCREEN_VERSIONS[launcherContext],
           launcherBehaviorSettings[launcherContext],
         );
-        return version?.realAppLabel ? [version] : [];
+        return version?.realAppLabel && version.enabled !== false ? [version] : [];
       }
 
       // Normal MyBishBash app
@@ -1204,7 +1204,7 @@ function App() {
             launcherBehaviorSettings[versionId],
           ),
         )
-        .filter((version) => Boolean(version?.realAppLabel));
+        .filter((version) => Boolean(version?.realAppLabel && version.enabled !== false));
     }, [
       launcherContext,
       homeScreenVersions,
@@ -6248,6 +6248,12 @@ function SettingsPanel({
     .filter((version) => version.id !== "mybishbash" && version.enabled !== false)
     .map((version) => version.name ?? version.displayName ?? version.id)
     .join(", ");
+  const installableHomeScreenVersions = Object.values(homeScreenVersions).filter(
+    (version) => version.id === "mybishbash" || version.enabled !== false,
+  );
+  const selectedPreviewVersion = installableHomeScreenVersions.some((version) => version.id === previewVersionId)
+    ? previewVersionId
+    : "mybishbash";
 
   return (
     <section className="panel-section">
@@ -6317,17 +6323,17 @@ function SettingsPanel({
         <label className="field" style={{ marginBottom: "16px" }}>
           <select
             className="settings-input"
-            value={previewVersionId}
+            value={selectedPreviewVersion}
             onChange={(e) => setPreviewVersionId(e.target.value)}
           >
-            {Object.values(homeScreenVersions).map((v) => (
+            {installableHomeScreenVersions.map((v) => (
               <option key={v.id} value={v.id}>{v.name}</option>
             ))}
           </select>
         </label>
         <div className="home-screen-version-list">
           {(() => {
-            const version = homeScreenVersions[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[previewVersionId] ?? DEFAULT_HOME_SCREEN_VERSIONS.mybishbash;
+            const version = homeScreenVersions[selectedPreviewVersion] ?? DEFAULT_HOME_SCREEN_VERSIONS[selectedPreviewVersion] ?? DEFAULT_HOME_SCREEN_VERSIONS.mybishbash;
             const previewIcon = version.customIconSrc || version.iconSrc;
             const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
             const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
