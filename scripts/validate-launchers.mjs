@@ -80,6 +80,7 @@ assert.notEqual(normalLaunchEvent.event_type, "fake_launcher_opened");
 
 const safari = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "safari");
 const instagram = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "instagram");
+const whatsapp = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "whatsapp");
 assert.equal(
   safari.webFallbackUrl,
   "https://www.google.com",
@@ -122,6 +123,40 @@ assert.equal(instagramWithEmptyCloudFields.iosAppUrl, instagram.iosAppUrl);
 assert.equal(instagramWithEmptyCloudFields.androidIntentUrl, instagram.androidIntentUrl);
 assert.equal(instagramWithEmptyCloudFields.webFallbackUrl, instagram.webFallbackUrl);
 
+assert.equal(whatsapp.enabled, false, "WhatsApp must remain disabled until manual iPhone QA passes");
+assert.equal(whatsapp.hqVisible, true, "WhatsApp should remain visible in HQ for manual QA");
+assert.equal(whatsapp.iosAppUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.iosWebFallbackUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.webFallbackUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.manualUrl, "https://api.whatsapp.com/send");
+assert.match(whatsapp.androidIntentUrl, /^intent:\/\/send\/#Intent;scheme=whatsapp;package=com\.whatsapp;/);
+assert.match(whatsapp.androidIntentUrl, /S\.browser_fallback_url=https%3A%2F%2Fapi\.whatsapp\.com%2Fsend;end$/);
+assert.equal(whatsapp.androidWebFallbackUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.qaDestinationCandidates?.preferred, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.qaDestinationCandidates?.fallback, "https://api.whatsapp.com/send");
+assert.equal(
+  whatsapp.qaDestinationCandidates?.ios?.includes("whatsapp://"),
+  true,
+  "WhatsApp QA candidates should document whatsapp:// without making it the default runtime URL",
+);
+assert.equal(
+  whatsapp.qaDestinationCandidates?.ios?.includes("https://web.whatsapp.com/"),
+  true,
+  "WhatsApp QA candidates should keep web.whatsapp.com documented as a weak iPhone comparison case",
+);
+
+const whatsappManifestPath = resolve(root, "public", "launchers", "whatsapp", "manifest.webmanifest");
+const whatsappInstallPath = resolve(root, "public", "install", "whatsapp", "index.html");
+assert.equal(existsSync(whatsappManifestPath), true, "WhatsApp manifest file missing");
+assert.equal(existsSync(whatsappInstallPath), true, "WhatsApp install page missing");
+const whatsappManifest = JSON.parse(readFileSync(whatsappManifestPath, "utf8"));
+assert.equal(whatsappManifest.start_url, "https://drlizlondon.github.io/mybishbash/intercept/whatsapp");
+assert.equal(whatsappManifest.display, "standalone");
+assert.match(
+  readFileSync(whatsappInstallPath, "utf8"),
+  /launcherContext "<span data-launcher-context>whatsapp<\/span>"/,
+);
+
 const launchersWithUnknownCloudConfig = mergeLauncherConfigs([
   {
     id: "tiktok",
@@ -147,6 +182,10 @@ assert.equal(
 );
 
 assert.equal(sanitizeLauncherUrl("googlechromes://www.google.com"), "googlechromes://www.google.com");
+assert.equal(sanitizeLauncherUrl("https://api.whatsapp.com/send"), "https://api.whatsapp.com/send");
+assert.equal(sanitizeLauncherUrl("https://wa.me/"), "https://wa.me/");
+assert.equal(sanitizeLauncherUrl(whatsapp.androidIntentUrl), whatsapp.androidIntentUrl);
+assert.equal(sanitizeLauncherUrl("whatsapp://"), "");
 assert.equal(sanitizeLauncherUrl("tiktok://"), "");
 assert.equal(sanitizeLauncherUrl("hinge://"), "");
 
