@@ -3,12 +3,20 @@ import { readFileSync } from "node:fs";
 
 const previewOrigin = normalizeOrigin(process.env.PAGES_PREVIEW_ORIGIN || "https://drlizlondon.github.io");
 const previewBasePath = normalizeBasePath(process.env.PAGES_PREVIEW_BASE_PATH || "/mybishbash-preview/");
+const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "MyBishBash Test";
 const previewRoot = `${previewOrigin}${previewBasePath.replace(/\/$/, "")}`;
 
 const appManifest = readJson("dist/manifest.webmanifest");
-assert.equal(appManifest.name, "MyBishBash Test");
+assert.equal(appManifest.name, previewAppName);
 assert.equal(appManifest.start_url, `${previewRoot}/home`);
 assert.equal(appManifest.scope, `${previewRoot}/`);
+
+const appHtml = readFileSync("dist/index.html", "utf8");
+assert.match(
+  appHtml,
+  new RegExp(`<meta\\s+[^>]*name=["']apple-mobile-web-app-title["'][^>]*content=["']${escapeRegExp(previewAppName)}["']`, "i"),
+);
+assert.match(appHtml, new RegExp(`<title>${escapeRegExp(previewAppName)}</title>`, "i"));
 
 for (const launcherId of ["safari", "youtube", "instagram"]) {
   const manifest = readJson(`dist/launchers/${launcherId}/manifest.webmanifest`);

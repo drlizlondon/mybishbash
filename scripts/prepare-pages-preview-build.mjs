@@ -24,6 +24,7 @@ const textExtensions = new Set([
 ]);
 
 rewriteDistPaths();
+rewriteHtmlAppTitles();
 rewriteManifests();
 writeFileSync(
   join(DIST_DIR, "preview-build.json"),
@@ -56,6 +57,23 @@ function rewriteDistPaths() {
         new RegExp(`${escapeRegExp(PRODUCTION_BASE_PATH.replace(/\/$/, ""))}(?=/|["'?#])`, "g"),
         previewBasePath.replace(/\/$/, ""),
       );
+
+    if (next !== original) {
+      writeFileSync(filePath, next);
+    }
+  }
+}
+
+function rewriteHtmlAppTitles() {
+  for (const filePath of listFiles(DIST_DIR)) {
+    if (!filePath.endsWith(".html")) continue;
+    const original = readFileSync(filePath, "utf8");
+    const next = original
+      .replace(
+        /(<meta\s+[^>]*name=["']apple-mobile-web-app-title["'][^>]*content=["'])[^"']*(["'][^>]*>)/gi,
+        `$1${previewAppName}$2`,
+      )
+      .replace(/<title>[\s\S]*?<\/title>/i, `<title>${previewAppName}</title>`);
 
     if (next !== original) {
       writeFileSync(filePath, next);
