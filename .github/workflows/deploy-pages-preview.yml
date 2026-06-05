@@ -1,6 +1,8 @@
 name: Deploy GitHub Pages Preview
 
 on:
+  push:
+    branches: ["codex/pages-first-launcher-flow"]
   workflow_dispatch:
 
 permissions:
