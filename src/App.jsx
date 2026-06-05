@@ -97,10 +97,9 @@ import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/l
 import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "./lib/launcherFlow";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
-  DEFAULT_WEIGHTED_FLOW_SETTINGS,
   buildCardExposureLookup,
-  getWeightedLauncherFlowGate,
-  selectWeightedLauncherCard,
+  DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS,
+  selectPersonalFirstLauncherCard,
 } from "./lib/cardSelection";
 import {
   DiagnosticsModal,
@@ -498,75 +497,6 @@ function isInterruptionSummaryEvent(event) {
   return ["intercept_do_something_else", "intercept_continue_to_app"].includes(event.event_type);
 }
 
-function pickRandomHomeCardForDisplay(
-  currentCards,
-  timezone,
-  launcherContext,
-  versions,
-  behaviors,
-  customPacks,
-  hiddenCardIds,
-  globalInterruptionMode,
-  events,
-  options = {},
-) {
-  const excludedCardIds = new Set(options.excludeCardIds ?? []);
-  const normalized = normalizeCards(currentCards, new Date(), timezone);
-  const interruptionPack = getInterruptionPackForLauncher(launcherContext, versions, behaviors, customPacks, {
-    hiddenCardIds,
-    globalEnabled: globalInterruptionMode,
-  });
-  const singles = normalized
-    .filter((card) => !excludedCardIds.has(card.id) && !card.sourcePackId && isEligible(card, new Date(), timezone))
-    .map((card) => ({ type: "single", card }));
-
-  const packMap = new Map();
-  normalized.forEach((card) => {
-    if (excludedCardIds.has(card.id)) return;
-    if (!isPackCardAvailable(card)) return;
-    if (!packMap.has(card.sourcePackId)) {
-      packMap.set(card.sourcePackId, []);
-    }
-    packMap.get(card.sourcePackId).push(card);
-  });
-
-  const packs = Array.from(packMap.values()).map((packCards) => ({
-    type: "pack",
-    packCards,
-  }));
-
-  const candidates = [...singles];
-
-  if (interruptionPack?.cards?.length > 0) {
-    return {
-      normalized,
-      selected: null,
-      interruption: {
-        type: "interruption",
-        pack: interruptionPack,
-        versionId: launcherContext,
-        activeIndex: pickInterruptionCardIndex(interruptionPack, events),
-      },
-    };
-  }
-
-  candidates.push(...packs);
-
-  if (candidates.length === 0) {
-    return { normalized, selected: null };
-  }
-
-  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-  if (chosen.type === "single") {
-    return { normalized, selected: chosen.card };
-  }
-  if (chosen.type === "interruption") {
-    return { normalized, selected: null, interruption: chosen };
-  }
-  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
-  return { normalized, selected };
-}
-
 function pickRandomPersonalCardForLauncher(currentCards, timezone, excludedCardIds = new Set()) {
   const normalized = normalizeCards(currentCards, new Date(), timezone);
   const candidates = normalized.filter((card) =>
@@ -581,50 +511,6 @@ function pickRandomPersonalCardForLauncher(currentCards, timezone, excludedCardI
   return {
     normalized,
     selected: candidates[Math.floor(Math.random() * candidates.length)],
-  };
-}
-
-function pickRandomGeneralCardForLauncher(currentCards, timezone, excludedCardIds = new Set()) {
-  const normalized = normalizeCards(currentCards, new Date(), timezone);
-  const singles = normalized
-    .filter((card) =>
-      !excludedCardIds.has(card.id) &&
-      !card.sourcePackId &&
-      !card.deletedAt &&
-      isEligible(card, new Date(), timezone)
-    )
-    .map((card) => ({ type: "single", card }));
-
-  const packMap = new Map();
-  normalized.forEach((card) => {
-    if (excludedCardIds.has(card.id)) return;
-    if (!isPackCardAvailable(card)) return;
-    if (!packMap.has(card.sourcePackId)) {
-      packMap.set(card.sourcePackId, []);
-    }
-    packMap.get(card.sourcePackId).push(card);
-  });
-
-  const packs = Array.from(packMap.values()).map((packCards) => ({
-    type: "pack",
-    packCards,
-  }));
-  const candidates = [...singles, ...packs];
-
-  if (candidates.length === 0) {
-    return { normalized, selected: null, selectedSource: "none" };
-  }
-
-  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-  if (chosen.type === "single") {
-    return { normalized, selected: chosen.card, selectedSource: "personal" };
-  }
-  const selected = chosen.packCards[Math.floor(Math.random() * chosen.packCards.length)];
-  return {
-    normalized,
-    selected,
-    selectedSource: selected ? "pack" : "none",
-    selectedPackId: selected?.sourcePackId ?? null,
   };
 }
 
@@ -703,13 +589,13 @@ function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = n
   const failed = checks.filter((check) => !check.pass);
   const legacyEligible = !isPack && !card.deletedAt && !excludedCardIds.has(card.id) && isEligible(card, date, timezone);
   const generalEligible = isPack ? activePack : legacyEligible;
-  const weightedEligible = isPack ? activePack && packOutsideTimeout : legacyEligible;
+  const launcherEligible = isPack ? activePack && packOutsideTimeout : legacyEligible;
 
   return {
     currentWindow,
     legacyEligible,
     generalEligible,
-    weightedEligible,
+    launcherEligible,
     activePack,
     checks,
     excludedReason: failed.map((check) => check.name).join(", ") || null,
@@ -726,14 +612,14 @@ function logLauncherSelectionAudit({
   excludedCardIds,
   fallbackDisplay,
   launcherStats,
-  weightedFlowGate,
+  selectionModel = "personal_first_fallback",
   interruptionPack,
   selected,
   plannedInterruption,
 }) {
   if (!isLauncherAuditEnabled()) return;
   const date = new Date();
-  const weights = fallbackDisplay.weights ?? DEFAULT_WEIGHTED_FLOW_SETTINGS;
+  const settings = fallbackDisplay.settings ?? DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS;
   const normalized = normalizeCards(cards, date, timezone);
   const exposureByCardId = buildCardExposureLookup(normalized, events);
   const cardAudits = normalized.map((card) => {
@@ -741,7 +627,7 @@ function logLauncherSelectionAudit({
       date,
       timezone,
       excludedCardIds,
-      packCardTimeoutMs: weights.packCardTimeoutMs,
+      packCardTimeoutMs: settings.packCardTimeoutMs,
       exposureByCardId,
     });
     return {
@@ -775,13 +661,19 @@ function logLauncherSelectionAudit({
       cardId: plannedInterruption.pack?.cards?.[plannedInterruption.activeIndex ?? 0]?.id ?? null,
     } : null,
     finalRenderedCard: selected ? "personal_or_pack_card" : plannedInterruption ? "interruption_card" : "caught_up_empty",
-    weightedFlowGate,
+    selectionModel,
+    selectedPriority: fallbackDisplay.selectedPriority ?? (selected?.sourcePackId ? "fallback" : selected ? "primary" : "none"),
+    selectedSource: fallbackDisplay.selectedSource ?? (selected?.sourcePackId ? "pack" : selected ? "personal" : "none"),
+    selectedCardId: selected?.id ?? null,
+    selectionReason: fallbackDisplay.selectionReason ?? null,
+    packFallbackReason: fallbackDisplay.selectedPriority === "fallback" ? fallbackDisplay.selectionReason ?? "no_eligible_primary_cards" : null,
+    caughtUpReason: !selected && !plannedInterruption ? "no_eligible_primary_or_fallback_cards" : null,
     summaryCounts: {
       eligiblePersonalCards: cardAudits.filter((card) => !card.sourcePackId && card.eligibility.generalEligible).length,
       eligiblePackCards: cardAudits.filter((card) => card.sourcePackId && card.eligibility.generalEligible).length,
       activePackCards: launcherStats.activePackCardsCount,
       activatedPacks: activatedPacks.size,
-      totalCardsEnteringWeightedSelection: (fallbackDisplay.availablePersonalCount ?? 0) + (fallbackDisplay.availablePackCount ?? 0),
+      totalCardsEnteringPersonalFirstSelection: (fallbackDisplay.availablePersonalCount ?? 0) + (fallbackDisplay.availablePackCount ?? 0),
       totalCardsExcluded: cardAudits.filter((card) => !card.eligibility.generalEligible).length,
       interruptionCardsAvailable: interruptionPack?.cards?.length ?? 0,
     },
@@ -2190,21 +2082,12 @@ function App() {
   function selectLauncherActivationCard(versionId, source = "route") {
     const activationKey = createInterceptActivation(versionId, source);
     launchCompletedCardIdsRef.current = new Set();
-    const weightedFlowGate = getWeightedLauncherFlowGate({
-      testerStatus,
-      storage: typeof window === "undefined" ? null : window.localStorage,
-    });
-    const useWeightedFlow = weightedFlowGate.weightedFlowEnabled;
     debugLaunch("[LAUNCH_ATTEMPT] intercept started", {
       route: route.path,
       launcherContext: versionId,
       launchAttemptId: activationKey,
       source,
-      weightedFlowEnabled: weightedFlowGate.weightedFlowEnabled,
-      weightedFlowUsed: useWeightedFlow,
-      testerStatusIsTester: weightedFlowGate.testerIsTester,
-      devOverride: weightedFlowGate.devOverride,
-      selectedPath: weightedFlowGate.selectedPath,
+      selectedPath: "personal_first_fallback",
     });
     const selectionEvents =
       overlay?.type === "intercept-pack" && overlay?.versionId === versionId
@@ -2225,6 +2108,11 @@ function App() {
       hiddenCardIds: hiddenPackCardIdsCompat,
       globalEnabled: globalInterruptionMode,
     });
+    const configuredLauncher = resolveVersionConfig(
+      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+      launcherBehaviorSettings[versionId],
+    );
+    const interruptionEnabled = Boolean(globalInterruptionMode && configuredLauncher?.useInterruptionPack && !configuredLauncher?.interruptionPaused);
     const eligibleCardCount = interruptionPack?.cards?.length ?? 0;
     const interruption = eligibleCardCount > 0
       ? {
@@ -2239,36 +2127,28 @@ function App() {
       route: route.path,
       versionId,
       activationKey,
-      weightedFlowUsed: useWeightedFlow,
-      selectedPath: weightedFlowGate.selectedPath,
+      selectedPath: "personal_first_fallback",
     }, testerStatus);
-    const fallbackDisplay = useWeightedFlow
-      ? selectWeightedLauncherCard({
-          cards,
-          timezone: profile.timezone,
-          events: selectionEvents,
-          excludedCardIds: launchCompletedCardIdsRef.current,
-        })
-      : pickRandomGeneralCardForLauncher(
-          cards,
-          profile.timezone,
-          launchCompletedCardIdsRef.current,
-        );
+    const fallbackDisplay = selectPersonalFirstLauncherCard({
+      cards,
+      timezone: profile.timezone,
+      events: selectionEvents,
+      excludedCardIds: launchCompletedCardIdsRef.current,
+    });
     recordLaunchTiming("card selection finished", {
       route: route.path,
       versionId,
       activationKey,
-      weightedFlowUsed: useWeightedFlow,
-      selectedPath: weightedFlowGate.selectedPath,
+      selectedPath: "personal_first_fallback",
       selectedCardId: fallbackDisplay.selected?.id ?? null,
+      selectedPriority: fallbackDisplay.selectedPriority ?? "none",
       selectedSource: fallbackDisplay.selectedSource ?? null,
+      selectionReason: fallbackDisplay.selectionReason ?? null,
     }, testerStatus);
     const selected = fallbackDisplay.selected;
     const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
     const plannedInterruption = interruption;
-    const selectedSource = useWeightedFlow
-      ? fallbackDisplay.selectedSource
-      : selected?.sourcePackId ? "pack" : selected ? "personal" : interruption ? "interruption" : "none";
+    const selectedSource = fallbackDisplay.selectedSource ?? (selected?.sourcePackId ? "pack" : selected ? "personal" : "none");
 
     const selectedCard = selected ?? plannedInterruption?.pack?.cards?.[plannedInterruption.activeIndex ?? 0] ?? null;
     logLauncherSelectionAudit({
@@ -2281,7 +2161,7 @@ function App() {
       excludedCardIds: launchCompletedCardIdsRef.current,
       fallbackDisplay,
       launcherStats,
-      weightedFlowGate,
+      selectionModel: "personal_first_fallback",
       interruptionPack,
       selected,
       plannedInterruption,
@@ -2293,27 +2173,28 @@ function App() {
       versionId,
       source,
       eligibleCardCount,
-      weightedFlowEnabled: weightedFlowGate.weightedFlowEnabled,
-      weightedFlowUsed: useWeightedFlow,
-      testerStatusIsTester: weightedFlowGate.testerIsTester,
-      devOverride: weightedFlowGate.devOverride,
-      selectedPath: weightedFlowGate.selectedPath,
-      configuredWeights: fallbackDisplay.weights ?? null,
+      selectedPath: "personal_first_fallback",
+      selectionReason: fallbackDisplay.selectionReason ?? null,
+      selectedPriority: fallbackDisplay.selectedPriority ?? "none",
       selectedSource,
-      availablePersonalCount: fallbackDisplay.availablePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
-      availablePackCount: fallbackDisplay.availablePackCount ?? launcherStats.eligiblePackCardsCount,
-      overlayType: selected ? "reveal" : plannedInterruption ? "intercept-pack" : "empty",
+      eligiblePersonalCount: fallbackDisplay.eligiblePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
+      eligiblePackCardCount: fallbackDisplay.eligiblePackCardCount ?? launcherStats.eligiblePackCardsCount,
+      overlayType: selected ? "reveal" : plannedInterruption ? "intercept-pack" : interruptionEnabled ? "continue-to-app" : "empty",
       packId: selected?.sourcePackId ?? plannedInterruption?.pack?.id ?? null,
       cardId: selectedCard?.id ?? null,
       selectedCardId: selectedCard?.id ?? null,
       selectedCardSource: selected?.sourcePackId ? "library_pack" : selected ? "personal" : plannedInterruption ? "interruption" : null,
       activeIndex: plannedInterruption?.activeIndex ?? null,
+      interruptionEnabled,
+      actionCardAvailable: visibleActionCards.length > 0,
+      emptyStateType: selected || plannedInterruption || interruptionEnabled ? null : "fake_launcher",
+      nextState: selected ? "card" : plannedInterruption ? "interruptor" : interruptionEnabled ? "continue_to_app" : "fake_launcher_empty",
       ...launcherStats,
-      caughtUpReason: plannedInterruption ? null : "no eligible interrupter cards",
-      fallbackReason: selected || plannedInterruption ? null : "no eligible personal, active pack, or interruption cards",
+      caughtUpReason: selected || plannedInterruption || interruptionEnabled ? null : "no_eligible_primary_or_fallback_cards",
+      fallbackReason: selected || plannedInterruption ? fallbackDisplay.selectionReason ?? null : "no_eligible_primary_or_fallback_cards",
     });
     void logEvent({
-      event_type: useWeightedFlow ? "launcher_weighted_session_started" : "launcher_session_started",
+      event_type: "launcher_session_started",
       source_type: "fake_launcher",
       card_source: "fake_launcher",
       card_id: selected?.id ?? null,
@@ -2328,18 +2209,19 @@ function App() {
         activationKey,
         launcherId: versionId,
         launchedFrom: source,
-        weightedFlowEnabled: weightedFlowGate.weightedFlowEnabled,
-        weightedFlowUsed: useWeightedFlow,
-        testerStatusIsTester: weightedFlowGate.testerIsTester,
-        devOverride: weightedFlowGate.devOverride,
-        selectedPath: weightedFlowGate.selectedPath,
+        selectedPath: "personal_first_fallback",
+        selectionReason: fallbackDisplay.selectionReason ?? null,
+        selectedPriority: fallbackDisplay.selectedPriority ?? "none",
         selectedSource,
-        configuredWeights: fallbackDisplay.weights ?? null,
-        availablePersonalCount: fallbackDisplay.availablePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
-        availablePackCount: fallbackDisplay.availablePackCount ?? launcherStats.eligiblePackCardsCount,
+        eligiblePersonalCount: fallbackDisplay.eligiblePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
+        eligiblePackCardCount: fallbackDisplay.eligiblePackCardCount ?? launcherStats.eligiblePackCardsCount,
         selectedCardId: selected?.id ?? null,
         selectedPackId: selected?.sourcePackId ?? null,
         interruptionShown: Boolean(plannedInterruption),
+        interruptionEnabled,
+        actionCardAvailable: visibleActionCards.length > 0,
+        emptyStateType: selected || plannedInterruption || interruptionEnabled ? null : "fake_launcher",
+        nextState: selected ? "card" : plannedInterruption ? "interruptor" : interruptionEnabled ? "continue_to_app" : "fake_launcher_empty",
         actionCardShown: false,
         destinationOpened: false,
       },
@@ -2350,9 +2232,9 @@ function App() {
       source,
       selected,
       interruption: plannedInterruption,
-      weightedFlowUsed: useWeightedFlow,
-      weightedFlowGate,
-      weightedDecision: fallbackDisplay,
+      interruptionEnabled,
+      selectionModel: "personal_first_fallback",
+      selectionDecision: fallbackDisplay,
     };
     return interceptActivationRef.current;
   }
@@ -2729,22 +2611,19 @@ function App() {
       });
 
       const launchAttemptId = createLaunchAttemptId("personal", "route");
-      const { selected } = pickRandomHomeCardForDisplay(
+      const homeDecision = selectPersonalFirstLauncherCard({
         cards,
-        profile.timezone,
-        NORMAL_LAUNCHER_CONTEXT,
-        homeScreenVersions,
-        launcherBehaviorSettings,
-        cardPacks,
-        hiddenPackCardIdsCompat,
-        globalInterruptionMode,
         events,
-      );
+        timezone: profile.timezone,
+      });
+      const selected = homeDecision.selected;
 
       const eligibleCount = countEligibleGeneralCards(cards, profile.timezone);
       debugLaunch("[ELIGIBLE_COUNTS]", {
         totalCards: cards.length,
         eligible: eligibleCount,
+        eligiblePrimaryCount: homeDecision.eligiblePrimaryCount ?? homeDecision.eligiblePersonalCount ?? 0,
+        eligibleFallbackCount: homeDecision.eligiblePackCardCount ?? 0,
       });
 
       setShouldLaunchOverlay(false);
@@ -2757,9 +2636,11 @@ function App() {
         launcherContext: NORMAL_LAUNCHER_CONTEXT,
         launchAttemptId,
         eligibleCardCount: eligibleCount,
+        selectedPriority: homeDecision.selectedPriority ?? "none",
+        selectedSource: homeDecision.selectedSource ?? null,
         selectedCardId: selected?.id ?? null,
         caughtUpReason: selected ? null : "no eligible general bash cards",
-        fallbackReason: null,
+        fallbackReason: selected ? homeDecision.selectionReason ?? null : "no_eligible_primary_or_fallback_cards",
       });
       if (selected) {
         debugLaunch("[LAUNCH_DIAG_DECISION]", "personal -> reveal");
@@ -2799,7 +2680,7 @@ function App() {
   }
 
   function renderInterceptionDecision(versionId, activation, { source = "route" } = {}) {
-    const { selected, interruption, activationKey } = activation;
+    const { selected, interruption, activationKey, interruptionEnabled } = activation;
 
     setScreen(selected ? "library" : "interception");
 
@@ -2836,7 +2717,24 @@ function App() {
       return nextOverlay;
     }
 
-    debugLaunch("[INTERCEPT] No eligible personal card or interruption; showing caught-up launcher state", {
+    if (interruptionEnabled) {
+      debugLaunch("[INTERCEPT] Interruption enabled with no layer-one card; routing to ContinueToAppCard", {
+        versionId,
+        source,
+      });
+      debugLaunch("[LAUNCHER_FINAL_DECISION]", {
+        source,
+        versionId,
+        selectedCardId: null,
+        finalDecision: "continue_to_app",
+      });
+      const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
+      debugLaunch("[CARD_ORIGIN] launcher continue created", nextOverlay);
+      setOverlay(nextOverlay);
+      return nextOverlay;
+    }
+
+    debugLaunch("[INTERCEPT] No eligible primary or fallback cards; showing caught-up launcher state", {
       versionId,
       source,
     });
@@ -2904,7 +2802,7 @@ function App() {
       metadata: {
         href,
         reason,
-        weightedFlowUsed: Boolean(interceptActivationRef.current?.weightedFlowUsed),
+        selectionModel: interceptActivationRef.current?.selectionModel ?? null,
         activationKey: interceptActivationRef.current?.activationKey ?? null,
         destinationOpened: Boolean(href),
       },
@@ -3140,7 +3038,7 @@ function App() {
             completedCardId,
             completedCardSource: completedCard?.sourcePackId ? "pack" : completedCard ? "personal" : null,
             completedPackId: completedCard?.sourcePackId ?? null,
-            weightedFlowUsed: Boolean(activation?.weightedFlowUsed),
+            selectionModel: activation?.selectionModel ?? null,
           });
           navigateTo(`/intercept/${versionId}`, { replace: true });
           return;
@@ -3155,7 +3053,7 @@ function App() {
           completedCardId,
           completedCardSource: completedCard?.sourcePackId ? "pack" : completedCard ? "personal" : null,
           completedPackId: completedCard?.sourcePackId ?? null,
-          weightedFlowUsed: Boolean(activation?.weightedFlowUsed),
+          selectionModel: activation?.selectionModel ?? null,
         });
         navigateTo(`/intercept/${versionId}`, { replace: true });
         return;
@@ -4733,7 +4631,7 @@ function App() {
               launcher_context: activeOverlayVersion?.id,
               action_taken: "chose_something_else",
               metadata: {
-                weightedFlowUsed: Boolean(interceptActivationRef.current?.weightedFlowUsed),
+                selectionModel: interceptActivationRef.current?.selectionModel ?? null,
                 activationKey: overlay?.activationKey ?? interceptActivationRef.current?.activationKey ?? null,
                 actionCardShown: visibleActionCards.length > 0,
               },
@@ -6878,7 +6776,7 @@ function Overlay({
         greeting={isIntercept ? interceptVersion?.name || "MyBishBash" : "MyBishBash"}
         icon="heart"
         headline={isIntercept ? "You're all caught up." : "You're all caught up for now."}
-        subtitle="See you later."
+        subtitle={isIntercept ? "See you later." : ""}
         actions={actions}
         launcherVersions={isIntercept ? [] : fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}

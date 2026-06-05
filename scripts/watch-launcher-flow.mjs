@@ -169,7 +169,7 @@ function printAudit(audit) {
   console.log(`   selected: ${audit.selected?.id ?? "(none)"} / ${audit.selected?.title ?? "(none)"}`);
   console.log(`   finalRenderedCard: ${audit.finalRenderedCard}`);
   console.log(
-    `   counts: personal=${summary.eligiblePersonalCards ?? 0}, pack=${summary.eligiblePackCards ?? 0}, activePack=${summary.activePackCards ?? 0}, activatedPacks=${summary.activatedPacks ?? 0}, weighted=${summary.totalCardsEnteringWeightedSelection ?? 0}, excluded=${summary.totalCardsExcluded ?? 0}`,
+    `   counts: personal=${summary.eligiblePersonalCards ?? 0}, pack=${summary.eligiblePackCards ?? 0}, activePack=${summary.activePackCards ?? 0}, activatedPacks=${summary.activatedPacks ?? 0}, personalFirst=${summary.totalCardsEnteringPersonalFirstSelection ?? 0}, excluded=${summary.totalCardsExcluded ?? 0}`,
   );
 }
 

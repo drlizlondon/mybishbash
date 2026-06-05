@@ -1,59 +1,48 @@
 import { isEligible, isPackCardAvailable, normalizeCards } from "../utils.js";
 
-export const WEIGHTED_FLOW_LOCAL_STORAGE_KEY = "mybishbash.weightedFlow.enabled";
-export const DEFAULT_WEIGHTED_FLOW_SETTINGS = {
-  personalWeight: 85,
-  packWeight: 15,
+export const LAUNCHER_TESTER_FEATURE_LOCAL_STORAGE_KEY = "mybishbash.launcherTesterFeatures.enabled";
+export const DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS = {
   packCardTimeoutMs: 30 * 60 * 1000,
 };
 
-function toWholeNumber(value) {
+export const PRIMARY_CARD_PRIORITIES = new Set(["primary", "partner_primary"]);
+
+function toNonNegativeWholeNumber(value, fallback) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return null;
-  return Math.max(0, Math.floor(number));
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return Math.floor(number);
 }
 
-export function normalizeWeightedFlowSettings(settings = {}) {
-  const personalWeight = toWholeNumber(settings.personalWeight);
-  const packWeight = toWholeNumber(settings.packWeight);
-  const total = (personalWeight ?? 0) + (packWeight ?? 0);
-  const weights = total > 0
-    ? { personalWeight, packWeight }
-    : {
-        personalWeight: DEFAULT_WEIGHTED_FLOW_SETTINGS.personalWeight,
-        packWeight: DEFAULT_WEIGHTED_FLOW_SETTINGS.packWeight,
-      };
-
-  const timeout = Number(settings.packCardTimeoutMs);
+export function normalizePersonalFirstFallbackSettings(settings = {}) {
   return {
-    ...weights,
-    packCardTimeoutMs: Number.isFinite(timeout) && timeout >= 0
-      ? Math.floor(timeout)
-      : DEFAULT_WEIGHTED_FLOW_SETTINGS.packCardTimeoutMs,
+    packCardTimeoutMs: toNonNegativeWholeNumber(
+      settings.packCardTimeoutMs,
+      DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS.packCardTimeoutMs,
+    ),
   };
 }
 
-export function getWeightedLauncherFlowGate({ testerStatus, storage, env = import.meta.env } = {}) {
+export function getTesterLauncherFeatureGate({ testerStatus, storage, env = import.meta.env } = {}) {
   const testerIsTester = testerStatus?.is_tester === true;
   let devOverride = false;
 
   try {
-    devOverride = env?.DEV === true && storage?.getItem?.(WEIGHTED_FLOW_LOCAL_STORAGE_KEY) === "true";
+    devOverride = env?.DEV === true && storage?.getItem?.(LAUNCHER_TESTER_FEATURE_LOCAL_STORAGE_KEY) === "true";
   } catch {
     devOverride = false;
   }
 
-  const weightedFlowEnabled = testerIsTester || devOverride;
+  const enabled = testerIsTester || devOverride;
   return {
-    weightedFlowEnabled,
+    enabled,
     testerIsTester,
     devOverride,
-    selectedPath: weightedFlowEnabled ? "weighted" : "legacy",
+    selectedPath: enabled ? "tester_features" : "stable",
   };
 }
 
-export function isWeightedLauncherFlowEnabled(options = {}) {
-  return getWeightedLauncherFlowGate(options).weightedFlowEnabled;
+export function areTesterLauncherFeaturesEnabled(options = {}) {
+  return getTesterLauncherFeatureGate(options).enabled;
 }
 
 function randomItem(items, random) {
@@ -104,6 +93,19 @@ function isPackCardOutsideTimeout(card, exposureByCardId, nowMs, timeoutMs) {
   return lastExposure + timeoutMs <= nowMs;
 }
 
+export function getLauncherCardPriority(card) {
+  if (!card) return "none";
+  if (card.sourcePackId) return "fallback";
+  const priority = String(card.launcherPriority ?? card.priority ?? card.cardPriority ?? "").trim();
+  if (!priority || PRIMARY_CARD_PRIORITIES.has(priority)) return "primary";
+  return "fallback";
+}
+
+function getPrimaryCardSource(card) {
+  const priority = String(card?.launcherPriority ?? card?.priority ?? card?.cardPriority ?? "").trim();
+  return priority === "partner_primary" ? "partner_primary" : "personal";
+}
+
 function chooseLeastRecentlyExposedCard(cards, exposureByCardId, random) {
   if (cards.length === 0) return null;
   let oldestExposure = Infinity;
@@ -122,7 +124,7 @@ function chooseLeastRecentlyExposedCard(cards, exposureByCardId, random) {
   return randomItem(oldestCards, random);
 }
 
-export function selectWeightedLauncherCard({
+export function selectPersonalFirstLauncherCard({
   cards,
   timezone,
   events = [],
@@ -132,12 +134,12 @@ export function selectWeightedLauncherCard({
   random = Math.random,
 } = {}) {
   const normalized = normalizeCards(cards ?? [], now, timezone);
-  const config = normalizeWeightedFlowSettings(settings);
+  const config = normalizePersonalFirstFallbackSettings(settings);
   const excluded = new Set(excludedCardIds ?? []);
   const nowMs = now.getTime();
   const exposureByCardId = buildCardExposureLookup(normalized, events);
 
-  const eligiblePersonalPool = [];
+  const eligiblePrimaryPool = [];
   const activePackPool = [];
   const eligiblePackPool = [];
   const activePackIds = new Set();
@@ -156,30 +158,26 @@ export function selectWeightedLauncherCard({
       continue;
     }
 
-    if (!card.sourcePackId && !card.deletedAt && isEligible(card, now, timezone)) {
-      eligiblePersonalPool.push(card);
+    if (getLauncherCardPriority(card) === "primary" && !card.deletedAt && isEligible(card, now, timezone)) {
+      eligiblePrimaryPool.push(card);
     }
   }
 
-  let selectedSource = "none";
-  if (eligiblePersonalPool.length > 0 && activePackPool.length === 0) {
-    selectedSource = "personal";
-  } else if (eligiblePersonalPool.length === 0 && activePackPool.length > 0) {
-    selectedSource = "pack";
-  } else if (eligiblePersonalPool.length > 0 && activePackPool.length > 0) {
-    const total = config.personalWeight + config.packWeight;
-    selectedSource = random() * total < config.personalWeight ? "personal" : "pack";
-  }
-
-  if (selectedSource === "personal") {
-    const selected = randomItem(eligiblePersonalPool, random);
+  if (eligiblePrimaryPool.length > 0) {
+    const selected = randomItem(eligiblePrimaryPool, random);
     return {
       normalized,
       selected,
-      selectedSource,
+      selectedPriority: "primary",
+      selectedSource: getPrimaryCardSource(selected),
       selectedPackId: null,
-      weights: config,
-      availablePersonalCount: eligiblePersonalPool.length,
+      selectionReason: "eligible_primary_cards_available",
+      settings: config,
+      eligiblePrimaryCount: eligiblePrimaryPool.length,
+      eligiblePersonalCount: eligiblePrimaryPool.length,
+      eligiblePackCardCount: eligiblePackPool.length,
+      availablePrimaryCount: eligiblePrimaryPool.length,
+      availablePersonalCount: eligiblePrimaryPool.length,
       availablePackCount: activePackPool.length,
       eligiblePackCount: eligiblePackPool.length,
       availablePackGroupCount: activePackIds.size,
@@ -187,17 +185,23 @@ export function selectWeightedLauncherCard({
     };
   }
 
-  if (selectedSource === "pack") {
+  if (activePackPool.length > 0) {
     const selected = eligiblePackPool.length > 0
       ? chooseLeastRecentlyExposedCard(eligiblePackPool, exposureByCardId, random)
       : chooseLeastRecentlyExposedCard(activePackPool, exposureByCardId, random);
     return {
       normalized,
       selected,
+      selectedPriority: selected ? "fallback" : "none",
       selectedSource: selected ? "pack" : "none",
       selectedPackId: selected?.sourcePackId ?? null,
-      weights: config,
-      availablePersonalCount: eligiblePersonalPool.length,
+      selectionReason: selected ? "no_eligible_primary_cards" : "no_eligible_primary_or_fallback_cards",
+      settings: config,
+      eligiblePrimaryCount: eligiblePrimaryPool.length,
+      eligiblePersonalCount: eligiblePrimaryPool.length,
+      eligiblePackCardCount: eligiblePackPool.length,
+      availablePrimaryCount: eligiblePrimaryPool.length,
+      availablePersonalCount: eligiblePrimaryPool.length,
       availablePackCount: activePackPool.length,
       eligiblePackCount: eligiblePackPool.length,
       availablePackGroupCount: activePackIds.size,
@@ -208,10 +212,16 @@ export function selectWeightedLauncherCard({
   return {
     normalized,
     selected: null,
+    selectedPriority: "none",
     selectedSource: "none",
     selectedPackId: null,
-    weights: config,
-    availablePersonalCount: eligiblePersonalPool.length,
+    selectionReason: "no_eligible_primary_or_fallback_cards",
+    settings: config,
+    eligiblePrimaryCount: eligiblePrimaryPool.length,
+    eligiblePersonalCount: eligiblePrimaryPool.length,
+    eligiblePackCardCount: eligiblePackPool.length,
+    availablePrimaryCount: eligiblePrimaryPool.length,
+    availablePersonalCount: eligiblePrimaryPool.length,
     availablePackCount: activePackPool.length,
     eligiblePackCount: eligiblePackPool.length,
     availablePackGroupCount: activePackIds.size,

@@ -387,7 +387,7 @@ test('launcher-origin card completion does not create an immediate card loop', a
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption off shows one Layer 1 card then ContinueToAppCard', async ({ page }) => {
+test('tester personal-first launcher with interruption off shows one Layer 1 card then ContinueToAppCard', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [smokeCard('tester-off-card', 'E2E tester interruption off card')],
@@ -416,7 +416,7 @@ test('tester weighted launcher with interruption off shows one Layer 1 card then
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption off and no Layer 1 card shows caught-up with continue action', async ({ page }) => {
+test('tester personal-first launcher with interruption off and no Layer 1 card shows caught-up with continue action', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [],
@@ -428,6 +428,7 @@ test('tester weighted launcher with interruption off and no Layer 1 card shows c
 
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   await expect(page.getByText("You're all caught up.")).toBeVisible();
+  await expect(page.getByText('See you later.')).toBeVisible();
   await page.getByTestId('card-action-continue-to-app').click();
 
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
@@ -440,7 +441,7 @@ test('tester weighted launcher with interruption off and no Layer 1 card shows c
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption off shows active pack card instead of caught-up', async ({ page }) => {
+test('tester personal-first launcher with interruption off shows active pack card instead of caught-up', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [packSmokeCard('pack-active-card', 'E2E active pack card')],
@@ -470,7 +471,7 @@ test('tester weighted launcher with interruption off shows active pack card inst
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with exhausted personal cards still shows active pack card before caught-up', async ({ page }) => {
+test('tester personal-first launcher with exhausted personal cards still shows active pack card before caught-up', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [
@@ -494,7 +495,7 @@ test('tester weighted launcher with exhausted personal cards still shows active 
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption on shows Layer 1 card then interruption continue opens destination directly', async ({ page }) => {
+test('tester personal-first launcher with interruption on shows Layer 1 card then interruption continue opens destination directly', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [smokeCard('tester-on-card', 'E2E tester interruption on card')],
@@ -523,7 +524,7 @@ test('tester weighted launcher with interruption on shows Layer 1 card then inte
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption on and no Layer 1 card shows interruption directly', async ({ page }) => {
+test('tester personal-first launcher with interruption on and no Layer 1 card shows interruption directly', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [],
@@ -540,7 +541,7 @@ test('tester weighted launcher with interruption on and no Layer 1 card shows in
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption on and no valid interruption may show caught-up with continue action', async ({ page }) => {
+test('tester personal-first launcher with interruption on and no valid interruption skips caught-up and continues to app', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [],
@@ -551,11 +552,10 @@ test('tester weighted launcher with interruption on and no valid interruption ma
 
   await gotoApp(page, '/intercept/safari');
 
-  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
   await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
-  await expect(page.getByText("You're all caught up.")).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-app')).toBeVisible();
-  await page.getByTestId('card-action-continue-to-app').click();
+  await expect(page.getByText("You're all caught up.")).toHaveCount(0);
+  await page.getByTestId('card-action-continue-to-safari').click();
 
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
   const [attempt] = await getNavigationAttempts(page);
@@ -563,13 +563,13 @@ test('tester weighted launcher with interruption on and no valid interruption ma
   expect(attempt.href).not.toMatch(/example\.com\/e2e-action/);
   expect(attempt.metadata).toMatchObject({
     versionId: 'safari',
-    source: 'empty_card',
-    reason: 'user_pressed_continue_after_no_eligible_cards',
+    source: 'continue_card',
+    reason: 'user_pressed_continue',
   });
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher interruption alternative path opens action URL instead of fake launcher destination', async ({ page }) => {
+test('tester personal-first launcher interruption alternative path opens action URL instead of fake launcher destination', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   const actionUrl = 'https://example.com/e2e-action';
   await seedE2EState(page, {

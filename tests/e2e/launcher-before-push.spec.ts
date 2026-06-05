@@ -27,7 +27,7 @@ function personalCard(id: string, promptText: string) {
     theme: 'Minimal',
     icon: 'heart',
     frequency: 'once_daily',
-    timingWindows: ['morning', 'day', 'evening'],
+    timingWindows: ['morning', 'day', 'evening', 'night'],
     paused: false,
     disliked: false,
     deletedAt: null,
@@ -342,6 +342,15 @@ test('before-push caught-up on one launcher does not leak into another valid lau
       }),
     )
     .toBe(true);
+  await page.evaluate(() => {
+    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') || '[]');
+    const eligibleCards = cards.map((card: { promptText?: string; timingWindows?: string[] }) =>
+      card.promptText === 'Fresh after caught up'
+        ? { ...card, timingWindows: ['morning', 'day', 'evening', 'night'] }
+        : card,
+    );
+    window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(eligibleCards));
+  });
 
   await openLauncher(page, 'youtube');
   await expectOverlay(page, 'personal');

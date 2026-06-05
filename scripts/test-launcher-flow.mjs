@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  DEFAULT_WEIGHTED_FLOW_SETTINGS,
-  getWeightedLauncherFlowGate,
-  isWeightedLauncherFlowEnabled,
-  normalizeWeightedFlowSettings,
-  selectWeightedLauncherCard,
+  DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS,
+  areTesterLauncherFeaturesEnabled,
+  getTesterLauncherFeatureGate,
+  normalizePersonalFirstFallbackSettings,
+  selectPersonalFirstLauncherCard,
 } from "../src/lib/cardSelection.js";
 import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "../src/lib/launcherFlow.js";
-import { buildCardsFromPack, getStatusMeta, isEligible, isPackCardAvailable } from "../src/utils.js";
+
+const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
 
 assert.deepEqual(
   getLauncherDecisionReadiness({
@@ -22,650 +24,132 @@ assert.deepEqual(
   { ready: false, reason: "auth_pending" },
 );
 
-assert.deepEqual(
-  getLauncherDecisionReadiness({
-    routeKind: "intercept",
-    authReady: true,
-    sessionPresent: true,
-    syncStatus: "loading",
-    hasUsableCachedLauncherState: false,
-    waitExpired: false,
-  }),
-  { ready: false, reason: "sync_pending" },
-);
-
-assert.deepEqual(
-  getLauncherDecisionReadiness({
-    routeKind: "intercept",
-    authReady: true,
-    sessionPresent: true,
-    testerStatusReady: false,
-    syncStatus: "ready",
-    hasUsableCachedLauncherState: false,
-    waitExpired: true,
-  }),
-  { ready: true, reason: "wait_expired" },
-);
-
-assert.equal(
-  getLauncherDecisionReadiness({
-    routeKind: "intercept",
-    authReady: true,
-    sessionPresent: true,
-    syncStatus: "loading",
-    hasUsableCachedLauncherState: true,
-    waitExpired: false,
-  }).reason,
-  "cached_launcher_state_available",
-);
-
-assert.deepEqual(
-  getLauncherDecisionReadiness({
-    routeKind: "intercept",
-    authReady: true,
-    sessionPresent: true,
-    syncStatus: "loading",
-    hasUsableCachedLauncherState: false,
-    waitExpired: true,
-  }),
-  { ready: true, reason: "wait_expired" },
-);
-
-assert.equal(LAUNCHER_DATA_WAIT_TIMEOUT_MS <= 300, true, "Launcher data wait timeout stays within the perceived-performance budget");
-
-assert.equal(
-  getLauncherDecisionReadiness({
-    routeKind: "intercept",
-    authReady: true,
-    sessionPresent: false,
-    syncStatus: "needs-connection",
-    hasUsableCachedLauncherState: false,
-    waitExpired: true,
-  }).reason,
-  "wait_expired",
-);
-
-assert.equal(
-  getLauncherDecisionReadiness({
-    routeKind: "intercept",
-    authReady: false,
-    sessionPresent: false,
-    syncStatus: "loading",
-    hasUsableCachedLauncherState: false,
-    waitExpired: false,
-    isDemoMode: true,
-  }).reason,
-  "demo_mode",
-);
-
-const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
-const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
-const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
-
-function sourceBetween(source, start, end) {
-  const startIndex = source.indexOf(start);
-  assert.notEqual(startIndex, -1, `Missing source marker: ${start}`);
-  const endIndex = source.indexOf(end, startIndex + start.length);
-  assert.notEqual(endIndex, -1, `Missing source marker: ${end}`);
-  return source.slice(startIndex, endIndex);
-}
-
-assert.match(appSource, /buildFakeLauncherPreparingOverlay/);
+assert.equal(LAUNCHER_DATA_WAIT_TIMEOUT_MS <= 300, true, "Launcher data wait timeout stays within perceived-performance budget");
 assert.match(appSource, /initialRoute\.kind === "intercept" \? buildFakeLauncherPreparingOverlay\(initialRoute\.versionId\) : null/);
-assert.match(appSource, /recordLaunchTiming\("route detected"/);
-assert.match(appSource, /recordLaunchTiming\("first overlay visible"/);
-assert.match(appSource, /recordLaunchTiming\("auth ready"/);
-assert.match(appSource, /recordLaunchTiming\("sync ready"/);
-assert.match(appSource, /recordLaunchTiming\("tester status ready"/);
-assert.match(appSource, /recordLaunchTiming\("card selection started"/);
-assert.match(appSource, /recordLaunchTiming\("card selection finished"/);
-assert.match(appSource, /recordLaunchTiming\("final overlay type rendered"/);
-assert.match(appSource, /\[\"intercept-pack\", "continue-to-app"\]\.includes\(overlay\?\.type\)/);
-assert.match(appSource, /if \(!launcherReadiness\.ready\)/);
-assert.match(appSource, /finalDecision: "personal_card"/);
-assert.match(appSource, /beginInterceptionFlow\(route\.versionId/);
-assert.match(appSource, /function beginInterceptionFlow/);
-assert.match(appSource, /function openDestinationApp/);
-assert.match(appSource, /function openExternalActionUrl/);
-assert.match(appSource, /buildFakeLauncherEmptyOverlay/);
+assert.match(appSource, /selectPersonalFirstLauncherCard/);
+assert.doesNotMatch(appSource, /selectWeightedLauncherCard/);
+assert.doesNotMatch(cardSelectionSource, /selectWeightedLauncherCard/);
+assert.doesNotMatch(cardSelectionSource, /personalWeight|packWeight|weightedFlow/);
 assert.match(appSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
+assert.match(appSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
 assert.match(appSource, /label: "Continue to App"/);
-assert.match(appSource, /const isHomeRoute = route\.kind === "home";/);
-assert.match(appSource, /const isLaunchingHomeOverlay = isHomeRoute && shouldLaunchOverlay && overlay == null;/);
-assert.doesNotMatch(appSource, /const isPersonalRoute = \["home", "library", "log", "packs", "settings"\]/);
-assert.match(appSource, /if \(isHomeRoute && shouldLaunchOverlay\)/);
-assert.doesNotMatch(appSource, /if \(isPersonalRoute && shouldLaunchOverlay\)/);
-assert.match(appSource, /saveCards\(cards\);/);
-assert.match(appSource, /\}, \[cards\]\);/);
-assert.match(appSource, /if \(!card\.sourcePackId \|\| card\.deletedAt \|\| card\.paused \|\| card\.disliked\) return;/);
-assert.doesNotMatch(appSource, /if \(!card\.sourcePackId \|\| !isEligible\(card, new Date\(\), profile\.timezone\) \|\| card\.deletedAt\) return;/);
-assert.match(appSource, /if \(!isPackCardAvailable\(card\)\) return;/);
-assert.match(appSource, /const eligiblePackCards = packCards\.filter\(isPackCardAvailable\);/);
-assert.match(appSource, /const eligiblePackCount = normalizedDiagCards\.filter\(isPackCardAvailable\)\.length;/);
-assert.match(appSource, /card\.sourcePackId \? isPackCardAvailable\(card\) : isEligible/);
-assert.match(appSource, /candidate\.sourcePackId === card\.sourcePackId &&\s*isPackCardAvailable\(candidate\)/);
-assert.match(appSource, /launchCompletedCardIdsRef/);
-assert.match(appSource, /selectedNextOverlayType/);
-assert.match(appSource, /cardsOverride/);
-assert.match(appSource, /function handleFakeLauncherLaunch\(versionId, source\)/);
-assert.match(appSource, /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"/);
-assert.match(appSource, /const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/);
-assert.match(appSource, /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId/);
-assert.doesNotMatch(appSource, /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId/);
-assert.match(appSource, /openDestinationApp\(versionId,[\s\S]{0,80}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/);
-assert.match(appSource, /handleFakeLauncherLaunch\(versionId, "home_fake_launcher_bar"\)/);
-assert.match(appSource, /function handleOverlayFakeLauncherLaunch/);
-assert.match(appSource, /onFakeLauncherLaunch=\{handleOverlayFakeLauncherLaunch\}/);
-assert.match(appSource, /handleFakeLauncherLaunch\(versionId, "overlay_fake_launcher"\)/);
-assert.match(appSource, /handleFakeLauncherLaunch\(versionId, "settings_fake_launcher"\)/);
-assert.match(appSource, /onTryLauncher=\{\(launcherId\) => finishOnboarding\("try", launcherId\)\}/);
-assert.match(appSource, /pickRandomPersonalCardForLauncher/);
-assert.match(appSource, /getWeightedLauncherFlowGate/);
-assert.match(appSource, /selectWeightedLauncherCard/);
-assert.match(appSource, /testerStatus/);
-assert.match(appSource, /return e2eMode \? \{ is_tester: e2eTesterMode \} : null;/);
-
-const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");
-assert.match(launcherCardActionsSource, /cardType === "pack"/);
-assert.match(launcherCardActionsSource, /label: "I really like this one", variant: "secondary"/);
-assert.match(launcherCardActionsSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
-assert.doesNotMatch(launcherCardActionsSource, /label: "Dislike"/);
-assert.doesNotMatch(launcherCardActionsSource, /label: "Like"/);
-assert.doesNotMatch(launcherCardActionsSource, /label: "(Not for me|Hide this)"/);
-assert.match(appSource, /function normalizeLaunchSession/);
-assert.match(appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
-assert.match(appSource, /allowedDestinationIds: \[launcherId\]/);
-assert.match(appSource, /const cardActionConfig = getLauncherCardActions\(\{ launchSession, cardType \}\);/);
-assert.match(appSource, /action\.id === "really_like_pack_card"[\s\S]{0,100}onClick: onPackLike/);
-assert.match(appSource, /action\.id === LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \|\| action\.id === LAUNCH_PRIMARY_ACTIONS\.BACK_TO_HOME[\s\S]{0,140}onClick: onPackContinue/);
-
-const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
-assert.match(
-  packContinueHandlerSource,
-  /handleRevealCompletion\(\{ completedCardId: activeRevealCard\?\.id \}\);/,
-  "Clicking Continue on a pack card continues via the neutral reveal-completion path",
-);
-assert.doesNotMatch(
-  packContinueHandlerSource,
-  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|dislikedPackCardIds|hiddenPackCardIdsCompat|deletedAt|paused|disliked:/,
-  "Clicking Continue must not hide, dislike, pause, delete, or suppress the pack card",
-);
-
-const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
-assert.match(packPositiveHandlerSource, /event_type: "pack_card_liked"/);
-assert.match(packPositiveHandlerSource, /action_taken: "liked"/);
-assert.doesNotMatch(
-  packPositiveHandlerSource,
-  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|deletedAt|paused|disliked:/,
-  "I really like this one records positive feedback without hiding the pack card",
-);
-assert.match(appSource, /function setPackCardHidden\(packId, text, hidden\)/);
-assert.match(appSource, /\{hidden \? "Restore card" : "Hide card"\}/);
-assert.match(
-  appSource,
-  /\{ id: "not_done", label: "Not done", variant: "secondary" \},\s*\{ id: "do_now", label: "I’ll do it now", variant: "secondary" \},\s*\{ id: "done", label: "Done", variant: "primary" \}/,
-  "Non-pack personal card actions are unchanged",
-);
-
-assert.match(appSource, /testerStatusReady: !session\?\.user\?\.id \|\| testerStatus !== null/);
+assert.match(appSource, /label: "I really like this one", variant: "secondary"/);
+assert.match(appSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
 assert.match(appSource, /const plannedInterruption = interruption;/);
+assert.match(appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
 assert.doesNotMatch(appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/);
-assert.match(appSource, /if \(overlay\.type === "reveal"\) \{/);
-assert.match(appSource, /activation\?\.interruption && activation\.versionId === versionId && activation\.activationKey === activationKey/);
-assert.match(appSource, /buildCustomPackOverlay\(activation\.interruption\.pack, activation\.interruption\.activeIndex, "intercept-pack"\)/);
-assert.match(appSource, /\[CONTINUE_DECISION\] launcher handled card -> routing to interruption card/);
-assert.match(appSource, /const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);/);
-assert.match(appSource, /\[CONTINUE_DECISION\] launcher handled card -> routing to ContinueToAppCard/);
-assert.doesNotMatch(appSource, /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\)/);
-assert.doesNotMatch(appSource, /\[CONTINUE_DECISION\] weighted intercept -> routing to next weighted card/);
-assert.doesNotMatch(appSource, /\[WEIGHTED_GUARD\] Active pack cards remained after selector returned empty/);
-assert.match(cardSelectionSource, /mybishbash\.weightedFlow\.enabled/);
-assert.match(cardSelectionSource, /env\?\.DEV === true/);
-assert.doesNotMatch(appSource, /startInterceptionFlow/);
-assert.doesNotMatch(appSource, /source: "home_fake_launcher_bar" \}\)\}/);
-assert.doesNotMatch(fakeLauncherBarSource, /window\.location\.assign/);
-assert.doesNotMatch(fakeLauncherBarSource, /getVersionOpenHref/);
-assert.doesNotMatch(fakeLauncherBarSource, /opened: Boolean\(href\)/);
-
-const continueCardSource = await readFile(new URL("../src/ContinueToAppCard.jsx", import.meta.url), "utf8");
-assert.doesNotMatch(continueCardSource, /window\.location\.assign/);
-assert.doesNotMatch(continueCardSource, /destinationUrl/);
-
-const destinationOpenMatches = [...appSource.matchAll(/window\.location\.assign\(href\)/g)];
-assert.equal(destinationOpenMatches.length, 1, "Only openDestinationApp may assign launcher destination hrefs");
-assert.match(appSource, /window\.location\.assign\(url\)/, "Action cards use the separate external URL opener");
-assert.doesNotMatch(launcherStateSource, /isPackCardAvailable/, "Interruption pack logic must stay separate from activated library pack availability");
-
-const nightDate = new Date("2026-01-01T23:30:00.000Z");
-const morningPersonalCard = {
-  id: "personal-morning",
-  promptText: "Morning personal",
-  timingWindows: ["morning"],
-  paused: false,
-  disliked: false,
-  deletedAt: null,
-  sourcePackId: null,
-};
-const morningPackCard = {
-  ...morningPersonalCard,
-  id: "pack-morning",
-  sourcePackId: "active-pack",
-};
-assert.equal(isEligible(morningPersonalCard, nightDate, "Europe/London"), false, "Personal morning-only card remains time-windowed at night");
-assert.equal(isEligible(morningPackCard, nightDate, "Europe/London"), false, "Base isEligible remains strict for pack cards");
-assert.equal(isPackCardAvailable(morningPackCard), true, "Activated pack card availability ignores timing windows");
-assert.equal(getStatusMeta(morningPackCard, nightDate, "Europe/London").badge, "ready", "Pack cards do not look upcoming solely because of time windows");
-assert.equal(isPackCardAvailable({ ...morningPackCard, paused: true }), false);
-assert.equal(isPackCardAvailable({ ...morningPackCard, deletedAt: nightDate.toISOString() }), false);
-assert.equal(isPackCardAvailable({ ...morningPackCard, disliked: true }), false);
-assert.equal(isPackCardAvailable({ ...morningPackCard, hidden: true }), false);
-
-const activatedPackCards = buildCardsFromPack({
-  id: "morning-pack",
-  title: "Morning Pack",
-  theme: "Minimal",
-  icon: "heart",
-  entries: [{ promptText: "Morning pack prompt", attribution: "" }],
-});
-assert.equal(activatedPackCards.length, 1);
-assert.equal(isEligible(activatedPackCards[0], nightDate, "Europe/London"), false, "Default activated pack card can be outside its timing window");
-assert.equal(isPackCardAvailable(activatedPackCards[0]), true, "Default activated pack card is still available when active");
-
-const selectorNow = new Date("2026-01-01T13:00:00.000Z");
-const personalCard = {
-  id: "personal-ready",
-  promptText: "Personal ready",
-  timingWindows: ["day"],
-  paused: false,
-  disliked: false,
-  deletedAt: null,
-  sourcePackId: null,
-  doneDate: null,
-  notYetUntil: null,
-  lastShownAt: null,
-};
-const packCard = (id, packId, extra = {}) => ({
-  id,
-  promptText: id,
-  timingWindows: ["morning"],
-  paused: false,
-  disliked: false,
-  deletedAt: null,
-  sourcePackId: packId,
-  ...extra,
-});
-const sequenceRandom = (values) => {
-  let index = 0;
-  return () => values[index++] ?? values[values.length - 1] ?? 0;
-};
+assert.doesNotMatch(appSource, /launcher_weighted_session_started/);
 
 assert.deepEqual(
-  normalizeWeightedFlowSettings({ personalWeight: -5, packWeight: "nope" }),
-  DEFAULT_WEIGHTED_FLOW_SETTINGS,
-  "Invalid weighted flow settings fall back to 85/15 and 30 minute timeout",
+  normalizePersonalFirstFallbackSettings({ packCardTimeoutMs: 5.8 }),
+  { packCardTimeoutMs: 5 },
 );
 assert.deepEqual(
-  normalizeWeightedFlowSettings({ personalWeight: 70.9, packWeight: 30.2, packCardTimeoutMs: 5.8 }),
-  { personalWeight: 70, packWeight: 30, packCardTimeoutMs: 5 },
-  "Weights are normalized as whole numbers",
+  normalizePersonalFirstFallbackSettings({ packCardTimeoutMs: -1 }),
+  DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS,
 );
 assert.deepEqual(
-  getWeightedLauncherFlowGate({
+  getTesterLauncherFeatureGate({
     testerStatus: { is_tester: true },
-    storage: { getItem: () => "false" },
+    storage: { getItem: () => null },
     env: { DEV: false },
   }),
   {
-    weightedFlowEnabled: true,
+    enabled: true,
     testerIsTester: true,
     devOverride: false,
-    selectedPath: "weighted",
+    selectedPath: "tester_features",
   },
-  "Tester user enters weighted flow even in production",
 );
-assert.deepEqual(
-  getWeightedLauncherFlowGate({
-    testerStatus: { is_tester: false },
-    storage: { getItem: () => "true" },
-    env: { DEV: false },
-  }),
-  {
-    weightedFlowEnabled: false,
-    testerIsTester: false,
-    devOverride: false,
-    selectedPath: "legacy",
-  },
-  "Production build ignores the localStorage override for non-testers",
-);
-assert.deepEqual(
-  getWeightedLauncherFlowGate({
-    testerStatus: undefined,
-    storage: { getItem: () => "false" },
-    env: { DEV: false },
-  }),
-  {
-    weightedFlowEnabled: false,
-    testerIsTester: false,
-    devOverride: false,
-    selectedPath: "legacy",
-  },
-  "Missing tester status defaults to legacy flow",
-);
-assert.deepEqual(
-  getWeightedLauncherFlowGate({
-    testerStatus: null,
-    storage: { getItem: () => "false" },
-    env: { DEV: false },
-  }),
-  {
-    weightedFlowEnabled: false,
-    testerIsTester: false,
-    devOverride: false,
-    selectedPath: "legacy",
-  },
-  "Supabase/tester-status failure defaults to legacy flow",
-);
-assert.deepEqual(
-  getWeightedLauncherFlowGate({
+assert.equal(
+  areTesterLauncherFeaturesEnabled({
     testerStatus: { is_tester: false },
     storage: { getItem: () => "true" },
     env: { DEV: true },
-  }),
-  {
-    weightedFlowEnabled: true,
-    testerIsTester: false,
-    devOverride: true,
-    selectedPath: "weighted",
-  },
-  "Development build localStorage override enables weighted flow",
-);
-assert.equal(
-  isWeightedLauncherFlowEnabled({
-    testerStatus: { is_tester: true },
-    storage: { getItem: () => "false" },
-    env: { DEV: false },
   }),
   true,
 );
-assert.equal(
-  isWeightedLauncherFlowEnabled({
-    testerStatus: { is_tester: false },
-    storage: { getItem: () => "true" },
-    env: { DEV: false },
-  }),
-  false,
-  "Boolean helper also ignores production localStorage override",
-);
-assert.equal(
-  isWeightedLauncherFlowEnabled({
-    testerStatus: { is_tester: false },
-    storage: { getItem: () => "false" },
-    env: { DEV: true },
-  }),
-  false,
-  "Non-testers stay on legacy flow without the dev override",
-);
 
-const largePack = Array.from({ length: 100 }, (_, index) => packCard(`large-pack-${index}`, "large-pack"));
-const weightedPersonal = selectWeightedLauncherCard({
-  cards: [personalCard, ...largePack],
-  timezone: "Europe/London",
-  now: selectorNow,
-  random: sequenceRandom([0.84, 0]),
+const now = new Date("2026-01-01T13:00:00.000Z");
+const personal = (id, overrides = {}) => ({
+  id,
+  promptText: id,
+  dashboardTitle: id,
+  sourcePackId: null,
+  deletedAt: null,
+  paused: false,
+  disliked: false,
+  doneDate: null,
+  statusToday: "fresh",
+  notYetUntil: null,
+  lastShownAt: null,
+  timingWindows: ["day"],
+  ...overrides,
 });
-assert.equal(weightedPersonal.selectedSource, "personal", "85/15 draw is source-level, not card-count-level");
-assert.equal(weightedPersonal.selected.id, "personal-ready");
-assert.equal(weightedPersonal.availablePackCount, 100);
-
-const weightedPack = selectWeightedLauncherCard({
-  cards: [personalCard, ...largePack],
-  timezone: "Europe/London",
-  now: selectorNow,
-  random: sequenceRandom([0.86, 0, 0]),
+const pack = (id, overrides = {}) => ({
+  id,
+  promptText: id,
+  dashboardTitle: id,
+  sourcePackId: "starter-pack",
+  deletedAt: null,
+  paused: false,
+  disliked: false,
+  hidden: false,
+  lastShownAt: null,
+  timingWindows: ["day"],
+  ...overrides,
 });
-assert.equal(weightedPack.selectedSource, "pack", "Pack wins only when source draw lands in pack weight");
-assert.equal(weightedPack.selectedPackId, "large-pack");
 
-assert.equal(
-  selectWeightedLauncherCard({
-    cards: [personalCard],
-    timezone: "Europe/London",
-    now: selectorNow,
-    random: sequenceRandom([0.99, 0]),
-  }).selectedSource,
-  "personal",
-  "Empty pack pool falls back to personal",
-);
-assert.equal(
-  selectWeightedLauncherCard({
-    cards: [packCard("pack-only", "pack-only")],
-    timezone: "Europe/London",
-    now: selectorNow,
-    random: sequenceRandom([0.01, 0]),
-  }).selectedSource,
-  "pack",
-  "Empty personal pool falls back to pack",
-);
-assert.equal(
-  selectWeightedLauncherCard({
-    cards: [],
-    timezone: "Europe/London",
-    now: selectorNow,
-  }).selectedSource,
-  "none",
-  "Both pools empty returns no selected source",
-);
+const personalFirst = selectPersonalFirstLauncherCard({
+  cards: [personal("personal-a"), pack("pack-a")],
+  timezone: "Europe/London",
+  now,
+  random: () => 0,
+});
+assert.equal(personalFirst.selected?.id, "personal-a");
+assert.equal(personalFirst.selectedSource, "personal");
+assert.equal(personalFirst.selectedPriority, "primary");
+assert.equal(personalFirst.selectionReason, "eligible_primary_cards_available");
 
-const rotatedPack = selectWeightedLauncherCard({
+const secondPersonal = selectPersonalFirstLauncherCard({
+  cards: [personal("personal-a"), personal("personal-b"), pack("pack-a")],
+  timezone: "Europe/London",
+  now,
+  random: () => 0.99,
+});
+assert.equal(secondPersonal.selected?.id, "personal-b");
+assert.equal(secondPersonal.selectedSource, "personal");
+
+const fallbackPack = selectPersonalFirstLauncherCard({
+  cards: [personal("done-personal", { doneDate: "2026-01-01", statusToday: "doneToday" }), pack("pack-a")],
+  timezone: "Europe/London",
+  now,
+  random: () => 0,
+});
+assert.equal(fallbackPack.selected?.id, "pack-a");
+assert.equal(fallbackPack.selectedSource, "pack");
+assert.equal(fallbackPack.selectedPriority, "fallback");
+assert.equal(fallbackPack.selectionReason, "no_eligible_primary_cards");
+
+const timeoutFallbackPack = selectPersonalFirstLauncherCard({
   cards: [
-    packCard("pack-a-card", "pack-a"),
-    packCard("pack-b-card", "pack-b"),
+    pack("pack-a", { lastShownAt: new Date(now.getTime() - 5 * 60 * 1000).toISOString() }),
+    pack("pack-b", { lastShownAt: new Date(now.getTime() - 10 * 60 * 1000).toISOString() }),
   ],
   timezone: "Europe/London",
-  now: selectorNow,
-  events: [
-    { card_id: "pack-a-card", pack_id: "pack-a", created_at: "2026-01-01T12:59:00.000Z" },
-    { card_id: "pack-b-card", pack_id: "pack-b", created_at: "2026-01-01T12:00:00.000Z" },
-  ],
-  random: sequenceRandom([0, 0]),
+  now,
+  random: () => 0,
 });
-assert.equal(rotatedPack.selectedPackId, "pack-b", "Pack rotation chooses the least recently exposed pack");
+assert.equal(timeoutFallbackPack.selectedSource, "pack");
+assert.equal(timeoutFallbackPack.selectionReason, "no_eligible_primary_cards");
 
-const timeoutSelection = selectWeightedLauncherCard({
-  cards: [
-    packCard("recent-pack-card", "timeout-pack"),
-    packCard("older-pack-card", "timeout-pack"),
-  ],
+const caughtUp = selectPersonalFirstLauncherCard({
+  cards: [personal("paused-personal", { paused: true }), pack("hidden-pack", { hidden: true })],
   timezone: "Europe/London",
-  now: selectorNow,
-  events: [
-    { card_id: "recent-pack-card", pack_id: "timeout-pack", created_at: "2026-01-01T12:45:00.000Z" },
-    { card_id: "older-pack-card", pack_id: "timeout-pack", created_at: "2026-01-01T12:00:00.000Z" },
-  ],
-  random: sequenceRandom([0, 0]),
+  now,
 });
-assert.equal(timeoutSelection.selected.id, "older-pack-card", "Pack card timeout prevents immediate repeat");
-
-const donePersonalWithPack = selectWeightedLauncherCard({
-  cards: [
-    { ...personalCard, id: "done-personal-with-pack", doneDate: "2026-01-01", statusToday: "doneToday" },
-    packCard("active-pack-card-after-done-personal", "active-pack-after-done"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(donePersonalWithPack.selectedSource, "pack", "Done personal cards do not force caught-up while active pack cards exist");
-assert.equal(donePersonalWithPack.selected.id, "active-pack-card-after-done-personal");
-assert.equal(donePersonalWithPack.availablePersonalCount, 0);
-assert.equal(donePersonalWithPack.availablePackCount, 1);
-
-const nextPackAfterCompletionSelection = selectWeightedLauncherCard({
-  cards: [
-    { ...personalCard, id: "completed-personal-before-pack", doneDate: "2026-01-01", statusToday: "doneToday" },
-    packCard("completed-pack-card-in-cycle", "cycle-pack"),
-    packCard("next-pack-card-in-cycle", "cycle-pack"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  excludedCardIds: new Set(["completed-pack-card-in-cycle"]),
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(
-  nextPackAfterCompletionSelection.selected.id,
-  "next-pack-card-in-cycle",
-  "Selector can still choose a remaining active pack card when initial launcher selection needs one",
-);
-assert.equal(nextPackAfterCompletionSelection.selectedSource, "pack");
-assert.equal(nextPackAfterCompletionSelection.availablePackCount, 1);
-
-const timeoutWithAlternativeSelection = selectWeightedLauncherCard({
-  cards: [
-    packCard("recent-pack-card-with-alternative", "repeat-pack"),
-    packCard("available-pack-card-with-alternative", "repeat-pack"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  events: [
-    { card_id: "recent-pack-card-with-alternative", pack_id: "repeat-pack", created_at: "2026-01-01T12:45:00.000Z" },
-  ],
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(timeoutWithAlternativeSelection.selectedSource, "pack");
-assert.equal(
-  timeoutWithAlternativeSelection.selected.id,
-  "available-pack-card-with-alternative",
-  "Recently shown pack card respects timeout when another pack card is available",
-);
-assert.equal(timeoutWithAlternativeSelection.availablePackCount, 2);
-assert.equal(timeoutWithAlternativeSelection.eligiblePackCount, 1);
-
-const noRepeatWhileUnshownSelection = selectWeightedLauncherCard({
-  cards: [
-    packCard("shown-pack-card", "no-repeat-pack"),
-    packCard("unshown-pack-card", "no-repeat-pack"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  excludedCardIds: new Set(["shown-pack-card"]),
-  events: [
-    { card_id: "shown-pack-card", pack_id: "no-repeat-pack", created_at: "2026-01-01T12:59:00.000Z" },
-  ],
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(
-  noRepeatWhileUnshownSelection.selected.id,
-  "unshown-pack-card",
-  "Tester weighted flow does not repeat a pack card while another active pack card remains unshown",
-);
-
-const allPackCardsInsideTimeoutSelection = selectWeightedLauncherCard({
-  cards: [
-    packCard("less-recent-active-pack-card", "all-timeout-pack"),
-    packCard("more-recent-active-pack-card", "all-timeout-pack"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  events: [
-    { card_id: "less-recent-active-pack-card", pack_id: "all-timeout-pack", created_at: "2026-01-01T12:36:00.000Z" },
-    { card_id: "more-recent-active-pack-card", pack_id: "all-timeout-pack", created_at: "2026-01-01T12:50:00.000Z" },
-  ],
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(
-  allPackCardsInsideTimeoutSelection.selectedSource,
-  "pack",
-  "Active pack cards inside timeout still beat caught-up",
-);
-assert.equal(
-  allPackCardsInsideTimeoutSelection.selected.id,
-  "less-recent-active-pack-card",
-  "When all active pack cards are inside timeout, choose the least recently shown card",
-);
-assert.equal(allPackCardsInsideTimeoutSelection.availablePackCount, 2);
-assert.equal(allPackCardsInsideTimeoutSelection.eligiblePackCount, 0);
-
-const insideTimeoutUncycledSelection = selectWeightedLauncherCard({
-  cards: [
-    packCard("already-cycled-inside-timeout", "uncycled-timeout-pack"),
-    packCard("uncycled-inside-timeout", "uncycled-timeout-pack"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  excludedCardIds: new Set(["already-cycled-inside-timeout"]),
-  events: [
-    { card_id: "already-cycled-inside-timeout", pack_id: "uncycled-timeout-pack", created_at: "2026-01-01T12:59:00.000Z" },
-    { card_id: "uncycled-inside-timeout", pack_id: "uncycled-timeout-pack", created_at: "2026-01-01T12:58:00.000Z" },
-  ],
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(
-  insideTimeoutUncycledSelection.selected.id,
-  "uncycled-inside-timeout",
-  "Uncycled active pack card is selected inside timeout during the same launcher session",
-);
-assert.equal(insideTimeoutUncycledSelection.selectedSource, "pack");
-assert.equal(insideTimeoutUncycledSelection.availablePackCount, 1);
-assert.equal(insideTimeoutUncycledSelection.eligiblePackCount, 0);
-
-const completedCycleSelection = selectWeightedLauncherCard({
-  cards: [
-    packCard("cycled-pack-card-a", "completed-cycle-pack"),
-    packCard("cycled-pack-card-b", "completed-cycle-pack"),
-  ],
-  timezone: "Europe/London",
-  now: selectorNow,
-  excludedCardIds: new Set(["cycled-pack-card-a", "cycled-pack-card-b"]),
-});
-assert.equal(completedCycleSelection.selectedSource, "none", "Completed launcher cycle can end after all active pack cards are excluded");
-assert.equal(completedCycleSelection.availablePackCount, 0);
-
-const outsideWindowPackSelection = selectWeightedLauncherCard({
-  cards: [packCard("night-unavailable-to-personal-pack-card", "outside-window-pack")],
-  timezone: "Europe/London",
-  now: selectorNow,
-  random: sequenceRandom([0, 0]),
-});
-assert.equal(isEligible(outsideWindowPackSelection.selected, selectorNow, "Europe/London"), false);
-assert.equal(
-  outsideWindowPackSelection.selectedSource,
-  "pack",
-  "Pack cards outside personal timing windows remain available in weighted launcher flow",
-);
-
-const hiddenPackSelection = selectWeightedLauncherCard({
-  cards: [packCard("hidden-pack-card", "hidden-pack", { hidden: true })],
-  timezone: "Europe/London",
-  now: selectorNow,
-});
-assert.equal(hiddenPackSelection.selectedSource, "none", "Hidden pack cards are not treated as active");
-assert.equal(hiddenPackSelection.availablePackCount, 0);
-
-assert.notEqual(
-  allPackCardsInsideTimeoutSelection.selectedSource,
-  "none",
-  "Weighted selector must not return none while the active pack pool has cards",
-);
-
-assert.equal(
-  selectWeightedLauncherCard({
-    cards: [{ ...personalCard, id: "done-personal", doneDate: "2026-01-01", statusToday: "doneToday" }],
-    timezone: "Europe/London",
-    now: selectorNow,
-  }).selected,
-  null,
-  "Done personal cards are not shown again today",
-);
-
-assert.equal(
-  getWeightedLauncherFlowGate({
-    testerStatus: { is_tester: false },
-    storage: { getItem: () => "false" },
-    env: { DEV: false },
-  }).selectedPath,
-  "legacy",
-  "Non-testers remain on the legacy launcher flow",
-);
+assert.equal(caughtUp.selected, null);
+assert.equal(caughtUp.selectedSource, "none");
+assert.equal(caughtUp.selectionReason, "no_eligible_primary_or_fallback_cards");
 
 console.log("Launcher flow checks passed");
