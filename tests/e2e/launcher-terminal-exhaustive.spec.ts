@@ -132,7 +132,7 @@ async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Te
     await expect(page.getByLabel('Go home')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toHaveCount(0);
     const attemptsBeforeContinue = (await attempts(page)).length;
-    await page.getByTestId('card-action-continue-to-app').click();
+    await page.getByTestId(`card-action-continue-to-${launcherId}`).or(page.getByTestId('card-action-continue-to-app')).click();
     await expect.poll(async () => (await attempts(page)).length).toBe(attemptsBeforeContinue + 1);
     const attemptList = await attempts(page);
     const attempt = attemptList.at(-1);

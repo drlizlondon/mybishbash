@@ -94,7 +94,16 @@ import {
   getVersionOpenHref,
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/launcherRegistry";
-import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "./lib/launcherFlow";
+import {
+  FAKE_LAUNCHER_FLOW_STEPS,
+  buildFakeLauncherFlowContext,
+  getInitialFakeLauncherStep,
+  getLauncherDecisionReadiness,
+  getNextFakeLauncherStepAfterActionCard,
+  getNextFakeLauncherStepAfterInterruption,
+  getNextFakeLauncherStepAfterSelectedCard,
+  LAUNCHER_DATA_WAIT_TIMEOUT_MS,
+} from "./lib/launcherFlow";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
   buildCardExposureLookup,
@@ -495,23 +504,6 @@ function isCompletionEvent(event) {
 
 function isInterruptionSummaryEvent(event) {
   return ["intercept_do_something_else", "intercept_continue_to_app"].includes(event.event_type);
-}
-
-function pickRandomPersonalCardForLauncher(currentCards, timezone, excludedCardIds = new Set()) {
-  const normalized = normalizeCards(currentCards, new Date(), timezone);
-  const candidates = normalized.filter((card) =>
-    !excludedCardIds.has(card.id) &&
-    !card.sourcePackId &&
-    !card.deletedAt &&
-    isEligible(card, new Date(), timezone)
-  );
-  if (candidates.length === 0) {
-    return { normalized, selected: null };
-  }
-  return {
-    normalized,
-    selected: candidates[Math.floor(Math.random() * candidates.length)],
-  };
 }
 
 function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set()) {
@@ -2149,6 +2141,17 @@ function App() {
     const launcherStats = getLauncherCardStats(cards, profile.timezone, launchCompletedCardIdsRef.current);
     const plannedInterruption = interruption;
     const selectedSource = fallbackDisplay.selectedSource ?? (selected?.sourcePackId ? "pack" : selected ? "personal" : "none");
+    const flowContext = buildFakeLauncherFlowContext({
+      launcherId: versionId,
+      launcherName: configuredLauncher?.name ?? configuredLauncher?.displayName ?? versionId,
+      destinationUrl: getBrowserSafeDestinationHref(getVersionOpenHref(configuredLauncher)),
+      interruptionEnabled,
+      activationKey,
+    });
+    const initialFlowStep = getInitialFakeLauncherStep({
+      selectedCard: selected,
+      interruption: plannedInterruption,
+    });
 
     const selectedCard = selected ?? plannedInterruption?.pack?.cards?.[plannedInterruption.activeIndex ?? 0] ?? null;
     logLauncherSelectionAudit({
@@ -2179,7 +2182,7 @@ function App() {
       selectedSource,
       eligiblePersonalCount: fallbackDisplay.eligiblePersonalCount ?? launcherStats.eligiblePersonalCardsCount,
       eligiblePackCardCount: fallbackDisplay.eligiblePackCardCount ?? launcherStats.eligiblePackCardsCount,
-      overlayType: selected ? "reveal" : plannedInterruption ? "intercept-pack" : interruptionEnabled ? "continue-to-app" : "empty",
+      overlayType: selected ? "reveal" : plannedInterruption ? "intercept-pack" : "empty",
       packId: selected?.sourcePackId ?? plannedInterruption?.pack?.id ?? null,
       cardId: selectedCard?.id ?? null,
       selectedCardId: selectedCard?.id ?? null,
@@ -2187,10 +2190,11 @@ function App() {
       activeIndex: plannedInterruption?.activeIndex ?? null,
       interruptionEnabled,
       actionCardAvailable: visibleActionCards.length > 0,
-      emptyStateType: selected || plannedInterruption || interruptionEnabled ? null : "fake_launcher",
-      nextState: selected ? "card" : plannedInterruption ? "interruptor" : interruptionEnabled ? "continue_to_app" : "fake_launcher_empty",
+      emptyStateType: selected || plannedInterruption ? null : "fake_launcher",
+      nextState: initialFlowStep,
+      flowContext,
       ...launcherStats,
-      caughtUpReason: selected || plannedInterruption || interruptionEnabled ? null : "no_eligible_primary_or_fallback_cards",
+      caughtUpReason: selected || plannedInterruption ? null : "no_eligible_primary_or_fallback_cards",
       fallbackReason: selected || plannedInterruption ? fallbackDisplay.selectionReason ?? null : "no_eligible_primary_or_fallback_cards",
     });
     void logEvent({
@@ -2219,9 +2223,10 @@ function App() {
         selectedPackId: selected?.sourcePackId ?? null,
         interruptionShown: Boolean(plannedInterruption),
         interruptionEnabled,
+        flowContext,
+        nextState: initialFlowStep,
         actionCardAvailable: visibleActionCards.length > 0,
-        emptyStateType: selected || plannedInterruption || interruptionEnabled ? null : "fake_launcher",
-        nextState: selected ? "card" : plannedInterruption ? "interruptor" : interruptionEnabled ? "continue_to_app" : "fake_launcher_empty",
+        emptyStateType: selected || plannedInterruption ? null : "fake_launcher",
         actionCardShown: false,
         destinationOpened: false,
       },
@@ -2233,6 +2238,7 @@ function App() {
       selected,
       interruption: plannedInterruption,
       interruptionEnabled,
+      flowContext,
       selectionModel: "personal_first_fallback",
       selectionDecision: fallbackDisplay,
     };
@@ -2680,11 +2686,15 @@ function App() {
   }
 
   function renderInterceptionDecision(versionId, activation, { source = "route" } = {}) {
-    const { selected, interruption, activationKey, interruptionEnabled } = activation;
+    const { selected, interruption, activationKey } = activation;
+    const initialStep = getInitialFakeLauncherStep({
+      selectedCard: selected,
+      interruption,
+    });
 
     setScreen(selected ? "library" : "interception");
 
-    if (selected) {
+    if (initialStep === FAKE_LAUNCHER_FLOW_STEPS.SELECTED_CARD) {
       debugLaunch("[INTERCEPT] Opening fallback MyBishBash card", { versionId, source, cardId: selected.id });
       debugLaunch("[LAUNCHER_FINAL_DECISION]", {
         source,
@@ -2699,7 +2709,7 @@ function App() {
       return nextOverlay;
     }
 
-    if (interruption) {
+    if (initialStep === FAKE_LAUNCHER_FLOW_STEPS.INTERRUPTION_CARD) {
       debugLaunch("[INTERCEPT] Opening interruption pack", { versionId, source, packId: interruption.pack?.id });
       debugLaunch("[LAUNCHER_FINAL_DECISION]", {
         source,
@@ -2713,23 +2723,6 @@ function App() {
       };
       debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
       debugLaunch("[CARD_ORIGIN] launcher pack created", nextOverlay);
-      setOverlay(nextOverlay);
-      return nextOverlay;
-    }
-
-    if (interruptionEnabled) {
-      debugLaunch("[INTERCEPT] Interruption enabled with no layer-one card; routing to ContinueToAppCard", {
-        versionId,
-        source,
-      });
-      debugLaunch("[LAUNCHER_FINAL_DECISION]", {
-        source,
-        versionId,
-        selectedCardId: null,
-        finalDecision: "continue_to_app",
-      });
-      const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
-      debugLaunch("[CARD_ORIGIN] launcher continue created", nextOverlay);
       setOverlay(nextOverlay);
       return nextOverlay;
     }
@@ -3025,7 +3018,14 @@ function App() {
         ? cardsForDecision.find((card) => card.id === completedCardId) ?? cards.find((card) => card.id === completedCardId)
         : null;
       if (overlay.type === "reveal") {
-        if (activation?.interruption && activation.versionId === versionId && activation.activationKey === activationKey) {
+        const nextStep = getNextFakeLauncherStepAfterSelectedCard({
+          interruption:
+            activation?.versionId === versionId && activation.activationKey === activationKey
+              ? activation.interruption
+              : null,
+        });
+
+        if (nextStep === FAKE_LAUNCHER_FLOW_STEPS.INTERRUPTION_CARD) {
           setScreen("interception");
           const nextOverlay = {
             ...buildCustomPackOverlay(activation.interruption.pack, activation.interruption.activeIndex, "intercept-pack"),
@@ -3058,15 +3058,10 @@ function App() {
         navigateTo(`/intercept/${versionId}`, { replace: true });
         return;
       }
-      const pack = getInterruptionPackForLauncher(versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
-        hiddenCardIds: hiddenPackCardIdsCompat,
-        globalEnabled: globalInterruptionMode,
-      });
-      const hasNextInterruptionPack = overlay.type !== "intercept-pack" && Boolean(pack && (pack.cards?.length > 0 || pack.messages?.length > 0));
+      const nextStep = overlay.type === "intercept-pack"
+        ? getNextFakeLauncherStepAfterInterruption("continue")
+        : FAKE_LAUNCHER_FLOW_STEPS.CONTINUE_CARD;
       const launcherStats = getLauncherCardStats(cardsForDecision, profile.timezone, excludedCardIds);
-      const fallbackDisplay = hasNextInterruptionPack || overlay.type === "reveal"
-        ? { selected: null }
-        : pickRandomPersonalCardForLauncher(cardsForDecision, profile.timezone, excludedCardIds);
 
       debugLaunch("[REVEAL COMPLETION DECISION]", {
         pathname: window.location.pathname,
@@ -3077,37 +3072,14 @@ function App() {
         versionId,
         routeKind: route.kind,
         overlayVersionId: overlay.versionId,
-        selectedNextCardId: fallbackDisplay.selected?.id ?? null,
-        selectedNextOverlayType: fallbackDisplay.selected ? "reveal" : hasNextInterruptionPack ? "intercept-pack" : "continue-to-app",
-        continueReason: fallbackDisplay.selected || hasNextInterruptionPack
-          ? null
-          : "no eligible cards remain after hydration and launcher evaluation",
+        selectedNextCardId: null,
+        selectedNextOverlayType: nextStep === FAKE_LAUNCHER_FLOW_STEPS.INTERRUPTION_CARD ? "intercept-pack" : "continue-to-app",
+        continueReason: nextStep === FAKE_LAUNCHER_FLOW_STEPS.CONTINUE_CARD
+          ? "shared fake launcher template terminal continue"
+          : null,
         ...launcherStats,
-        hasInterruptionPack: hasNextInterruptionPack,
+        nextStep,
       });
-
-      if (fallbackDisplay.selected) {
-        setScreen("library");
-        const nextOverlay = buildFakeLauncherRevealOverlay(fallbackDisplay.selected.id, versionId, activationKey);
-        setOverlay(nextOverlay);
-        debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-        debugLaunch("[CONTINUE_DECISION] intercept -> routing to next eligible card", nextOverlay);
-        navigateTo(`/intercept/${versionId}`, { replace: true });
-        return;
-      }
-
-      if (hasNextInterruptionPack) {
-         setScreen("interception");
-         const nextOverlay = {
-           ...buildCustomPackOverlay(pack, pickInterruptionCardIndex(pack, events), "intercept-pack"),
-           ...buildFakeLauncherOverlayContext(versionId, activationKey),
-         };
-         setOverlay(nextOverlay);
-         debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
-         debugLaunch("[CONTINUE_DECISION] intercept -> routing to interruption decision", nextOverlay);
-         navigateTo(`/intercept/${versionId}`, { replace: true });
-         return;
-      }
 
       setScreen("interception");
       const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
@@ -4578,11 +4550,13 @@ function App() {
           onAction={handleAction}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
+            const nextStep = getNextFakeLauncherStepAfterActionCard();
             const nextOverlay = {
               ...buildActionSuccessOverlay(overlay?.versionId),
               origin: overlay?.origin,
               activationKey: overlay?.activationKey,
               launchSource: overlay?.launchSource,
+              flowStep: nextStep,
             };
             console.log("[CARD_ORIGIN] action success created", nextOverlay);
             setOverlay(nextOverlay);
@@ -4636,6 +4610,7 @@ function App() {
                 actionCardShown: visibleActionCards.length > 0,
               },
             });
+            const nextStep = getNextFakeLauncherStepAfterInterruption("do_something_else");
             if (visibleActionCards.length === 0) {
               console.log("[ACTION CARDS] Opening empty fallback.");
               const nextOverlay = {
@@ -4643,6 +4618,7 @@ function App() {
                 origin: overlay?.origin || "home",
                 activationKey: overlay?.activationKey,
                 launchSource: overlay?.launchSource,
+                flowStep: nextStep,
               };
               console.log("[CARD_ORIGIN] action card empty created", nextOverlay);
               setOverlay(nextOverlay);
@@ -4653,6 +4629,7 @@ function App() {
                 origin: overlay?.origin || "home",
                 activationKey: overlay?.activationKey,
                 launchSource: overlay?.launchSource,
+                flowStep: nextStep,
               };
               console.log("[CARD_ORIGIN] action card created", nextOverlay);
               setOverlay(nextOverlay);
@@ -6745,7 +6722,7 @@ function Overlay({
     if (isIntercept && interceptVersion) {
       const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion));
       actions.push({
-        label: "Continue to App",
+        label: `Continue to ${appName}`,
         variant: "primary",
         href: continueHref,
         onClick: (event) => {
@@ -7282,7 +7259,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         subtitle="Make one for yourself."
         actions={[
           ...(allowBackHome ? [{ label: "Back home", variant: "secondary", onClick: onClose }] : []),
-          ...(version ? [{ label: "Continue to App", variant: "secondary", onClick: handleContinueToApp }] : []),
+          ...(version ? [{ label: `Continue to ${version.name}`, variant: "secondary", onClick: handleContinueToApp }] : []),
           { label: "Create action card", variant: "primary", onClick: onCreateActionCard },
         ]}
         launcherVersions={fakeLauncherVersions}
@@ -7297,7 +7274,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
 function ActionSuccessOverlay({ version, onClose, onContinueToApp, allowBackHome = false, onDashboard, className = "" }) {
   const actions = version
     ? [
-        { label: "Continue to App", variant: "primary", onClick: () => onContinueToApp?.(version.id, { source: "action_card_success", reason: "user_pressed_continue" }) },
+        { label: `Continue to ${version.name}`, variant: "primary", onClick: () => onContinueToApp?.(version.id, { source: "action_card_success", reason: "user_pressed_continue" }) },
         ...(allowBackHome ? [{ label: "Back home", variant: "secondary", onClick: onClose }] : []),
       ]
     : allowBackHome ? [{ label: "Back home", variant: "primary", onClick: onClose }] : [];

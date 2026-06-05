@@ -59,9 +59,9 @@ assertMatch("App uses personal-first fallback for launcher and home decisions", 
 assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);
 assertNoMatch("interruption must not be disabled by old weighted activation state", appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption/);
-assertMatch("interruption on with no layer-one card avoids caught-up", appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
+assertNoMatch("interruption on with no layer-one card uses caught-up instead of direct continue", appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
 assertMatch("fake launcher empty state uses caught-up headline", appSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
-assertMatch("fake launcher empty state has Continue to App", appSource, /label: "Continue to App"/);
+assertMatch("fake launcher empty state has launcher-specific Continue", appSource, /label: `Continue to \$\{appName\}`/);
 assertMatch("real app empty state stays softer than fake launcher empty state", appSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
 
 const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");

@@ -203,12 +203,14 @@ async function exerciseLayerOneFlow({
   name,
   kind,
   terminal,
+  launcherId = 'safari',
   interruptionOn = false,
 }: {
   page: Page;
   name: string;
   kind: 'personal' | 'pack';
   terminal: TerminalAction;
+  launcherId?: LauncherId;
   interruptionOn?: boolean;
 }) {
   const card = kind === 'personal'
@@ -219,11 +221,11 @@ async function exerciseLayerOneFlow({
     : [];
 
   await seedState(page, { cards: [card], actionCards, interruptionOn });
-  await openLauncher(page);
+  await openLauncher(page, launcherId);
   await expectOverlay(page, kind);
 
   if (terminal === 'dashboard') {
-    await clickTerminal(page, 'safari', terminal);
+    await clickTerminal(page, launcherId, terminal);
     return;
   }
 
@@ -235,7 +237,7 @@ async function exerciseLayerOneFlow({
     await expect(page.getByTestId('continue-to-app-card'), `${name} should route to continue card`).toBeVisible();
   }
 
-  await clickTerminal(page, 'safari', terminal);
+  await clickTerminal(page, launcherId, terminal);
 }
 
 const buttonBranches: Array<{
@@ -278,6 +280,41 @@ for (const branch of buttonBranches) {
     await clickTerminal(page, 'safari', branch.terminal);
   });
 }
+
+for (const launcherId of Object.keys(destinationByLauncher) as LauncherId[]) {
+  for (const interruptionOn of [false, true]) {
+    test(`shared fake launcher template: ${launcherId}, interruption ${interruptionOn ? 'ON' : 'OFF'}, personal card continues to destination`, async ({ page }) => {
+      await exerciseLayerOneFlow({
+        page,
+        name: `${launcherId}-${interruptionOn ? 'on' : 'off'}`,
+        kind: 'personal',
+        terminal: 'continue',
+        launcherId,
+        interruptionOn,
+      });
+    });
+  }
+}
+
+test('before-push action card after Do Something Else resolves to a launcher continue state', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('action-flow-personal', 'Action flow personal')],
+    actionCards: [...hiddenStarterActionCards(), actionCard('action-flow-no-url', 'Action flow no URL')],
+    interruptionOn: true,
+  });
+
+  await openLauncher(page, 'instagram');
+  await expectOverlay(page, 'personal');
+  await completeFirstCard(page, 'personal');
+  await expect(page.getByTestId('card-overlay-interruption')).toBeVisible();
+  await page.getByTestId('card-action-do-something-else').click();
+  await expect(page.getByTestId('card-overlay-action')).toBeVisible();
+  await page.getByTestId('card-action-i-ll-do-this').click();
+  await expect(page.getByTestId('card-overlay-action')).toBeVisible();
+  await expect(page.getByTestId('card-action-continue-to-instagram')).toBeVisible();
+  await page.getByTestId('card-action-continue-to-instagram').click();
+  await expectDestinationAttempt(page, 'instagram');
+});
 
 test('before-push launcher state does not leak between sequential launches', async ({ page }) => {
   await seedState(page, {
