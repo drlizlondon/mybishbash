@@ -7,7 +7,16 @@ import {
   normalizePersonalFirstFallbackSettings,
   selectPersonalFirstLauncherCard,
 } from "../src/lib/cardSelection.js";
-import { getLauncherDecisionReadiness, LAUNCHER_DATA_WAIT_TIMEOUT_MS } from "../src/lib/launcherFlow.js";
+import {
+  FAKE_LAUNCHER_FLOW_STEPS,
+  buildFakeLauncherFlowContext,
+  getInitialFakeLauncherStep,
+  getLauncherDecisionReadiness,
+  getNextFakeLauncherStepAfterActionCard,
+  getNextFakeLauncherStepAfterInterruption,
+  getNextFakeLauncherStepAfterSelectedCard,
+  LAUNCHER_DATA_WAIT_TIMEOUT_MS,
+} from "../src/lib/launcherFlow.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
@@ -32,13 +41,41 @@ assert.doesNotMatch(cardSelectionSource, /selectWeightedLauncherCard/);
 assert.doesNotMatch(cardSelectionSource, /personalWeight|packWeight|weightedFlow/);
 assert.match(appSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
 assert.match(appSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
-assert.match(appSource, /label: "Continue to App"/);
+assert.match(appSource, /label: `Continue to \$\{appName\}`/);
 assert.match(appSource, /label: "I really like this one", variant: "secondary"/);
 assert.match(appSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
 assert.match(appSource, /const plannedInterruption = interruption;/);
-assert.match(appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
+assert.match(appSource, /getInitialFakeLauncherStep/);
+assert.match(appSource, /getNextFakeLauncherStepAfterSelectedCard/);
+assert.match(appSource, /buildFakeLauncherFlowContext/);
+assert.doesNotMatch(appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
 assert.doesNotMatch(appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/);
 assert.doesNotMatch(appSource, /launcher_weighted_session_started/);
+
+assert.deepEqual(
+  buildFakeLauncherFlowContext({
+    launcherId: "instagram",
+    launcherName: "Instagram",
+    destinationUrl: "https://www.instagram.com",
+    interruptionEnabled: true,
+    activationKey: "activation-1",
+  }),
+  {
+    launcherId: "instagram",
+    launcherName: "Instagram",
+    destinationUrl: "https://www.instagram.com",
+    interruptionEnabled: true,
+    activationKey: "activation-1",
+  },
+);
+assert.equal(getInitialFakeLauncherStep({ selectedCard: { id: "personal-a" }, interruption: { id: "interrupt" } }), FAKE_LAUNCHER_FLOW_STEPS.SELECTED_CARD);
+assert.equal(getInitialFakeLauncherStep({ selectedCard: null, interruption: { id: "interrupt" } }), FAKE_LAUNCHER_FLOW_STEPS.INTERRUPTION_CARD);
+assert.equal(getInitialFakeLauncherStep({ selectedCard: null, interruption: null }), FAKE_LAUNCHER_FLOW_STEPS.CAUGHT_UP);
+assert.equal(getNextFakeLauncherStepAfterSelectedCard({ interruption: { id: "interrupt" } }), FAKE_LAUNCHER_FLOW_STEPS.INTERRUPTION_CARD);
+assert.equal(getNextFakeLauncherStepAfterSelectedCard({ interruption: null }), FAKE_LAUNCHER_FLOW_STEPS.CONTINUE_CARD);
+assert.equal(getNextFakeLauncherStepAfterInterruption("do_something_else"), FAKE_LAUNCHER_FLOW_STEPS.ACTION_CARD);
+assert.equal(getNextFakeLauncherStepAfterInterruption("continue"), FAKE_LAUNCHER_FLOW_STEPS.CONTINUE_CARD);
+assert.equal(getNextFakeLauncherStepAfterActionCard(), FAKE_LAUNCHER_FLOW_STEPS.ACTION_SUCCESS);
 
 assert.deepEqual(
   normalizePersonalFirstFallbackSettings({ packCardTimeoutMs: 5.8 }),
