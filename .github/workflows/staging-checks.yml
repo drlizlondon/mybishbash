@@ -37,6 +37,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
       - name: Before-push checks
         run: npm run test:before-push
         env:
