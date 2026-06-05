@@ -96,11 +96,12 @@ function rewriteHtmlAppTitles() {
 }
 
 function rewriteManifests() {
+  const launcherIds = getLauncherIdsFromDistRegistry();
   for (const filePath of listFiles(DIST_DIR)) {
     if (!filePath.endsWith(".webmanifest")) continue;
     const manifest = JSON.parse(readFileSync(filePath, "utf8"));
     const path = relative(DIST_DIR, filePath);
-    const launcherId = path.match(/(?:^|\/)(?:launchers\/)?(safari|youtube|instagram)\/manifest\.webmanifest$/)?.[1];
+    const launcherId = getLauncherManifestId(path, launcherIds);
 
     if (launcherId) {
       const launcherName = manifest.short_name || manifest.name || launcherId;
@@ -128,6 +129,25 @@ function rewriteManifests() {
 
     writeFileSync(filePath, `${JSON.stringify(manifest, null, 2)}\n`);
   }
+}
+
+function getLauncherIdsFromDistRegistry() {
+  try {
+    const registry = JSON.parse(readFileSync(join(DIST_DIR, "launchers", "registry.json"), "utf8"));
+    return new Set((Array.isArray(registry.launchers) ? registry.launchers : []).map((launcher) => launcher.id).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+function getLauncherManifestId(relativePath, launcherIds) {
+  const launchersPathId = relativePath.match(/^launchers\/([^/]+)\/manifest\.webmanifest$/)?.[1];
+  if (launchersPathId && launcherIds.has(launchersPathId)) return launchersPathId;
+
+  const legacyPathId = relativePath.match(/^([^/]+)\/manifest\.webmanifest$/)?.[1];
+  if (legacyPathId && launcherIds.has(legacyPathId)) return legacyPathId;
+
+  return null;
 }
 
 function rewriteVersionMarker() {

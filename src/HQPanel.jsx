@@ -905,6 +905,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
   const [launcherFilter, setLauncherFilter] = useState("all");
   const [identityFilter, setIdentityFilter] = useState("all");
   const [displayFilter, setDisplayFilter] = useState("all");
+  const supportedLauncherNames = FAKE_APP_LAUNCHERS.map((launcher) => launcher.displayName).join(", ");
   const launcherIds = Array.from(new Set(telemetry.events.map(getEventLauncher).filter(Boolean))).sort();
   const filtered = telemetry.events.filter((event) => {
     const launcherId = getEventLauncher(event);
@@ -923,7 +924,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
         title="Supported Launcher Performance"
         subtitle="Install views, installs, interruption opens, Do Something Else, Continue to app, and settings for supported launchers."
       />
-      <GlassPanel title="Supported Launchers" subtitle="HQ can edit Safari, YouTube and Instagram only. New apps need a reviewed release because routing, install pages, manifests, interruption contexts and tests are still static-ID based. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.">
+      <GlassPanel title="Supported Launchers" subtitle={`HQ can edit supported code-reviewed launchers only: ${supportedLauncherNames}. New apps need a reviewed release because routing, install pages, manifests, interruption contexts and tests are still static-ID based. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
         <div className="grid gap-4 xl:grid-cols-3">
           {(launchers.length ? launchers : FAKE_APP_LAUNCHERS).map((launcher) => (
             <LauncherConfigCard

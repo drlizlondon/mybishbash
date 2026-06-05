@@ -7,6 +7,7 @@ import {
   buildManifestForLauncher,
   mergeLauncherConfig,
   mergeLauncherConfigs,
+  sanitizeLauncherUrl,
 } from "../src/lib/launcherRegistry.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -25,6 +26,15 @@ const requiredFields = [
   "enabled",
   "hqVisible",
 ];
+const launcherIds = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
+const acceptedPhaseTwoLauncherIds = ["chrome", "reddit", "linkedin", "whatsapp", "bbc-news", "duolingo"];
+
+assert.equal(new Set(launcherIds).size, launcherIds.length, "Launcher IDs must be unique");
+for (const id of acceptedPhaseTwoLauncherIds) {
+  assert.equal(launcherIds.includes(id), true, `${id} should be a supported code-reviewed launcher`);
+}
+assert.equal(launcherIds.includes("tiktok"), false, "TikTok should wait for a follow-up branch");
+assert.equal(launcherIds.includes("hinge"), false, "Hinge should wait for a follow-up branch");
 
 for (const launcher of FAKE_APP_LAUNCHERS) {
   for (const field of requiredFields) {
@@ -122,6 +132,10 @@ assert.equal(
   "Instagram Test Name",
   "Known HQ launcher configs should still override supported launchers",
 );
+
+assert.equal(sanitizeLauncherUrl("googlechromes://www.google.com"), "googlechromes://www.google.com");
+assert.equal(sanitizeLauncherUrl("tiktok://"), "");
+assert.equal(sanitizeLauncherUrl("hinge://"), "");
 
 assert.throws(
   () => assertKnownLauncherId("tiktok"),

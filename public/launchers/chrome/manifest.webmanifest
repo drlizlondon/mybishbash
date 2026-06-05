@@ -1,0 +1,17 @@
+{
+  "name": "Chrome",
+  "short_name": "Chrome",
+  "id": "https://drlizlondon.github.io/mybishbash/intercept/chrome",
+  "start_url": "https://drlizlondon.github.io/mybishbash/intercept/chrome",
+  "scope": "https://drlizlondon.github.io/mybishbash/",
+  "display": "standalone",
+  "background_color": "#F7F2EE",
+  "theme_color": "#F7F2EE",
+  "icons": [
+    {
+      "src": "/mybishbash/icons/mybishbash-cover.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

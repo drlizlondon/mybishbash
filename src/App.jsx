@@ -6236,8 +6236,18 @@ function SettingsPanel({
     safari: "Reminders during everyday phone use",
     instagram: "Pause before social scrolling",
     youtube: "Pause before video scrolling",
+    chrome: "Pause before open-ended browsing",
+    reddit: "Pause before thread-hopping",
+    linkedin: "Pause before professional comparison",
+    whatsapp: "Pause before reactive messaging",
+    "bbc-news": "Pause before checking the news",
+    duolingo: "Pause before streak-checking",
     mybishbash: "Main MyBishBash home",
   };
+  const supportedShortcutNames = Object.values(homeScreenVersions)
+    .filter((version) => version.id !== "mybishbash" && version.enabled !== false)
+    .map((version) => version.name ?? version.displayName ?? version.id)
+    .join(", ");
 
   return (
     <section className="panel-section">
@@ -6292,7 +6302,7 @@ function SettingsPanel({
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Home Screen Shortcuts</p>
-          <span>Install separate home-screen shortcuts for Safari, Instagram and YouTube. Each shortcut shares your MyBishBash cards and settings.</span>
+          <span>Install separate home-screen shortcuts for supported apps. Each shortcut shares your MyBishBash cards and settings.</span>
         </div>
         <div className="shortcut-context-grid">
           <div>
@@ -6301,7 +6311,7 @@ function SettingsPanel({
           </div>
           <div>
             <strong>Available shortcuts</strong>
-            <p>Safari: reminders during everyday phone use · Instagram: pause before social scrolling · YouTube: pause before video scrolling</p>
+            <p>{supportedShortcutNames || "Supported launcher shortcuts appear here."}</p>
           </div>
         </div>
         <label className="field" style={{ marginBottom: "16px" }}>

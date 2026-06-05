@@ -168,16 +168,26 @@ async function loadRegistry(normalAppLauncher, appBasePath = "/mybishbash") {
 }
 
 function fallbackFakeLauncher(launcherId, appBasePath) {
-  if (!["safari", "youtube", "instagram"].includes(launcherId)) return null;
-  const displayName = launcherId.charAt(0).toUpperCase() + launcherId.slice(1);
+  if (!launcherId || launcherId === "mybishbash") return null;
+  const displayName = document.querySelector("[data-version-name]")?.textContent?.trim() || titleCaseLauncherId(launcherId);
+  const iconSrc = document.querySelector("[data-install-icon]")?.getAttribute("src") || `${appBasePath}/icons/mybishbash-cover.png`;
+  const manifestPath = document.querySelector('link[rel="manifest"]')?.getAttribute("href") || `${appBasePath}/launchers/${launcherId}/manifest.webmanifest`;
   return {
     id: launcherId,
     displayName,
     name: displayName,
-    iconSrc: `${appBasePath}/icons/${launcherId === "safari" ? "apple-touch-icon.png" : `${launcherId}-cover.${launcherId === "instagram" ? "jpg" : "png"}`}`,
-    manifestPath: `${appBasePath}/launchers/${launcherId}/manifest.webmanifest`,
+    iconSrc,
+    manifestPath,
     launchPath: `/intercept/${launcherId}`,
   };
+}
+
+function titleCaseLauncherId(launcherId) {
+  return String(launcherId)
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function loadStoredVersions() {
