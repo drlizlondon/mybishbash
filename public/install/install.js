@@ -1,19 +1,16 @@
 (async function () {
-  const appBasePath = "/mybishbash";
+  const appBasePath = detectAppBasePath(window.location.pathname);
   const NORMAL_APP_LAUNCHER = {
     id: "mybishbash",
     displayName: "MyBishBash",
     name: "MyBishBash",
-    iconSrc: "/mybishbash/icons/mybishbash-cover.png",
-    manifestPath: "/mybishbash/manifest.webmanifest",
+    iconSrc: `${appBasePath}/icons/mybishbash-cover.png`,
+    manifestPath: `${appBasePath}/manifest.webmanifest`,
     launchPath: "/home",
   };
-  const registry = await loadRegistry(NORMAL_APP_LAUNCHER);
-  const pathParts = window.location.pathname.split("/").filter(Boolean);
-  const installIndex = pathParts.indexOf("install");
-  const legacyLauncherId = pathParts[0] === "mybishbash" ? pathParts[1] : pathParts[0];
-  const launcherId = installIndex >= 0 ? pathParts[installIndex + 1] : legacyLauncherId;
-  const launcher = registry.launchers.find((item) => item.id === launcherId) ?? NORMAL_APP_LAUNCHER;
+  const registry = await loadRegistry(NORMAL_APP_LAUNCHER, appBasePath);
+  const launcherId = resolveLauncherIdFromPath(window.location.pathname, registry, appBasePath);
+  const launcher = registry.launchers.find((item) => item.id === launcherId) ?? fallbackFakeLauncher(launcherId, appBasePath) ?? NORMAL_APP_LAUNCHER;
 
   if (!launcher) return;
 
@@ -54,7 +51,14 @@
 
   const launchLink = document.querySelector("[data-launch-link]");
   if (launchLink && version.launchPath) {
-    const launchUrl = new URL(`${window.location.origin}${appBasePath}${version.launchPath}`);
+    const launchPayload = buildLauncherPayload({
+      appBasePath,
+      fakeAppId: version.id,
+      launcher: version,
+      previewNamespace: appBasePath.replace(/^\/+/, ""),
+      source: "install_icon",
+    });
+    const launchUrl = new URL(`${window.location.origin}${appBasePath}${launchPayload.targetRoute}`);
     const currentParams = new URLSearchParams(window.location.search);
     if (currentParams.get("launcherAudit") === "1") {
       launchUrl.searchParams.set("launcherAudit", "1");
@@ -62,17 +66,23 @@
     }
     launchLink.href = launchUrl.toString();
     launchLink.addEventListener("click", () => {
-      if (version.id !== "mybishbash") {
+      logLauncherNavigation({
+        ...launchPayload,
+        currentPath: window.location.pathname,
+        localStorageLauncherContext: readStorageValue("localStorage", "mybishbash.installed-launcher-shell.v1"),
+        sessionStorageLauncherContext: readStorageValue("sessionStorage", "mybishbash.installed-launcher-shell.v1"),
+      });
+      if (launchPayload.appId !== "mybishbash") {
         storeInstalledLauncherShell(version);
       }
       const pendingEvents = loadPendingEvents();
       pendingEvents.push({
         event_type: "launcher_installed",
-        launcher_id: version.id,
-        route: version.launchPath,
+        launcher_id: launchPayload.appId,
+        route: launchPayload.targetRoute,
         created_at: new Date().toISOString(),
         is_standalone: isStandalone,
-        opened_from: "install_icon",
+        opened_from: launchPayload.source,
       });
       window.localStorage.setItem("mybishbash.pending-launcher-install.v1", JSON.stringify(pendingEvents.slice(-20)));
     });
@@ -110,9 +120,41 @@
   );
 })();
 
-async function loadRegistry(normalAppLauncher) {
+function detectAppBasePath(pathname) {
+  const [firstPart] = String(pathname || "").split("/").filter(Boolean);
+  if (firstPart === "mybishbash-preview") return "/mybishbash-preview";
+  return "/mybishbash";
+}
+
+function resolveLauncherIdFromPath(pathname, registry, appBasePath = "/mybishbash") {
+  const pathParts = String(pathname || "").split("/").filter(Boolean);
+  const appBasePart = appBasePath.replace(/^\/+|\/+$/g, "");
+  const installIndex = pathParts.indexOf("install");
+  const candidate = installIndex >= 0
+    ? pathParts[installIndex + 1]
+    : pathParts[0] === appBasePart
+      ? pathParts[1]
+      : pathParts[0];
+  const launcherIds = new Set((registry?.launchers || []).map((item) => item.id));
+  return launcherIds.has(candidate) || candidate ? candidate : "mybishbash";
+}
+
+function buildLauncherPayload({ appBasePath = "/mybishbash", previewNamespace = "", fakeAppId = "", launcher = {}, source = "install_icon" } = {}) {
+  const appId = fakeAppId || launcher.id || "mybishbash";
+  const targetRoute = launcher.launchPath || (appId === "mybishbash" ? "/home" : `/intercept/${appId}`);
+  return {
+    appId,
+    launcherContext: appId,
+    targetRoute,
+    source,
+    appBasePath,
+    previewNamespace,
+  };
+}
+
+async function loadRegistry(normalAppLauncher, appBasePath = "/mybishbash") {
   try {
-    const response = await fetch("/mybishbash/launchers/registry.json", { cache: "no-store" });
+    const response = await fetch(`${appBasePath}/launchers/registry.json`, { cache: "no-store" });
     if (response.ok) {
       const registry = await response.json();
       const fakeLaunchers = Array.isArray(registry.launchers) ? registry.launchers : [];
@@ -123,6 +165,19 @@ async function loadRegistry(normalAppLauncher) {
   }
 
   return { launchers: [normalAppLauncher] };
+}
+
+function fallbackFakeLauncher(launcherId, appBasePath) {
+  if (!["safari", "youtube", "instagram"].includes(launcherId)) return null;
+  const displayName = launcherId.charAt(0).toUpperCase() + launcherId.slice(1);
+  return {
+    id: launcherId,
+    displayName,
+    name: displayName,
+    iconSrc: `${appBasePath}/icons/${launcherId === "safari" ? "apple-touch-icon.png" : `${launcherId}-cover.${launcherId === "instagram" ? "jpg" : "png"}`}`,
+    manifestPath: `${appBasePath}/launchers/${launcherId}/manifest.webmanifest`,
+    launchPath: `/intercept/${launcherId}`,
+  };
 }
 
 function loadStoredVersions() {
@@ -151,4 +206,21 @@ function storeInstalledLauncherShell(launcher) {
       updated_at: new Date().toISOString(),
     }),
   );
+}
+
+function readStorageValue(storageName, key) {
+  try {
+    return window[storageName]?.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function logLauncherNavigation(payload) {
+  const message = {
+    event_type: "launcher_navigation_resolved",
+    ...payload,
+  };
+  window.__MYBISHBASH_LAUNCH_DEBUG__ = message;
+  console.debug("[mybishbash-launcher]", message);
 }
