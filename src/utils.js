@@ -340,9 +340,11 @@ export function getCurrentWindow(date = new Date(), timeZone) {
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const isPackCard = Boolean(card.sourcePackId);
+  const isCommitmentCard = card.cardKind === "commitment";
   if (card.paused) return false;
   if (card.disliked) return false;
   if (card.deletedAt) return false;
+  if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) return false;
   if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) return false;
   if (
     !isPackCard &&
@@ -419,6 +421,7 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
   const currentWindow = getCurrentWindow(date, timeZone);
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
   const isPackCard = Boolean(card.sourcePackId);
+  const isCommitmentCard = card.cardKind === "commitment";
 
   if (card.paused) {
     return { badge: "paused", detail: "hidden for now" };
@@ -426,6 +429,12 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
 
   if (isPackCard && (card.deletedAt || card.disliked)) {
     return { badge: "paused", detail: "hidden for now" };
+  }
+
+  if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) {
+    return card.commitmentStatusToday === "declined"
+      ? { badge: "done", detail: "not committed today" }
+      : { badge: "done", detail: "committed today" };
   }
 
   if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) {
