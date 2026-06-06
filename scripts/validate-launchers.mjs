@@ -125,6 +125,8 @@ assert.equal(instagramWithEmptyCloudFields.webFallbackUrl, instagram.webFallback
 
 assert.equal(whatsapp.enabled, false, "WhatsApp must remain disabled until manual iPhone QA passes");
 assert.equal(whatsapp.hqVisible, true, "WhatsApp should remain visible in HQ for manual QA");
+assert.equal(whatsapp.iconSrc, "/mybishbash/icons/whatsapp-qa-icon.png");
+assert.notEqual(whatsapp.iconSrc, "/mybishbash/icons/mybishbash-cover.png", "WhatsApp QA should not use the generic MyBishBash placeholder icon");
 assert.equal(whatsapp.iosAppUrl, "https://api.whatsapp.com/send");
 assert.equal(whatsapp.iosWebFallbackUrl, "https://api.whatsapp.com/send");
 assert.equal(whatsapp.webFallbackUrl, "https://api.whatsapp.com/send");

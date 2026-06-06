@@ -184,7 +184,7 @@ export const FAKE_APP_LAUNCHERS = [
     installPath: "/mybishbash/install/whatsapp/",
     launchPath: "/intercept/whatsapp",
     manifestPath: "/mybishbash/launchers/whatsapp/manifest.webmanifest",
-    iconSrc: PLACEHOLDER_ICON_SRC,
+    iconSrc: "/mybishbash/icons/whatsapp-qa-icon.png",
     customIconSrc: "",
     nativeAppUrl: "",
     webFallbackUrl: "https://api.whatsapp.com/send",
