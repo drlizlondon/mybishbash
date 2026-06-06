@@ -156,6 +156,13 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 const LAUNCH_TIMING_LOG_KEY = "bishbash.launchTiming.v1";
 const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;
+const COMMITMENT_TIMING_OPTIONS = [
+  { id: "anytime", label: "Anytime today", timingWindows: ["morning", "day", "evening", "night"] },
+  { id: "morning", label: "Morning", timingWindows: ["morning"] },
+  { id: "afternoon", label: "Afternoon", timingWindows: ["day"] },
+  { id: "evening", label: "Evening", timingWindows: ["evening"] },
+  { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
+];
 
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
@@ -357,10 +364,18 @@ function getCommitmentStartWindow(timingWindows = []) {
   return orderedWindowIds.find((windowId) => timingWindows.includes(windowId)) ?? "day";
 }
 
-function getTimingWindowsFromStart(startWindow) {
-  const orderedWindowIds = TIME_WINDOWS.map((item) => item.id);
-  const startIndex = Math.max(0, orderedWindowIds.indexOf(startWindow));
-  return orderedWindowIds.slice(startIndex);
+function getCommitmentTimingOptionId(card) {
+  if (card?.commitmentTimingMode) return card.commitmentTimingMode;
+  const windows = card?.timingWindows ?? [];
+  if (windows.includes("morning") && windows.includes("day") && windows.includes("evening") && windows.includes("night")) return "anytime";
+  if (windows.length === 1 && windows[0] === "morning") return "morning";
+  if (windows.length === 1 && windows[0] === "day") return "afternoon";
+  if (windows.length === 1 && windows[0] === "evening") return "evening";
+  return getCommitmentStartWindow(windows);
+}
+
+function getCommitmentTimingConfig(mode) {
+  return COMMITMENT_TIMING_OPTIONS.find((option) => option.id === mode) ?? COMMITMENT_TIMING_OPTIONS[0];
 }
 
 if (typeof window !== "undefined") {
@@ -1189,6 +1204,7 @@ function App() {
   const [launcherContext, setLauncherContext] = useState(() => getLauncherContextFromRoute(initialRoute));
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const composerReturnPathRef = useRef("/home");
   const [editingPackId, setEditingPackId] = useState(null);
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
   const [isActionCardEditorOpen, setIsActionCardEditorOpen] = useState(false);
@@ -3346,6 +3362,7 @@ function App() {
   }
 
   function handleSaveCard(formData) {
+    const returnPath = composerReturnPathRef.current || "/home";
     if (formData.cardKind === "commitment") {
       const trimmedText = formData.promptText.trim();
       if (!trimmedText) return;
@@ -3357,7 +3374,10 @@ function App() {
         promptText: trimmedText,
         dashboardTitle: "Today’s Commitment",
         commitmentReason: formData.commitmentReason?.trim() ?? "",
-        commitmentStartWindow: formData.commitmentStartWindow,
+        commitmentTimingMode: formData.commitmentTimingMode,
+        commitmentStartWindow: formData.commitmentTimingMode,
+        commitmentCustomStartTime: formData.commitmentCustomStartTime ?? "",
+        commitmentCustomEndTime: formData.commitmentCustomEndTime ?? "",
         theme: formData.theme,
         icon: formData.icon,
         statusToday: "fresh",
@@ -3404,7 +3424,10 @@ function App() {
       });
       logCommitmentDebug("selected display time/window", {
         cardId: newCard.id,
+        commitmentTimingMode: newCard.commitmentTimingMode,
         commitmentStartWindow: newCard.commitmentStartWindow,
+        commitmentCustomStartTime: newCard.commitmentCustomStartTime,
+        commitmentCustomEndTime: newCard.commitmentCustomEndTime,
         timingWindows: newCard.timingWindows,
       });
 
@@ -3417,7 +3440,7 @@ function App() {
         return;
       }
 
-      navigateTo("/home");
+      navigateTo(returnPath);
       return;
     }
 
@@ -3455,7 +3478,7 @@ function App() {
         return;
       }
 
-      navigateTo("/home");
+      navigateTo(returnPath);
       return;
     }
 
@@ -3512,7 +3535,7 @@ function App() {
       return;
     }
 
-    navigateTo("/home");
+    navigateTo(returnPath);
   }
 
   function handleDeleteCard(cardId) {
@@ -3600,8 +3623,15 @@ function App() {
 
   function openEditor(cardId) {
     setEditingId(cardId);
+    composerReturnPathRef.current = route.path;
     setIsComposerOpen(true);
     setMenuOpenId(null);
+  }
+
+  function openCardComposerFromCurrentRoute() {
+    setEditingId(null);
+    composerReturnPathRef.current = route.path;
+    setIsComposerOpen(true);
   }
 
   function openPackEditor(packId) {
@@ -4613,10 +4643,7 @@ function App() {
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`} data-testid="app-shell">
           <div className="app-inner">
             <Masthead
-              onCreate={() => {
-                setEditingId(null);
-                setIsComposerOpen(true);
-              }}
+              onCreate={openCardComposerFromCurrentRoute}
             />
 
             <main className="content">
@@ -4635,10 +4662,7 @@ function App() {
                   handleDeleteCard={handleDeleteCard}
                   handleDuplicateCard={handleDuplicateCard}
                   deactivatePack={deactivatePack}
-                  onCreate={() => {
-                    setEditingId(null);
-                    setIsComposerOpen(true);
-                  }}
+                  onCreate={openCardComposerFromCurrentRoute}
                 />
               ) : null}
 
@@ -4754,6 +4778,7 @@ function App() {
           initialCard={editingCard}
           onClose={() => {
             setEditingId(null);
+            composerReturnPathRef.current = "/home";
             setIsComposerOpen(false);
           }}
           onSave={handleSaveCard}
@@ -4836,6 +4861,7 @@ function App() {
           }}
           onAction={handleAction}
           onCommitmentAction={handleCommitmentAction}
+          onCreateCard={openCardComposerFromCurrentRoute}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
             const nextStep = getNextFakeLauncherStepAfterActionCard();
@@ -4992,9 +5018,9 @@ function Composer({ initialCard, onClose, onSave }) {
   const [cardKind, setCardKind] = useState(initialCardKind);
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
   const [commitmentReason, setCommitmentReason] = useState(initialCard?.commitmentReason ?? "");
-  const [commitmentStartWindow, setCommitmentStartWindow] = useState(
-    initialCard?.commitmentStartWindow ?? getCommitmentStartWindow(initialCard?.timingWindows ?? ["day", "evening", "night"]),
-  );
+  const [commitmentTimingMode, setCommitmentTimingMode] = useState(getCommitmentTimingOptionId(initialCard));
+  const [commitmentCustomStartTime, setCommitmentCustomStartTime] = useState(initialCard?.commitmentCustomStartTime ?? "09:00");
+  const [commitmentCustomEndTime, setCommitmentCustomEndTime] = useState(initialCard?.commitmentCustomEndTime ?? "17:00");
   const [bulkText, setBulkText] = useState("");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [theme, setTheme] = useState(resolveTheme(initialCard?.theme));
@@ -5006,6 +5032,7 @@ function Composer({ initialCard, onClose, onSave }) {
   const bulkCardsCount = isBulkMode ? parseBulkCards(bulkText).length : 0;
   const trimmedCommitment = promptText.trim();
   const isCommitmentMode = cardKind === "commitment";
+  const commitmentTimingConfig = getCommitmentTimingConfig(commitmentTimingMode);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -5018,11 +5045,13 @@ function Composer({ initialCard, onClose, onSave }) {
         cardKind: "commitment",
         promptText: trimmedCommitment,
         commitmentReason,
-        commitmentStartWindow,
+        commitmentTimingMode,
+        commitmentCustomStartTime: commitmentTimingMode === "custom" ? commitmentCustomStartTime : "",
+        commitmentCustomEndTime: commitmentTimingMode === "custom" ? commitmentCustomEndTime : "",
         theme,
         icon,
         frequency: "once_daily",
-        timingWindows: getTimingWindowsFromStart(commitmentStartWindow),
+        timingWindows: commitmentTimingConfig.timingWindows,
       });
       return;
     }
@@ -5103,7 +5132,7 @@ function Composer({ initialCard, onClose, onSave }) {
         {isCommitmentMode ? (
           <>
             <label className="field">
-              <span>What should the card say?</span>
+              <span>What are you committing to?</span>
               <textarea
                 data-testid="commitment-text-input"
                 value={promptText}
@@ -5116,8 +5145,8 @@ function Composer({ initialCard, onClose, onSave }) {
                 placeholder="Be smoke-free"
                 rows={4}
               />
-              <span className="field-hint">Write this as something you could commit to today.</span>
-              <span className="field-hint">Examples: Be smoke-free · Avoid evening snacks · Read my Bible · Go for a walk · Be patient with the children</span>
+              <span className="field-hint">Write something that makes sense after “I will...”</span>
+              <span className="field-hint">Examples: not have a cigarette today · not eat snacks after dinner · avoid cheese · read my Bible · go for a walk · be patient with the children</span>
               {showValidation ? (
                 <span className="field-hint">Add the exact commitment text before saving.</span>
               ) : null}
@@ -5133,33 +5162,64 @@ function Composer({ initialCard, onClose, onSave }) {
               />
             </label>
             <label className="field">
-              <span>What time or when do you want this card to be shown?</span>
+              <span>When should this card appear?</span>
               <select
                 className="settings-input"
                 data-testid="commitment-window-select"
-                value={commitmentStartWindow}
-                onChange={(event) => setCommitmentStartWindow(event.target.value)}
+                value={commitmentTimingMode}
+                onChange={(event) => setCommitmentTimingMode(event.target.value)}
               >
-                {TIME_WINDOWS.map((windowOption) => (
-                  <option key={windowOption.id} value={windowOption.id}>
-                    {windowOption.label} onwards
+                {COMMITMENT_TIMING_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </label>
+            {commitmentTimingMode === "custom" ? (
+              <div className="commitment-custom-time-grid">
+                <label className="field">
+                  <span>Start time</span>
+                  <input
+                    className="settings-input"
+                    data-testid="commitment-start-time-input"
+                    type="time"
+                    value={commitmentCustomStartTime}
+                    onChange={(event) => setCommitmentCustomStartTime(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>End time</span>
+                  <input
+                    className="settings-input"
+                    data-testid="commitment-end-time-input"
+                    type="time"
+                    value={commitmentCustomEndTime}
+                    onChange={(event) => setCommitmentCustomEndTime(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
             <div className={`composer-preview theme-${getThemeClass(theme)}`} data-testid="commitment-preview">
-              <p className="eyebrow">Today’s Commitment</p>
+              <p className="eyebrow">TODAY’S COMMITMENT</p>
               <span className="composer-mini-heart" aria-hidden="true">
                 <HeartGlyph />
               </span>
-              <div className="composer-preview-copy">
+              <div className="composer-preview-copy commitment-preview-copy">
+                <p>I will</p>
                 <h3>{trimmedCommitment || "Be smoke-free"}</h3>
-                <p>I will commit to this today</p>
-                <p>I don’t think I can commit to this today</p>
+                <div className="commitment-preview-actions">
+                  <button type="button" className="premium-action-button premium-action-button-primary" disabled>
+                    I will commit to this
+                  </button>
+                  <button type="button" className="premium-action-button premium-action-button-secondary" disabled>
+                    Not this time
+                  </button>
+                </div>
               </div>
             </div>
             <div className="field" data-testid="commitment-self-check">
-              <span>Does this read naturally with the choices below?</span>
+              <span>Does this sound right?</span>
               <div className="frequency-grid">
                 <button
                   type="submit"
@@ -7078,6 +7138,7 @@ function Overlay({
   onDashboard,
   onAction,
   onCommitmentAction,
+  onCreateCard,
   onPackContinue,
   onPackLike,
   onChooseElse,
@@ -7242,13 +7303,14 @@ function Overlay({
         icon="heart"
         headline={isIntercept ? "You're all caught up." : "You're all caught up for now."}
         subtitle={isIntercept ? "See you later." : ""}
-        actions={actions}
-        launcherVersions={isIntercept ? [] : fakeLauncherVersions}
-        onLauncherLaunch={onFakeLauncherLaunch}
-        onDashboard={onDashboard}
-        cardOverlayKey={cardOverlayKey}
-        className={launcherInterceptionClass}
-      />
+      actions={actions}
+      launcherVersions={isIntercept ? [] : fakeLauncherVersions}
+      onLauncherLaunch={onFakeLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={launcherInterceptionClass}
+    />
     );
   }
 
@@ -7263,6 +7325,7 @@ function Overlay({
         onContinueToApp={onContinueToApp}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
       />
     );
@@ -7284,6 +7347,7 @@ function Overlay({
         onFakeLauncherLaunch={onFakeLauncherLaunch}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
       />
@@ -7303,6 +7367,7 @@ function Overlay({
         onFakeLauncherLaunch={onFakeLauncherLaunch}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
       />
@@ -7318,6 +7383,7 @@ function Overlay({
         onContinueToApp={onContinueToApp}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
       />
@@ -7336,6 +7402,7 @@ function Overlay({
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
       />
@@ -7369,6 +7436,7 @@ function Overlay({
       launcherVersions={fakeLauncherVersions}
       onLauncherLaunch={onFakeLauncherLaunch}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
     />
@@ -7387,6 +7455,7 @@ function PremiumCardScreen({
   showDashboardShortcut = true,
   dashboardHref,
   onDashboard,
+  onCreateCard,
   children,
   className = "",
   cardOverlayKey = "",
@@ -7406,6 +7475,7 @@ function PremiumCardScreen({
       showDashboardShortcut={showDashboardShortcut}
       dashboardHref={dashboardHref}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
       className={className}
     >
       {children}
@@ -7420,6 +7490,7 @@ function CommitmentCardOverlay({
   launcherVersions = [],
   onLauncherLaunch,
   onDashboard,
+  onCreateCard,
   cardOverlayKey = "",
   className = "",
 }) {
@@ -7432,7 +7503,9 @@ function CommitmentCardOverlay({
     logCommitmentDebug("commitment card shown", {
       cardId: card.id,
       commitmentText: card.promptText,
-      commitmentStartWindow: card.commitmentStartWindow ?? getCommitmentStartWindow(card.timingWindows),
+      commitmentTimingMode: card.commitmentTimingMode ?? card.commitmentStartWindow ?? getCommitmentStartWindow(card.timingWindows),
+      commitmentCustomStartTime: card.commitmentCustomStartTime ?? "",
+      commitmentCustomEndTime: card.commitmentCustomEndTime ?? "",
       timingWindows: card.timingWindows,
     });
   }, [card]);
@@ -7447,11 +7520,12 @@ function CommitmentCardOverlay({
         subtitle=""
         actions={[
           { label: "I’ll commit after all", variant: "primary", onClick: () => onCommitmentAction("commit_after_all") },
-          { label: "I still don’t think I can commit today", variant: "secondary", onClick: () => onCommitmentAction("decline") },
+          { label: "Not this time", variant: "secondary", onClick: () => onCommitmentAction("decline") },
         ]}
         launcherVersions={launcherVersions}
         onLauncherLaunch={onLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={`${cardOverlayKey}:reason`}
         className={className}
       />
@@ -7461,14 +7535,14 @@ function CommitmentCardOverlay({
   return (
     <PremiumCardScreen
       type="personal"
-      greeting="Today’s Commitment"
+      greeting="TODAY’S COMMITMENT"
       icon="heart"
-      headline={card.promptText}
+      headline={`I will\n${card.promptText}`}
       subtitle=""
       actions={[
-        { label: "I will commit to this today", variant: "primary", onClick: () => onCommitmentAction("commit") },
+        { label: "I will commit to this", variant: "primary", onClick: () => onCommitmentAction("commit") },
         {
-          label: "I don’t think I can commit to this today",
+          label: "Not this time",
           variant: "secondary",
           onClick: () => {
             logCommitmentDebug("user chose second screen", {
@@ -7482,6 +7556,7 @@ function CommitmentCardOverlay({
       launcherVersions={launcherVersions}
       onLauncherLaunch={onLauncherLaunch}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
     />
@@ -7500,6 +7575,7 @@ function CardRevealTemplate({
   showDashboardShortcut = true,
   dashboardHref,
   onDashboard,
+  onCreateCard,
   children,
   className = "",
   cardOverlayKey = "",
@@ -7523,6 +7599,7 @@ function CardRevealTemplate({
   return (
     <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
       {showDashboardShortcut ? <PremiumDashboardShortcut href={dashboardHref} onClick={onDashboard} /> : null}
+      {onCreateCard ? <PremiumCreateShortcut onClick={onCreateCard} /> : null}
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header">
           {greeting ? <p className="premium-greeting">{greeting}</p> : null}
@@ -7668,6 +7745,22 @@ function PremiumDashboardShortcut({ href, onClick }) {
   );
 }
 
+function PremiumCreateShortcut({ onClick }) {
+  return (
+    <button
+      type="button"
+      className="premium-dashboard-shortcut premium-create-shortcut"
+      onClick={(event) => onClick?.(event)}
+      aria-label="Create a MyBishBash"
+      title="Create"
+      data-testid="overlay-create-card-button"
+    >
+      <span aria-hidden="true">+</span>
+      <span className="sr-only">Create a MyBishBash</span>
+    </button>
+  );
+}
+
 function PremiumActionStack({ actions = [] }) {
   if (!actions.length) return null;
 
@@ -7715,6 +7808,7 @@ function ActionCardOverlay({
   onFakeLauncherLaunch,
   allowBackHome = false,
   onDashboard,
+  onCreateCard,
   cardOverlayKey = "",
   className = "",
 }) {
@@ -7830,6 +7924,7 @@ function ActionCardOverlay({
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={`${cardOverlayKey}:${currentCard.id}`}
         className={className}
       />
@@ -7837,7 +7932,7 @@ function ActionCardOverlay({
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, cardOverlayKey = "", className = "" }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
   function handleContinueToApp() {
     if (!version) return;
 
@@ -7869,6 +7964,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={className}
       />
@@ -7876,7 +7972,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onDashboard, cardOverlayKey = "", className = "" }) {
+function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
   const actions = [
     { label: "Back home", variant: "primary", onClick: onClose },
   ];
@@ -7890,6 +7986,7 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, cardOverlayKey = 
       subtitle="Take all the time you need."
       actions={actions}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
     />
@@ -7955,7 +8052,7 @@ function CustomPackOverlay({ overlay, onClose, onDashboard }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, cardOverlayKey = "" }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, onCreateCard, cardOverlayKey = "" }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -8094,6 +8191,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         launcherVersions={[]}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
         cardOverlayKey={`${cardOverlayKey}:${cards[activeIndex]?.id ?? activeIndex}`}
         className="launcher-interception-card"
       >
