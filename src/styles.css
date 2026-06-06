@@ -1223,6 +1223,23 @@ textarea {
   cursor: default;
 }
 
+.commitment-card-user-text {
+  margin-top: 12px;
+  color: var(--bb-text);
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(26px, 7vw, 34px);
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.commitment-check-in-copy {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  width: min(88vw, 390px);
+}
+
 .commitment-custom-time-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

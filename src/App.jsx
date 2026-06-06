@@ -65,6 +65,8 @@ import {
   THEMES,
   TIME_WINDOWS,
   applyCardAction,
+  buildCommitmentCheckInCard,
+  buildEligibleCommitmentCheckInCards,
   buildCardsFromPack,
   createId,
   getGreeting,
@@ -73,6 +75,8 @@ import {
   getThemeClass,
   getCurrentWindow,
   isEligible,
+  isCommitmentCheckInCard,
+  isCommitmentCheckInEligible,
   isPackCardAvailable,
   normalizeCards,
   getTodayKey,
@@ -359,6 +363,21 @@ function isCommitmentCard(card) {
   return card?.cardKind === "commitment";
 }
 
+function findCommitmentCheckInParent(cards, checkInCardId) {
+  const [, parentId] = String(checkInCardId ?? "").split(":");
+  return parentId ? cards.find((card) => card.id === parentId && isCommitmentCard(card)) ?? null : null;
+}
+
+function resolveRevealCard(cards, cardId, timezone) {
+  if (!cardId) return null;
+  const storedCard = cards.find((card) => card.id === cardId);
+  if (storedCard) return storedCard;
+  const parent = findCommitmentCheckInParent(cards, cardId);
+  return parent && isCommitmentCheckInEligible(parent, new Date(), timezone)
+    ? buildCommitmentCheckInCard(parent, new Date(), timezone)
+    : null;
+}
+
 function getCommitmentStartWindow(timingWindows = []) {
   const orderedWindowIds = TIME_WINDOWS.map((item) => item.id);
   return orderedWindowIds.find((windowId) => timingWindows.includes(windowId)) ?? "day";
@@ -598,12 +617,17 @@ function isInterruptionSummaryEvent(event) {
 }
 
 function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set()) {
-  const normalized = normalizeCards(currentCards, new Date(), timezone);
+  const now = new Date();
+  const normalized = normalizeCards(currentCards, now, timezone);
+  const selectablePersonalCards = [
+    ...normalized,
+    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+  ];
   const activePackCards = normalized.filter((card) =>
     isPackCardAvailable(card) && !excludedCardIds.has(card.id)
   );
-  const eligiblePersonalCards = normalized.filter((card) =>
-    !card.sourcePackId && !card.deletedAt && !excludedCardIds.has(card.id) && isEligible(card, new Date(), timezone)
+  const eligiblePersonalCards = selectablePersonalCards.filter((card) =>
+    !card.sourcePackId && !card.deletedAt && !excludedCardIds.has(card.id) && isEligible(card, now, timezone)
   );
   const eligiblePackCards = activePackCards;
   return {
@@ -617,8 +641,14 @@ function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set(
 }
 
 function countEligibleGeneralCards(currentCards, timezone) {
-  return normalizeCards(currentCards, new Date(), timezone).filter((card) =>
-    card.sourcePackId ? isPackCardAvailable(card) : isEligible(card, new Date(), timezone) && !card.deletedAt
+  const now = new Date();
+  const normalized = normalizeCards(currentCards, now, timezone);
+  const selectableCards = [
+    ...normalized,
+    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+  ];
+  return selectableCards.filter((card) =>
+    card.sourcePackId ? isPackCardAvailable(card) : isEligible(card, now, timezone) && !card.deletedAt
   ).length;
 }
 
@@ -1107,6 +1137,15 @@ function buildActionCardEmptyOverlay(versionId = null) {
 
 function buildActionSuccessOverlay(versionId = null) {
   return { type: "action-success", versionId };
+}
+
+function buildFlowConfirmationOverlay(versionId = null, message = "Thanks for the update.", activationKey = null) {
+  return {
+    type: "flow-confirmation",
+    versionId,
+    message,
+    ...(versionId ? buildFakeLauncherOverlayContext(versionId, activationKey) : {}),
+  };
 }
 
 function App() {
@@ -1754,12 +1793,17 @@ function App() {
           globalEnabled: globalInterruptionMode,
         })
       : null;
-    const normalizedCards = normalizeCards(cards, new Date(), profile.timezone);
+    const routeNow = new Date();
+    const normalizedCards = normalizeCards(cards, routeNow, profile.timezone);
+    const selectableCards = [
+      ...normalizedCards,
+      ...buildEligibleCommitmentCheckInCards(normalizedCards, routeNow, profile.timezone),
+    ];
     const hasUsableCachedLauncherState =
-      normalizedCards.some((card) =>
+      selectableCards.some((card) =>
         card.sourcePackId
           ? isPackCardAvailable(card)
-          : !card.deletedAt && isEligible(card, new Date(), profile.timezone)
+          : !card.deletedAt && isEligible(card, routeNow, profile.timezone)
       ) ||
       (routeInterruptionPack?.cards?.length ?? 0) > 0;
     const readiness = getLauncherDecisionReadiness({
@@ -2575,8 +2619,13 @@ function App() {
     if (route.kind === "intercept") {
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
-      const normalizedDiagCards = normalizeCards(cards, new Date(), profile.timezone);
-      const eligiblePersonalCount = normalizedDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, new Date(), profile.timezone)).length;
+      const routeNow = new Date();
+      const normalizedDiagCards = normalizeCards(cards, routeNow, profile.timezone);
+      const selectableDiagCards = [
+        ...normalizedDiagCards,
+        ...buildEligibleCommitmentCheckInCards(normalizedDiagCards, routeNow, profile.timezone),
+      ];
+      const eligiblePersonalCount = selectableDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, routeNow, profile.timezone)).length;
       const eligiblePackCount = normalizedDiagCards.filter(isPackCardAvailable).length;
       const routeInterruptionPack = getInterruptionPackForLauncher(route.versionId, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
         hiddenCardIds: hiddenPackCardIdsCompat,
@@ -2644,7 +2693,7 @@ function App() {
 
       if (
         !isResumeInterceptLaunch &&
-        ["action-card", "action-card-empty", "action-success"].includes(overlay?.type) &&
+        ["action-card", "action-card-empty", "action-success", "flow-confirmation"].includes(overlay?.type) &&
         overlay?.versionId === route.versionId
       ) {
         return;
@@ -3166,6 +3215,29 @@ function App() {
   }
 
   function handleRevealCompletion(options = {}) {
+    if (options.confirmationMessage) {
+      if (overlay?.launchSource === "fake_launcher" && overlay?.versionId) {
+        const versionId = overlay.versionId;
+        const completedCardId = options.completedCardId ?? overlay.cardId ?? null;
+        if (completedCardId) {
+          launchCompletedCardIdsRef.current = new Set([...launchCompletedCardIdsRef.current, completedCardId]);
+        }
+        const activation = interceptActivationRef.current;
+        const activationKey = overlay.activationKey || activation?.activationKey || Date.now().toString();
+        setScreen("interception");
+        const nextOverlay = buildFlowConfirmationOverlay(versionId, options.confirmationMessage, activationKey);
+        setOverlay(nextOverlay);
+        navigateTo(`/intercept/${versionId}`, { replace: true });
+        return;
+      }
+
+      suppressNextHomeAutoLaunchRef.current = true;
+      setShouldLaunchOverlay(false);
+      setScreen("library");
+      setOverlay(buildFlowConfirmationOverlay(null, options.confirmationMessage));
+      return;
+    }
+
     if (overlay?.launchSource === "fake_launcher" && overlay?.versionId) {
       const versionId = overlay.versionId;
       const completedCardId = options.completedCardId ?? overlay.cardId ?? null;
@@ -3322,6 +3394,7 @@ function App() {
       commitmentStatusToday: committed ? "made" : "declined",
       commitmentDecisionDate: todayKey,
       commitmentDecisionAt: now.toISOString(),
+      commitmentCheckInPendingDate: committed && activeCard.commitmentCheckInEnabled ? todayKey : null,
     };
     const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
     setCards(cardsAfterAction);
@@ -3358,26 +3431,92 @@ function App() {
       });
     }
 
-    handleRevealCompletion({ cardsOverride: cardsAfterAction, completedCardId: activeCard.id });
+    handleRevealCompletion({
+      cardsOverride: cardsAfterAction,
+      completedCardId: activeCard.id,
+      confirmationMessage: committed
+        ? "Thanks for making a commitment to yourself."
+        : "Thanks for the update.",
+    });
+  }
+
+  function handleCommitmentCheckInAction(response) {
+    if (!overlay || overlay.type !== "reveal") return;
+
+    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
+    if (!activeCard || !isCommitmentCheckInCard(activeCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
+    if (!parentCard || !isCommitmentCard(parentCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const updatedCard = {
+      ...parentCard,
+      lastShownAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      commitmentCheckInResponse: response,
+      commitmentCheckInResponseDate: todayKey,
+      commitmentCheckInResponseAt: now.toISOString(),
+      commitmentCheckInPendingDate: null,
+    };
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
+
+    void logEvent({
+      event_type: "commitment_check_in",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: parentCard.id,
+      bash_title: parentCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Check-in",
+      card_text: parentCard.promptText,
+      action_taken: response,
+      metadata: {
+        cardKind: "commitment_check_in",
+        parentCommitmentCardId: parentCard.id,
+        checkInTime: parentCard.commitmentCheckInTime ?? "",
+        response,
+      },
+    });
+
+    handleRevealCompletion({
+      cardsOverride: cardsAfterAction,
+      completedCardId: activeCard.id,
+      confirmationMessage: "Thanks for the update.",
+    });
   }
 
   function handleSaveCard(formData) {
     const returnPath = composerReturnPathRef.current || "/home";
     if (formData.cardKind === "commitment") {
-      const trimmedText = formData.promptText.trim();
-      if (!trimmedText) return;
+      const commitmentText = formData.promptText;
+      if (!commitmentText.trim()) return;
 
       const now = new Date().toISOString();
       const newCard = {
         id: createId(),
         cardKind: "commitment",
-        promptText: trimmedText,
+        promptText: commitmentText,
         dashboardTitle: "Today’s Commitment",
-        commitmentReason: formData.commitmentReason?.trim() ?? "",
+        commitmentReason: formData.commitmentReason ?? "",
         commitmentTimingMode: formData.commitmentTimingMode,
         commitmentStartWindow: formData.commitmentTimingMode,
         commitmentCustomStartTime: formData.commitmentCustomStartTime ?? "",
         commitmentCustomEndTime: formData.commitmentCustomEndTime ?? "",
+        commitmentCheckInEnabled: Boolean(formData.commitmentCheckInEnabled),
+        commitmentCheckInTime: formData.commitmentCheckInEnabled ? formData.commitmentCheckInTime ?? "" : "",
+        commitmentCheckInPendingDate: null,
+        commitmentCheckInResponse: null,
+        commitmentCheckInResponseDate: null,
+        commitmentCheckInResponseAt: null,
         theme: formData.theme,
         icon: formData.icon,
         statusToday: "fresh",
@@ -3410,6 +3549,10 @@ function App() {
                   commitmentStatusToday: card.commitmentStatusToday ?? null,
                   commitmentDecisionDate: card.commitmentDecisionDate ?? null,
                   commitmentDecisionAt: card.commitmentDecisionAt ?? null,
+                  commitmentCheckInPendingDate: card.commitmentCheckInPendingDate ?? null,
+                  commitmentCheckInResponse: card.commitmentCheckInResponse ?? null,
+                  commitmentCheckInResponseDate: card.commitmentCheckInResponseDate ?? null,
+                  commitmentCheckInResponseAt: card.commitmentCheckInResponseAt ?? null,
                 }
               : card,
           ),
@@ -4393,7 +4536,7 @@ function App() {
   );
 
   const activeRevealCard = overlay?.cardId
-    ? cards.find((card) => card.id === overlay.cardId)
+    ? resolveRevealCard(cards, overlay.cardId, profile.timezone)
     : null;
   const activeOverlayVersion = useMemo(
     () =>
@@ -4861,6 +5004,7 @@ function App() {
           }}
           onAction={handleAction}
           onCommitmentAction={handleCommitmentAction}
+          onCommitmentCheckInAction={handleCommitmentCheckInAction}
           onCreateCard={openCardComposerFromCurrentRoute}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
@@ -5021,6 +5165,8 @@ function Composer({ initialCard, onClose, onSave }) {
   const [commitmentTimingMode, setCommitmentTimingMode] = useState(getCommitmentTimingOptionId(initialCard));
   const [commitmentCustomStartTime, setCommitmentCustomStartTime] = useState(initialCard?.commitmentCustomStartTime ?? "09:00");
   const [commitmentCustomEndTime, setCommitmentCustomEndTime] = useState(initialCard?.commitmentCustomEndTime ?? "17:00");
+  const [commitmentCheckInEnabled, setCommitmentCheckInEnabled] = useState(Boolean(initialCard?.commitmentCheckInEnabled));
+  const [commitmentCheckInTime, setCommitmentCheckInTime] = useState(initialCard?.commitmentCheckInTime ?? "20:00");
   const [bulkText, setBulkText] = useState("");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [theme, setTheme] = useState(resolveTheme(initialCard?.theme));
@@ -5043,11 +5189,13 @@ function Composer({ initialCard, onClose, onSave }) {
       }
       onSave({
         cardKind: "commitment",
-        promptText: trimmedCommitment,
+        promptText,
         commitmentReason,
         commitmentTimingMode,
         commitmentCustomStartTime: commitmentTimingMode === "custom" ? commitmentCustomStartTime : "",
         commitmentCustomEndTime: commitmentTimingMode === "custom" ? commitmentCustomEndTime : "",
+        commitmentCheckInEnabled,
+        commitmentCheckInTime: commitmentCheckInEnabled ? commitmentCheckInTime : "",
         theme,
         icon,
         frequency: "once_daily",
@@ -5142,7 +5290,7 @@ function Composer({ initialCard, onClose, onSave }) {
                     setShowValidation(false);
                   }
                 }}
-                placeholder="Be smoke-free"
+                placeholder="not have a cigarette today"
                 rows={4}
               />
               <span className="field-hint">Write something that makes sense after “I will...”</span>
@@ -5200,6 +5348,37 @@ function Composer({ initialCard, onClose, onSave }) {
                 </label>
               </div>
             ) : null}
+            <div className="field">
+              <span>Would you like a check-in?</span>
+              <div className="frequency-grid" data-testid="commitment-check-in-toggle">
+                <button
+                  type="button"
+                  className={`frequency-option ${!commitmentCheckInEnabled ? "selected" : ""}`}
+                  onClick={() => setCommitmentCheckInEnabled(false)}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  className={`frequency-option ${commitmentCheckInEnabled ? "selected" : ""}`}
+                  onClick={() => setCommitmentCheckInEnabled(true)}
+                >
+                  Yes
+                </button>
+              </div>
+            </div>
+            {commitmentCheckInEnabled ? (
+              <label className="field">
+                <span>Check-in time</span>
+                <input
+                  className="settings-input"
+                  data-testid="commitment-check-in-time-input"
+                  type="time"
+                  value={commitmentCheckInTime}
+                  onChange={(event) => setCommitmentCheckInTime(event.target.value)}
+                />
+              </label>
+            ) : null}
             <div className={`composer-preview theme-${getThemeClass(theme)}`} data-testid="commitment-preview">
               <p className="eyebrow">TODAY’S COMMITMENT</p>
               <span className="composer-mini-heart" aria-hidden="true">
@@ -5207,7 +5386,7 @@ function Composer({ initialCard, onClose, onSave }) {
               </span>
               <div className="composer-preview-copy commitment-preview-copy">
                 <p>I will</p>
-                <h3>{trimmedCommitment || "Be smoke-free"}</h3>
+                <h3>{promptText || "not have a cigarette today"}</h3>
                 <div className="commitment-preview-actions">
                   <button type="button" className="premium-action-button premium-action-button-primary" disabled>
                     I will commit to this
@@ -7138,6 +7317,7 @@ function Overlay({
   onDashboard,
   onAction,
   onCommitmentAction,
+  onCommitmentCheckInAction,
   onCreateCard,
   onPackContinue,
   onPackLike,
@@ -7390,8 +7570,39 @@ function Overlay({
     );
   }
 
+  if (overlay.type === "flow-confirmation") {
+    return (
+      <FlowConfirmationOverlay
+        overlay={overlay}
+        version={version}
+        onClose={onClose}
+        onContinueToApp={onContinueToApp}
+        onChooseElse={onChooseElse}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={launcherInterceptionClass}
+      />
+    );
+  }
+
   if (!card) return null;
   const cardType = card.sourcePackId ? "pack" : "personal";
+
+  if (isCommitmentCheckInCard(card)) {
+    return (
+      <CommitmentCheckInOverlay
+        card={card}
+        onCheckInAction={onCommitmentCheckInAction}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+      />
+    );
+  }
 
   if (isCommitmentCard(card)) {
     return (
@@ -7514,7 +7725,7 @@ function CommitmentCardOverlay({
     return (
       <PremiumCardScreen
         type="personal"
-        greeting="Message from yourself"
+        greeting="MESSAGE FROM YOURSELF"
         icon="heart"
         headline={card.commitmentReason || "You wrote this because it matters."}
         subtitle=""
@@ -7537,7 +7748,7 @@ function CommitmentCardOverlay({
       type="personal"
       greeting="TODAY’S COMMITMENT"
       icon="heart"
-      headline={`I will\n${card.promptText}`}
+      headline="I will"
       subtitle=""
       actions={[
         { label: "I will commit to this", variant: "primary", onClick: () => onCommitmentAction("commit") },
@@ -7559,7 +7770,46 @@ function CommitmentCardOverlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
-    />
+    >
+      <p className="premium-subtitle commitment-card-user-text">{card.promptText}</p>
+    </PremiumCardScreen>
+  );
+}
+
+function CommitmentCheckInOverlay({
+  card,
+  onCheckInAction,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+}) {
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting="CHECK-IN"
+      icon="heart"
+      headline="You committed to:"
+      subtitle=""
+      actions={[
+        { label: "Going perfectly", variant: "primary", onClick: () => onCheckInAction("Going perfectly") },
+        { label: "Could be better", variant: "secondary", onClick: () => onCheckInAction("Could be better") },
+        { label: "Not going well", variant: "secondary", onClick: () => onCheckInAction("Not going well") },
+      ]}
+      launcherVersions={launcherVersions}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+    >
+      <div className="commitment-check-in-copy">
+        <p className="premium-subtitle commitment-card-user-text">{card.promptText}</p>
+        <p className="premium-subtitle">How’s it going?</p>
+      </div>
+    </PremiumCardScreen>
   );
 }
 
@@ -7984,6 +8234,44 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, car
       icon="heart"
       headline="Nice choice."
       subtitle="Take all the time you need."
+      actions={actions}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+    />
+  );
+}
+
+function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, onChooseElse, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
+  const appName = version?.name ?? "App";
+  const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version)) : "";
+  const actions = version
+    ? [
+        {
+          label: `Continue to ${appName}`,
+          variant: "primary",
+          href: continueHref,
+          onClick: (event) => {
+            const handled = onContinueToApp?.(version.id, {
+              source: "flow_confirmation",
+              reason: "user_pressed_continue_after_confirmation",
+              allowDefaultNavigation: Boolean(continueHref),
+            });
+            if (handled !== false) event?.preventDefault?.();
+          },
+        },
+        { label: "Do something else", variant: "secondary", onClick: onChooseElse },
+      ]
+    : [{ label: "Back home", variant: "primary", onClick: onClose }];
+
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting="MyBishBash"
+      icon="heart"
+      headline={overlay.message || "Thanks for the update."}
+      subtitle=""
       actions={actions}
       onDashboard={onDashboard}
       onCreateCard={onCreateCard}

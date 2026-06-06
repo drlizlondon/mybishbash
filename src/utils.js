@@ -345,7 +345,7 @@ function getTimeOfDayMinutes(date = new Date(), timeZone) {
   return context.hour * 60 + context.minute;
 }
 
-function parseTimeStringToMinutes(value) {
+export function parseTimeStringToMinutes(value) {
   if (typeof value !== "string") return null;
   const match = value.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
@@ -353,6 +353,59 @@ function parseTimeStringToMinutes(value) {
   const minute = Number(match[2]);
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return hour * 60 + minute;
+}
+
+export function getCommitmentCheckInId(card, date = new Date(), timeZone) {
+  return `checkin:${card.id}:${getTodayKey(date, timeZone)}`;
+}
+
+export function isCommitmentCheckInCard(card) {
+  return card?.cardKind === "commitment_check_in";
+}
+
+export function isCommitmentCheckInEligible(card, date = new Date(), timeZone) {
+  if (!card || card.sourcePackId) return false;
+  if (card.cardKind !== "commitment") return false;
+  if (card.paused || card.disliked || card.deletedAt) return false;
+  if (!card.commitmentCheckInEnabled || !card.commitmentCheckInTime) return false;
+
+  const todayKey = getTodayKey(date, timeZone);
+  if (card.commitmentStatusToday !== "made" || card.commitmentDecisionDate !== todayKey) return false;
+  if (card.commitmentCheckInResponseDate === todayKey) return false;
+
+  const checkInMinutes = parseTimeStringToMinutes(card.commitmentCheckInTime);
+  if (checkInMinutes == null) return false;
+  return getTimeOfDayMinutes(date, timeZone) >= checkInMinutes;
+}
+
+export function buildCommitmentCheckInCard(card, date = new Date(), timeZone) {
+  return {
+    id: getCommitmentCheckInId(card, date, timeZone),
+    cardKind: "commitment_check_in",
+    parentCommitmentCardId: card.id,
+    promptText: card.promptText,
+    dashboardTitle: "Check-in",
+    theme: card.theme,
+    icon: card.icon ?? "heart",
+    statusToday: "fresh",
+    createdAt: card.commitmentDecisionAt ?? card.createdAt,
+    updatedAt: card.updatedAt,
+    lastShownAt: null,
+    notYetUntil: null,
+    doneDate: null,
+    frequency: "once_daily",
+    timingWindows: ["morning", "day", "evening", "night"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+  };
+}
+
+export function buildEligibleCommitmentCheckInCards(cards = [], date = new Date(), timeZone) {
+  return cards
+    .filter((card) => isCommitmentCheckInEligible(card, date, timeZone))
+    .map((card) => buildCommitmentCheckInCard(card, date, timeZone));
 }
 
 function isWithinCustomTimeWindow(card, date = new Date(), timeZone) {

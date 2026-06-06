@@ -1,4 +1,9 @@
-import { isEligible, isPackCardAvailable, normalizeCards } from "../utils.js";
+import {
+  buildEligibleCommitmentCheckInCards,
+  isEligible,
+  isPackCardAvailable,
+  normalizeCards,
+} from "../utils.js";
 
 export const LAUNCHER_TESTER_FEATURE_LOCAL_STORAGE_KEY = "mybishbash.launcherTesterFeatures.enabled";
 export const DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS = {
@@ -137,7 +142,11 @@ export function selectPersonalFirstLauncherCard({
   const config = normalizePersonalFirstFallbackSettings(settings);
   const excluded = new Set(excludedCardIds ?? []);
   const nowMs = now.getTime();
-  const exposureByCardId = buildCardExposureLookup(normalized, events);
+  const selectableCards = [
+    ...normalized,
+    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+  ];
+  const exposureByCardId = buildCardExposureLookup(selectableCards, events);
 
   const eligiblePrimaryPool = [];
   const activePackPool = [];
@@ -145,7 +154,7 @@ export function selectPersonalFirstLauncherCard({
   const activePackIds = new Set();
   const eligiblePackIds = new Set();
 
-  for (const card of normalized) {
+  for (const card of selectableCards) {
     if (excluded.has(card.id)) continue;
 
     if (isPackCardAvailable(card)) {
