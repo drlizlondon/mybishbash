@@ -135,8 +135,7 @@ function resolveLauncherIdFromPath(pathname, registry, appBasePath = "/mybishbas
     : pathParts[0] === appBasePart
       ? pathParts[1]
       : pathParts[0];
-  const launcherIds = new Set((registry?.launchers || []).map((item) => item.id));
-  return launcherIds.has(candidate) || candidate ? candidate : "mybishbash";
+  return candidate || "mybishbash";
 }
 
 function buildLauncherPayload({ appBasePath = "/mybishbash", previewNamespace = "", fakeAppId = "", launcher = {}, source = "install_icon" } = {}) {

@@ -384,13 +384,18 @@ function getCommitmentStartWindow(timingWindows = []) {
 }
 
 function getCommitmentTimingOptionId(card) {
-  if (card?.commitmentTimingMode) return card.commitmentTimingMode;
+  const validTimingIds = new Set(COMMITMENT_TIMING_OPTIONS.map((option) => option.id));
+  if (!card) return "anytime";
+  if (validTimingIds.has(card.commitmentTimingMode)) return card.commitmentTimingMode;
   const windows = card?.timingWindows ?? [];
   if (windows.includes("morning") && windows.includes("day") && windows.includes("evening") && windows.includes("night")) return "anytime";
   if (windows.length === 1 && windows[0] === "morning") return "morning";
   if (windows.length === 1 && windows[0] === "day") return "afternoon";
   if (windows.length === 1 && windows[0] === "evening") return "evening";
-  return getCommitmentStartWindow(windows);
+  const startWindow = getCommitmentStartWindow(windows);
+  if (startWindow === "day") return "afternoon";
+  if (startWindow === "night") return "anytime";
+  return validTimingIds.has(startWindow) ? startWindow : "anytime";
 }
 
 function getCommitmentTimingConfig(mode) {
@@ -2315,7 +2320,7 @@ function App() {
     const flowContext = buildFakeLauncherFlowContext({
       launcherId: versionId,
       launcherName: configuredLauncher?.name ?? configuredLauncher?.displayName ?? versionId,
-      destinationUrl: getBrowserSafeDestinationHref(getVersionOpenHref(configuredLauncher)),
+      destinationUrl: configuredLauncher ? getBrowserSafeDestinationHref(getVersionOpenHref(configuredLauncher)) : "",
       interruptionEnabled,
       activationKey,
     });
@@ -3395,6 +3400,9 @@ function App() {
       commitmentDecisionDate: todayKey,
       commitmentDecisionAt: now.toISOString(),
       commitmentCheckInPendingDate: committed && activeCard.commitmentCheckInEnabled ? todayKey : null,
+      commitmentCheckInResponse: null,
+      commitmentCheckInResponseDate: null,
+      commitmentCheckInResponseAt: null,
     };
     const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
     setCards(cardsAfterAction);
@@ -3730,7 +3738,7 @@ function App() {
 
         if (!matches) return card;
 
-        return {
+        const resetCard = {
           ...card,
           statusToday: "fresh",
           doneDate: null,
@@ -3738,6 +3746,16 @@ function App() {
           lastShownAt: null,
           paused: false,
           updatedAt: new Date().toISOString(),
+        };
+
+        if (!isCommitmentCard(card)) return resetCard;
+
+        return {
+          ...resetCard,
+          commitmentCheckInPendingDate: null,
+          commitmentCheckInResponse: null,
+          commitmentCheckInResponseDate: null,
+          commitmentCheckInResponseAt: null,
         };
       }),
     );
@@ -5158,6 +5176,7 @@ function parseBulkCards(text) {
 }
 
 function Composer({ initialCard, onClose, onSave }) {
+  const commitmentInputRef = useRef(null);
   const initialCardKind = isCommitmentCard(initialCard) ? "commitment" : "personal";
   const [cardKind, setCardKind] = useState(initialCardKind);
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
@@ -5179,11 +5198,14 @@ function Composer({ initialCard, onClose, onSave }) {
   const trimmedCommitment = promptText.trim();
   const isCommitmentMode = cardKind === "commitment";
   const commitmentTimingConfig = getCommitmentTimingConfig(commitmentTimingMode);
+  const commitmentCustomTimeMissing = commitmentTimingMode === "custom" && (!commitmentCustomStartTime || !commitmentCustomEndTime);
+  const commitmentCheckInTimeMissing = commitmentCheckInEnabled && !commitmentCheckInTime;
+  const canSaveCommitment = Boolean(trimmedCommitment) && !commitmentCustomTimeMissing && !commitmentCheckInTimeMissing;
 
   function handleSubmit(event) {
     event.preventDefault();
     if (isCommitmentMode) {
-      if (!trimmedCommitment) {
+      if (!canSaveCommitment) {
         setShowValidation(true);
         return;
       }
@@ -5283,6 +5305,7 @@ function Composer({ initialCard, onClose, onSave }) {
               <span>What are you committing to?</span>
               <textarea
                 data-testid="commitment-text-input"
+                ref={commitmentInputRef}
                 value={promptText}
                 onChange={(event) => {
                   setPromptText(event.target.value);
@@ -5296,7 +5319,9 @@ function Composer({ initialCard, onClose, onSave }) {
               <span className="field-hint">Write something that makes sense after “I will...”</span>
               <span className="field-hint">Examples: not have a cigarette today · not eat snacks after dinner · avoid cheese · read my Bible · go for a walk · be patient with the children</span>
               {showValidation ? (
-                <span className="field-hint">Add the exact commitment text before saving.</span>
+                <span className="field-hint">
+                  {trimmedCommitment ? "Finish the selected timing details before saving." : "Add the exact commitment text before saving."}
+                </span>
               ) : null}
             </label>
             <label className="field">
@@ -5404,14 +5429,14 @@ function Composer({ initialCard, onClose, onSave }) {
                   type="submit"
                   className="frequency-option selected"
                   data-testid="save-commitment-card-button"
-                  disabled={!trimmedCommitment}
+                  disabled={!canSaveCommitment}
                 >
                   Yes, save
                 </button>
                 <button
                   type="button"
                   className="frequency-option"
-                  onClick={() => document.querySelector("[data-testid='commitment-text-input']")?.focus()}
+                  onClick={() => commitmentInputRef.current?.focus()}
                 >
                   Edit commitment
                 </button>
