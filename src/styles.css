@@ -1188,6 +1188,10 @@ textarea {
   max-width: 11ch;
 }
 
+.commitment-preview-copy {
+  max-width: min(100%, 22rem);
+}
+
 .composer-preview h3 {
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
@@ -1204,6 +1208,25 @@ textarea {
   font-size: 0.9rem;
   line-height: 1.25;
   max-width: 10ch;
+}
+
+.commitment-preview-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  max-width: 18rem;
+}
+
+.commitment-preview-actions .premium-action-button {
+  min-height: 42px;
+  opacity: 1;
+  cursor: default;
+}
+
+.commitment-custom-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .composer-preview-scene {
@@ -4164,6 +4187,14 @@ body {
   fill: none;
 }
 
+.premium-create-shortcut {
+  right: auto;
+  left: max(18px, env(safe-area-inset-left));
+  font-size: 1.7rem;
+  line-height: 1;
+  font-weight: 400;
+}
+
 .premium-greeting {
   margin: 0;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -4219,6 +4250,7 @@ body {
   text-align: center;
   overflow-wrap: anywhere;
   text-wrap: balance;
+  white-space: pre-line;
   overflow: visible;
 }
 
@@ -4559,6 +4591,11 @@ body {
     right: 28px;
   }
 
+  .premium-create-shortcut {
+    right: auto;
+    left: 28px;
+  }
+
   .premium-title-box {
     width: min(88vw, 390px);
   }
@@ -4585,6 +4622,11 @@ body {
   .premium-dashboard-shortcut {
     top: calc(env(safe-area-inset-top) + 22px);
     right: 32px;
+  }
+
+  .premium-create-shortcut {
+    right: auto;
+    left: 32px;
   }
 
   .premium-dashboard-shortcut svg {

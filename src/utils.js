@@ -290,9 +290,10 @@ function getDateContext(date = new Date(), timeZone) {
     return {
       year: date.getFullYear(),
       month: date.getMonth() + 1,
-      day: date.getDate(),
-      hour: date.getHours(),
-    };
+    day: date.getDate(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+  };
   }
 
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -301,6 +302,7 @@ function getDateContext(date = new Date(), timeZone) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     hour12: false,
   }).formatToParts(date);
 
@@ -310,6 +312,7 @@ function getDateContext(date = new Date(), timeZone) {
     month: Number(map.month),
     day: Number(map.day),
     hour: Number(map.hour),
+    minute: Number(map.minute),
   };
 }
 
@@ -337,12 +340,40 @@ export function getCurrentWindow(date = new Date(), timeZone) {
   return "night";
 }
 
+function getTimeOfDayMinutes(date = new Date(), timeZone) {
+  const context = getDateContext(date, timeZone);
+  return context.hour * 60 + context.minute;
+}
+
+function parseTimeStringToMinutes(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function isWithinCustomTimeWindow(card, date = new Date(), timeZone) {
+  if (card.commitmentTimingMode !== "custom") return true;
+  const start = parseTimeStringToMinutes(card.commitmentCustomStartTime);
+  const end = parseTimeStringToMinutes(card.commitmentCustomEndTime);
+  if (start == null || end == null) return false;
+  const current = getTimeOfDayMinutes(date, timeZone);
+  if (start === end) return true;
+  if (start < end) return current >= start && current <= end;
+  return current >= start || current <= end;
+}
+
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const isPackCard = Boolean(card.sourcePackId);
+  const isCommitmentCard = card.cardKind === "commitment";
   if (card.paused) return false;
   if (card.disliked) return false;
   if (card.deletedAt) return false;
+  if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) return false;
   if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) return false;
   if (
     !isPackCard &&
@@ -354,6 +385,7 @@ export function isEligible(card, date = new Date(), timeZone) {
   if (!isPackCard && card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
     return false;
   }
+  if (!isPackCard && isCommitmentCard && !isWithinCustomTimeWindow(card, date, timeZone)) return false;
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
   if (!windows.includes(getCurrentWindow(date, timeZone))) return false;
   return true;
@@ -419,6 +451,7 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
   const currentWindow = getCurrentWindow(date, timeZone);
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
   const isPackCard = Boolean(card.sourcePackId);
+  const isCommitmentCard = card.cardKind === "commitment";
 
   if (card.paused) {
     return { badge: "paused", detail: "hidden for now" };
@@ -426,6 +459,12 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
 
   if (isPackCard && (card.deletedAt || card.disliked)) {
     return { badge: "paused", detail: "hidden for now" };
+  }
+
+  if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) {
+    return card.commitmentStatusToday === "declined"
+      ? { badge: "done", detail: "not committed today" }
+      : { badge: "done", detail: "committed today" };
   }
 
   if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) {
@@ -441,6 +480,13 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
 
   if (isPackCard) {
     return { badge: "ready", detail: "available from active pack" };
+  }
+
+  if (!isPackCard && isCommitmentCard && !isWithinCustomTimeWindow(card, date, timeZone)) {
+    return {
+      badge: "upcoming",
+      detail: "waits for custom time",
+    };
   }
 
   if (!windows.includes(currentWindow)) {

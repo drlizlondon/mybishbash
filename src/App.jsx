@@ -156,6 +156,13 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 const LAUNCH_TIMING_LOG_KEY = "bishbash.launchTiming.v1";
 const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;
+const COMMITMENT_TIMING_OPTIONS = [
+  { id: "anytime", label: "Anytime today", timingWindows: ["morning", "day", "evening", "night"] },
+  { id: "morning", label: "Morning", timingWindows: ["morning"] },
+  { id: "afternoon", label: "Afternoon", timingWindows: ["day"] },
+  { id: "evening", label: "Evening", timingWindows: ["evening"] },
+  { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
+];
 
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
@@ -277,6 +284,26 @@ function getOverlayDebugSnapshot(overlay, routePath = "") {
   };
 }
 
+function getCardDebugSnapshot(card) {
+  if (!card) return { id: null, title: null };
+  return {
+    id: card.id ?? null,
+    title: card.dashboardTitle ?? card.promptText ?? card.title ?? card.name ?? null,
+  };
+}
+
+function getCardOverlayRenderKey(overlay, activeCardId = null) {
+  return [
+    overlay?.type ?? "none",
+    overlay?.versionId ?? "",
+    overlay?.activationKey ?? "",
+    overlay?.cardId ?? "",
+    overlay?.packId ?? "",
+    overlay?.flowStep ?? "",
+    activeCardId ?? "",
+  ].join(":");
+}
+
 function isSameJsonValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -307,6 +334,48 @@ function recordLaunchTiming(label, payload = {}, testerStatus = null) {
   } catch {
     // Timing logs are diagnostic only.
   }
+}
+
+function logCommitmentDebug(label, payload = {}) {
+  const entry = {
+    label,
+    payload,
+    at: new Date().toISOString(),
+  };
+  console.log(`[COMMITMENT_CARD] ${label}`, payload);
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const stored = JSON.parse(window.localStorage.getItem("mybishbash.commitmentDebug.v1") || "[]");
+    stored.push(entry);
+    if (stored.length > 100) stored.splice(0, stored.length - 100);
+    window.localStorage.setItem("mybishbash.commitmentDebug.v1", JSON.stringify(stored));
+    window.__MYBISHBASH_COMMITMENT_DEBUG = stored;
+  } catch {
+    // Debug logging must never block the card flow.
+  }
+}
+
+function isCommitmentCard(card) {
+  return card?.cardKind === "commitment";
+}
+
+function getCommitmentStartWindow(timingWindows = []) {
+  const orderedWindowIds = TIME_WINDOWS.map((item) => item.id);
+  return orderedWindowIds.find((windowId) => timingWindows.includes(windowId)) ?? "day";
+}
+
+function getCommitmentTimingOptionId(card) {
+  if (card?.commitmentTimingMode) return card.commitmentTimingMode;
+  const windows = card?.timingWindows ?? [];
+  if (windows.includes("morning") && windows.includes("day") && windows.includes("evening") && windows.includes("night")) return "anytime";
+  if (windows.length === 1 && windows[0] === "morning") return "morning";
+  if (windows.length === 1 && windows[0] === "day") return "afternoon";
+  if (windows.length === 1 && windows[0] === "evening") return "evening";
+  return getCommitmentStartWindow(windows);
+}
+
+function getCommitmentTimingConfig(mode) {
+  return COMMITMENT_TIMING_OPTIONS.find((option) => option.id === mode) ?? COMMITMENT_TIMING_OPTIONS[0];
 }
 
 if (typeof window !== "undefined") {
@@ -472,6 +541,14 @@ function getWeeklyShiftCount(events, now = new Date()) {
 }
 
 function describeLogEvent(event) {
+  if (event.event_type === "commitment_made") {
+    return `You committed to: ${event.card_text || event.card_title || "today’s commitment"}`;
+  }
+
+  if (event.event_type === "commitment_declined") {
+    return `You did not commit to: ${event.card_text || event.card_title || "today’s commitment"}`;
+  }
+
   if (event.event_type === "pack_card_liked") {
     return `Really liked: ${event.card_title || event.card_text || "a pack card"}`;
   }
@@ -501,6 +578,8 @@ function describeLogEvent(event) {
 
 function getLogEventDisplayLabel(event) {
   const labels = {
+    commitment_made: "Commitment made",
+    commitment_declined: "Commitment declined",
     pack_card_liked: "Really liked",
     pack_card_disliked: "Hidden card",
     pack_card_restored: "Restored card",
@@ -817,6 +896,7 @@ function mergeEntitiesById(local = [], incoming = []) {
 }
 
 function getHomeCardTitle(card) {
+  if (isCommitmentCard(card)) return "Today’s Commitment";
   return card.dashboardTitle ?? card.promptText?.trim() ?? "";
 }
 
@@ -1124,6 +1204,7 @@ function App() {
   const [launcherContext, setLauncherContext] = useState(() => getLauncherContextFromRoute(initialRoute));
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const composerReturnPathRef = useRef("/home");
   const [editingPackId, setEditingPackId] = useState(null);
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
   const [isActionCardEditorOpen, setIsActionCardEditorOpen] = useState(false);
@@ -1150,6 +1231,12 @@ function App() {
   useEffect(() => {
     const previous = previousOverlayDebugRef.current;
     const next = getOverlayDebugSnapshot(overlay, route.path);
+    const previousCard = previous?.cardId
+      ? getCardDebugSnapshot(cards.find((candidate) => candidate.id === previous.cardId))
+      : { id: null, title: null };
+    const nextCard = overlay?.cardId
+      ? getCardDebugSnapshot(cards.find((candidate) => candidate.id === overlay.cardId))
+      : { id: null, title: null };
     if (
       previous?.type !== next.type ||
       previous?.versionId !== next.versionId ||
@@ -1162,12 +1249,16 @@ function App() {
         versionId: next.versionId,
         activationKey: next.activationKey,
         cardId: next.cardId,
+        previousCardId: previousCard.id,
+        previousCardTitle: previousCard.title,
+        nextCardId: nextCard.id,
+        nextCardTitle: nextCard.title,
         routePath: next.routePath,
         timestamp: next.timestamp,
       });
     }
     previousOverlayDebugRef.current = next;
-  }, [overlay, route.path]);
+  }, [cards, overlay, route.path]);
 
   const activeTab = route.tab ?? "home";
   const activeInterceptionVersion = useMemo(
@@ -2190,6 +2281,7 @@ function App() {
     });
 
     const selectedCard = selected ?? plannedInterruption?.pack?.cards?.[plannedInterruption.activeIndex ?? 0] ?? null;
+    const selectedCardDebug = getCardDebugSnapshot(selectedCard);
     logLauncherSelectionAudit({
       versionId,
       source,
@@ -2204,6 +2296,16 @@ function App() {
       interruptionPack,
       selected,
       plannedInterruption,
+    });
+    debugLaunch("[LAUNCH_SELECTION_CARD_IDENTITY]", {
+      route: route.path,
+      launcherContext: versionId,
+      activationKey,
+      source,
+      selectedOverlayType: selected ? "reveal" : plannedInterruption ? "intercept-pack" : "empty",
+      selectedCardId: selectedCardDebug.id,
+      selectedCardTitle: selectedCardDebug.title,
+      selectedCardSource: selected?.sourcePackId ? "library_pack" : selected ? "personal" : plannedInterruption ? "interruption" : null,
     });
     debugLaunch("[LAUNCH_ATTEMPT] intercept resolved", {
       route: route.path,
@@ -2312,29 +2414,53 @@ function App() {
       }
 
       if (resumeRoute.kind === "intercept") {
-        const nextSession = buildLaunchSession("fake_launcher", resumeRoute.versionId);
+        const previousOverlay = activeLauncherOverlayRef.current ?? overlay;
+        const previousCard = previousOverlay?.cardId
+          ? getCardDebugSnapshot(cards.find((candidate) => candidate.id === previousOverlay.cardId))
+          : { id: null, title: null };
         interceptActivationRef.current = null;
         launchCompletedCardIdsRef.current = new Set();
         loggedLauncherOpenRef.current = "";
         suppressNextHomeAutoLaunchRef.current = false;
-        setShouldLaunchOverlay(false);
-        setLauncherContext(resumeRoute.versionId);
-        persistLaunchSession(nextSession);
-        setLaunchSession(nextSession);
-        setScreen("interception");
-        setOverlay(null);
-        setResumeLaunchNonce((current) => current + 1);
         debugLaunch("[LAUNCH_ATTEMPT] intercept resume", {
           route: resumeRoute.path,
           launcherContext: resumeRoute.versionId,
-          launchAttemptId: `${resumeRoute.versionId}:${source}:${Date.now()}`,
-          source,
+          launchAttemptId: `${resumeRoute.versionId}:home_screen_resume:${Date.now()}`,
+          source: "home_screen_resume",
+          resumeEventSource: source,
           eligibleCardCount: null,
+          previousOverlayType: previousOverlay?.type ?? null,
+          previousOverlayCardId: previousCard.id,
+          previousOverlayCardTitle: previousCard.title,
           selectedCardId: null,
           caughtUpReason: null,
           fallbackReason: null,
         });
-        navigateTo(`/intercept/${resumeRoute.versionId}`, { replace: true });
+        const nextOverlay = beginInterceptionFlow(resumeRoute.versionId, {
+          source: "home_screen_resume",
+          replace: true,
+          navigate: true,
+        });
+        const nextActivation = interceptActivationRef.current;
+        const nextSelectedCard = nextOverlay?.cardId
+          ? getCardDebugSnapshot(cards.find((candidate) => candidate.id === nextOverlay.cardId))
+          : getCardDebugSnapshot(
+              nextActivation?.selected ??
+                nextActivation?.interruption?.pack?.cards?.[nextActivation?.interruption?.activeIndex ?? 0] ??
+                null,
+            );
+        debugLaunch("[WARM_RESUME_ATOMIC_OVERLAY_REPLACE]", {
+          route: resumeRoute.path,
+          launcherContext: resumeRoute.versionId,
+          resumeEventSource: source,
+          previousOverlayType: previousOverlay?.type ?? null,
+          previousOverlayCardId: previousCard.id,
+          previousOverlayCardTitle: previousCard.title,
+          nextOverlayType: nextOverlay?.type ?? null,
+          nextOverlayCardId: nextSelectedCard.id,
+          nextOverlayCardTitle: nextSelectedCard.title,
+          activationKey: nextOverlay?.activationKey ?? nextActivation?.activationKey ?? null,
+        });
         return;
       }
 
@@ -3174,7 +3300,150 @@ function App() {
     return;
   }
 
+  function handleCommitmentAction(action) {
+    if (!overlay || overlay.type !== "reveal") return;
+
+    const activeCard = cards.find((card) => card.id === overlay.cardId);
+    if (!activeCard || !isCommitmentCard(activeCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const committed = action === "commit" || action === "commit_after_all";
+    const updatedCard = {
+      ...activeCard,
+      statusToday: "doneToday",
+      doneDate: todayKey,
+      lastShownAt: now.toISOString(),
+      notYetUntil: null,
+      updatedAt: now.toISOString(),
+      commitmentStatusToday: committed ? "made" : "declined",
+      commitmentDecisionDate: todayKey,
+      commitmentDecisionAt: now.toISOString(),
+    };
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
+
+    const eventType = committed ? "commitment_made" : "commitment_declined";
+    void logEvent({
+      event_type: eventType,
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: activeCard.id,
+      bash_title: activeCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Today’s Commitment",
+      card_text: activeCard.promptText,
+      action_taken: committed ? "committed" : "declined",
+      metadata: {
+        cardKind: "commitment",
+        reason: activeCard.commitmentReason ?? "",
+        decisionSource: action,
+        frequency: activeCard.frequency,
+        timingWindows: activeCard.timingWindows,
+      },
+    });
+
+    if (action === "commit_after_all") {
+      logCommitmentDebug("user committed after the second screen", {
+        cardId: activeCard.id,
+        commitmentText: activeCard.promptText,
+      });
+    } else {
+      logCommitmentDebug(committed ? "user committed" : "user declined commitment", {
+        cardId: activeCard.id,
+        commitmentText: activeCard.promptText,
+      });
+    }
+
+    handleRevealCompletion({ cardsOverride: cardsAfterAction, completedCardId: activeCard.id });
+  }
+
   function handleSaveCard(formData) {
+    const returnPath = composerReturnPathRef.current || "/home";
+    if (formData.cardKind === "commitment") {
+      const trimmedText = formData.promptText.trim();
+      if (!trimmedText) return;
+
+      const now = new Date().toISOString();
+      const newCard = {
+        id: createId(),
+        cardKind: "commitment",
+        promptText: trimmedText,
+        dashboardTitle: "Today’s Commitment",
+        commitmentReason: formData.commitmentReason?.trim() ?? "",
+        commitmentTimingMode: formData.commitmentTimingMode,
+        commitmentStartWindow: formData.commitmentTimingMode,
+        commitmentCustomStartTime: formData.commitmentCustomStartTime ?? "",
+        commitmentCustomEndTime: formData.commitmentCustomEndTime ?? "",
+        theme: formData.theme,
+        icon: formData.icon,
+        statusToday: "fresh",
+        createdAt: now,
+        updatedAt: now,
+        lastShownAt: null,
+        notYetUntil: null,
+        doneDate: null,
+        frequency: "once_daily",
+        timingWindows: formData.timingWindows,
+        paused: false,
+        disliked: false,
+        deletedAt: null,
+      };
+
+      const isFirstCard = !setupComplete && !editingId;
+
+      if (editingId) {
+        updateCards((current) =>
+          current.map((card) =>
+            card.id === editingId
+              ? {
+                  ...card,
+                  ...newCard,
+                  id: card.id,
+                  createdAt: card.createdAt ?? now,
+                  lastShownAt: card.lastShownAt ?? null,
+                  doneDate: card.doneDate ?? null,
+                  statusToday: card.statusToday ?? "fresh",
+                  commitmentStatusToday: card.commitmentStatusToday ?? null,
+                  commitmentDecisionDate: card.commitmentDecisionDate ?? null,
+                  commitmentDecisionAt: card.commitmentDecisionAt ?? null,
+                }
+              : card,
+          ),
+        );
+      } else {
+        updateCards((current) => [newCard, ...current]);
+      }
+
+      logCommitmentDebug("commitment card created", {
+        cardId: newCard.id,
+        commitmentText: newCard.promptText,
+      });
+      logCommitmentDebug("selected display time/window", {
+        cardId: newCard.id,
+        commitmentTimingMode: newCard.commitmentTimingMode,
+        commitmentStartWindow: newCard.commitmentStartWindow,
+        commitmentCustomStartTime: newCard.commitmentCustomStartTime,
+        commitmentCustomEndTime: newCard.commitmentCustomEndTime,
+        timingWindows: newCard.timingWindows,
+      });
+
+      setEditingId(null);
+      setIsComposerOpen(false);
+
+      if (isFirstCard) {
+        setSetupComplete(true);
+        navigateTo("/home", { replace: true });
+        return;
+      }
+
+      navigateTo(returnPath);
+      return;
+    }
+
     if (Array.isArray(formData.bulkTexts) && formData.bulkTexts.length > 0) {
       const now = new Date().toISOString();
       const newCards = formData.bulkTexts.map((text) => ({
@@ -3209,7 +3478,7 @@ function App() {
         return;
       }
 
-      navigateTo("/home");
+      navigateTo(returnPath);
       return;
     }
 
@@ -3238,6 +3507,7 @@ function App() {
       updateCards((current) => [
         {
           id: createId(),
+          cardKind: "personal",
           promptText: trimmedText,
           theme: formData.theme,
           icon: formData.icon,
@@ -3265,7 +3535,7 @@ function App() {
       return;
     }
 
-    navigateTo("/home");
+    navigateTo(returnPath);
   }
 
   function handleDeleteCard(cardId) {
@@ -3295,6 +3565,9 @@ function App() {
         lastShownAt: null,
         notYetUntil: null,
         doneDate: null,
+        commitmentStatusToday: null,
+        commitmentDecisionDate: null,
+        commitmentDecisionAt: null,
         paused: false,
         deletedAt: null,
         sourcePackId: null,
@@ -3350,8 +3623,15 @@ function App() {
 
   function openEditor(cardId) {
     setEditingId(cardId);
+    composerReturnPathRef.current = route.path;
     setIsComposerOpen(true);
     setMenuOpenId(null);
+  }
+
+  function openCardComposerFromCurrentRoute() {
+    setEditingId(null);
+    composerReturnPathRef.current = route.path;
+    setIsComposerOpen(true);
   }
 
   function openPackEditor(packId) {
@@ -4363,10 +4643,7 @@ function App() {
       <div className={`app-shell app-mood theme-${getThemeClass(mood)}`} data-testid="app-shell">
           <div className="app-inner">
             <Masthead
-              onCreate={() => {
-                setEditingId(null);
-                setIsComposerOpen(true);
-              }}
+              onCreate={openCardComposerFromCurrentRoute}
             />
 
             <main className="content">
@@ -4385,10 +4662,7 @@ function App() {
                   handleDeleteCard={handleDeleteCard}
                   handleDuplicateCard={handleDuplicateCard}
                   deactivatePack={deactivatePack}
-                  onCreate={() => {
-                    setEditingId(null);
-                    setIsComposerOpen(true);
-                  }}
+                  onCreate={openCardComposerFromCurrentRoute}
                 />
               ) : null}
 
@@ -4504,6 +4778,7 @@ function App() {
           initialCard={editingCard}
           onClose={() => {
             setEditingId(null);
+            composerReturnPathRef.current = "/home";
             setIsComposerOpen(false);
           }}
           onSave={handleSaveCard}
@@ -4585,6 +4860,8 @@ function App() {
             setOverlay(null);
           }}
           onAction={handleAction}
+          onCommitmentAction={handleCommitmentAction}
+          onCreateCard={openCardComposerFromCurrentRoute}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
             const nextStep = getNextFakeLauncherStepAfterActionCard();
@@ -4737,7 +5014,13 @@ function parseBulkCards(text) {
 }
 
 function Composer({ initialCard, onClose, onSave }) {
+  const initialCardKind = isCommitmentCard(initialCard) ? "commitment" : "personal";
+  const [cardKind, setCardKind] = useState(initialCardKind);
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
+  const [commitmentReason, setCommitmentReason] = useState(initialCard?.commitmentReason ?? "");
+  const [commitmentTimingMode, setCommitmentTimingMode] = useState(getCommitmentTimingOptionId(initialCard));
+  const [commitmentCustomStartTime, setCommitmentCustomStartTime] = useState(initialCard?.commitmentCustomStartTime ?? "09:00");
+  const [commitmentCustomEndTime, setCommitmentCustomEndTime] = useState(initialCard?.commitmentCustomEndTime ?? "17:00");
   const [bulkText, setBulkText] = useState("");
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [theme, setTheme] = useState(resolveTheme(initialCard?.theme));
@@ -4747,9 +5030,32 @@ function Composer({ initialCard, onClose, onSave }) {
   const [showValidation, setShowValidation] = useState(false);
 
   const bulkCardsCount = isBulkMode ? parseBulkCards(bulkText).length : 0;
+  const trimmedCommitment = promptText.trim();
+  const isCommitmentMode = cardKind === "commitment";
+  const commitmentTimingConfig = getCommitmentTimingConfig(commitmentTimingMode);
 
   function handleSubmit(event) {
     event.preventDefault();
+    if (isCommitmentMode) {
+      if (!trimmedCommitment) {
+        setShowValidation(true);
+        return;
+      }
+      onSave({
+        cardKind: "commitment",
+        promptText: trimmedCommitment,
+        commitmentReason,
+        commitmentTimingMode,
+        commitmentCustomStartTime: commitmentTimingMode === "custom" ? commitmentCustomStartTime : "",
+        commitmentCustomEndTime: commitmentTimingMode === "custom" ? commitmentCustomEndTime : "",
+        theme,
+        icon,
+        frequency: "once_daily",
+        timingWindows: commitmentTimingConfig.timingWindows,
+      });
+      return;
+    }
+
     if (isBulkMode) {
       const parsed = parseBulkCards(bulkText);
       if (parsed.length === 0) {
@@ -4782,6 +5088,32 @@ function Composer({ initialCard, onClose, onSave }) {
             <div className="frequency-grid">
               <button
                 type="button"
+                className={`frequency-option ${cardKind === "personal" ? "selected" : ""}`}
+                onClick={() => {
+                  setCardKind("personal");
+                  setIsBulkMode(false);
+                }}
+              >
+                Personal Card
+              </button>
+              <button
+                type="button"
+                className={`frequency-option ${cardKind === "commitment" ? "selected" : ""}`}
+                onClick={() => {
+                  setCardKind("commitment");
+                  setIsBulkMode(false);
+                }}
+              >
+                Commitment Card
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {!initialCard && !isCommitmentMode ? (
+          <div className="field" style={{ marginBottom: "24px" }}>
+            <div className="frequency-grid">
+              <button
+                type="button"
                 className={`frequency-option ${!isBulkMode ? "selected" : ""}`}
                 onClick={() => setIsBulkMode(false)}
               >
@@ -4797,7 +5129,117 @@ function Composer({ initialCard, onClose, onSave }) {
             </div>
           </div>
         ) : null}
-        {isBulkMode ? (
+        {isCommitmentMode ? (
+          <>
+            <label className="field">
+              <span>What are you committing to?</span>
+              <textarea
+                data-testid="commitment-text-input"
+                value={promptText}
+                onChange={(event) => {
+                  setPromptText(event.target.value);
+                  if (showValidation && event.target.value.trim()) {
+                    setShowValidation(false);
+                  }
+                }}
+                placeholder="Be smoke-free"
+                rows={4}
+              />
+              <span className="field-hint">Write something that makes sense after “I will...”</span>
+              <span className="field-hint">Examples: not have a cigarette today · not eat snacks after dinner · avoid cheese · read my Bible · go for a walk · be patient with the children</span>
+              {showValidation ? (
+                <span className="field-hint">Add the exact commitment text before saving.</span>
+              ) : null}
+            </label>
+            <label className="field">
+              <span>Why is this important?</span>
+              <textarea
+                data-testid="commitment-reason-input"
+                value={commitmentReason}
+                onChange={(event) => setCommitmentReason(event.target.value)}
+                placeholder="Write the message you want to see if this feels hard today."
+                rows={4}
+              />
+            </label>
+            <label className="field">
+              <span>When should this card appear?</span>
+              <select
+                className="settings-input"
+                data-testid="commitment-window-select"
+                value={commitmentTimingMode}
+                onChange={(event) => setCommitmentTimingMode(event.target.value)}
+              >
+                {COMMITMENT_TIMING_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {commitmentTimingMode === "custom" ? (
+              <div className="commitment-custom-time-grid">
+                <label className="field">
+                  <span>Start time</span>
+                  <input
+                    className="settings-input"
+                    data-testid="commitment-start-time-input"
+                    type="time"
+                    value={commitmentCustomStartTime}
+                    onChange={(event) => setCommitmentCustomStartTime(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>End time</span>
+                  <input
+                    className="settings-input"
+                    data-testid="commitment-end-time-input"
+                    type="time"
+                    value={commitmentCustomEndTime}
+                    onChange={(event) => setCommitmentCustomEndTime(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+            <div className={`composer-preview theme-${getThemeClass(theme)}`} data-testid="commitment-preview">
+              <p className="eyebrow">TODAY’S COMMITMENT</p>
+              <span className="composer-mini-heart" aria-hidden="true">
+                <HeartGlyph />
+              </span>
+              <div className="composer-preview-copy commitment-preview-copy">
+                <p>I will</p>
+                <h3>{trimmedCommitment || "Be smoke-free"}</h3>
+                <div className="commitment-preview-actions">
+                  <button type="button" className="premium-action-button premium-action-button-primary" disabled>
+                    I will commit to this
+                  </button>
+                  <button type="button" className="premium-action-button premium-action-button-secondary" disabled>
+                    Not this time
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="field" data-testid="commitment-self-check">
+              <span>Does this sound right?</span>
+              <div className="frequency-grid">
+                <button
+                  type="submit"
+                  className="frequency-option selected"
+                  data-testid="save-commitment-card-button"
+                  disabled={!trimmedCommitment}
+                >
+                  Yes, save
+                </button>
+                <button
+                  type="button"
+                  className="frequency-option"
+                  onClick={() => document.querySelector("[data-testid='commitment-text-input']")?.focus()}
+                >
+                  Edit commitment
+                </button>
+              </div>
+            </div>
+          </>
+        ) : isBulkMode ? (
           <>
             <label className="field">
               <span>Paste one card per line</span>
@@ -6695,6 +7137,8 @@ function Overlay({
   onClose,
   onDashboard,
   onAction,
+  onCommitmentAction,
+  onCreateCard,
   onPackContinue,
   onPackLike,
   onChooseElse,
@@ -6712,6 +7156,7 @@ function Overlay({
   const launcherInterceptionClass = overlay?.launchSource === "fake_launcher" || overlay?.versionId
     ? "launcher-interception-card"
     : "";
+  const cardOverlayKey = getCardOverlayRenderKey(overlay, card?.id);
 
   useEffect(() => {
     if (overlay.type !== "launcher-preparing") {
@@ -6858,12 +7303,14 @@ function Overlay({
         icon="heart"
         headline={isIntercept ? "You're all caught up." : "You're all caught up for now."}
         subtitle={isIntercept ? "See you later." : ""}
-        actions={actions}
-        launcherVersions={isIntercept ? [] : fakeLauncherVersions}
-        onLauncherLaunch={onFakeLauncherLaunch}
-        onDashboard={onDashboard}
-        className={launcherInterceptionClass}
-      />
+      actions={actions}
+      launcherVersions={isIntercept ? [] : fakeLauncherVersions}
+      onLauncherLaunch={onFakeLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={launcherInterceptionClass}
+    />
     );
   }
 
@@ -6878,6 +7325,8 @@ function Overlay({
         onContinueToApp={onContinueToApp}
         onFakeLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
       />
     );
   }
@@ -6898,6 +7347,8 @@ function Overlay({
         onFakeLauncherLaunch={onFakeLauncherLaunch}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
       />
     );
@@ -6916,6 +7367,8 @@ function Overlay({
         onFakeLauncherLaunch={onFakeLauncherLaunch}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
       />
     );
@@ -6930,6 +7383,8 @@ function Overlay({
         onContinueToApp={onContinueToApp}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
       />
     );
@@ -6937,6 +7392,23 @@ function Overlay({
 
   if (!card) return null;
   const cardType = card.sourcePackId ? "pack" : "personal";
+
+  if (isCommitmentCard(card)) {
+    return (
+      <CommitmentCardOverlay
+        card={card}
+        timezone={timezone}
+        onCommitmentAction={onCommitmentAction}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+      />
+    );
+  }
+
   const cardActionConfig = getLauncherCardActions({ launchSession, cardType });
   const resolvedActions = cardActionConfig.actions.map((action) => {
     if (action.id === "really_like_pack_card") return { ...action, onClick: onPackLike };
@@ -6964,6 +7436,8 @@ function Overlay({
       launcherVersions={fakeLauncherVersions}
       onLauncherLaunch={onFakeLauncherLaunch}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
       className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
     />
   );
@@ -6981,11 +7455,15 @@ function PremiumCardScreen({
   showDashboardShortcut = true,
   dashboardHref,
   onDashboard,
+  onCreateCard,
   children,
   className = "",
+  cardOverlayKey = "",
 }) {
   return (
     <CardRevealTemplate
+      key={cardOverlayKey}
+      cardOverlayKey={cardOverlayKey}
       variant={type}
       greeting={greeting}
       icon={icon}
@@ -6997,10 +7475,91 @@ function PremiumCardScreen({
       showDashboardShortcut={showDashboardShortcut}
       dashboardHref={dashboardHref}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
       className={className}
     >
       {children}
     </CardRevealTemplate>
+  );
+}
+
+function CommitmentCardOverlay({
+  card,
+  timezone,
+  onCommitmentAction,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+}) {
+  const [showReason, setShowReason] = useState(false);
+  const shownRef = useRef(false);
+
+  useEffect(() => {
+    if (!card || shownRef.current) return;
+    shownRef.current = true;
+    logCommitmentDebug("commitment card shown", {
+      cardId: card.id,
+      commitmentText: card.promptText,
+      commitmentTimingMode: card.commitmentTimingMode ?? card.commitmentStartWindow ?? getCommitmentStartWindow(card.timingWindows),
+      commitmentCustomStartTime: card.commitmentCustomStartTime ?? "",
+      commitmentCustomEndTime: card.commitmentCustomEndTime ?? "",
+      timingWindows: card.timingWindows,
+    });
+  }, [card]);
+
+  if (showReason) {
+    return (
+      <PremiumCardScreen
+        type="personal"
+        greeting="Message from yourself"
+        icon="heart"
+        headline={card.commitmentReason || "You wrote this because it matters."}
+        subtitle=""
+        actions={[
+          { label: "I’ll commit after all", variant: "primary", onClick: () => onCommitmentAction("commit_after_all") },
+          { label: "Not this time", variant: "secondary", onClick: () => onCommitmentAction("decline") },
+        ]}
+        launcherVersions={launcherVersions}
+        onLauncherLaunch={onLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={`${cardOverlayKey}:reason`}
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting="TODAY’S COMMITMENT"
+      icon="heart"
+      headline={`I will\n${card.promptText}`}
+      subtitle=""
+      actions={[
+        { label: "I will commit to this", variant: "primary", onClick: () => onCommitmentAction("commit") },
+        {
+          label: "Not this time",
+          variant: "secondary",
+          onClick: () => {
+            logCommitmentDebug("user chose second screen", {
+              cardId: card.id,
+              commitmentText: card.promptText,
+            });
+            setShowReason(true);
+          },
+        },
+      ]}
+      launcherVersions={launcherVersions}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+    />
   );
 }
 
@@ -7016,8 +7575,10 @@ function CardRevealTemplate({
   showDashboardShortcut = true,
   dashboardHref,
   onDashboard,
+  onCreateCard,
   children,
   className = "",
+  cardOverlayKey = "",
 }) {
   const hasLaunchers = launchers?.length > 0;
   const hasActions = actions?.length > 0;
@@ -7028,15 +7589,17 @@ function CardRevealTemplate({
       ...(window.__MYBISHBASH_CARD_OVERLAY_MOUNTS ?? []),
       {
         variant,
+        cardOverlayKey,
         at: new Date().toISOString(),
         route: window.location.pathname + window.location.search,
       },
     ];
-  }, [variant]);
+  }, [cardOverlayKey, variant]);
 
   return (
     <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
       {showDashboardShortcut ? <PremiumDashboardShortcut href={dashboardHref} onClick={onDashboard} /> : null}
+      {onCreateCard ? <PremiumCreateShortcut onClick={onCreateCard} /> : null}
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header">
           {greeting ? <p className="premium-greeting">{greeting}</p> : null}
@@ -7182,6 +7745,22 @@ function PremiumDashboardShortcut({ href, onClick }) {
   );
 }
 
+function PremiumCreateShortcut({ onClick }) {
+  return (
+    <button
+      type="button"
+      className="premium-dashboard-shortcut premium-create-shortcut"
+      onClick={(event) => onClick?.(event)}
+      aria-label="Create a MyBishBash"
+      title="Create"
+      data-testid="overlay-create-card-button"
+    >
+      <span aria-hidden="true">+</span>
+      <span className="sr-only">Create a MyBishBash</span>
+    </button>
+  );
+}
+
 function PremiumActionStack({ actions = [] }) {
   if (!actions.length) return null;
 
@@ -7229,6 +7808,8 @@ function ActionCardOverlay({
   onFakeLauncherLaunch,
   allowBackHome = false,
   onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
   className = "",
 }) {
   console.log("[ACTION CARDS] Overlay rendered");
@@ -7343,13 +7924,15 @@ function ActionCardOverlay({
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={`${cardOverlayKey}:${currentCard.id}`}
         className={className}
       />
     </div>
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, className = "" }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
   function handleContinueToApp() {
     if (!version) return;
 
@@ -7381,13 +7964,15 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         launcherVersions={fakeLauncherVersions}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
         className={className}
       />
     </div>
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onDashboard, className = "" }) {
+function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
   const actions = [
     { label: "Back home", variant: "primary", onClick: onClose },
   ];
@@ -7401,6 +7986,8 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, className = "" })
       subtitle="Take all the time you need."
       actions={actions}
       onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
       className={className}
     />
   );
@@ -7465,7 +8052,7 @@ function CustomPackOverlay({ overlay, onClose, onDashboard }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, onCreateCard, cardOverlayKey = "" }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -7604,6 +8191,8 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         launcherVersions={[]}
         onLauncherLaunch={onFakeLauncherLaunch}
         onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={`${cardOverlayKey}:${cards[activeIndex]?.id ?? activeIndex}`}
         className="launcher-interception-card"
       >
         {hasMultipleMessages ? (
