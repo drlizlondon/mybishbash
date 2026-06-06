@@ -4197,29 +4197,35 @@ body {
 .premium-title-box {
   width: min(88vw, 390px);
   min-height: 0;
+  max-height: var(--message-max-height, none);
   margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .premium-headline {
   width: auto;
   max-width: 100%;
   margin: 0;
-  padding-bottom: 0.12em;
+  padding-block: 0.08em 0.16em;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
   font-size: var(--message-font-size);
   font-weight: 500;
-  line-height: 1.1;
+  line-height: 1.18;
   letter-spacing: 0;
   color: var(--bb-text);
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
   text-wrap: balance;
-  overflow: visible;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--message-line-clamp, unset);
 }
 
 .premium-divider {

@@ -150,6 +150,41 @@ async function expectOverlay(page: Page, kind: CardKind) {
   await expect(page.getByTestId(testId), `Expected ${kind} launcher overlay`).toBeVisible();
 }
 
+async function expectPremiumHeadingFits(page: Page, overlayTestId: string) {
+  const overlay = page.getByTestId(overlayTestId);
+  const heading = overlay.locator('.premium-headline');
+  const actions = overlay.locator('.premium-action-stack');
+
+  await expect(heading).toBeVisible();
+  await expect(actions).toBeVisible();
+
+  const fit = await heading.evaluate((node) => {
+    const styles = window.getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    const parentRect = node.parentElement?.getBoundingClientRect();
+    return {
+      scrollWidth: node.scrollWidth,
+      clientWidth: node.clientWidth,
+      rectTop: rect.top,
+      rectBottom: rect.bottom,
+      parentTop: parentRect?.top ?? 0,
+      parentBottom: parentRect?.bottom ?? 0,
+      overflowWrap: styles.overflowWrap,
+      wordBreak: styles.wordBreak,
+      hyphens: styles.hyphens,
+      fontSize: Number.parseFloat(styles.fontSize),
+    };
+  });
+
+  expect(fit.overflowWrap).toBe('normal');
+  expect(fit.wordBreak).toBe('normal');
+  expect(fit.hyphens).toBe('none');
+  expect(fit.fontSize).toBeGreaterThanOrEqual(18);
+  expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth + 1);
+  expect(fit.rectTop).toBeGreaterThanOrEqual(fit.parentTop - 1);
+  expect(fit.rectBottom).toBeLessThanOrEqual(fit.parentBottom + 1);
+}
+
 async function clickTerminal(page: Page, launcherId: LauncherId, action: TerminalAction) {
   if (action === 'dashboard') {
     await page.getByLabel('Open dashboard').click();
@@ -281,6 +316,39 @@ for (const branch of buttonBranches) {
     await openLauncher(page);
     await expectOverlay(page, branch.initial ?? 'caught-up');
     await clickTerminal(page, 'safari', branch.terminal);
+  });
+}
+
+const premiumTextFitCases = [
+  {
+    name: 'short personal',
+    card: personalCard('fit-short-personal', 'Hydrocortisone on skin?'),
+    overlay: 'card-overlay-personal',
+  },
+  {
+    name: 'medium personal',
+    card: personalCard('fit-medium-personal', 'Nobody can support work they never see.'),
+    overlay: 'card-overlay-personal',
+  },
+  {
+    name: 'long personal',
+    card: personalCard('fit-long-personal', 'Nobody can support work they never see. You keep saying you want opportunities, influence, freedom, impact. But invisibility guarantees none of those things.'),
+    overlay: 'card-overlay-personal',
+  },
+  {
+    name: 'descender-heavy pack',
+    card: packCard('fit-descender-pack', 'typing saying changing progress growing psychology typing saying changing progress growing psychology typing saying changing progress growing psychology'),
+    overlay: 'card-overlay-pack',
+  },
+];
+
+for (const { name, card, overlay } of premiumTextFitCases) {
+  test(`premium card text fits narrow iPhone cards without clipping or mid-word wrapping: ${name}`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await seedState(page, { cards: [card] });
+    await openLauncher(page, 'safari');
+    await expect(page.getByTestId(overlay)).toBeVisible();
+    await expectPremiumHeadingFits(page, overlay);
   });
 }
 

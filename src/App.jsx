@@ -7071,19 +7071,21 @@ function getMessageBaseSize(value) {
   const text = String(value ?? "").trim();
   const characterCount = text.length;
   const manualLines = text ? text.split(/\r\n|\r|\n/).length : 1;
-  const estimatedLines = Math.max(manualLines, Math.ceil(characterCount / 20));
+  const estimatedLines = Math.max(manualLines, Math.ceil(characterCount / 24));
 
   if (estimatedLines <= 1 && characterCount <= 14) return 56;
   if (estimatedLines <= 2 && characterCount <= 24) return 48;
   if (estimatedLines <= 3 && characterCount <= 48) return 42;
-  return 34;
+  if (estimatedLines <= 5 && characterCount <= 120) return 36;
+  return 32;
 }
 
 function CardRevealMessage({ message }) {
   const frameRef = useRef(null);
   const headlineRef = useRef(null);
   const baseSize = getMessageBaseSize(message);
-  const [fontSize, setFontSize] = useState(baseSize);
+  const minSize = 18;
+  const [textFit, setTextFit] = useState({ fontSize: baseSize, lineClamp: "unset", maxHeight: "none" });
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -7092,45 +7094,88 @@ function CardRevealMessage({ message }) {
 
     let frameId;
 
-    function fit() {
-      const minSize = 16;
+    function getAvailableHeight() {
+      const section = frame.closest(".premium-card-message-section");
+      if (!section) return frame.clientHeight;
+
+      const sectionStyles = window.getComputedStyle(section);
+      const sectionPadding =
+        Number.parseFloat(sectionStyles.paddingTop) +
+        Number.parseFloat(sectionStyles.paddingBottom);
+      const siblingHeight = Array.from(section.children).reduce((total, child) => {
+        if (child === frame) return total;
+        const childStyles = window.getComputedStyle(child);
+        const margins =
+          Number.parseFloat(childStyles.marginTop) +
+          Number.parseFloat(childStyles.marginBottom);
+        return total + child.getBoundingClientRect().height + margins;
+      }, 0);
+
+      return Math.max(72, Math.floor(section.clientHeight - sectionPadding - siblingHeight - 8));
+    }
+
+    function measureFit() {
+      const availableWidth = Math.floor(frame.clientWidth);
+      const availableHeight = getAvailableHeight();
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
       let nextSize = baseSize;
       headline.style.fontSize = `${nextSize}px`;
+      headline.style.webkitLineClamp = "unset";
 
-      while (
-        nextSize > minSize &&
-        headline.scrollWidth > frame.clientWidth
-      ) {
+      while (nextSize > minSize) {
+        const overflowsWidth = headline.scrollWidth > availableWidth + 1;
+        const overflowsHeight = headline.scrollHeight > availableHeight + 1;
+        if (!overflowsWidth && !overflowsHeight) break;
         nextSize -= 1;
         headline.style.fontSize = `${nextSize}px`;
       }
 
-      setFontSize(nextSize);
+      const lineHeight = Number.parseFloat(window.getComputedStyle(headline).lineHeight) || nextSize * 1.18;
+      const lineClamp = headline.scrollHeight > availableHeight + 1
+        ? Math.max(1, Math.floor(availableHeight / lineHeight))
+        : "unset";
+      const maxHeight = `${availableHeight}px`;
+
+      setTextFit((current) => (
+        current.fontSize === nextSize && current.lineClamp === lineClamp && current.maxHeight === maxHeight
+          ? current
+          : { fontSize: nextSize, lineClamp, maxHeight }
+      ));
     }
 
-    frameId = window.requestAnimationFrame(fit);
+    frameId = window.requestAnimationFrame(measureFit);
     if (typeof ResizeObserver === "undefined") {
       return () => window.cancelAnimationFrame(frameId);
     }
 
     const observer = new ResizeObserver(() => {
       window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(fit);
+      frameId = window.requestAnimationFrame(measureFit);
     });
     observer.observe(frame);
+    observer.observe(headline);
+    observer.observe(frame.closest(".premium-card-message-section") ?? frame);
 
     return () => {
       window.cancelAnimationFrame(frameId);
       observer.disconnect();
     };
-  }, [baseSize, message]);
+  }, [baseSize, message, minSize]);
 
   return (
-    <div className="premium-title-box" ref={frameRef}>
+    <div
+      className="premium-title-box"
+      ref={frameRef}
+      style={{ "--message-max-height": textFit.maxHeight }}
+    >
       <h2
         className="premium-headline"
         ref={headlineRef}
-        style={{ "--message-font-size": `${fontSize}px` }}
+        style={{
+          "--message-font-size": `${textFit.fontSize}px`,
+          WebkitLineClamp: textFit.lineClamp,
+        }}
       >
         {message}
       </h2>
