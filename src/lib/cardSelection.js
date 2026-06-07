@@ -1,5 +1,6 @@
 import {
   buildEligibleCommitmentCheckInCards,
+  getTodayKey,
   isEligible,
   isPackCardAvailable,
   normalizeCards,
@@ -8,9 +9,25 @@ import {
 export const LAUNCHER_TESTER_FEATURE_LOCAL_STORAGE_KEY = "mybishbash.launcherTesterFeatures.enabled";
 export const DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS = {
   packCardTimeoutMs: 30 * 60 * 1000,
+  personalCardCooldownMs: 30 * 60 * 1000,
 };
 
 export const PRIMARY_CARD_PRIORITIES = new Set(["primary", "partner_primary"]);
+export const CARD_SELECTION_SURFACES = {
+  HOME: "home",
+  SHELL: "shell",
+  NOTIFICATION_FUTURE: "notification_future",
+  LOCKSCREEN_WIDGET_FUTURE: "lockscreen_widget_future",
+  HOMESCREEN_WIDGET_FUTURE: "homescreen_widget_future",
+  NATIVE_FUTURE: "native_future",
+};
+export const CARD_EVENT_TYPES = {
+  SHOWN: "card_shown",
+  COMPLETED: "card_completed",
+  IGNORED: "card_ignored",
+};
+
+const COMPLETED_CARD_EVENT_TYPES = new Set([CARD_EVENT_TYPES.COMPLETED, "bash_done"]);
 
 function toNonNegativeWholeNumber(value, fallback) {
   const number = Number(value);
@@ -23,6 +40,10 @@ export function normalizePersonalFirstFallbackSettings(settings = {}) {
     packCardTimeoutMs: toNonNegativeWholeNumber(
       settings.packCardTimeoutMs,
       DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS.packCardTimeoutMs,
+    ),
+    personalCardCooldownMs: toNonNegativeWholeNumber(
+      settings.personalCardCooldownMs,
+      DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS.personalCardCooldownMs,
     ),
   };
 }
@@ -98,6 +119,29 @@ function isPackCardOutsideTimeout(card, exposureByCardId, nowMs, timeoutMs) {
   return lastExposure + timeoutMs <= nowMs;
 }
 
+function isPersonalCardOutsideCooldown(card, exposureByCardId, nowMs, cooldownMs) {
+  if (cooldownMs <= 0) return true;
+  const lastExposure = getLastCardExposure(card, exposureByCardId);
+  if (!lastExposure) return true;
+  return lastExposure + cooldownMs <= nowMs;
+}
+
+export function buildCompletedTodayCardIds(events = [], now = new Date(), timezone) {
+  const todayKey = getTodayKey(now, timezone);
+  const completed = new Set();
+
+  for (const event of events ?? []) {
+    if (!COMPLETED_CARD_EVENT_TYPES.has(event?.event_type)) continue;
+    const cardId = getEventCardId(event);
+    if (!cardId) continue;
+    const timestamp = getEventTimestamp(event);
+    if (timestamp <= 0) continue;
+    if (getTodayKey(new Date(timestamp), timezone) === todayKey) completed.add(cardId);
+  }
+
+  return completed;
+}
+
 export function getLauncherCardPriority(card) {
   if (!card) return "none";
   if (card.sourcePackId) return "fallback";
@@ -129,7 +173,7 @@ function chooseLeastRecentlyExposedCard(cards, exposureByCardId, random) {
   return randomItem(oldestCards, random);
 }
 
-export function selectPersonalFirstLauncherCard({
+export function selectEligibleCard({
   cards,
   timezone,
   events = [],
@@ -147,6 +191,7 @@ export function selectPersonalFirstLauncherCard({
     ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
   ];
   const exposureByCardId = buildCardExposureLookup(selectableCards, events);
+  const completedTodayCardIds = buildCompletedTodayCardIds(events, now, timezone);
 
   const eligiblePrimaryPool = [];
   const activePackPool = [];
@@ -167,7 +212,12 @@ export function selectPersonalFirstLauncherCard({
       continue;
     }
 
-    if (getLauncherCardPriority(card) === "primary" && !card.deletedAt && isEligible(card, now, timezone)) {
+    if (
+      getLauncherCardPriority(card) === "primary" &&
+      !completedTodayCardIds.has(card.id) &&
+      isEligible(card, now, timezone) &&
+      isPersonalCardOutsideCooldown(card, exposureByCardId, nowMs, config.personalCardCooldownMs)
+    ) {
       eligiblePrimaryPool.push(card);
     }
   }
@@ -236,4 +286,8 @@ export function selectPersonalFirstLauncherCard({
     availablePackGroupCount: activePackIds.size,
     eligiblePackGroupCount: eligiblePackIds.size,
   };
+}
+
+export function selectPersonalFirstLauncherCard(options = {}) {
+  return selectEligibleCard(options);
 }

@@ -1,6 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { readFile } from "node:fs/promises";
-import { selectPersonalFirstLauncherCard } from "../src/lib/cardSelection.js";
+import { selectEligibleCard } from "../src/lib/cardSelection.js";
+import { buildLibrarySections } from "../src/lib/librarySections.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
@@ -57,8 +58,27 @@ assertMatch("openDestinationApp is the single destination href assignment", appS
 assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
 assertNoMatch("old weighted launcher selector is not used by the app", appSource, /selectWeightedLauncherCard\(\{/);
 assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
-assertMatch("App uses personal-first fallback for launcher and home decisions", appSource, /selectPersonalFirstLauncherCard\(\{[\s\S]{0,500}cards,[\s\S]{0,500}timezone: profile\.timezone/);
+assertMatch("App uses shared eligible card selection for launcher and home decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards,[\s\S]{0,500}timezone: profile\.timezone/);
+assertNoMatch("App has no legacy selector call sites", appSource, /selectPersonalFirstLauncherCard\(\{/);
+assertNoMatch("App has no manual pack card randomisation path", appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);
+assertMatch("canonical card shown events are logged", appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
+assertMatch("canonical card completed and ignored events are logged", appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+assertMatch("Library renders Personal Cards section", appSource, /title="Personal Cards"[\s\S]{0,160}Cards you have written for yourself\./);
+assertMatch("Library renders Commitment Cards section", appSource, /title="Commitment Cards"[\s\S]{0,160}Promises you've made to yourself\./);
+assertMatch("Library renders Active Packs section", appSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
+assertMatch("Library default open states match product shape", appSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*\}\)/);
+assertMatch("Library uses compact list rows", appSource, /function LibraryListRow[\s\S]{0,1500}className=\{`library-list-row/);
+assertNoMatch("Library does not add View all links", appSource, /View all/);
+assertMatch("Personal Library plus opens personal composer", appSource, /onCreatePersonal=\{\(\) => openCardComposerFromCurrentRoute\("personal"\)\}/);
+assertMatch("Commitment Library plus opens commitment composer", appSource, /onCreateCommitment=\{\(\) => openCardComposerFromCurrentRoute\("commitment"\)\}/);
+assertMatch("Active Packs Library plus opens Packs add/manage flow", appSource, /onAddPack=\{\(\) => navigateTo\("\/packs"\)\}/);
+assertMatch("Composer can open in section-specific creation modes", appSource, /function Composer\(\{ initialCard, initialKind = "personal"/);
+assertMatch("Library section plus has its own click target", appSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
+assertMatch("Library section toggle remains separate from plus", appSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
+assertMatch("Packs tab still renders Interruption Packs", appSource, /<h2>Interruption Packs<\/h2>/);
+assertMatch("Packs tab still renders Active Actions", appSource, /<h2>Active Actions<\/h2>/);
+assertMatch("Packs tab still renders Library Packs", appSource, /<h2>Library Packs<\/h2>/);
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);
 assertNoMatch("interruption must not be disabled by old weighted activation state", appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption/);
 assertNoMatch("interruption on with no layer-one card uses caught-up instead of direct continue", appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
@@ -156,11 +176,12 @@ const perfEvents = Array.from({ length: 20000 }, (_, index) => ({
 
 const largeSelection = measureSelection(
   "selectPersonalFirstLauncherCard handles large event history under 50ms",
-  () => selectPersonalFirstLauncherCard({
+  () => selectEligibleCard({
     cards: perfCards,
     timezone: "Europe/London",
     events: perfEvents,
     now,
+    settings: { personalCardCooldownMs: 0 },
     random: () => 0.99,
   }),
   50,
@@ -171,7 +192,7 @@ if (largeSelection.selectedSource === "personal" && largeSelection.selectedPrior
   fail("large selection stays personal-first when personal cards exist", JSON.stringify(largeSelection));
 }
 
-const packFallback = selectPersonalFirstLauncherCard({
+const packFallback = selectEligibleCard({
   cards: [personal("done", { doneDate: "2026-01-01", statusToday: "doneToday" }), pack("pack-fallback")],
   timezone: "Europe/London",
   now,
@@ -182,7 +203,7 @@ if (packFallback.selectedSource === "pack" && packFallback.selectionReason === "
   fail("pack fallback is used only when no primary cards are eligible", JSON.stringify(packFallback));
 }
 
-const caughtUp = selectPersonalFirstLauncherCard({
+const caughtUp = selectEligibleCard({
   cards: [personal("paused", { paused: true }), pack("hidden", { hidden: true })],
   timezone: "Europe/London",
   now,
@@ -191,6 +212,50 @@ if (!caughtUp.selected && caughtUp.selectionReason === "no_eligible_primary_or_f
   pass("caught-up only occurs when no primary or fallback cards are eligible");
 } else {
   fail("caught-up only occurs when no primary or fallback cards are eligible", JSON.stringify(caughtUp));
+}
+
+const libraryCards = [
+  personal("personal-library"),
+  personal("commitment-library", { cardKind: "commitment", commitmentReason: "Because I said I would." }),
+  pack("active-pack-a", { sourcePackId: "pack-alpha" }),
+  pack("active-pack-b", { sourcePackId: "pack-alpha" }),
+  pack("active-pack-hidden-deleted", { sourcePackId: "pack-beta", deletedAt: now.toISOString() }),
+  personal("deleted-personal", { deletedAt: now.toISOString() }),
+  ...Array.from({ length: 50 }, (_, index) => personal(`many-personal-${index}`)),
+];
+const librarySections = buildLibrarySections({
+  cards: libraryCards,
+  libraryPacks: [{ id: "pack-alpha", title: "Alpha Pack" }],
+});
+if (
+  librarySections.personal.some((item) => item.id === "personal-library") &&
+  librarySections.personal.some((item) => item.id === "many-personal-49") &&
+  !librarySections.personal.some((item) => item.id === "commitment-library") &&
+  !librarySections.personal.some((item) => item.id === "pack-alpha") &&
+  librarySections.personal.length === 51
+) {
+  pass("personal cards appear only in Personal Cards and include all 50+ items");
+} else {
+  fail("personal cards appear only in Personal Cards and include all 50+ items", JSON.stringify(librarySections.personal));
+}
+if (
+  librarySections.commitments.length === 1 &&
+  librarySections.commitments[0].id === "commitment-library" &&
+  !librarySections.commitments.some((item) => item.id === "personal-library")
+) {
+  pass("commitment cards appear only in Commitment Cards");
+} else {
+  fail("commitment cards appear only in Commitment Cards", JSON.stringify(librarySections.commitments));
+}
+if (
+  librarySections.activePacks.length === 1 &&
+  librarySections.activePacks[0].id === "pack-alpha" &&
+  librarySections.activePacks[0].count === 2 &&
+  librarySections.activePacks[0].representative.promptText === "Alpha Pack"
+) {
+  pass("active packs appear only in Active Packs with correct counts");
+} else {
+  fail("active packs appear only in Active Packs with correct counts", JSON.stringify(librarySections.activePacks));
 }
 
 if (failures.length > 0) {

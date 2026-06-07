@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  CARD_EVENT_TYPES,
+  CARD_SELECTION_SURFACES,
   DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS,
   areTesterLauncherFeaturesEnabled,
   getTesterLauncherFeatureGate,
   normalizePersonalFirstFallbackSettings,
+  selectEligibleCard,
   selectPersonalFirstLauncherCard,
 } from "../src/lib/cardSelection.js";
 import {
@@ -42,7 +45,7 @@ assert.match(appSource, /\}, LAUNCHER_PREPARING_VISIBLE_DELAY_MS\);/);
 assert.match(appSource, /data-testid="launcher-preparing-placeholder"/);
 assert.doesNotMatch(appSource, /headline="Getting your card ready\.\.\."/);
 assert.doesNotMatch(appSource, /subtitle="One moment\."/);
-assert.match(appSource, /selectPersonalFirstLauncherCard/);
+assert.match(appSource, /selectEligibleCard/);
 assert.doesNotMatch(appSource, /selectWeightedLauncherCard/);
 assert.doesNotMatch(cardSelectionSource, /selectWeightedLauncherCard/);
 assert.doesNotMatch(cardSelectionSource, /personalWeight|packWeight|weightedFlow/);
@@ -90,7 +93,7 @@ assert.equal(getNextFakeLauncherStepAfterActionCard(), FAKE_LAUNCHER_FLOW_STEPS.
 
 assert.deepEqual(
   normalizePersonalFirstFallbackSettings({ packCardTimeoutMs: 5.8 }),
-  { packCardTimeoutMs: 5 },
+  { packCardTimeoutMs: 5, personalCardCooldownMs: DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS.personalCardCooldownMs },
 );
 assert.deepEqual(
   normalizePersonalFirstFallbackSettings({ packCardTimeoutMs: -1 }),
@@ -168,6 +171,40 @@ const secondPersonal = selectPersonalFirstLauncherCard({
 assert.equal(secondPersonal.selected?.id, "personal-b");
 assert.equal(secondPersonal.selectedSource, "personal");
 
+const completedPersonalIsRemoved = selectEligibleCard({
+  cards: [personal("personal-a"), personal("personal-b"), pack("pack-a")],
+  events: [
+    {
+      event_type: CARD_EVENT_TYPES.COMPLETED,
+      card_id: "personal-a",
+      created_at: now.toISOString(),
+      metadata: { surface: CARD_SELECTION_SURFACES.HOME },
+    },
+  ],
+  timezone: "Europe/London",
+  now,
+  random: () => 0,
+});
+assert.equal(completedPersonalIsRemoved.selected?.id, "personal-b");
+assert.equal(completedPersonalIsRemoved.selectedSource, "personal");
+
+const ignoredPersonalIsReplaced = selectEligibleCard({
+  cards: [personal("personal-a"), personal("personal-b"), pack("pack-a")],
+  events: [
+    {
+      event_type: CARD_EVENT_TYPES.IGNORED,
+      card_id: "personal-a",
+      created_at: now.toISOString(),
+      metadata: { surface: CARD_SELECTION_SURFACES.SHELL },
+    },
+  ],
+  timezone: "Europe/London",
+  now,
+  random: () => 0,
+});
+assert.equal(ignoredPersonalIsReplaced.selected?.id, "personal-b");
+assert.equal(ignoredPersonalIsReplaced.selectedSource, "personal");
+
 const fallbackPack = selectPersonalFirstLauncherCard({
   cards: [personal("done-personal", { doneDate: "2026-01-01", statusToday: "doneToday" }), pack("pack-a")],
   timezone: "Europe/London",
@@ -199,5 +236,12 @@ const caughtUp = selectPersonalFirstLauncherCard({
 assert.equal(caughtUp.selected, null);
 assert.equal(caughtUp.selectedSource, "none");
 assert.equal(caughtUp.selectionReason, "no_eligible_primary_or_fallback_cards");
+
+assert.match(appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards,[\s\S]{0,500}timezone: profile\.timezone/);
+assert.doesNotMatch(appSource, /selectPersonalFirstLauncherCard\(\{/);
+assert.doesNotMatch(appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
+assert.match(appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
+assert.match(appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+assert.match(appSource, /CARD_SELECTION_SURFACES\.SHELL/);
 
 console.log("Launcher flow checks passed");
