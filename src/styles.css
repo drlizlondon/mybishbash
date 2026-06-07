@@ -1400,6 +1400,42 @@ textarea {
   width: min(88vw, 390px);
 }
 
+.commitment-motivation-copy {
+  width: min(88vw, 390px);
+  min-height: 0;
+  margin-top: 18px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+.commitment-motivation-copy .premium-title-box {
+  width: 100%;
+  max-height: clamp(150px, 30svh, 280px);
+  margin-top: 16px;
+}
+
+.commitment-motivation-intro,
+.commitment-motivation-subline {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.25;
+  text-align: center;
+  color: #6B625B;
+}
+
+.commitment-motivation-intro {
+  font-size: clamp(18px, 4.8vw, 21px);
+  font-weight: 600;
+}
+
+.commitment-motivation-subline {
+  margin-top: 8px;
+  font-size: clamp(14px, 3.7vw, 16px);
+}
+
 .commitment-custom-time-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4320,7 +4356,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   padding: 18px 0 20px;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -4404,13 +4440,22 @@ body {
 
 .premium-title-box {
   width: min(88vw, 390px);
-  min-height: 0;
+  min-height: 92px;
+  max-height: clamp(180px, 42svh, 360px);
   margin-top: 10px;
+  padding: 0 2px 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  overflow: visible;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.premium-title-box.is-scrollable {
+  align-items: flex-start;
+  overflow-y: auto;
 }
 
 .premium-headline {
@@ -4425,7 +4470,8 @@ body {
   letter-spacing: 0;
   color: var(--bb-text);
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
   text-wrap: balance;
   white-space: pre-line;
   overflow: visible;

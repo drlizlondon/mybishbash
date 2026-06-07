@@ -6,7 +6,11 @@ const MORNING_SUMMARY_START_HOUR = 7;
 const PERSONAL_CARD_SHOWN_TYPES = new Set(["personal_card_shown", "card_shown"]);
 const INTERRUPTED_TYPES = new Set(["first_interruption_seen", "intercept_card_viewed"]);
 const COMMITMENT_CHECKIN_GENERATED_TYPES = new Set(["commitment_checkin_generated", "commitment_check_in_generated"]);
-const COMMITMENT_CHECKIN_COMPLETED_TYPES = new Set(["commitment_checkin_completed", "commitment_check_in"]);
+const COMMITMENT_CHECKIN_COMPLETED_TYPES = new Set([
+  "commitment_checkin_completed",
+  "commitment_check_in",
+  "commitment_check_in_response",
+]);
 
 function safeParse(rawValue, fallback) {
   try {
@@ -111,8 +115,10 @@ function buildDebugEvents(events, timezone) {
     card_shown: "Card shown",
     bash_done: "Card completed",
     commitment_made: "Commitment made",
+    commitment_declined: "Commitment declined",
     commitment_check_in_generated: "Commitment check-in generated",
     commitment_check_in: "Commitment check-in answered",
+    commitment_check_in_response: "Commitment check-in answered",
     first_interruption_seen: "Shell/app interrupted",
     intercept_card_viewed: "Shell/app interrupted",
     intercept_continue_to_app: "Continue to app pressed",
@@ -157,6 +163,7 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
   const checkIns = dayEvents.filter((event) => COMMITMENT_CHECKIN_COMPLETED_TYPES.has(event.event_type));
   const commitments = {
     madeCount: dayEvents.filter((event) => event.event_type === "commitment_made").length,
+    declinedCount: dayEvents.filter((event) => event.event_type === "commitment_declined").length,
     checkInGeneratedCount: dayEvents.filter((event) => COMMITMENT_CHECKIN_GENERATED_TYPES.has(event.event_type)).length,
     checkInCompletedCount: checkIns.length,
     outcomes: {
@@ -196,6 +203,8 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
     personal.completedCount > 0 ||
     personal.availableCount > 0 ||
     commitments.madeCount > 0 ||
+    commitments.declinedCount > 0 ||
+    commitments.checkInGeneratedCount > 0 ||
     commitments.checkInCompletedCount > 0 ||
     interruptions.interruptedCount > 0 ||
     interruptions.continueToAppCount > 0 ||

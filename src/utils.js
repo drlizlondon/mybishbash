@@ -440,6 +440,12 @@ function isWithinCustomTimeWindow(card, date = new Date(), timeZone) {
   return current >= start || current <= end;
 }
 
+function wasCardDoneToday(card, todayKey) {
+  if (card.doneDate === todayKey) return true;
+  if (card.doneDate && card.doneDate !== todayKey) return false;
+  return card.statusToday === "doneToday";
+}
+
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const isPackCard = Boolean(card.sourcePackId);
@@ -448,7 +454,7 @@ export function isEligible(card, date = new Date(), timeZone) {
   if (card.disliked) return false;
   if (card.deletedAt) return false;
   if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) return false;
-  if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) return false;
+  if (!isPackCard && wasCardDoneToday(card, todayKey)) return false;
   if (
     !isPackCard &&
     card.lastShownAt &&
@@ -507,6 +513,17 @@ export function normalizeCards(cards, date = new Date(), timeZone) {
       next.commitmentCheckInResponse = next.commitmentCheckInResponse ?? null;
       next.commitmentCheckInResponseDate = next.commitmentCheckInResponseDate ?? null;
       next.commitmentCheckInResponseAt = next.commitmentCheckInResponseAt ?? null;
+      if (next.commitmentDecisionDate !== todayKey) {
+        next.commitmentStatusToday = null;
+      }
+      if (next.commitmentCheckInPendingDate !== todayKey) {
+        next.commitmentCheckInPendingDate = null;
+      }
+      if (next.commitmentCheckInResponseDate !== todayKey) {
+        next.commitmentCheckInResponse = null;
+        next.commitmentCheckInResponseDate = null;
+        next.commitmentCheckInResponseAt = null;
+      }
     }
     if (typeof next.disliked !== "boolean") {
       next.disliked = false;
@@ -556,7 +573,7 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
       : { badge: "done", detail: "committed today" };
   }
 
-  if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) {
+  if (!isPackCard && wasCardDoneToday(card, todayKey)) {
     return { badge: "done", detail: "see you tomorrow" };
   }
 

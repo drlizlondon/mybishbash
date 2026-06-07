@@ -698,6 +698,7 @@ function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = n
   const lastExposure = exposureByCardId.get(card.id) ?? (card.lastShownAt ? new Date(card.lastShownAt).getTime() : 0);
   const activePack = isPackCardAvailable(card) && !excludedCardIds.has(card.id);
   const packOutsideTimeout = !isPack || packCardTimeoutMs <= 0 || !lastExposure || lastExposure + packCardTimeoutMs <= date.getTime();
+  const doneToday = card.doneDate === todayKey || (!card.doneDate && card.statusToday === "doneToday");
 
   const checks = [
     { name: "excluded_by_launcher", pass: !excludedCardIds.has(card.id), appliesToPacks: true },
@@ -705,7 +706,7 @@ function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = n
     { name: "not_paused", pass: !card.paused, appliesToPacks: true },
     { name: "not_disliked", pass: !card.disliked, appliesToPacks: true },
     { name: "not_hidden_pack_card", pass: !isPack || !card.hidden, appliesToPacks: true },
-    { name: "not_done_today", pass: isPack || (card.doneDate !== todayKey && card.statusToday !== "doneToday"), appliesToPacks: false },
+    { name: "not_done_today", pass: isPack || !doneToday, appliesToPacks: false },
     { name: "personal_cooldown_expired", pass: isPack || !card.lastShownAt || new Date(card.lastShownAt).getTime() + 30 * 60 * 1000 <= date.getTime(), appliesToPacks: false },
     { name: "not_yet_expired", pass: isPack || !card.notYetUntil || new Date(card.notYetUntil).getTime() <= date.getTime(), appliesToPacks: false },
     { name: "timing_window_matches", pass: isPack || windows.includes(currentWindow), appliesToPacks: false },
@@ -1151,13 +1152,40 @@ function buildActionSuccessOverlay(versionId = null) {
   return { type: "action-success", versionId };
 }
 
-function buildFlowConfirmationOverlay(versionId = null, message = "Thanks for the update.", activationKey = null) {
+function buildFlowConfirmationOverlay(versionId = null, message = "Thanks for the update.", activationKey = null, actionLabel = "Continue") {
   return {
     type: "flow-confirmation",
     versionId,
     message,
+    actionLabel,
     ...(versionId ? buildFakeLauncherOverlayContext(versionId, activationKey) : {}),
   };
+}
+
+function buildCommitmentMotivationOverlay(cardId, versionId = null, activationKey = null) {
+  return {
+    type: "commitment-motivation",
+    cardId,
+    versionId,
+    ...(versionId ? buildFakeLauncherOverlayContext(versionId, activationKey) : {}),
+  };
+}
+
+function stripCommitmentPrefix(value = "") {
+  return String(value ?? "").trim().replace(/^I\s+will\b[\s:,-]*/i, "").trim();
+}
+
+function getCommitmentAcknowledgementMessage({ committed, checkInEnabled }) {
+  if (!committed) return "That’s okay.\nAnother day.";
+  return checkInEnabled
+    ? "Nice choice.\nWe’ll check in later."
+    : "Nice choice.\nKeep this in mind today.";
+}
+
+function getCommitmentCheckInOutcomeMessage(response) {
+  if (response === "Going perfectly") return "Excellent.\nKeep going today.";
+  if (response === "Could be better") return "That’s okay.\nThere’s still time today.";
+  return "That’s okay.\nTomorrow is another opportunity.";
 }
 
 function App() {
@@ -2741,7 +2769,7 @@ function App() {
 
       if (
         !isResumeInterceptLaunch &&
-        ["action-card", "action-card-empty", "action-success", "flow-confirmation"].includes(overlay?.type) &&
+        ["action-card", "action-card-empty", "action-success", "flow-confirmation", "commitment-motivation"].includes(overlay?.type) &&
         overlay?.versionId === route.versionId
       ) {
         return;
@@ -2810,6 +2838,9 @@ function App() {
     setScreen("library");
 
     if (route.kind === "card") {
+      if (["flow-confirmation", "commitment-motivation"].includes(overlay?.type)) {
+        return;
+      }
       if (overlay?.type === "reveal" && overlay.cardId === route.cardId) {
         return;
       }
@@ -3287,7 +3318,7 @@ function App() {
         const activation = interceptActivationRef.current;
         const activationKey = overlay?.activationKey || activation?.activationKey || Date.now().toString();
         setScreen("interception");
-        const nextOverlay = buildFlowConfirmationOverlay(versionId, options.confirmationMessage, activationKey);
+        const nextOverlay = buildFlowConfirmationOverlay(versionId, options.confirmationMessage, activationKey, options.confirmationActionLabel);
         setOverlay(nextOverlay);
         navigateTo(`/intercept/${versionId}`, { replace: true });
         return;
@@ -3296,7 +3327,7 @@ function App() {
       suppressNextHomeAutoLaunchRef.current = true;
       setShouldLaunchOverlay(false);
       setScreen("library");
-      setOverlay(buildFlowConfirmationOverlay(null, options.confirmationMessage));
+      setOverlay(buildFlowConfirmationOverlay(null, options.confirmationMessage, null, options.confirmationActionLabel));
       return;
     }
 
@@ -3435,11 +3466,28 @@ function App() {
   }
 
   function handleCommitmentAction(action) {
-    if (!overlay || overlay.type !== "reveal") return;
+    if (!overlay || !["reveal", "commitment-motivation"].includes(overlay.type)) return;
 
     const activeCard = cards.find((card) => card.id === overlay.cardId);
     if (!activeCard || !isCommitmentCard(activeCard)) {
       setOverlay(null);
+      return;
+    }
+
+    const savedMotivation = String(activeCard.commitmentReason ?? "").trim();
+    if (action === "decline" && overlay.type === "reveal" && savedMotivation) {
+      const activation = interceptActivationRef.current;
+      const activationKey = overlay?.activationKey || activation?.activationKey || Date.now().toString();
+      const nextOverlay = buildCommitmentMotivationOverlay(
+        activeCard.id,
+        overlay?.launchSource === "fake_launcher" ? overlay.versionId : null,
+        activationKey
+      );
+      logCommitmentDebug("showing commitment motivation before final decline", {
+        cardId: activeCard.id,
+        commitmentText: activeCard.promptText,
+      });
+      setOverlay(nextOverlay);
       return;
     }
 
@@ -3499,9 +3547,11 @@ function App() {
     handleRevealCompletion({
       cardsOverride: cardsAfterAction,
       completedCardId: activeCard.id,
-      confirmationMessage: committed
-        ? "Thanks for making a commitment to yourself."
-        : "Thanks for the update.",
+      confirmationMessage: getCommitmentAcknowledgementMessage({
+        committed,
+        checkInEnabled: Boolean(activeCard.commitmentCheckInEnabled),
+      }),
+      confirmationActionLabel: "Continue",
     });
   }
 
@@ -3555,7 +3605,8 @@ function App() {
     handleRevealCompletion({
       cardsOverride: cardsAfterAction,
       completedCardId: activeCard.id,
-      confirmationMessage: "Thanks for the update.",
+      confirmationMessage: getCommitmentCheckInOutcomeMessage(response),
+      confirmationActionLabel: "Continue",
     });
   }
 
@@ -7362,15 +7413,28 @@ function MorningSummaryModal({ summary, onClose }) {
     });
   }
 
-  if (commitments.madeCount > 0 || commitments.checkInCompletedCount > 0) {
+  if (
+    commitments.madeCount > 0 ||
+    commitments.declinedCount > 0 ||
+    commitments.checkInGeneratedCount > 0 ||
+    commitments.checkInCompletedCount > 0
+  ) {
     const details = [];
+    const commitmentBody = commitments.madeCount > 0
+      ? `You made ${plural(commitments.madeCount, "commitment")} yesterday.`
+      : commitments.declinedCount > 0
+        ? `You chose not this time for ${plural(commitments.declinedCount, "commitment")} yesterday.`
+        : "Your commitment check-ins were active yesterday.";
+    if (commitments.declinedCount > 0) details.push(`${commitments.declinedCount} not this time`);
+    if (commitments.checkInGeneratedCount > 0) details.push(`${commitments.checkInGeneratedCount} check-in shown`);
+    if (commitments.checkInCompletedCount > 0) details.push(`${commitments.checkInCompletedCount} check-in answered`);
     if (commitments.outcomes?.goingPerfectly) details.push(`${commitments.outcomes.goingPerfectly} going perfectly`);
     if (commitments.outcomes?.couldBeBetter) details.push(`${commitments.outcomes.couldBeBetter} could be better`);
     if (commitments.outcomes?.notGoingWell) details.push(`${commitments.outcomes.notGoingWell} not going well`);
     sections.push({
       id: "commitments",
       title: "Commitments",
-      body: `You made ${plural(commitments.madeCount, "commitment")} yesterday. You checked in on ${commitments.checkInCompletedCount} of them.`,
+      body: commitmentBody,
       details,
     });
   }
@@ -7875,6 +7939,21 @@ function Overlay({
   if (!card) return null;
   const cardType = card.sourcePackId ? "pack" : "personal";
 
+  if (overlay.type === "commitment-motivation" && isCommitmentCard(card)) {
+    return (
+      <CommitmentMotivationOverlay
+        card={card}
+        onCommitmentAction={onCommitmentAction}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={launcherInterceptionClass}
+      />
+    );
+  }
+
   if (isCommitmentCheckInCard(card)) {
     return (
       <CommitmentCheckInOverlay
@@ -7991,8 +8070,8 @@ function CommitmentCardOverlay({
   cardOverlayKey = "",
   className = "",
 }) {
-  const [showReason, setShowReason] = useState(false);
   const shownRef = useRef(false);
+  const commitmentText = stripCommitmentPrefix(card.promptText);
 
   useEffect(() => {
     if (!card || shownRef.current) return;
@@ -8007,34 +8086,12 @@ function CommitmentCardOverlay({
     });
   }, [card]);
 
-  if (showReason) {
-    return (
-      <PremiumCardScreen
-        type="personal"
-        greeting="MESSAGE FROM YOURSELF"
-        icon="heart"
-        headline={card.commitmentReason || "You wrote this because it matters."}
-        subtitle=""
-        actions={[
-          { label: "I’ll commit after all", variant: "primary", onClick: () => onCommitmentAction("commit_after_all") },
-          { label: "Not this time", variant: "secondary", onClick: () => onCommitmentAction("decline") },
-        ]}
-        launcherVersions={launcherVersions}
-        onLauncherLaunch={onLauncherLaunch}
-        onDashboard={onDashboard}
-        onCreateCard={onCreateCard}
-        cardOverlayKey={`${cardOverlayKey}:reason`}
-        className={className}
-      />
-    );
-  }
-
   return (
     <PremiumCardScreen
       type="personal"
       greeting="TODAY’S COMMITMENT"
       icon="heart"
-      headline="I will"
+      headline={`I will\n${commitmentText}`}
       subtitle=""
       actions={[
         { label: "I will commit to this", variant: "primary", onClick: () => onCommitmentAction("commit") },
@@ -8042,11 +8099,11 @@ function CommitmentCardOverlay({
           label: "Not this time",
           variant: "secondary",
           onClick: () => {
-            logCommitmentDebug("user chose second screen", {
+            logCommitmentDebug("user declined from first screen", {
               cardId: card.id,
               commitmentText: card.promptText,
             });
-            setShowReason(true);
+            onCommitmentAction("decline");
           },
         },
       ]}
@@ -8056,9 +8113,44 @@ function CommitmentCardOverlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
+    />
+  );
+}
+
+function CommitmentMotivationOverlay({
+  card,
+  onCommitmentAction,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+}) {
+  return (
+    <CardRevealTemplate
+      variant="personal"
+      greeting="MESSAGE FROM YOURSELF"
+      icon="heart"
+      message=""
+      subtitle=""
+      launchers={launcherVersions}
+      actions={[
+        { label: "I’ll commit after all", variant: "primary", onClick: () => onCommitmentAction("commit_after_all") },
+        { label: "Not this time", variant: "secondary", onClick: () => onCommitmentAction("decline_after_motivation") },
+      ]}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
     >
-      <p className="premium-subtitle commitment-card-user-text">{card.promptText}</p>
-    </PremiumCardScreen>
+      <div className="commitment-motivation-copy">
+        <p className="commitment-motivation-intro">Before you decide...</p>
+        <p className="commitment-motivation-subline">You wrote this to yourself:</p>
+        <CardRevealMessage message={card.commitmentReason} />
+      </div>
+    </CardRevealTemplate>
   );
 }
 
@@ -8075,9 +8167,9 @@ function CommitmentCheckInOverlay({
   return (
     <PremiumCardScreen
       type="personal"
-      greeting="CHECK-IN"
+      greeting="How is it going?"
       icon="heart"
-      headline="You committed to:"
+      headline={card.promptText}
       subtitle=""
       actions={[
         { label: "Going perfectly", variant: "primary", onClick: () => onCheckInAction("Going perfectly") },
@@ -8090,12 +8182,7 @@ function CommitmentCheckInOverlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
-    >
-      <div className="commitment-check-in-copy">
-        <p className="premium-subtitle commitment-card-user-text">{card.promptText}</p>
-        <p className="premium-subtitle">How’s it going?</p>
-      </div>
-    </PremiumCardScreen>
+    />
   );
 }
 
@@ -8183,6 +8270,7 @@ function CardRevealMessage({ message }) {
   const headlineRef = useRef(null);
   const baseSize = getMessageBaseSize(message);
   const [fontSize, setFontSize] = useState(baseSize);
+  const [isScrollable, setIsScrollable] = useState(false);
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -8192,19 +8280,21 @@ function CardRevealMessage({ message }) {
     let frameId;
 
     function fit() {
-      const minSize = 16;
+      const minSize = 18;
       let nextSize = baseSize;
       headline.style.fontSize = `${nextSize}px`;
 
       while (
         nextSize > minSize &&
-        headline.scrollWidth > frame.clientWidth
+        (headline.scrollWidth > frame.clientWidth ||
+          headline.scrollHeight > frame.clientHeight)
       ) {
         nextSize -= 1;
         headline.style.fontSize = `${nextSize}px`;
       }
 
       setFontSize(nextSize);
+      setIsScrollable(headline.scrollHeight > frame.clientHeight || headline.scrollWidth > frame.clientWidth);
     }
 
     frameId = window.requestAnimationFrame(fit);
@@ -8225,7 +8315,7 @@ function CardRevealMessage({ message }) {
   }, [baseSize, message]);
 
   return (
-    <div className="premium-title-box" ref={frameRef}>
+    <div className={`premium-title-box ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
       <h2
         className="premium-headline"
         ref={headlineRef}
@@ -8530,12 +8620,12 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, car
 }
 
 function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, onChooseElse, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
-  const appName = version?.name ?? "App";
   const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version)) : "";
+  const actionLabel = overlay.actionLabel || "Continue";
   const actions = version
     ? [
         {
-          label: `Continue to ${appName}`,
+          label: actionLabel,
           variant: "primary",
           href: continueHref,
           onClick: (event) => {
@@ -8549,7 +8639,7 @@ function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, o
         },
         { label: "Do something else", variant: "secondary", onClick: onChooseElse },
       ]
-    : [{ label: "Back home", variant: "primary", onClick: onClose }];
+    : [{ label: actionLabel, variant: "primary", onClick: onClose }];
 
   return (
     <PremiumCardScreen
