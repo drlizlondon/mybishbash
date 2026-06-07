@@ -228,8 +228,7 @@ test('legacy dashboard-title commitment cards render as Commitment Cards', async
 
   const overlay = page.getByTestId('card-overlay-personal');
   await expect(overlay.getByText('TODAY’S COMMITMENT')).toBeVisible();
-  await expect(overlay.getByRole('heading', { name: 'I will' })).toBeVisible();
-  await expect(overlay.getByText('go for a walk')).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: /I will\s+go for a walk/ })).toBeVisible();
   await expect(overlay.getByTestId('card-action-i-will-commit-to-this')).toBeVisible();
 });
 
@@ -246,10 +245,8 @@ test('legacy commitment cards produce check-ins after the selected time', async 
   await gotoLauncher(page, 'safari');
 
   const overlay = page.getByTestId('card-overlay-personal');
-  await expect(overlay.getByText('CHECK-IN')).toBeVisible();
-  await expect(overlay.getByRole('heading', { name: 'You committed to:' })).toBeVisible();
-  await expect(overlay.getByText('go for a walk')).toBeVisible();
-  await expect(overlay.getByText('How’s it going?')).toBeVisible();
+  await expect(overlay.getByText('How is it going?')).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'go for a walk' })).toBeVisible();
 });
 
 test('normal Personal Cards without commitment fields stay Personal Cards', async ({ page }) => {
@@ -330,50 +327,37 @@ test('commit path records made and prevents same-day reappearance', async ({ pag
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
   const events = await storedEvents(page);
   expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_made')).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Thanks for making a commitment to yourself.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Nice choice\.\s+Keep this in mind today\./ })).toBeVisible();
 
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
 });
 
-test('Not this time path shows the second screen', async ({ page }) => {
+test('Not this time path records declined and shows soft acknowledgement', async ({ page }) => {
   await seedE2EState(page, [commitmentCard()]);
   await gotoHome(page);
 
   await page.getByTestId('home-card-commitment-card').click();
-  await page.getByTestId('card-action-not-this-time').click();
-
-  await expect(page.getByText('MESSAGE FROM YOURSELF')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Fresh air helps me reset.' })).toBeVisible();
-  await expect(page.getByTestId('card-action-i-ll-commit-after-all')).toBeVisible();
-  await expect(page.getByTestId('card-action-not-this-time')).toBeVisible();
-});
-
-test('second screen commit after all records commitment made', async ({ page }) => {
-  await seedE2EState(page, [commitmentCard()]);
-  await gotoHome(page);
-
-  await page.getByTestId('home-card-commitment-card').click();
-  await page.getByTestId('card-action-not-this-time').click();
-  await page.getByTestId('card-action-i-ll-commit-after-all').click();
-
-  await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
-  const events = await storedEvents(page);
-  expect(events.some((event: any) => event.event_type === 'commitment_made' && event.metadata?.decisionSource === 'commit_after_all')).toBe(true);
-});
-
-test('second screen Not this time records declined and does not automatically reappear', async ({ page }) => {
-  await seedE2EState(page, [commitmentCard()]);
-  await gotoLauncher(page, 'safari');
-
-  await page.getByTestId('card-action-not-this-time').click();
   await page.getByTestId('card-action-not-this-time').click();
 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
   const events = await storedEvents(page);
   expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_declined')).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Thanks for the update.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /That’s okay\.\s+Another day\./ })).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+});
+
+test('Not this time records declined and does not automatically reappear', async ({ page }) => {
+  await seedE2EState(page, [commitmentCard()]);
+  await gotoLauncher(page, 'safari');
+
+  await page.getByTestId('card-action-not-this-time').click();
+
+  await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
+  const events = await storedEvents(page);
+  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_declined')).toBe(true);
+  await expect(page.getByRole('heading', { name: /That’s okay\.\s+Another day\./ })).toBeVisible();
 
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
@@ -408,16 +392,14 @@ test('check-in appears only after the user commits and the selected time has arr
   await gotoLauncher(page, 'safari');
 
   await page.getByTestId('card-action-i-will-commit-to-this').click();
-  await expect(page.getByRole('heading', { name: 'Thanks for making a commitment to yourself.' })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-safari')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Nice choice\.\s+We’ll check in later\./ })).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
   await expect(page.getByTestId('card-action-do-something-else')).toBeVisible();
 
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('CHECK-IN')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'You committed to:' })).toBeVisible();
-  await expect(page.getByText('go for a walk')).toBeVisible();
-  await expect(page.getByText('How’s it going?')).toBeVisible();
+  await expect(page.getByText('How is it going?')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'go for a walk' })).toBeVisible();
 });
 
 test('check-in does not appear if the user declines the commitment', async ({ page }) => {
@@ -430,11 +412,10 @@ test('check-in does not appear if the user declines the commitment', async ({ pa
   await gotoLauncher(page, 'safari');
 
   await page.getByTestId('card-action-not-this-time').click();
-  await page.getByTestId('card-action-not-this-time').click();
 
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('CHECK-IN')).toHaveCount(0);
+  await expect(page.getByText('How is it going?')).toHaveCount(0);
 });
 
 test('check-in waits until the selected check-in time', async ({ page }) => {
@@ -449,7 +430,7 @@ test('check-in waits until the selected check-in time', async ({ page }) => {
   ]);
 
   await gotoLauncher(page, 'safari');
-  await expect(page.getByText('CHECK-IN')).toHaveCount(0);
+  await expect(page.getByText('How is it going?')).toHaveCount(0);
 });
 
 test('check-in response labels and completion return to normal launcher choices', async ({ page }) => {
@@ -474,11 +455,11 @@ test('check-in response labels and completion return to normal launcher choices'
     card.commitmentCheckInResponse === 'Could be better' &&
     card.commitmentCheckInResponseDate === '2026-06-01',
   );
-  await expect(page.getByRole('heading', { name: 'Thanks for the update.' })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-safari')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /That’s okay\.\s+There’s still time today\./ })).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
   await expect(page.getByTestId('card-action-do-something-else')).toBeVisible();
 
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('CHECK-IN')).toHaveCount(0);
+  await expect(page.getByText('How is it going?')).toHaveCount(0);
 });
