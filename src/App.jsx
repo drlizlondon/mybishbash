@@ -99,6 +99,7 @@ import {
   getVersionOpenHref,
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/launcherRegistry";
+import { buildLibrarySections } from "./lib/librarySections";
 import {
   FAKE_LAUNCHER_FLOW_STEPS,
   buildFakeLauncherFlowContext,
@@ -118,8 +119,10 @@ import {
 } from "./morningSummary";
 import {
   buildCardExposureLookup,
+  CARD_EVENT_TYPES,
+  CARD_SELECTION_SURFACES,
   DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS,
-  selectPersonalFirstLauncherCard,
+  selectEligibleCard,
 } from "./lib/cardSelection";
 import {
   DiagnosticsModal,
@@ -1136,6 +1139,11 @@ function getLauncherCardActions({ launchSession, cardType }) {
   };
 }
 
+function getCardSelectionSurfaceForOverlay(overlay) {
+  if (overlay?.launchSource === "fake_launcher" || overlay?.versionId) return CARD_SELECTION_SURFACES.SHELL;
+  return CARD_SELECTION_SURFACES.HOME;
+}
+
 function buildEmptyOverlay(versionId = null) {
   return { type: "empty", versionId };
 }
@@ -1282,6 +1290,7 @@ function App() {
   });
   const [launcherContext, setLauncherContext] = useState(() => getLauncherContextFromRoute(initialRoute));
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [composerInitialKind, setComposerInitialKind] = useState("personal");
   const [editingId, setEditingId] = useState(null);
   const composerReturnPathRef = useRef("/home");
   const [editingPackId, setEditingPackId] = useState(null);
@@ -2368,7 +2377,7 @@ function App() {
       activationKey,
       selectedPath: "personal_first_fallback",
     }, testerStatus);
-    const fallbackDisplay = selectPersonalFirstLauncherCard({
+    const fallbackDisplay = selectEligibleCard({
       cards,
       timezone: profile.timezone,
       events: selectionEvents,
@@ -2921,7 +2930,7 @@ function App() {
       });
 
       const launchAttemptId = createLaunchAttemptId("personal", "route");
-      const homeDecision = selectPersonalFirstLauncherCard({
+      const homeDecision = selectEligibleCard({
         cards,
         events,
         timezone: profile.timezone,
@@ -3300,10 +3309,13 @@ function App() {
     const packCards = cards.filter((card) => card.sourcePackId === packId && !card.deletedAt);
     if (packCards.length === 0) return;
 
-    const eligiblePackCards = packCards.filter(isPackCardAvailable);
-    if (eligiblePackCards.length === 0) return;
-    const source = eligiblePackCards;
-    const selected = source[Math.floor(Math.random() * source.length)];
+    const { selected } = selectEligibleCard({
+      cards: packCards,
+      events,
+      timezone: profile.timezone,
+      settings: { packCardTimeoutMs: 0 },
+    });
+    if (!selected || !isPackCardAvailable(selected)) return;
     openSpecificReveal(selected.id);
   }
 
@@ -3460,6 +3472,30 @@ function App() {
         timingWindows: activeCard.timingWindows,
       },
     });
+    if (!activeCard.sourcePackId) {
+      void logEvent({
+        event_type: action === "done" ? CARD_EVENT_TYPES.COMPLETED : CARD_EVENT_TYPES.IGNORED,
+        source_type: "personal",
+        card_source: "personal",
+        bash_id: activeCard.id,
+        bash_title: activeCard.promptText,
+        card_id: activeCard.id,
+        card_title: activeCard.dashboardTitle ?? activeCard.promptText,
+        card_text: activeCard.promptText,
+        action_taken: action === "done" ? "completed" : "ignored",
+        metadata: {
+          legacyEventType: eventType,
+          cardKind: activeCard.cardKind ?? "personal",
+          surface: getCardSelectionSurfaceForOverlay(overlay),
+          selectedAction: action,
+          frequency: activeCard.frequency,
+          timingWindows: activeCard.timingWindows,
+          origin: overlay.origin ?? null,
+          launchSource: overlay.launchSource ?? null,
+          activationKey: overlay?.activationKey ?? null,
+        },
+      });
+    }
 
     handleRevealCompletion({ cardsOverride: cardsAfterAction, completedCardId: activeCard.id });
     return;
@@ -3531,6 +3567,28 @@ function App() {
         timingWindows: activeCard.timingWindows,
       },
     });
+    void logEvent({
+      event_type: CARD_EVENT_TYPES.COMPLETED,
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: activeCard.id,
+      bash_title: activeCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Today’s Commitment",
+      card_text: activeCard.promptText,
+      action_taken: committed ? "committed" : "declined",
+      metadata: {
+        legacyEventType: eventType,
+        cardKind: "commitment",
+        surface: getCardSelectionSurfaceForOverlay(overlay),
+        decisionSource: action,
+        frequency: activeCard.frequency,
+        timingWindows: activeCard.timingWindows,
+        origin: overlay.origin ?? null,
+        launchSource: overlay.launchSource ?? null,
+        activationKey: overlay?.activationKey ?? null,
+      },
+    });
 
     if (action === "commit_after_all") {
       logCommitmentDebug("user committed after the second screen", {
@@ -3599,6 +3657,27 @@ function App() {
         parentCommitmentCardId: parentCard.id,
         checkInTime: parentCard.commitmentCheckInTime ?? "",
         response,
+      },
+    });
+    void logEvent({
+      event_type: CARD_EVENT_TYPES.COMPLETED,
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: parentCard.id,
+      bash_title: parentCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Check-in",
+      card_text: parentCard.promptText,
+      action_taken: response,
+      metadata: {
+        legacyEventType: "commitment_check_in",
+        cardKind: "commitment_check_in",
+        surface: getCardSelectionSurfaceForOverlay(overlay),
+        parentCommitmentCardId: parentCard.id,
+        checkInTime: parentCard.commitmentCheckInTime ?? "",
+        origin: overlay.origin ?? null,
+        launchSource: overlay.launchSource ?? null,
+        activationKey: overlay?.activationKey ?? null,
       },
     });
 
@@ -3892,13 +3971,15 @@ function App() {
 
   function openEditor(cardId) {
     setEditingId(cardId);
+    setComposerInitialKind("personal");
     composerReturnPathRef.current = route.path;
     setIsComposerOpen(true);
     setMenuOpenId(null);
   }
 
-  function openCardComposerFromCurrentRoute() {
+  function openCardComposerFromCurrentRoute(initialKind = "personal") {
     setEditingId(null);
+    setComposerInitialKind(initialKind);
     composerReturnPathRef.current = route.path;
     setIsComposerOpen(true);
   }
@@ -4664,6 +4745,37 @@ function App() {
   const activeRevealCard = overlay?.cardId
     ? resolveRevealCard(cards, overlay.cardId, profile.timezone)
     : null;
+  const recordActiveRevealCardIgnored = useCallback((reason) => {
+    if (!overlay || overlay.type !== "reveal" || !activeRevealCard || activeRevealCard.sourcePackId) return;
+    const now = new Date();
+    const surface = getCardSelectionSurfaceForOverlay(overlay);
+    updateCards((current) =>
+      current.map((card) =>
+        card.id === activeRevealCard.id
+          ? { ...card, lastShownAt: now.toISOString(), updatedAt: now.toISOString() }
+          : card,
+      ),
+    );
+    void logEvent({
+      event_type: CARD_EVENT_TYPES.IGNORED,
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: activeRevealCard.parentCommitmentCardId ?? activeRevealCard.id,
+      bash_title: activeRevealCard.promptText,
+      card_id: activeRevealCard.id,
+      card_title: activeRevealCard.dashboardTitle ?? activeRevealCard.promptText,
+      card_text: activeRevealCard.promptText,
+      action_taken: "ignored",
+      metadata: {
+        cardKind: activeRevealCard.cardKind ?? "personal",
+        surface,
+        reason,
+        origin: overlay.origin ?? null,
+        launchSource: overlay.launchSource ?? null,
+        activationKey: overlay?.activationKey ?? null,
+      },
+    });
+  }, [activeRevealCard, logEvent, overlay, updateCards]);
   const activeOverlayVersion = useMemo(
     () =>
       overlay?.versionId
@@ -4688,6 +4800,7 @@ function App() {
 
     const isCheckIn = isCommitmentCheckInCard(activeRevealCard);
     const isCommitment = isCommitmentCard(activeRevealCard);
+    const surface = getCardSelectionSurfaceForOverlay(overlay);
     const baseEvent = {
       source_type: "personal",
       card_source: "personal",
@@ -4699,6 +4812,7 @@ function App() {
       action_taken: "shown",
       metadata: {
         cardKind: activeRevealCard.cardKind ?? "personal",
+        surface,
         origin: overlay.origin ?? null,
         launchSource: overlay.launchSource ?? null,
         activationKey: overlay?.activationKey ?? null,
@@ -4714,12 +4828,29 @@ function App() {
           parentCommitmentCardId: activeRevealCard.parentCommitmentCardId,
         },
       });
+      void logEvent({
+        ...baseEvent,
+        event_type: CARD_EVENT_TYPES.SHOWN,
+        metadata: {
+          ...baseEvent.metadata,
+          legacyEventType: "commitment_check_in_generated",
+          parentCommitmentCardId: activeRevealCard.parentCommitmentCardId,
+        },
+      });
       return;
     }
 
     void logEvent({
       ...baseEvent,
       event_type: isCommitment ? "commitment_card_shown" : "personal_card_shown",
+    });
+    void logEvent({
+      ...baseEvent,
+      event_type: CARD_EVENT_TYPES.SHOWN,
+      metadata: {
+        ...baseEvent.metadata,
+        legacyEventType: isCommitment ? "commitment_card_shown" : "personal_card_shown",
+      },
     });
   }, [activeRevealCard, logEvent, overlay, route.path]);
 
@@ -4830,22 +4961,6 @@ function App() {
 
     return count;
   }, [cards, profile.timezone]);
-  const personalLibraryItems = useMemo(
-    () =>
-      cards
-        .filter((card) => !card.sourcePackId && !card.deletedAt)
-        .map((card) => ({
-          type: "single",
-          id: card.id,
-          representative: card,
-        }))
-        .sort((left, right) => {
-          const leftCreated = new Date(left.representative.createdAt ?? 0).getTime();
-          const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
-          return rightCreated - leftCreated;
-        }),
-    [cards],
-  );
   const recentMeaningfulEvents = useMemo(
     () => events.filter(isRecentMomentEvent).slice(0, 5),
     [events],
@@ -4857,6 +4972,10 @@ function App() {
       return [...fallbackPacks, ...globalPacks].filter((pack) => !hiddenLibraryPacks.includes(pack.id));
     },
     [hiddenLibraryPacks, globalPacks],
+  );
+  const librarySections = useMemo(
+    () => buildLibrarySections({ cards, libraryPacks: visibleLibraryPacks }),
+    [cards, visibleLibraryPacks],
   );
   const completionEvents = useMemo(
     () => events.filter(isCompletionEvent).slice(0, 3),
@@ -4985,7 +5104,9 @@ function App() {
 
               {activeTab === "library" ? (
                 <StandardLibraryPanel
-                  items={personalLibraryItems}
+                  personalItems={librarySections.personal}
+                  commitmentItems={librarySections.commitments}
+                  activePackItems={librarySections.activePacks}
                   timezone={profile.timezone}
                   menuOpenId={menuOpenId}
                   setMenuOpenId={setMenuOpenId}
@@ -4995,6 +5116,11 @@ function App() {
                   handleDeleteCard={handleDeleteCard}
                   handleDuplicateCard={handleDuplicateCard}
                   openSpecificReveal={openSpecificReveal}
+                  openPackReveal={openPackReveal}
+                  deactivatePack={deactivatePack}
+                  onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
+                  onCreateCommitment={() => openCardComposerFromCurrentRoute("commitment")}
+                  onAddPack={() => navigateTo("/packs")}
                 />
               ) : null}
 
@@ -5095,10 +5221,12 @@ function App() {
 
       {isComposerOpen ? (
         <Composer
-          key={editingId ?? "new"}
+          key={editingId ?? `new-${composerInitialKind}`}
           initialCard={editingCard}
+          initialKind={composerInitialKind}
           onClose={() => {
             setEditingId(null);
+            setComposerInitialKind("personal");
             composerReturnPathRef.current = "/home";
             setIsComposerOpen(false);
           }}
@@ -5172,6 +5300,7 @@ function App() {
               setOverlay(null);
               return;
             }
+            recordActiveRevealCardIgnored("overlay_closed");
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             setShouldLaunchOverlay(false);
@@ -5180,6 +5309,7 @@ function App() {
             setOverlay(null);
           }}
           onDashboard={() => {
+            recordActiveRevealCardIgnored("dashboard_opened");
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             setShouldLaunchOverlay(false);
@@ -5342,9 +5472,9 @@ function parseBulkCards(text) {
   return cards;
 }
 
-function Composer({ initialCard, onClose, onSave }) {
+function Composer({ initialCard, initialKind = "personal", onClose, onSave }) {
   const commitmentInputRef = useRef(null);
-  const initialCardKind = isCommitmentCard(initialCard) ? "commitment" : "personal";
+  const initialCardKind = initialCard ? (isCommitmentCard(initialCard) ? "commitment" : "personal") : initialKind;
   const [cardKind, setCardKind] = useState(initialCardKind);
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
   const [commitmentReason, setCommitmentReason] = useState(initialCard?.commitmentReason ?? "");
@@ -6077,8 +6207,126 @@ function HomeReminderCard({
   );
 }
 
+function LibrarySectionHeader({ id, icon, title, description, countLabel, isOpen, onToggle, onAdd, addLabel, testId }) {
+  return (
+    <div className="library-section-header">
+      <button
+        type="button"
+        className="library-section-toggle"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        aria-controls={id}
+        data-testid={`${testId}-toggle`}
+      >
+        <span className="tile library-section-icon">
+          <CardIcon icon={icon} />
+        </span>
+        <span className="library-section-copy">
+          <span className="library-section-title">{title}</span>
+          <span className="library-section-description">{description}</span>
+        </span>
+      </button>
+      <span className="library-section-meta">
+        <span className="library-section-count">{countLabel}</span>
+        <button
+          type="button"
+          className="library-section-add"
+          onClick={onAdd}
+          aria-label={addLabel}
+          data-testid={`${testId}-add`}
+        >
+          +
+        </button>
+        <span className={`library-section-chevron ${isOpen ? "open" : ""}`} aria-hidden="true">
+          ›
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function LibraryListRow({
+  item,
+  title,
+  secondary,
+  menuOpenId,
+  setMenuOpenId,
+  onOpen,
+  menuActions,
+}) {
+  return (
+    <article
+      className={`library-list-row ${menuOpenId === item.id ? "menu-open" : ""}`}
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      <div className="library-list-copy">
+        <h3>{title}</h3>
+        {secondary ? <p>{secondary}</p> : null}
+      </div>
+      <div className="menu-wrap">
+        <button
+          type="button"
+          className="menu-trigger library-list-menu-trigger"
+          onClick={(event) => {
+            event.stopPropagation();
+            setMenuOpenId((current) => (current === item.id ? null : item.id));
+          }}
+          aria-label="Card menu"
+        >
+          •••
+        </button>
+        {menuOpenId === item.id ? (
+          <div className="menu">
+            {menuActions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                className={action.danger ? "danger-soft" : ""}
+                disabled={action.disabled}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  action.onClick();
+                }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function getLibraryPersonalSecondary(card, timezone) {
+  const status = getStatusMeta(card, new Date(), timezone);
+  return status.badge;
+}
+
+function getLibraryCommitmentSecondary(card) {
+  if (card.commitmentCheckInEnabled && card.commitmentCheckInTime) {
+    return `check-in ${card.commitmentCheckInTime}`;
+  }
+  return card.commitmentTimingMode === "custom" ? "custom timing" : "commitment";
+}
+
+function getLibraryPackSecondary(item) {
+  const count = item.count ?? 0;
+  return `${count} ${count === 1 ? "card" : "cards"}`;
+}
+
 function StandardLibraryPanel({
-  items,
+  personalItems,
+  commitmentItems,
+  activePackItems,
   timezone,
   menuOpenId,
   setMenuOpenId,
@@ -6088,7 +6336,47 @@ function StandardLibraryPanel({
   handleDeleteCard,
   handleDuplicateCard,
   openSpecificReveal,
+  openPackReveal,
+  deactivatePack,
+  onCreatePersonal,
+  onCreateCommitment,
+  onAddPack,
 }) {
+  const [openSections, setOpenSections] = useState({
+    personal: false,
+    commitments: false,
+    activePacks: false,
+  });
+  const personalOpen = openSections.personal;
+  const commitmentsOpen = openSections.commitments;
+  const activePacksOpen = openSections.activePacks;
+  const personalCountLabel = `${personalItems.length} ${personalItems.length === 1 ? "card" : "cards"}`;
+  const commitmentCountLabel = `${commitmentItems.length} ${commitmentItems.length === 1 ? "card" : "cards"}`;
+  const activePackCountLabel = `${activePackItems.length} ${activePackItems.length === 1 ? "pack" : "packs"}`;
+
+  function toggleSection(sectionId) {
+    setOpenSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
+  }
+
+  function personalActions(item) {
+    return [
+      { label: "Edit", onClick: () => openEditor(item.id) },
+      { label: "Duplicate", onClick: () => handleDuplicateCard(item.id) },
+      { label: "Reset for today", onClick: () => handleResetItem(item) },
+      { label: item.representative.paused ? "Unpause" : "Pause", onClick: () => handleTogglePause(item) },
+      { label: "Delete", danger: true, onClick: () => handleDeleteCard(item.id) },
+    ];
+  }
+
+  function packActions(item) {
+    return [
+      { label: "Open card", onClick: () => openPackReveal(item.id) },
+      { label: "Reset for today", onClick: () => handleResetItem(item) },
+      { label: item.representative.paused ? "Unpause" : "Pause", onClick: () => handleTogglePause(item) },
+      { label: "Remove pack", danger: true, onClick: () => deactivatePack(item.id) },
+    ];
+  }
+
   return (
     <section className="library">
       <div className="section-heading solo">
@@ -6097,98 +6385,120 @@ function StandardLibraryPanel({
           <p>Your own MyBishBashes, gathered in one quiet place.</p>
         </div>
       </div>
-      <div className="card-stack">
-        {items.map((item) => {
-          const status = getStatusMeta(item.representative, new Date(), timezone);
-          return (
-            <article
-              key={item.id}
-              className={`library-card ${menuOpenId === item.id ? "menu-open" : ""} theme-${getThemeClass(item.representative.theme)}`}
-              onClick={() => openSpecificReveal(item.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openSpecificReveal(item.id);
-                }
-              }}
-            >
-              <div className="tile">
-                <CardIcon icon={item.representative.icon} />
-              </div>
-              <div className="card-copy">
-                <h3>{item.representative.promptText}</h3>
-              </div>
-              <div className="card-status">
-                <span className={`badge ${status.badge}`}>{status.badge}</span>
-              </div>
-              <div className="menu-wrap">
-                <button
-                  type="button"
-                  className="menu-trigger"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setMenuOpenId((current) => (current === item.id ? null : item.id));
-                  }}
-                  aria-label="Card menu"
-                >
-                  •••
-                </button>
-                {menuOpenId === item.id ? (
-                  <div className="menu">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openEditor(item.id);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleDuplicateCard(item.id);
-                      }}
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleResetItem(item);
-                      }}
-                    >
-                      Reset for today
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleTogglePause(item);
-                      }}
-                    >
-                      {item.representative.paused ? "Unpause" : "Pause"}
-                    </button>
-                    <button
-                      type="button"
-                      className="danger-soft"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleDeleteCard(item.id);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+      <div className="library-sections">
+        <section className="library-section-group">
+          <LibrarySectionHeader
+            id="personal-card-section"
+            icon="heart"
+            title="Personal Cards"
+            description="Cards you have written for yourself."
+            countLabel={personalCountLabel}
+            isOpen={personalOpen}
+            onToggle={() => toggleSection("personal")}
+            onAdd={onCreatePersonal}
+            addLabel="Create personal card"
+            testId="library-personal-section"
+          />
+          {personalOpen ? (
+            <div className="library-section-body" id="personal-card-section">
+              <div className="library-list-card">
+                {personalItems.length === 0 ? (
+                  <article className="library-list-empty">
+                    <h3>No personal cards yet</h3>
+                  </article>
                 ) : null}
+                {personalItems.map((item) => (
+                  <LibraryListRow
+                    key={item.id}
+                    item={item}
+                    title={item.representative.promptText}
+                    secondary={getLibraryPersonalSecondary(item.representative, timezone)}
+                    menuOpenId={menuOpenId}
+                    setMenuOpenId={setMenuOpenId}
+                    onOpen={() => openSpecificReveal(item.id)}
+                    menuActions={personalActions(item)}
+                  />
+                ))}
               </div>
-            </article>
-          );
-        })}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="library-section-group">
+          <LibrarySectionHeader
+            id="commitment-card-section"
+            icon="star"
+            title="Commitment Cards"
+            description="Promises you've made to yourself."
+            countLabel={commitmentCountLabel}
+            isOpen={commitmentsOpen}
+            onToggle={() => toggleSection("commitments")}
+            onAdd={onCreateCommitment}
+            addLabel="Create commitment card"
+            testId="library-commitment-section"
+          />
+          {commitmentsOpen ? (
+            <div className="library-section-body" id="commitment-card-section">
+              <div className="library-list-card">
+                {commitmentItems.length === 0 ? (
+                  <article className="library-list-empty">
+                    <h3>No commitment cards yet</h3>
+                  </article>
+                ) : null}
+                {commitmentItems.map((item) => (
+                  <LibraryListRow
+                    key={item.id}
+                    item={item}
+                    title={item.representative.promptText}
+                    secondary={getLibraryCommitmentSecondary(item.representative)}
+                    menuOpenId={menuOpenId}
+                    setMenuOpenId={setMenuOpenId}
+                    onOpen={() => openSpecificReveal(item.id)}
+                    menuActions={personalActions(item)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="library-section-group">
+          <LibrarySectionHeader
+            id="active-pack-section"
+            icon="book"
+            title="Active Packs"
+            description="Packs you've added to your library."
+            countLabel={activePackCountLabel}
+            isOpen={activePacksOpen}
+            onToggle={() => toggleSection("activePacks")}
+            onAdd={onAddPack}
+            addLabel="Add active pack"
+            testId="library-active-packs-section"
+          />
+          {activePacksOpen ? (
+            <div className="library-section-body" id="active-pack-section">
+              <div className="library-list-card">
+                {activePackItems.length === 0 ? (
+                  <article className="library-list-empty">
+                    <h3>No active packs yet</h3>
+                  </article>
+                ) : null}
+                {activePackItems.map((item) => (
+                  <LibraryListRow
+                    key={item.id}
+                    item={item}
+                    title={item.representative.promptText}
+                    secondary={getLibraryPackSecondary(item)}
+                    menuOpenId={menuOpenId}
+                    setMenuOpenId={setMenuOpenId}
+                    onOpen={() => openPackReveal(item.id)}
+                    menuActions={packActions(item)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
       </div>
     </section>
   );
