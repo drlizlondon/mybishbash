@@ -1161,6 +1161,15 @@ function buildFlowConfirmationOverlay(versionId = null, message = "Thanks for th
   };
 }
 
+function buildCommitmentMotivationOverlay(cardId, versionId = null, activationKey = null) {
+  return {
+    type: "commitment-motivation",
+    cardId,
+    versionId,
+    ...(versionId ? buildFakeLauncherOverlayContext(versionId, activationKey) : {}),
+  };
+}
+
 function stripCommitmentPrefix(value = "") {
   return String(value ?? "").trim().replace(/^I\s+will\b[\s:,-]*/i, "").trim();
 }
@@ -2759,7 +2768,7 @@ function App() {
 
       if (
         !isResumeInterceptLaunch &&
-        ["action-card", "action-card-empty", "action-success", "flow-confirmation"].includes(overlay?.type) &&
+        ["action-card", "action-card-empty", "action-success", "flow-confirmation", "commitment-motivation"].includes(overlay?.type) &&
         overlay?.versionId === route.versionId
       ) {
         return;
@@ -2828,7 +2837,7 @@ function App() {
     setScreen("library");
 
     if (route.kind === "card") {
-      if (overlay?.type === "flow-confirmation") {
+      if (["flow-confirmation", "commitment-motivation"].includes(overlay?.type)) {
         return;
       }
       if (overlay?.type === "reveal" && overlay.cardId === route.cardId) {
@@ -3456,11 +3465,28 @@ function App() {
   }
 
   function handleCommitmentAction(action) {
-    if (!overlay || overlay.type !== "reveal") return;
+    if (!overlay || !["reveal", "commitment-motivation"].includes(overlay.type)) return;
 
     const activeCard = cards.find((card) => card.id === overlay.cardId);
     if (!activeCard || !isCommitmentCard(activeCard)) {
       setOverlay(null);
+      return;
+    }
+
+    const savedMotivation = String(activeCard.commitmentReason ?? "").trim();
+    if (action === "decline" && overlay.type === "reveal" && savedMotivation) {
+      const activation = interceptActivationRef.current;
+      const activationKey = overlay?.activationKey || activation?.activationKey || Date.now().toString();
+      const nextOverlay = buildCommitmentMotivationOverlay(
+        activeCard.id,
+        overlay?.launchSource === "fake_launcher" ? overlay.versionId : null,
+        activationKey
+      );
+      logCommitmentDebug("showing commitment motivation before final decline", {
+        cardId: activeCard.id,
+        commitmentText: activeCard.promptText,
+      });
+      setOverlay(nextOverlay);
       return;
     }
 
@@ -7393,6 +7419,11 @@ function MorningSummaryModal({ summary, onClose }) {
     commitments.checkInCompletedCount > 0
   ) {
     const details = [];
+    const commitmentBody = commitments.madeCount > 0
+      ? `You made ${plural(commitments.madeCount, "commitment")} yesterday.`
+      : commitments.declinedCount > 0
+        ? `You chose not this time for ${plural(commitments.declinedCount, "commitment")} yesterday.`
+        : "Your commitment check-ins were active yesterday.";
     if (commitments.declinedCount > 0) details.push(`${commitments.declinedCount} not this time`);
     if (commitments.checkInGeneratedCount > 0) details.push(`${commitments.checkInGeneratedCount} check-in shown`);
     if (commitments.checkInCompletedCount > 0) details.push(`${commitments.checkInCompletedCount} check-in answered`);
@@ -7402,7 +7433,7 @@ function MorningSummaryModal({ summary, onClose }) {
     sections.push({
       id: "commitments",
       title: "Commitments",
-      body: `You made ${plural(commitments.madeCount, "commitment")} yesterday.`,
+      body: commitmentBody,
       details,
     });
   }
@@ -7907,6 +7938,21 @@ function Overlay({
   if (!card) return null;
   const cardType = card.sourcePackId ? "pack" : "personal";
 
+  if (overlay.type === "commitment-motivation" && isCommitmentCard(card)) {
+    return (
+      <CommitmentMotivationOverlay
+        card={card}
+        onCommitmentAction={onCommitmentAction}
+        launcherVersions={fakeLauncherVersions}
+        onLauncherLaunch={onFakeLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={launcherInterceptionClass}
+      />
+    );
+  }
+
   if (isCommitmentCheckInCard(card)) {
     return (
       <CommitmentCheckInOverlay
@@ -8067,6 +8113,43 @@ function CommitmentCardOverlay({
       cardOverlayKey={cardOverlayKey}
       className={className}
     />
+  );
+}
+
+function CommitmentMotivationOverlay({
+  card,
+  onCommitmentAction,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+}) {
+  return (
+    <CardRevealTemplate
+      variant="personal"
+      greeting="MESSAGE FROM YOURSELF"
+      icon="heart"
+      message=""
+      subtitle=""
+      launchers={launcherVersions}
+      actions={[
+        { label: "I’ll commit after all", variant: "primary", onClick: () => onCommitmentAction("commit_after_all") },
+        { label: "Not this time", variant: "secondary", onClick: () => onCommitmentAction("decline_after_motivation") },
+      ]}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+    >
+      <div className="commitment-motivation-copy">
+        <p className="commitment-motivation-intro">Before you decide...</p>
+        <p className="commitment-motivation-subline">You wrote this to yourself:</p>
+        <CardRevealMessage message={card.commitmentReason} />
+      </div>
+    </CardRevealTemplate>
   );
 }
 

@@ -232,6 +232,15 @@ test('legacy dashboard-title commitment cards render as Commitment Cards', async
   await expect(overlay.getByTestId('card-action-i-will-commit-to-this')).toBeVisible();
 });
 
+test('saved prompts that already start with I will do not duplicate the prefix when rendered', async ({ page }) => {
+  await seedE2EState(page, [commitmentCard({ promptText: 'I will read my Bible in the morning' })]);
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay.getByRole('heading', { name: /I will\s+read my Bible in the morning/ })).toBeVisible();
+  await expect(overlay.getByText(/I will\s+I will/)).toHaveCount(0);
+});
+
 test('legacy commitment cards produce check-ins after the selected time', async ({ page }) => {
   await seedE2EState(page, [
     legacyCommitmentCard({
@@ -334,11 +343,43 @@ test('commit path records made and prevents same-day reappearance', async ({ pag
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
 });
 
-test('Not this time path records declined and shows soft acknowledgement', async ({ page }) => {
+test('Not this time shows motivation reminder before a final decision', async ({ page }) => {
   await seedE2EState(page, [commitmentCard()]);
   await gotoHome(page);
 
   await page.getByTestId('home-card-commitment-card').click();
+  await page.getByTestId('card-action-not-this-time').click();
+
+  await expect(page.getByText('MESSAGE FROM YOURSELF')).toBeVisible();
+  await expect(page.getByText('Before you decide...')).toBeVisible();
+  await expect(page.getByText('You wrote this to yourself:')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Fresh air helps me reset.' })).toBeVisible();
+  await expect(page.getByTestId('card-action-i-ll-commit-after-all')).toBeVisible();
+  await expect(page.getByTestId('card-action-not-this-time')).toBeVisible();
+  await expectStoredCard(page, (card) => card.id === 'commitment-card' && !card.commitmentStatusToday);
+});
+
+test('I’ll commit after all records made and shows acknowledgement', async ({ page }) => {
+  await seedE2EState(page, [commitmentCard({ commitmentCheckInEnabled: true, commitmentCheckInTime: '12:00' })]);
+  await gotoHome(page);
+
+  await page.getByTestId('home-card-commitment-card').click();
+  await page.getByTestId('card-action-not-this-time').click();
+  await page.getByTestId('card-action-i-ll-commit-after-all').click();
+
+  await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
+  const events = await storedEvents(page);
+  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_made')).toBe(true);
+  await expect(page.getByRole('heading', { name: /Nice choice\.\s+We’ll check in later\./ })).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+});
+
+test('final Not this time from motivation records declined and shows soft acknowledgement', async ({ page }) => {
+  await seedE2EState(page, [commitmentCard()]);
+  await gotoHome(page);
+
+  await page.getByTestId('home-card-commitment-card').click();
+  await page.getByTestId('card-action-not-this-time').click();
   await page.getByTestId('card-action-not-this-time').click();
 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
@@ -348,8 +389,8 @@ test('Not this time path records declined and shows soft acknowledgement', async
   await expect(page.getByTestId('card-action-continue')).toBeVisible();
 });
 
-test('Not this time records declined and does not automatically reappear', async ({ page }) => {
-  await seedE2EState(page, [commitmentCard()]);
+test('Not this time without motivation records declined and does not automatically reappear', async ({ page }) => {
+  await seedE2EState(page, [commitmentCard({ commitmentReason: '' })]);
   await gotoLauncher(page, 'safari');
 
   await page.getByTestId('card-action-not-this-time').click();
@@ -405,6 +446,7 @@ test('check-in appears only after the user commits and the selected time has arr
 test('check-in does not appear if the user declines the commitment', async ({ page }) => {
   await seedE2EState(page, [
     commitmentCard({
+      commitmentReason: '',
       commitmentCheckInEnabled: true,
       commitmentCheckInTime: '12:00',
     }),
@@ -433,33 +475,77 @@ test('check-in waits until the selected check-in time', async ({ page }) => {
   await expect(page.getByText('How is it going?')).toHaveCount(0);
 });
 
-test('check-in response labels and completion return to normal launcher choices', async ({ page }) => {
+const checkInOutcomeCases = [
+  {
+    response: 'Going perfectly',
+    expected: /Excellent\.\s+Keep going today\./,
+  },
+  {
+    response: 'Could be better',
+    expected: /That’s okay\.\s+There’s still time today\./,
+  },
+  {
+    response: 'Not going well',
+    expected: /That’s okay\.\s+Tomorrow is another opportunity\./,
+  },
+] as const;
+
+for (const { response, expected } of checkInOutcomeCases) {
+  test(`check-in response ${response} records outcome and returns to normal launcher choices`, async ({ page }) => {
+    await seedE2EState(page, [
+      commitmentCard({
+        commitmentStatusToday: 'made',
+        commitmentDecisionDate: '2026-06-01',
+        commitmentDecisionAt: now,
+        commitmentCheckInEnabled: true,
+        commitmentCheckInTime: '12:00',
+      }),
+    ]);
+    await gotoLauncher(page, 'safari');
+
+    await expect(page.getByRole('button', { name: 'Going perfectly' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Could be better' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Not going well' })).toBeVisible();
+    await page.getByRole('button', { name: response }).click();
+
+    await expectStoredCard(page, (card) =>
+      card.id === 'commitment-card' &&
+      card.commitmentCheckInResponse === response &&
+      card.commitmentCheckInResponseDate === '2026-06-01',
+    );
+    await expect(page.getByRole('heading', { name: expected })).toBeVisible();
+    await expect(page.getByTestId('card-action-continue')).toBeVisible();
+    await expect(page.getByTestId('card-action-do-something-else')).toBeVisible();
+
+    await page.getByTestId('dashboard-shortcut').click();
+    await navigateWithinApp(page, '/intercept/youtube');
+    await expect(page.getByText('How is it going?')).toHaveCount(0);
+  });
+}
+
+test('long motivation reminder fits inside an iPhone-sized viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await seedE2EState(page, [
     commitmentCard({
-      commitmentStatusToday: 'made',
-      commitmentDecisionDate: '2026-06-01',
-      commitmentDecisionAt: now,
-      commitmentCheckInEnabled: true,
-      commitmentCheckInTime: '12:00',
+      commitmentReason:
+        'When I start the morning with this, I feel steadier, less reactive, and more like the person I keep saying I want to become. Even a small faithful start changes the tone of the day.',
     }),
   ]);
   await gotoLauncher(page, 'safari');
 
-  await expect(page.getByRole('button', { name: 'Going perfectly' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Could be better' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Not going well' })).toBeVisible();
-  await page.getByRole('button', { name: 'Could be better' }).click();
+  await page.getByTestId('card-action-not-this-time').click();
 
-  await expectStoredCard(page, (card) =>
-    card.id === 'commitment-card' &&
-    card.commitmentCheckInResponse === 'Could be better' &&
-    card.commitmentCheckInResponseDate === '2026-06-01',
-  );
-  await expect(page.getByRole('heading', { name: /That’s okay\.\s+There’s still time today\./ })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue')).toBeVisible();
-  await expect(page.getByTestId('card-action-do-something-else')).toBeVisible();
-
-  await page.getByTestId('dashboard-shortcut').click();
-  await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('How is it going?')).toHaveCount(0);
+  const titleBox = page.locator('.commitment-motivation-copy .premium-title-box');
+  const buttons = page.locator('.premium-card-cta');
+  await expect(page.getByText('Before you decide...')).toBeVisible();
+  await expect(page.getByText('You wrote this to yourself:')).toBeVisible();
+  await expect(titleBox).toBeVisible();
+  await expect(buttons).toBeVisible();
+  const boxes = await Promise.all([
+    titleBox.boundingBox(),
+    buttons.boundingBox(),
+  ]);
+  expect(boxes[0]).not.toBeNull();
+  expect(boxes[1]).not.toBeNull();
+  expect((boxes[0]?.y ?? 0) + (boxes[0]?.height ?? 0)).toBeLessThanOrEqual((boxes[1]?.y ?? 0) + 1);
 });
