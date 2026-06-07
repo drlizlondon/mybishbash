@@ -1,8 +1,10 @@
 import { PACKS, isCommitmentLikeCard } from "../utils.js";
 
 function createdDesc(left, right) {
-  const leftCreated = new Date(left.representative.createdAt ?? 0).getTime();
-  const rightCreated = new Date(right.representative.createdAt ?? 0).getTime();
+  const leftTime = new Date(left.representative?.createdAt).getTime();
+  const rightTime = new Date(right.representative?.createdAt).getTime();
+  const leftCreated = Number.isFinite(leftTime) ? leftTime : 0;
+  const rightCreated = Number.isFinite(rightTime) ? rightTime : 0;
   return rightCreated - leftCreated;
 }
 

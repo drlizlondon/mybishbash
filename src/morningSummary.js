@@ -27,7 +27,7 @@ function getLocalDateParts(date = new Date(), timeZone) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   }).formatToParts(date);
   const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return {
