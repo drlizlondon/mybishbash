@@ -8223,7 +8223,6 @@ function CardRevealMessage({ message }) {
       frameId = window.requestAnimationFrame(fit);
     });
     observer.observe(frame);
-    observer.observe(headline);
 
     return () => {
       window.cancelAnimationFrame(frameId);
