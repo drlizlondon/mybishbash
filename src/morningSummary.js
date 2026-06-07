@@ -5,6 +5,13 @@ const MORNING_SUMMARY_START_HOUR = 7;
 
 const PERSONAL_CARD_SHOWN_TYPES = new Set(["personal_card_shown", "card_shown"]);
 const INTERRUPTED_TYPES = new Set(["first_interruption_seen", "intercept_card_viewed"]);
+const COMMITMENT_CHECKIN_GENERATED_TYPES = new Set(["commitment_checkin_generated", "commitment_check_in_generated"]);
+const COMMITMENT_CHECKIN_COMPLETED_TYPES = new Set(["commitment_checkin_completed", "commitment_check_in"]);
+const COMMITMENT_CHECKIN_RESPONSE_TYPES = new Set([
+  "commitment_checkin_response_perfect",
+  "commitment_checkin_response_could_be_better",
+  "commitment_checkin_response_not_going_well",
+]);
 
 function safeParse(rawValue, fallback) {
   try {
@@ -109,8 +116,13 @@ function buildDebugEvents(events, timezone) {
     card_shown: "Card shown",
     bash_done: "Card completed",
     commitment_made: "Commitment made",
+    commitment_checkin_generated: "Commitment check-in generated",
     commitment_check_in_generated: "Commitment check-in generated",
+    commitment_checkin_completed: "Commitment check-in answered",
     commitment_check_in: "Commitment check-in answered",
+    commitment_checkin_response_perfect: "Commitment check-in: going perfectly",
+    commitment_checkin_response_could_be_better: "Commitment check-in: could be better",
+    commitment_checkin_response_not_going_well: "Commitment check-in: not going well",
     first_interruption_seen: "Shell/app interrupted",
     intercept_card_viewed: "Shell/app interrupted",
     intercept_continue_to_app: "Continue to app pressed",
@@ -152,15 +164,29 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
     isCompletionPercentageReliable: shownCardIds.size > 0 && availableCount > 0 && completedCount <= availableCount,
   };
 
-  const checkIns = dayEvents.filter((event) => event.event_type === "commitment_check_in");
+  const checkIns = dayEvents.filter((event) => COMMITMENT_CHECKIN_COMPLETED_TYPES.has(event.event_type));
+  const responseEvents = dayEvents.filter((event) => COMMITMENT_CHECKIN_RESPONSE_TYPES.has(event.event_type));
+  const checkInOutcomeEvents = responseEvents.length > 0 ? responseEvents : checkIns;
   const commitments = {
     madeCount: dayEvents.filter((event) => event.event_type === "commitment_made").length,
-    checkInGeneratedCount: dayEvents.filter((event) => event.event_type === "commitment_check_in_generated").length,
+    checkInGeneratedCount: dayEvents.filter((event) => COMMITMENT_CHECKIN_GENERATED_TYPES.has(event.event_type)).length,
     checkInCompletedCount: checkIns.length,
     outcomes: {
-      goingPerfectly: checkIns.filter((event) => event.action_taken === "Going perfectly" || event.metadata?.response === "Going perfectly").length,
-      couldBeBetter: checkIns.filter((event) => event.action_taken === "Could be better" || event.metadata?.response === "Could be better").length,
-      notGoingWell: checkIns.filter((event) => event.action_taken === "Not going well" || event.metadata?.response === "Not going well").length,
+      goingPerfectly: checkInOutcomeEvents.filter((event) =>
+        event.event_type === "commitment_checkin_response_perfect" ||
+        event.action_taken === "Going perfectly" ||
+        event.metadata?.response === "Going perfectly"
+      ).length,
+      couldBeBetter: checkInOutcomeEvents.filter((event) =>
+        event.event_type === "commitment_checkin_response_could_be_better" ||
+        event.action_taken === "Could be better" ||
+        event.metadata?.response === "Could be better"
+      ).length,
+      notGoingWell: checkInOutcomeEvents.filter((event) =>
+        event.event_type === "commitment_checkin_response_not_going_well" ||
+        event.action_taken === "Not going well" ||
+        event.metadata?.response === "Not going well"
+      ).length,
     },
   };
 

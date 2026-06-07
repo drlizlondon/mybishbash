@@ -1400,6 +1400,19 @@ textarea {
   width: min(88vw, 390px);
 }
 
+.commitment-supporting-copy {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  width: min(88vw, 390px);
+  text-align: center;
+}
+
+.commitment-quote {
+  color: var(--bb-text);
+  font-style: italic;
+}
+
 .commitment-custom-time-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

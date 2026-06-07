@@ -136,6 +136,13 @@ async function expectStoredCard(page: Page, predicate: (card: any) => boolean) {
   }).toBe(true);
 }
 
+async function expectStoredEvent(page: Page, predicate: (event: any) => boolean) {
+  await expect.poll(async () => {
+    const events = await storedEvents(page);
+    return events.some(predicate);
+  }).toBe(true);
+}
+
 async function fillCommitmentComposer(page: Page, text: string, reason = 'This matters to me today.') {
   await page.getByRole('button', { name: 'Commitment Card' }).click();
   await page.getByTestId('commitment-text-input').fill(text);
@@ -200,10 +207,11 @@ test('live preview updates with real button-style actions as the user types', as
   await page.getByTestId('commitment-text-input').fill('not eat snacks after dinner');
 
   const preview = page.getByTestId('commitment-preview');
-  await expect(preview.getByText('TODAY’S COMMITMENT')).toBeVisible();
-  await expect(preview.getByText('I will', { exact: true })).toBeVisible();
+  await expect(preview.getByText("Today's Commitment")).toBeVisible();
+  await expect(preview.getByText('I will', { exact: true })).toHaveCount(0);
   await expect(preview.getByRole('heading', { name: 'not eat snacks after dinner' })).toBeVisible();
-  await expect(preview.getByRole('button', { name: 'I will commit to this' })).toBeVisible();
+  await expect(preview.getByText('Are you willing to commit to this today?')).toBeVisible();
+  await expect(preview.getByRole('button', { name: "Yes, I'm in" })).toBeVisible();
   await expect(preview.getByRole('button', { name: 'Not this time' })).toBeVisible();
   await expect(page.getByTestId('commitment-self-check').getByText('Does this sound right?')).toBeVisible();
 });
@@ -214,9 +222,10 @@ test('Commitment Cards are eligible in fake shell flows anywhere Personal Cards 
   for (const launcherId of launcherIds) {
     await gotoLauncher(page, launcherId);
     await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
-    await expect(page.getByTestId('card-overlay-personal').getByText('TODAY’S COMMITMENT')).toBeVisible();
-    await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'I will' })).toBeVisible();
-    await expect(page.getByTestId('card-overlay-personal').getByText('go for a walk')).toBeVisible();
+    await expect(page.getByTestId('card-overlay-personal').getByText("Today's Commitment")).toBeVisible();
+    await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'go for a walk' })).toBeVisible();
+    await expect(page.getByTestId('card-overlay-personal').getByText('Are you willing to commit to this today?')).toBeVisible();
+    await expect(page.getByTestId('card-overlay-personal').getByText('I will', { exact: true })).toHaveCount(0);
     await page.getByTestId('dashboard-shortcut').click();
     await expect(page.getByTestId('app-shell')).toBeVisible();
   }
@@ -227,10 +236,9 @@ test('legacy dashboard-title commitment cards render as Commitment Cards', async
   await gotoLauncher(page, 'safari');
 
   const overlay = page.getByTestId('card-overlay-personal');
-  await expect(overlay.getByText('TODAY’S COMMITMENT')).toBeVisible();
-  await expect(overlay.getByRole('heading', { name: 'I will' })).toBeVisible();
-  await expect(overlay.getByText('go for a walk')).toBeVisible();
-  await expect(overlay.getByTestId('card-action-i-will-commit-to-this')).toBeVisible();
+  await expect(overlay.getByText("Today's Commitment")).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'go for a walk' })).toBeVisible();
+  await expect(overlay.getByTestId('card-action-yes-i-m-in')).toBeVisible();
 });
 
 test('legacy commitment cards produce check-ins after the selected time', async ({ page }) => {
@@ -246,10 +254,9 @@ test('legacy commitment cards produce check-ins after the selected time', async 
   await gotoLauncher(page, 'safari');
 
   const overlay = page.getByTestId('card-overlay-personal');
-  await expect(overlay.getByText('CHECK-IN')).toBeVisible();
-  await expect(overlay.getByRole('heading', { name: 'You committed to:' })).toBeVisible();
+  await expect(overlay.getByText("Today's Commitment")).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'How is it going?' })).toBeVisible();
   await expect(overlay.getByText('go for a walk')).toBeVisible();
-  await expect(overlay.getByText('How’s it going?')).toBeVisible();
 });
 
 test('normal Personal Cards without commitment fields stay Personal Cards', async ({ page }) => {
@@ -325,13 +332,16 @@ test('commit path records made and prevents same-day reappearance', async ({ pag
   await seedE2EState(page, [commitmentCard()]);
   await gotoLauncher(page, 'safari');
 
-  await page.getByTestId('card-action-i-will-commit-to-this').click();
+  await page.getByTestId('card-action-yes-i-m-in').click();
 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
   const events = await storedEvents(page);
   expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_made')).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Thanks for making a commitment to yourself.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nice choice.' })).toBeVisible();
+  await expect(page.getByText("You've committed to:")).toBeVisible();
+  await expect(page.getByTestId('card-overlay-personal').getByText('go for a walk')).toBeVisible();
 
+  await page.getByTestId('card-action-continue').click();
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
@@ -344,8 +354,10 @@ test('Not this time path shows the second screen', async ({ page }) => {
   await page.getByTestId('home-card-commitment-card').click();
   await page.getByTestId('card-action-not-this-time').click();
 
-  await expect(page.getByText('MESSAGE FROM YOURSELF')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Fresh air helps me reset.' })).toBeVisible();
+  await expect(page.getByText('Message From Yourself')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Still worth considering?' })).toBeVisible();
+  await expect(page.getByText('You said this matters because:')).toBeVisible();
+  await expect(page.getByText('"Fresh air helps me reset."')).toBeVisible();
   await expect(page.getByTestId('card-action-i-ll-commit-after-all')).toBeVisible();
   await expect(page.getByTestId('card-action-not-this-time')).toBeVisible();
 });
@@ -361,6 +373,7 @@ test('second screen commit after all records commitment made', async ({ page }) 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
   const events = await storedEvents(page);
   expect(events.some((event: any) => event.event_type === 'commitment_made' && event.metadata?.decisionSource === 'commit_after_all')).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Nice choice.' })).toBeVisible();
 });
 
 test('second screen Not this time records declined and does not automatically reappear', async ({ page }) => {
@@ -373,8 +386,10 @@ test('second screen Not this time records declined and does not automatically re
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
   const events = await storedEvents(page);
   expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_declined')).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Thanks for the update.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ok, another day.' })).toBeVisible();
+  await expect(page.getByText('No judgement.')).toBeVisible();
 
+  await page.getByTestId('card-action-continue').click();
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
@@ -407,17 +422,17 @@ test('check-in appears only after the user commits and the selected time has arr
   ]);
   await gotoLauncher(page, 'safari');
 
-  await page.getByTestId('card-action-i-will-commit-to-this').click();
-  await expect(page.getByRole('heading', { name: 'Thanks for making a commitment to yourself.' })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-safari')).toBeVisible();
-  await expect(page.getByTestId('card-action-do-something-else')).toBeVisible();
+  await page.getByTestId('card-action-yes-i-m-in').click();
+  await expect(page.getByRole('heading', { name: 'Nice choice.' })).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
 
+  await page.getByTestId('card-action-continue').click();
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('CHECK-IN')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'You committed to:' })).toBeVisible();
+  await expect(page.getByText("Today's Commitment")).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How is it going?' })).toBeVisible();
   await expect(page.getByText('go for a walk')).toBeVisible();
-  await expect(page.getByText('How’s it going?')).toBeVisible();
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_checkin_generated');
 });
 
 test('check-in does not appear if the user declines the commitment', async ({ page }) => {
@@ -432,9 +447,10 @@ test('check-in does not appear if the user declines the commitment', async ({ pa
   await page.getByTestId('card-action-not-this-time').click();
   await page.getByTestId('card-action-not-this-time').click();
 
+  await page.getByTestId('card-action-continue').click();
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('CHECK-IN')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'How is it going?' })).toHaveCount(0);
 });
 
 test('check-in waits until the selected check-in time', async ({ page }) => {
@@ -449,7 +465,7 @@ test('check-in waits until the selected check-in time', async ({ page }) => {
   ]);
 
   await gotoLauncher(page, 'safari');
-  await expect(page.getByText('CHECK-IN')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'How is it going?' })).toHaveCount(0);
 });
 
 test('check-in response labels and completion return to normal launcher choices', async ({ page }) => {
@@ -474,11 +490,40 @@ test('check-in response labels and completion return to normal launcher choices'
     card.commitmentCheckInResponse === 'Could be better' &&
     card.commitmentCheckInResponseDate === '2026-06-01',
   );
-  await expect(page.getByRole('heading', { name: 'Thanks for the update.' })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-safari')).toBeVisible();
-  await expect(page.getByTestId('card-action-do-something-else')).toBeVisible();
+  await expectStoredEvent(page, (event) =>
+    event.event_type === 'commitment_checkin_completed' &&
+    event.action_taken === 'Could be better' &&
+    event.metadata?.parentCommitmentCardId === 'commitment-card',
+  );
+  await expectStoredEvent(page, (event) =>
+    event.event_type === 'commitment_checkin_response_could_be_better' &&
+    event.metadata?.response === 'Could be better',
+  );
+  await expect(page.getByRole('heading', { name: "That's ok." })).toBeVisible();
+  await expect(page.getByText('Remember why this is important to you.')).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
 
+  await page.getByTestId('card-action-continue').click();
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
-  await expect(page.getByText('CHECK-IN')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'How is it going?' })).toHaveCount(0);
+});
+
+test('not going well check-in response uses the supportive copy from the commitment loop', async ({ page }) => {
+  await seedE2EState(page, [
+    commitmentCard({
+      commitmentStatusToday: 'made',
+      commitmentDecisionDate: '2026-06-01',
+      commitmentDecisionAt: now,
+      commitmentCheckInEnabled: true,
+      commitmentCheckInTime: '12:00',
+    }),
+  ]);
+  await gotoLauncher(page, 'safari');
+
+  await page.getByRole('button', { name: 'Not going well' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Keep going for today.' })).toBeVisible();
+  await expect(page.getByText('Tomorrow is a fresh start.')).toBeVisible();
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_checkin_response_not_going_well');
 });

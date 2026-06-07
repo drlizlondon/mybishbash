@@ -57,7 +57,7 @@ assert.match(appSource, /getNextFakeLauncherStepAfterSelectedCard/);
 assert.match(appSource, /buildFakeLauncherFlowContext/);
 assert.match(
   appSource,
-  /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/,
+  /overlay\.type === "reveal" \|\| overlay\.type === "commitment-confirmation"[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/,
 );
 assert.doesNotMatch(appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
 assert.doesNotMatch(appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/);
