@@ -54,7 +54,7 @@ assertNoMatch("FakeLauncherBar does not navigate by itself", fakeLauncherBarSour
 assertMatch("/intercept/:launcherId still starts the interception flow", appSource, /beginInterceptionFlow\(route\.versionId/);
 assertMatch("continue-to-app still opens the real destination through openDestinationApp", appSource, /onContinueToApp=\{\(versionId, options\) => openDestinationApp\(versionId, options\)\}/);
 assertMatch("openDestinationApp is the single destination href assignment", appSource, /window\.location\.assign\(href\)/);
-assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
+assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /overlay\.type === "reveal" \|\| overlay\.type === "commitment-confirmation"[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
 assertNoMatch("old weighted launcher selector is not used by the app", appSource, /selectWeightedLauncherCard\(\{/);
 assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
 assertMatch("App uses personal-first fallback for launcher and home decisions", appSource, /selectPersonalFirstLauncherCard\(\{[\s\S]{0,500}cards,[\s\S]{0,500}timezone: profile\.timezone/);
