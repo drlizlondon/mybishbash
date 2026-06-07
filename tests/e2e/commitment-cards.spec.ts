@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const now = '2026-06-01T12:00:00.000Z';
+const todayKey = '2026-06-01';
+const yesterdayKey = '2026-05-31';
+const yesterdayNow = '2026-05-31T12:00:00.000Z';
 const launcherIds = ['safari', 'instagram', 'youtube'] as const;
 
 function commitmentCard(overrides: Record<string, unknown> = {}) {
@@ -127,6 +130,13 @@ async function storedCards(page: Page) {
 
 async function storedEvents(page: Page) {
   return page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') || '[]'));
+}
+
+async function expectStoredEvent(page: Page, predicate: (event: any) => boolean) {
+  await expect.poll(async () => {
+    const events = await storedEvents(page);
+    return events.some(predicate);
+  }).toBe(true);
 }
 
 async function expectStoredCard(page: Page, predicate: (card: any) => boolean) {
@@ -333,14 +343,93 @@ test('commit path records made and prevents same-day reappearance', async ({ pag
 
   await page.getByTestId('card-action-i-will-commit-to-this').click();
 
-  await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_made')).toBe(true);
+  await expectStoredCard(page, (card) =>
+    card.id === 'commitment-card' &&
+    card.statusToday === 'doneToday' &&
+    card.doneDate === todayKey &&
+    card.commitmentStatusToday === 'made' &&
+    card.commitmentDecisionDate === todayKey,
+  );
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_made');
   await expect(page.getByRole('heading', { name: /Nice choice\.\s+Keep this in mind today\./ })).toBeVisible();
 
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+});
+
+test('commitment accepted today does not reappear today', async ({ page }) => {
+  await seedE2EState(page, [
+    commitmentCard({
+      statusToday: 'doneToday',
+      doneDate: todayKey,
+      commitmentStatusToday: 'made',
+      commitmentDecisionDate: todayKey,
+      commitmentDecisionAt: now,
+    }),
+  ]);
+
+  await gotoLauncher(page, 'safari');
+
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expect(page.getByText('go for a walk')).toHaveCount(0);
+});
+
+test('commitment declined today does not reappear today', async ({ page }) => {
+  await seedE2EState(page, [
+    commitmentCard({
+      statusToday: 'doneToday',
+      doneDate: todayKey,
+      commitmentStatusToday: 'declined',
+      commitmentDecisionDate: todayKey,
+      commitmentDecisionAt: now,
+    }),
+  ]);
+
+  await gotoLauncher(page, 'safari');
+
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expect(page.getByText('go for a walk')).toHaveCount(0);
+});
+
+test('commitment accepted yesterday appears again today', async ({ page }) => {
+  await seedE2EState(page, [
+    commitmentCard({
+      statusToday: 'doneToday',
+      doneDate: yesterdayKey,
+      lastShownAt: yesterdayNow,
+      commitmentStatusToday: 'made',
+      commitmentDecisionDate: yesterdayKey,
+      commitmentDecisionAt: yesterdayNow,
+    }),
+  ]);
+
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay.getByText('TODAY’S COMMITMENT')).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'I will' })).toBeVisible();
+  await expect(overlay.getByText('go for a walk')).toBeVisible();
+  await expect(page.getByText('How is it going?')).toHaveCount(0);
+});
+
+test('commitment declined yesterday appears again today', async ({ page }) => {
+  await seedE2EState(page, [
+    commitmentCard({
+      statusToday: 'doneToday',
+      doneDate: yesterdayKey,
+      lastShownAt: yesterdayNow,
+      commitmentStatusToday: 'declined',
+      commitmentDecisionDate: yesterdayKey,
+      commitmentDecisionAt: yesterdayNow,
+    }),
+  ]);
+
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay.getByText('TODAY’S COMMITMENT')).toBeVisible();
+  await expect(overlay.getByText('go for a walk')).toBeVisible();
 });
 
 test('Not this time shows motivation reminder before a final decision', async ({ page }) => {
@@ -441,6 +530,7 @@ test('check-in appears only after the user commits and the selected time has arr
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByText('How is it going?')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'go for a walk' })).toBeVisible();
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_check_in_generated');
 });
 
 test('check-in does not appear if the user declines the commitment', async ({ page }) => {
@@ -458,6 +548,30 @@ test('check-in does not appear if the user declines the commitment', async ({ pa
   await page.getByTestId('dashboard-shortcut').click();
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByText('How is it going?')).toHaveCount(0);
+  const events = await storedEvents(page);
+  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_check_in_generated')).toBe(false);
+});
+
+test('check-in is not generated for a commitment made yesterday', async ({ page }) => {
+  await seedE2EState(page, [
+    commitmentCard({
+      statusToday: 'doneToday',
+      doneDate: yesterdayKey,
+      lastShownAt: yesterdayNow,
+      commitmentStatusToday: 'made',
+      commitmentDecisionDate: yesterdayKey,
+      commitmentDecisionAt: yesterdayNow,
+      commitmentCheckInEnabled: true,
+      commitmentCheckInTime: '12:00',
+    }),
+  ]);
+
+  await gotoLauncher(page, 'safari');
+
+  await expect(page.getByText('How is it going?')).toHaveCount(0);
+  await expect(page.getByTestId('card-overlay-personal').getByText('TODAY’S COMMITMENT')).toBeVisible();
+  const events = await storedEvents(page);
+  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_check_in_generated')).toBe(false);
 });
 
 test('check-in waits until the selected check-in time', async ({ page }) => {

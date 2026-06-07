@@ -698,6 +698,7 @@ function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = n
   const lastExposure = exposureByCardId.get(card.id) ?? (card.lastShownAt ? new Date(card.lastShownAt).getTime() : 0);
   const activePack = isPackCardAvailable(card) && !excludedCardIds.has(card.id);
   const packOutsideTimeout = !isPack || packCardTimeoutMs <= 0 || !lastExposure || lastExposure + packCardTimeoutMs <= date.getTime();
+  const doneToday = card.doneDate === todayKey || (!card.doneDate && card.statusToday === "doneToday");
 
   const checks = [
     { name: "excluded_by_launcher", pass: !excludedCardIds.has(card.id), appliesToPacks: true },
@@ -705,7 +706,7 @@ function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = n
     { name: "not_paused", pass: !card.paused, appliesToPacks: true },
     { name: "not_disliked", pass: !card.disliked, appliesToPacks: true },
     { name: "not_hidden_pack_card", pass: !isPack || !card.hidden, appliesToPacks: true },
-    { name: "not_done_today", pass: isPack || (card.doneDate !== todayKey && card.statusToday !== "doneToday"), appliesToPacks: false },
+    { name: "not_done_today", pass: isPack || !doneToday, appliesToPacks: false },
     { name: "personal_cooldown_expired", pass: isPack || !card.lastShownAt || new Date(card.lastShownAt).getTime() + 30 * 60 * 1000 <= date.getTime(), appliesToPacks: false },
     { name: "not_yet_expired", pass: isPack || !card.notYetUntil || new Date(card.notYetUntil).getTime() <= date.getTime(), appliesToPacks: false },
     { name: "timing_window_matches", pass: isPack || windows.includes(currentWindow), appliesToPacks: false },
