@@ -5,6 +5,8 @@ const MORNING_SUMMARY_START_HOUR = 7;
 
 const PERSONAL_CARD_SHOWN_TYPES = new Set(["personal_card_shown", "card_shown"]);
 const INTERRUPTED_TYPES = new Set(["first_interruption_seen", "intercept_card_viewed"]);
+const COMMITMENT_CHECKIN_GENERATED_TYPES = new Set(["commitment_checkin_generated", "commitment_check_in_generated"]);
+const COMMITMENT_CHECKIN_COMPLETED_TYPES = new Set(["commitment_checkin_completed", "commitment_check_in"]);
 
 function safeParse(rawValue, fallback) {
   try {
@@ -152,15 +154,24 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
     isCompletionPercentageReliable: shownCardIds.size > 0 && availableCount > 0 && completedCount <= availableCount,
   };
 
-  const checkIns = dayEvents.filter((event) => event.event_type === "commitment_check_in");
+  const checkIns = dayEvents.filter((event) => COMMITMENT_CHECKIN_COMPLETED_TYPES.has(event.event_type));
   const commitments = {
     madeCount: dayEvents.filter((event) => event.event_type === "commitment_made").length,
-    checkInGeneratedCount: dayEvents.filter((event) => event.event_type === "commitment_check_in_generated").length,
+    checkInGeneratedCount: dayEvents.filter((event) => COMMITMENT_CHECKIN_GENERATED_TYPES.has(event.event_type)).length,
     checkInCompletedCount: checkIns.length,
     outcomes: {
-      goingPerfectly: checkIns.filter((event) => event.action_taken === "Going perfectly" || event.metadata?.response === "Going perfectly").length,
-      couldBeBetter: checkIns.filter((event) => event.action_taken === "Could be better" || event.metadata?.response === "Could be better").length,
-      notGoingWell: checkIns.filter((event) => event.action_taken === "Not going well" || event.metadata?.response === "Not going well").length,
+      goingPerfectly: checkIns.filter((event) =>
+        event.action_taken === "Going perfectly" ||
+        event.metadata?.response === "Going perfectly"
+      ).length,
+      couldBeBetter: checkIns.filter((event) =>
+        event.action_taken === "Could be better" ||
+        event.metadata?.response === "Could be better"
+      ).length,
+      notGoingWell: checkIns.filter((event) =>
+        event.action_taken === "Not going well" ||
+        event.metadata?.response === "Not going well"
+      ).length,
     },
   };
 

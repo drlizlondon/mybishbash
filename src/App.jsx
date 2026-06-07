@@ -1451,7 +1451,7 @@ function App() {
       }, testerStatus);
     }
     if (overlay.type === "launcher-preparing") return;
-    const finalKey = `final-overlay:${overlay.activationKey ?? overlay.versionId}:${overlay.type}`;
+    const finalKey = `final-overlay:${overlay?.activationKey ?? overlay.versionId}:${overlay.type}`;
     if (launcherTimingSeenRef.current.has(finalKey)) return;
     launcherTimingSeenRef.current.add(finalKey);
     recordLaunchTiming("final overlay type rendered", {
@@ -2110,7 +2110,7 @@ function App() {
       const nextOverlay = {
         ...buildActionCardEmptyOverlay(overlay.versionId),
         origin: overlay.origin,
-        activationKey: overlay.activationKey,
+        activationKey: overlay?.activationKey,
         launchSource: overlay.launchSource,
       };
       setOverlay(nextOverlay);
@@ -3285,7 +3285,7 @@ function App() {
           launchCompletedCardIdsRef.current = new Set([...launchCompletedCardIdsRef.current, completedCardId]);
         }
         const activation = interceptActivationRef.current;
-        const activationKey = overlay.activationKey || activation?.activationKey || Date.now().toString();
+        const activationKey = overlay?.activationKey || activation?.activationKey || Date.now().toString();
         setScreen("interception");
         const nextOverlay = buildFlowConfirmationOverlay(versionId, options.confirmationMessage, activationKey);
         setOverlay(nextOverlay);
@@ -3308,7 +3308,7 @@ function App() {
       }
       const excludedCardIds = launchCompletedCardIdsRef.current;
       const activation = interceptActivationRef.current;
-      const activationKey = overlay.activationKey || activation?.activationKey || Date.now().toString();
+      const activationKey = overlay?.activationKey || activation?.activationKey || Date.now().toString();
       const cardsForDecision = options.cardsOverride ?? cards;
       const completedCard = completedCardId
         ? cardsForDecision.find((card) => card.id === completedCardId) ?? cards.find((card) => card.id === completedCardId)
@@ -4628,7 +4628,7 @@ function App() {
     if (!overlay || overlay.type !== "reveal" || !activeRevealCard) return;
     if (activeRevealCard.sourcePackId) return;
     const shownKey = [
-      overlay.activationKey ?? overlay.origin ?? route.path,
+      overlay?.activationKey ?? overlay.origin ?? route.path,
       overlay.cardId,
       activeRevealCard.id,
     ].join(":");
@@ -4650,7 +4650,7 @@ function App() {
         cardKind: activeRevealCard.cardKind ?? "personal",
         origin: overlay.origin ?? null,
         launchSource: overlay.launchSource ?? null,
-        activationKey: overlay.activationKey ?? null,
+        activationKey: overlay?.activationKey ?? null,
       },
     };
 
@@ -4689,7 +4689,7 @@ function App() {
             origin: overlay.origin ?? null,
             launchSource: overlay.launchSource ?? null,
             versionId: overlay.versionId ?? null,
-            activationKey: overlay.activationKey ?? null,
+            activationKey: overlay?.activationKey ?? null,
           }
         : null,
       launchSession: {
@@ -5109,7 +5109,7 @@ function App() {
 
       {overlay ? (
         <Overlay
-          key={`${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}:${overlay.packId ?? ""}:${overlay.activationKey ?? ""}`}
+          key={`${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}:${overlay.packId ?? ""}:${overlay?.activationKey ?? ""}`}
           overlay={overlay}
           card={activeRevealCard}
           route={route}
@@ -7676,7 +7676,7 @@ function Overlay({
         });
       }
     };
-  }, [overlay.activationKey, overlay.type, overlay.versionId, route?.kind, route?.path]);
+  }, [overlay?.activationKey, overlay.type, overlay.versionId, route?.kind, route?.path]);
 
   if (overlay.type === "launcher-preparing") {
     if (!showLauncherPreparingFallback) return null;
