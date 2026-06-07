@@ -1144,6 +1144,27 @@ function getCardSelectionSurfaceForOverlay(overlay) {
   return CARD_SELECTION_SURFACES.HOME;
 }
 
+function getActiveFakeLauncherReturnContext(route, overlay, interceptActivation) {
+  const versionId =
+    route?.versionId ||
+    overlay?.versionId ||
+    interceptActivation?.versionId ||
+    null;
+
+  const activationKey =
+    overlay?.activationKey ||
+    interceptActivation?.activationKey ||
+    null;
+
+  if (!versionId) return null;
+
+  return {
+    versionId,
+    activationKey,
+    launchSource: "fake_launcher",
+  };
+}
+
 function buildEmptyOverlay(versionId = null) {
   return { type: "empty", versionId };
 }
@@ -1535,7 +1556,8 @@ function App() {
   }
 
   function buildRevealOverlayForCurrentShell(cardId) {
-    const installedLauncherId = getFakeLauncherShellContextId();
+    const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current);
+    const installedLauncherId = getFakeLauncherShellContextId() || fakeContext?.versionId;
     if (installedLauncherId) {
       const nextSession = buildLaunchSession("fake_launcher", installedLauncherId);
       persistLaunchSession(nextSession);
@@ -1543,7 +1565,7 @@ function App() {
       return buildFakeLauncherRevealOverlay(
         cardId,
         installedLauncherId,
-        interceptActivationRef.current?.activationKey ?? null,
+        fakeContext?.activationKey || null,
       );
     }
     const nextSession = buildLaunchSession("mybishbash_home");
@@ -2661,10 +2683,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (route.kind !== "intercept" && overlay?.launchSource !== "fake_launcher" && interceptActivationRef.current) {
-      interceptActivationRef.current = null;
-    }
-
     if (!setupComplete && route.kind !== "intercept") {
       setScreen("onboarding");
       setOverlay(null);
@@ -2838,7 +2856,10 @@ function App() {
 
     if (route.kind === "caught-up") {
       setScreen("library");
-      const nextOverlay = { ...buildEmptyOverlay(), origin: "home" };
+      const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current);
+      const nextOverlay = fakeContext
+        ? { ...buildFakeLauncherEmptyOverlay(fakeContext.versionId, fakeContext.activationKey), origin: "home" }
+        : { ...buildEmptyOverlay(), origin: "home" };
       debugLaunch("[CARD_ORIGIN] caught-up created", nextOverlay);
       setOverlay(nextOverlay);
       return;
@@ -2961,12 +2982,17 @@ function App() {
         caughtUpReason: selected ? null : "no eligible general bash cards",
         fallbackReason: selected ? homeDecision.selectionReason ?? null : "no_eligible_primary_or_fallback_cards",
       });
+      
+      const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current);
+
       if (selected) {
         debugLaunch("[LAUNCH_DIAG_DECISION]", "personal -> reveal");
         debugLaunch("[REVEAL_SELECTED_AFTER_SYNC] found eligible card", selected.id);
         debugLaunch("[LAUNCH_DECISION]", "personal -> reveal");
         debugLaunch("[REVEAL_SELECTED_AFTER_SYNC]", { cardId: selected.id });
-        const nextOverlay = { ...buildRevealOverlay(selected.id), origin: "home" };
+        const nextOverlay = fakeContext
+          ? { ...buildFakeLauncherRevealOverlay(selected.id, fakeContext.versionId, fakeContext.activationKey), origin: "home" }
+          : { ...buildRevealOverlay(selected.id), origin: "home" };
         debugLaunch("[CARD_ORIGIN] home reveal created", nextOverlay);
         setOverlay(nextOverlay);
         return;
@@ -2974,7 +3000,9 @@ function App() {
 
       debugLaunch("[LAUNCH_DIAG_DECISION]", "personal -> empty");
       debugLaunch("[LAUNCH_DECISION]", "personal -> empty");
-      const nextOverlayEmpty = { ...buildEmptyOverlay(), origin: "home" };
+      const nextOverlayEmpty = fakeContext
+        ? { ...buildFakeLauncherEmptyOverlay(fakeContext.versionId, fakeContext.activationKey), origin: "home" }
+        : { ...buildEmptyOverlay(), origin: "home" };
       debugLaunch("[CARD_ORIGIN] home empty created", nextOverlayEmpty);
       setOverlay(nextOverlayEmpty);
       return;
