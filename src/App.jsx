@@ -77,6 +77,7 @@ import {
   isEligible,
   isCommitmentCheckInCard,
   isCommitmentCheckInEligible,
+  isCommitmentLikeCard,
   isPackCardAvailable,
   normalizeCards,
   getTodayKey,
@@ -360,7 +361,7 @@ function logCommitmentDebug(label, payload = {}) {
 }
 
 function isCommitmentCard(card) {
-  return card?.cardKind === "commitment";
+  return isCommitmentLikeCard(card);
 }
 
 function findCommitmentCheckInParent(cards, checkInCardId) {

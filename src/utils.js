@@ -363,9 +363,30 @@ export function isCommitmentCheckInCard(card) {
   return card?.cardKind === "commitment_check_in";
 }
 
+const COMMITMENT_DASHBOARD_TITLE = "Today’s Commitment";
+const COMMITMENT_COMPATIBILITY_FIELDS = [
+  "commitmentReason",
+  "commitmentTimingMode",
+  "commitmentStartWindow",
+  "commitmentCustomStartTime",
+  "commitmentCustomEndTime",
+  "commitmentCheckInEnabled",
+  "commitmentCheckInTime",
+  "commitmentStatusToday",
+  "commitmentDecisionDate",
+  "commitmentDecisionAt",
+];
+
+export function isCommitmentLikeCard(card) {
+  if (!card || card.sourcePackId) return false;
+  if (card.cardKind === "commitment") return true;
+  if (card.dashboardTitle === COMMITMENT_DASHBOARD_TITLE) return true;
+  return COMMITMENT_COMPATIBILITY_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(card, field));
+}
+
 export function isCommitmentCheckInEligible(card, date = new Date(), timeZone) {
   if (!card || card.sourcePackId) return false;
-  if (card.cardKind !== "commitment") return false;
+  if (!isCommitmentLikeCard(card)) return false;
   if (card.paused || card.disliked || card.deletedAt) return false;
   if (!card.commitmentCheckInEnabled || !card.commitmentCheckInTime) return false;
 
@@ -422,7 +443,7 @@ function isWithinCustomTimeWindow(card, date = new Date(), timeZone) {
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const isPackCard = Boolean(card.sourcePackId);
-  const isCommitmentCard = card.cardKind === "commitment";
+  const isCommitmentCard = isCommitmentLikeCard(card);
   if (card.paused) return false;
   if (card.disliked) return false;
   if (card.deletedAt) return false;
@@ -472,6 +493,21 @@ export function normalizeCards(cards, date = new Date(), timeZone) {
     if (!next.frequency) {
       next.frequency = "once_daily";
     }
+    if (isCommitmentLikeCard(next)) {
+      next.cardKind = "commitment";
+      next.dashboardTitle = COMMITMENT_DASHBOARD_TITLE;
+      next.commitmentReason = next.commitmentReason ?? "";
+      next.commitmentTimingMode = next.commitmentTimingMode ?? "anytime";
+      next.commitmentStartWindow = next.commitmentStartWindow ?? next.commitmentTimingMode ?? "anytime";
+      next.commitmentCustomStartTime = next.commitmentCustomStartTime ?? "";
+      next.commitmentCustomEndTime = next.commitmentCustomEndTime ?? "";
+      next.commitmentCheckInEnabled = Boolean(next.commitmentCheckInEnabled);
+      next.commitmentCheckInTime = next.commitmentCheckInTime ?? "";
+      next.commitmentCheckInPendingDate = next.commitmentCheckInPendingDate ?? null;
+      next.commitmentCheckInResponse = next.commitmentCheckInResponse ?? null;
+      next.commitmentCheckInResponseDate = next.commitmentCheckInResponseDate ?? null;
+      next.commitmentCheckInResponseAt = next.commitmentCheckInResponseAt ?? null;
+    }
     if (typeof next.disliked !== "boolean") {
       next.disliked = false;
     }
@@ -504,7 +540,7 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
   const currentWindow = getCurrentWindow(date, timeZone);
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
   const isPackCard = Boolean(card.sourcePackId);
-  const isCommitmentCard = card.cardKind === "commitment";
+  const isCommitmentCard = isCommitmentLikeCard(card);
 
   if (card.paused) {
     return { badge: "paused", detail: "hidden for now" };

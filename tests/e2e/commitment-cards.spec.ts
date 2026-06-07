@@ -34,6 +34,44 @@ function commitmentCard(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function legacyCommitmentCard(overrides: Record<string, unknown> = {}) {
+  const card = commitmentCard(overrides);
+  delete card.cardKind;
+  return card;
+}
+
+function personalCard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'personal-card',
+    promptText: 'take a steady breath',
+    dashboardTitle: 'Personal Card',
+    theme: 'Minimal',
+    icon: 'heart',
+    frequency: 'once_daily',
+    timingWindows: ['morning', 'day', 'evening'],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    sourcePackId: null,
+    ...overrides,
+  };
+}
+
+function packCard(overrides: Record<string, unknown> = {}) {
+  return {
+    ...personalCard({
+      id: 'pack-card',
+      promptText: 'I will keep going',
+      dashboardTitle: 'Today’s Commitment',
+      sourcePackId: 'legacy-looking-pack',
+      attribution: 'Test Pack',
+    }),
+    ...overrides,
+  };
+}
+
 async function seedE2EState(page: Page, cards: Array<Record<string, unknown>> = []) {
   await page.addInitScript(({ seededCards, fixedNow }) => {
     const RealDate = Date;
@@ -182,6 +220,57 @@ test('Commitment Cards are eligible in fake shell flows anywhere Personal Cards 
     await page.getByTestId('dashboard-shortcut').click();
     await expect(page.getByTestId('app-shell')).toBeVisible();
   }
+});
+
+test('legacy dashboard-title commitment cards render as Commitment Cards', async ({ page }) => {
+  await seedE2EState(page, [legacyCommitmentCard()]);
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay.getByText('TODAY’S COMMITMENT')).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'I will' })).toBeVisible();
+  await expect(overlay.getByText('go for a walk')).toBeVisible();
+  await expect(overlay.getByTestId('card-action-i-will-commit-to-this')).toBeVisible();
+});
+
+test('legacy commitment cards produce check-ins after the selected time', async ({ page }) => {
+  await seedE2EState(page, [
+    legacyCommitmentCard({
+      commitmentCheckInEnabled: true,
+      commitmentCheckInTime: '12:00',
+      commitmentStatusToday: 'made',
+      commitmentDecisionDate: '2026-06-01',
+      commitmentDecisionAt: now,
+    }),
+  ]);
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay.getByText('CHECK-IN')).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'You committed to:' })).toBeVisible();
+  await expect(overlay.getByText('go for a walk')).toBeVisible();
+  await expect(overlay.getByText('How’s it going?')).toBeVisible();
+});
+
+test('normal Personal Cards without commitment fields stay Personal Cards', async ({ page }) => {
+  await seedE2EState(page, [personalCard()]);
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay).toBeVisible();
+  await expect(overlay.getByText('TODAY’S COMMITMENT')).toHaveCount(0);
+  await expect(overlay.getByRole('heading', { name: 'take a steady breath' })).toBeVisible();
+  await expect(overlay.getByTestId('card-action-done')).toBeVisible();
+});
+
+test('pack cards with commitment-looking text are not reclassified as Commitment Cards', async ({ page }) => {
+  await seedE2EState(page, [packCard()]);
+  await gotoLauncher(page, 'safari');
+
+  const overlay = page.getByTestId('card-overlay-pack');
+  await expect(overlay).toBeVisible();
+  await expect(overlay.getByRole('heading', { name: 'I will keep going' })).toBeVisible();
+  await expect(page.getByTestId('card-action-i-will-commit-to-this')).toHaveCount(0);
 });
 
 test('Commitment Card preset and custom timing controls eligibility', async ({ page }) => {
