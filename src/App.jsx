@@ -111,6 +111,12 @@ import {
 } from "./lib/launcherFlow";
 import { buildLauncherEventPayload, getAppDisplayMode } from "./lib/launcherEvents";
 import {
+  buildMorningSummary,
+  getPreviousDateKey,
+  markMorningSummarySeen,
+  shouldAutoShowMorningSummary,
+} from "./morningSummary";
+import {
   buildCardExposureLookup,
   DEFAULT_PERSONAL_FIRST_FALLBACK_SETTINGS,
   selectPersonalFirstLauncherCard,
@@ -1254,6 +1260,7 @@ function App() {
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
   const [isActionCardEditorOpen, setIsActionCardEditorOpen] = useState(false);
   const [selectedPackDetail, setSelectedPackDetail] = useState(null);
+  const [morningSummary, setMorningSummary] = useState(null);
   const [menuOpenId, setMenuOpenId] = useState(null);
   const transitionTimerRef = useRef(null);
   const previousOverlayDebugRef = useRef(null);
@@ -1264,6 +1271,7 @@ function App() {
   const interceptActivationCounterRef = useRef(0);
   const launchAttemptCounterRef = useRef(0);
   const launchCompletedCardIdsRef = useRef(new Set());
+  const loggedCardShownRef = useRef(new Set());
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
   const cardSaveTimerRef = useRef(null);
@@ -2184,6 +2192,40 @@ function App() {
     setEvents(next);
   }, [launcherContext]);
 
+  const showMorningSummaryForDate = useCallback((dateKey, { forced = false } = {}) => {
+    const summary = buildMorningSummary(events, { dateKey, timezone: profile.timezone });
+    setMorningSummary({ ...summary, forced });
+    setOverlay(null);
+    setShouldLaunchOverlay(false);
+  }, [events, profile.timezone]);
+
+  const showMorningSummaryNow = useCallback(() => {
+    showMorningSummaryForDate(getPreviousDateKey(new Date(), profile.timezone), { forced: true });
+  }, [profile.timezone, showMorningSummaryForDate]);
+
+  const showMorningSummaryForToday = useCallback(() => {
+    showMorningSummaryForDate(getTodayKey(new Date(), profile.timezone), { forced: true });
+  }, [profile.timezone, showMorningSummaryForDate]);
+
+  const showMorningSummaryForYesterday = useCallback(() => {
+    showMorningSummaryForDate(getPreviousDateKey(new Date(), profile.timezone), { forced: true });
+  }, [profile.timezone, showMorningSummaryForDate]);
+
+  const morningSummaryDebug = useMemo(
+    () => buildMorningSummary(events, {
+      dateKey: getPreviousDateKey(new Date(), profile.timezone),
+      timezone: profile.timezone,
+    }),
+    [events, profile.timezone],
+  );
+
+  function closeMorningSummary(summary = morningSummary) {
+    if (summary?.dateKey) {
+      markMorningSummarySeen(getTodayKey(new Date(), profile.timezone));
+    }
+    setMorningSummary(null);
+  }
+
   useEffect(() => {
     if (screen === "onboarding" && !loggedOnboardingStartedRef.current) {
       loggedOnboardingStartedRef.current = true;
@@ -2804,6 +2846,20 @@ function App() {
     }
 
     if (isHomeRoute && shouldLaunchOverlay) {
+      const todayKey = getTodayKey(new Date(), profile.timezone);
+      if (shouldAutoShowMorningSummary({ timezone: profile.timezone, seenDateKey: todayKey })) {
+        const summary = buildMorningSummary(events, {
+          dateKey: getPreviousDateKey(new Date(), profile.timezone),
+          timezone: profile.timezone,
+        });
+        if (summary.hasMeaningfulData) {
+          setShouldLaunchOverlay(false);
+          setOverlay(null);
+          setMorningSummary(summary);
+          return;
+        }
+      }
+
       if (e2eMode) {
         setShouldLaunchOverlay(false);
         setOverlay(null);
@@ -4569,6 +4625,54 @@ function App() {
   );
 
   useEffect(() => {
+    if (!overlay || overlay.type !== "reveal" || !activeRevealCard) return;
+    if (activeRevealCard.sourcePackId) return;
+    const shownKey = [
+      overlay.activationKey ?? overlay.origin ?? route.path,
+      overlay.cardId,
+      activeRevealCard.id,
+    ].join(":");
+    if (loggedCardShownRef.current.has(shownKey)) return;
+    loggedCardShownRef.current.add(shownKey);
+
+    const isCheckIn = isCommitmentCheckInCard(activeRevealCard);
+    const isCommitment = isCommitmentCard(activeRevealCard);
+    const baseEvent = {
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: activeRevealCard.parentCommitmentCardId ?? activeRevealCard.id,
+      bash_title: activeRevealCard.promptText,
+      card_id: activeRevealCard.id,
+      card_title: activeRevealCard.dashboardTitle ?? activeRevealCard.promptText,
+      card_text: activeRevealCard.promptText,
+      action_taken: "shown",
+      metadata: {
+        cardKind: activeRevealCard.cardKind ?? "personal",
+        origin: overlay.origin ?? null,
+        launchSource: overlay.launchSource ?? null,
+        activationKey: overlay.activationKey ?? null,
+      },
+    };
+
+    if (isCheckIn) {
+      void logEvent({
+        ...baseEvent,
+        event_type: "commitment_check_in_generated",
+        metadata: {
+          ...baseEvent.metadata,
+          parentCommitmentCardId: activeRevealCard.parentCommitmentCardId,
+        },
+      });
+      return;
+    }
+
+    void logEvent({
+      ...baseEvent,
+      event_type: isCommitment ? "commitment_card_shown" : "personal_card_shown",
+    });
+  }, [activeRevealCard, logEvent, overlay, route.path]);
+
+  useEffect(() => {
     if (!e2eMode || typeof window === "undefined") return;
     const cardType = activeRevealCard?.sourcePackId ? "pack" : activeRevealCard ? "personal" : null;
     const actionLabels = cardType
@@ -4891,6 +4995,10 @@ function App() {
                   interruptionPacks={interruptionPacks}
                   launcherContext={launcherContext}
                   onLogLauncherEvent={logLauncherEvent}
+                  morningSummaryDebug={morningSummaryDebug}
+                  onShowMorningSummaryNow={showMorningSummaryNow}
+                  onGenerateMorningSummaryForToday={showMorningSummaryForToday}
+                  onGenerateMorningSummaryForYesterday={showMorningSummaryForYesterday}
                   onFakeLauncherLaunch={(versionId) =>
                     handleFakeLauncherLaunch(versionId, "settings_fake_launcher")
                   }
@@ -4989,6 +5097,13 @@ function App() {
           onSaveInterruptionCard={handleSaveInterruptionCard}
           onDeleteInterruptionCard={handleDeleteInterruptionCard}
           onClose={() => setSelectedPackDetail(null)}
+        />
+      ) : null}
+
+      {morningSummary ? (
+        <MorningSummaryModal
+          summary={morningSummary}
+          onClose={() => closeMorningSummary(morningSummary)}
         />
       ) : null}
 
@@ -6867,6 +6982,10 @@ function SettingsPanel({
   interruptionPacks,
   launcherContext,
   onLogLauncherEvent,
+  morningSummaryDebug,
+  onShowMorningSummaryNow,
+  onGenerateMorningSummaryForToday,
+  onGenerateMorningSummaryForYesterday,
   onFakeLauncherLaunch,
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -7138,6 +7257,24 @@ function SettingsPanel({
           Status: {notificationStatus || "unknown"}
         </p>
       </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Morning Summary debug</p>
+          <span>Force yesterday’s reflection and inspect the raw events used by the summary.</span>
+        </div>
+        <div className="sync-profile-row morning-summary-debug-actions">
+          <button type="button" className="pack-button secondary" onClick={onShowMorningSummaryNow}>
+            Show Morning Summary Now
+          </button>
+          <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForToday}>
+            Generate Summary for Today
+          </button>
+          <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForYesterday}>
+            Generate Summary for Yesterday
+          </button>
+        </div>
+        <MorningSummaryDebugLog summary={morningSummaryDebug} />
+      </div>
       <div className="settings-card settings-compact">
         <div className="settings-version-heading">
           <p>Refresh MyBishBash</p>
@@ -7174,6 +7311,129 @@ function SettingsPanel({
         />
       ) : null}
     </section>
+  );
+}
+
+function MorningSummaryDebugLog({ summary }) {
+  const events = summary?.debugEvents ?? [];
+
+  return (
+    <div className="morning-summary-debug-log" data-testid="morning-summary-debug-log">
+      <div className="morning-summary-debug-header">
+        <strong>Raw summary/debug log</strong>
+        <span>{summary?.dateKey ?? "No date"} · {events.length} events</span>
+      </div>
+      {events.length === 0 ? (
+        <p className="tiny-note">No summary events found for this date yet.</p>
+      ) : (
+        <div className="morning-summary-debug-list">
+          {events.map((event) => (
+            <div key={`${event.id}:${event.type}:${event.at}`} className="morning-summary-debug-row">
+              <span>{formatTwentyFourHourTime(event.at)}</span>
+              <strong>{event.label}</strong>
+              <p>{[event.card, event.app, event.action].filter(Boolean).join(" · ")}</p>
+              <code>{event.type}</code>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MorningSummaryModal({ summary, onClose }) {
+  const sections = [];
+  const personal = summary.personal ?? {};
+  const commitments = summary.commitments ?? {};
+  const interruptions = summary.interruptions ?? {};
+  const plural = (count, singular, pluralLabel = `${singular}s`) => `${count} ${count === 1 ? singular : pluralLabel}`;
+
+  if (personal.completedCount > 0 || personal.availableCount > 0) {
+    const completionCopy = personal.availableCount > 0
+      ? `Yesterday, you completed ${personal.completedCount} of your ${plural(personal.availableCount, "personal card")}.`
+      : `Yesterday, you completed ${plural(personal.completedCount, "personal card")}.`;
+    sections.push({
+      id: "personal",
+      title: "Personal Cards",
+      body: completionCopy,
+      details: personal.isCompletionPercentageReliable && personal.completionPercentage != null
+        ? [`That is ${personal.completionPercentage}% of the personal cards shown yesterday.`]
+        : [],
+    });
+  }
+
+  if (commitments.madeCount > 0 || commitments.checkInCompletedCount > 0) {
+    const details = [];
+    if (commitments.outcomes?.goingPerfectly) details.push(`${commitments.outcomes.goingPerfectly} going perfectly`);
+    if (commitments.outcomes?.couldBeBetter) details.push(`${commitments.outcomes.couldBeBetter} could be better`);
+    if (commitments.outcomes?.notGoingWell) details.push(`${commitments.outcomes.notGoingWell} not going well`);
+    sections.push({
+      id: "commitments",
+      title: "Commitments",
+      body: `You made ${plural(commitments.madeCount, "commitment")} yesterday. You checked in on ${commitments.checkInCompletedCount} of them.`,
+      details,
+    });
+  }
+
+  if (interruptions.interruptedCount > 0 || interruptions.continueToAppCount > 0 || interruptions.choseAlternativeCount > 0) {
+    const topApp = interruptions.byApp?.[0];
+    const body = topApp
+      ? `${topApp.appName} was interrupted ${topApp.count} times. You chose something else ${interruptions.choseAlternativeCount} times.`
+      : `Your app shortcuts were interrupted ${plural(interruptions.interruptedCount, "time")}. You chose something else ${plural(interruptions.choseAlternativeCount, "time")}.`;
+    sections.push({
+      id: "interruptions",
+      title: "Interruptions",
+      body: topApp
+        ? `${topApp.appName} was interrupted ${plural(topApp.count, "time")}. You chose something else ${plural(interruptions.choseAlternativeCount, "time")}.`
+        : body,
+      details: [
+        interruptions.continueToAppCount > 0 ? `${plural(interruptions.continueToAppCount, "time")} continued to app` : null,
+        ...(interruptions.byApp ?? []).slice(1, 4).map((row) => `${row.appName}: ${row.count}`),
+      ].filter(Boolean),
+    });
+  }
+
+  return (
+    <div className="modal-backdrop morning-summary-backdrop" onClick={onClose}>
+      <div className="composer morning-summary-card" data-testid="morning-summary" onClick={(event) => event.stopPropagation()}>
+        <div className="composer-heading">
+          <p className="eyebrow">Morning Summary</p>
+          <button type="button" className="text-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="morning-summary-hero">
+          <span className="morning-summary-icon" aria-hidden="true"><HeartGlyph /></span>
+          <h2>Yesterday’s reflection</h2>
+          <p>{summary.dateKey}</p>
+        </div>
+        {sections.length === 0 ? (
+          <div className="morning-summary-section">
+            <h3>A quiet day in the log.</h3>
+            <p>There is not much to reflect back from yesterday yet. You can just keep going gently today.</p>
+          </div>
+        ) : (
+          <div className="morning-summary-sections">
+            {sections.map((section) => (
+              <section key={section.id} className="morning-summary-section">
+                <h3>{section.title}</h3>
+                <p>{section.body}</p>
+                {section.details.length > 0 ? (
+                  <div className="morning-summary-detail-list">
+                    {section.details.map((detail) => (
+                      <span key={detail}>{detail}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ))}
+          </div>
+        )}
+        <button type="button" className="save-button morning-summary-cta" onClick={onClose}>
+          Continue to MyBishBash
+        </button>
+      </div>
+    </div>
   );
 }
 
