@@ -1,12 +1,12 @@
-# BishBash Privacy Policy
+# MyBishBash Privacy Policy
 
 Last updated: 18/05/2026
 
 ## Introduction
 
-BishBash is designed to help users create a more intentional relationship with their phone through personalised reminders, identity cues, and behavioural nudges.
+MyBishBash is designed to help users create a more intentional relationship with their phone through personalised reminders, identity cues, and behavioural nudges.
 
-We take privacy seriously. BishBash is built around personal reflection and intentionality, and we aim to handle user data with transparency and care.
+We take privacy seriously. MyBishBash is built around personal reflection and intentionality, and we aim to handle user data with transparency and care.
 
 This Privacy Policy explains what information we collect, how we use it, and the choices available to you.
 
@@ -14,7 +14,7 @@ This Privacy Policy explains what information we collect, how we use it, and the
 
 # Information We Collect
 
-Depending on how you use BishBash, we may collect:
+Depending on how you use MyBishBash, we may collect:
 
 ## Account Information
 - email address
@@ -43,7 +43,7 @@ We do not sell your personal cards or private content to advertisers or third pa
 # How We Use Information
 
 We use information to:
-- provide and improve BishBash
+- provide and improve MyBishBash
 - personalise the app experience
 - understand product usage patterns
 - improve reliability and performance
@@ -62,9 +62,9 @@ We do not:
 - sell personal user content
 - sell identifiable behavioural profiles
 - share private cards publicly without permission
-- use BishBash content for advertising targeting
+- use MyBishBash content for advertising targeting
 
-BishBash is designed to feel personal, intentional, and trustworthy.
+MyBishBash is designed to feel personal, intentional, and trustworthy.
 
 ---
 
@@ -72,7 +72,7 @@ BishBash is designed to feel personal, intentional, and trustworthy.
 
 Data may be stored:
 - locally on your device
-- on secure cloud infrastructure used by BishBash
+- on secure cloud infrastructure used by MyBishBash
 
 We take reasonable technical and organisational measures to protect user data.
 
@@ -90,19 +90,19 @@ Depending on your location, you may have rights to:
 - withdraw consent to optional communications
 
 To request deletion or support, contact:
-support@bishbash.app
+support@mybishbash.app
 
 ---
 
 # Children
 
-BishBash is not intended for children under 16 years old.
+MyBishBash is not intended for children under 16 years old.
 
 ---
 
 # International Users
 
-BishBash may operate internationally. By using the app, you understand that your information may be processed in countries outside your own.
+MyBishBash may operate internationally. By using the app, you understand that your information may be processed in countries outside your own.
 
 We aim to handle data responsibly and in accordance with applicable privacy laws.
 
@@ -112,7 +112,7 @@ We aim to handle data responsibly and in accordance with applicable privacy laws
 
 We may update this Privacy Policy from time to time.
 
-Continued use of BishBash after updates means you accept the revised policy.
+Continued use of MyBishBash after updates means you accept the revised policy.
 
 ---
 
@@ -120,4 +120,4 @@ Continued use of BishBash after updates means you accept the revised policy.
 
 For questions about privacy or data handling:
 
-support@bishbash.app
+support@mybishbash.app
