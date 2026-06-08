@@ -6374,6 +6374,205 @@ function LibraryListRow({
   );
 }
 
+// ─── ExpandableCollection ────────────────────────────────────────────────────
+// Reusable animated collection component for the Library page.
+// Shows a header (icon, title, description, count pill, add button, chevron)
+// and an animated body that reveals up to `maxPreview` items when open.
+// When more items exist than the preview cap, a "View all" footer appears.
+// If `onViewAll` is provided it is called; otherwise all items expand inline.
+
+function ExpandableCollection({
+  id,
+  icon,
+  title,
+  description,
+  countLabel,
+  items = [],
+  maxPreview = 5,
+  isOpen,
+  onToggle,
+  onAdd,
+  addLabel,
+  onViewAll,
+  testId,
+  renderRow,
+  emptyLabel = "Nothing here yet",
+}) {
+  const [showAll, setShowAll] = useState(false);
+
+  // Collapse "show all" when the section closes
+  const prevIsOpen = useRef(isOpen);
+  useEffect(() => {
+    if (!isOpen && prevIsOpen.current) setShowAll(false);
+    prevIsOpen.current = isOpen;
+  }, [isOpen]);
+
+  const displayItems = showAll ? items : items.slice(0, maxPreview);
+  const hasMore = items.length > maxPreview && !showAll;
+
+  function handleViewAll() {
+    if (onViewAll) {
+      onViewAll();
+    } else {
+      setShowAll(true);
+    }
+  }
+
+  return (
+    <div className={`expandable-collection${isOpen ? " open" : ""}`}>
+      {/* Header ─ the toggle button covers the icon + copy; add + chevron are independent */}
+      <div className="library-section-header">
+        <button
+          type="button"
+          className="library-section-toggle"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          aria-controls={id}
+          data-testid={`${testId}-toggle`}
+        >
+          <span className="tile library-section-icon">
+            <CardIcon icon={icon} />
+          </span>
+          <span className="library-section-copy">
+            <span className="library-section-title">{title}</span>
+            <span className="library-section-description">{description}</span>
+          </span>
+        </button>
+        <span className="library-section-meta">
+          <span className="library-section-count">{countLabel}</span>
+          <button
+            type="button"
+            className="library-section-add"
+            onClick={onAdd}
+            aria-label={addLabel}
+            data-testid={`${testId}-add`}
+          >
+            +
+          </button>
+          <span
+            className={`library-section-chevron${isOpen ? " open" : ""}`}
+            aria-hidden="true"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
+        </span>
+      </div>
+
+      {/* Animated body ─ CSS grid-template-rows trick for smooth height animation */}
+      <div
+        className={`expandable-collection-body-wrap${isOpen ? " open" : ""}`}
+        id={id}
+        aria-hidden={!isOpen}
+      >
+        <div className="expandable-collection-body-inner">
+          <div className="library-list-card">
+            {items.length === 0 ? (
+              <article className="library-list-empty">
+                <h3>{emptyLabel}</h3>
+              </article>
+            ) : null}
+            {displayItems.map((item) => renderRow(item))}
+            {items.length > 0 && hasMore ? (
+              <button
+                type="button"
+                className="collection-view-all"
+                onClick={handleViewAll}
+              >
+                View all {items.length} {items.length === 1 ? "item" : "items"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CollectionPreviewRow ────────────────────────────────────────────────────
+// A richer list row for use inside ExpandableCollection.
+// Unlike LibraryListRow it includes an item icon column and an optional status
+// badge, giving the "drawer glimpse" feel described in the design spec.
+
+function CollectionPreviewRow({
+  item,
+  icon = "heart",
+  title,
+  secondary,
+  statusBadge,
+  menuOpenId,
+  setMenuOpenId,
+  onOpen,
+  menuActions = [],
+}) {
+  return (
+    <article
+      className={`collection-preview-row${menuOpenId === item.id ? " menu-open" : ""}`}
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      <span className="collection-preview-icon">
+        <CardIcon icon={icon} />
+      </span>
+      <div className="collection-preview-copy">
+        <h3>{title}</h3>
+        {secondary ? <p>{secondary}</p> : null}
+      </div>
+      {statusBadge ? (
+        <span className={`collection-preview-status ${statusBadge}`}>
+          {statusBadge}
+        </span>
+      ) : null}
+      <div className="menu-wrap">
+        <button
+          type="button"
+          className="menu-trigger collection-preview-menu-trigger"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpenId((current) => (current === item.id ? null : item.id));
+          }}
+          aria-label="Card options"
+        >
+          •••
+        </button>
+        {menuOpenId === item.id ? (
+          <div className="menu">
+            {menuActions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                className={action.danger ? "danger-soft" : ""}
+                disabled={action.disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  action.onClick();
+                }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 function getLibraryPersonalSecondary(card, timezone) {
   const status = getStatusMeta(card, new Date(), timezone);
   return status.badge;
@@ -6455,117 +6654,93 @@ function StandardLibraryPanel({
       </div>
       <div className="library-sections">
         <section className="library-section-group">
-          <LibrarySectionHeader
+          <ExpandableCollection
             id="personal-card-section"
             icon="heart"
             title="Personal Cards"
             description="Cards you have written for yourself."
             countLabel={personalCountLabel}
+            items={personalItems}
             isOpen={personalOpen}
             onToggle={() => toggleSection("personal")}
             onAdd={onCreatePersonal}
             addLabel="Create personal card"
             testId="library-personal-section"
+            emptyLabel="No personal cards yet"
+            renderRow={(item) => (
+              <CollectionPreviewRow
+                key={item.id}
+                item={item}
+                icon={item.representative.icon ?? "heart"}
+                title={item.representative.promptText}
+                secondary={getLibraryPersonalSecondary(item.representative, timezone)}
+                menuOpenId={menuOpenId}
+                setMenuOpenId={setMenuOpenId}
+                onOpen={() => openSpecificReveal(item.id)}
+                menuActions={personalActions(item)}
+              />
+            )}
           />
-          {personalOpen ? (
-            <div className="library-section-body" id="personal-card-section">
-              <div className="library-list-card">
-                {personalItems.length === 0 ? (
-                  <article className="library-list-empty">
-                    <h3>No personal cards yet</h3>
-                  </article>
-                ) : null}
-                {personalItems.map((item) => (
-                  <LibraryListRow
-                    key={item.id}
-                    item={item}
-                    title={item.representative.promptText}
-                    secondary={getLibraryPersonalSecondary(item.representative, timezone)}
-                    menuOpenId={menuOpenId}
-                    setMenuOpenId={setMenuOpenId}
-                    onOpen={() => openSpecificReveal(item.id)}
-                    menuActions={personalActions(item)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
         </section>
 
         <section className="library-section-group">
-          <LibrarySectionHeader
+          <ExpandableCollection
             id="commitment-card-section"
             icon="star"
             title="Commitment Cards"
             description="Promises you've made to yourself."
             countLabel={commitmentCountLabel}
+            items={commitmentItems}
             isOpen={commitmentsOpen}
             onToggle={() => toggleSection("commitments")}
             onAdd={onCreateCommitment}
             addLabel="Create commitment card"
             testId="library-commitment-section"
+            emptyLabel="No commitment cards yet"
+            renderRow={(item) => (
+              <CollectionPreviewRow
+                key={item.id}
+                item={item}
+                icon={item.representative.icon ?? "star"}
+                title={item.representative.promptText}
+                secondary={getLibraryCommitmentSecondary(item.representative)}
+                menuOpenId={menuOpenId}
+                setMenuOpenId={setMenuOpenId}
+                onOpen={() => openSpecificReveal(item.id)}
+                menuActions={personalActions(item)}
+              />
+            )}
           />
-          {commitmentsOpen ? (
-            <div className="library-section-body" id="commitment-card-section">
-              <div className="library-list-card">
-                {commitmentItems.length === 0 ? (
-                  <article className="library-list-empty">
-                    <h3>No commitment cards yet</h3>
-                  </article>
-                ) : null}
-                {commitmentItems.map((item) => (
-                  <LibraryListRow
-                    key={item.id}
-                    item={item}
-                    title={item.representative.promptText}
-                    secondary={getLibraryCommitmentSecondary(item.representative)}
-                    menuOpenId={menuOpenId}
-                    setMenuOpenId={setMenuOpenId}
-                    onOpen={() => openSpecificReveal(item.id)}
-                    menuActions={personalActions(item)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
         </section>
 
         <section className="library-section-group">
-          <LibrarySectionHeader
+          <ExpandableCollection
             id="active-pack-section"
             icon="book"
             title="Active Packs"
             description="Packs you've added to your library."
             countLabel={activePackCountLabel}
+            items={activePackItems}
             isOpen={activePacksOpen}
             onToggle={() => toggleSection("activePacks")}
             onAdd={onAddPack}
             addLabel="Add active pack"
             testId="library-active-packs-section"
+            emptyLabel="No active packs yet"
+            renderRow={(item) => (
+              <CollectionPreviewRow
+                key={item.id}
+                item={item}
+                icon={item.representative.icon ?? "book"}
+                title={item.representative.promptText}
+                secondary={getLibraryPackSecondary(item)}
+                menuOpenId={menuOpenId}
+                setMenuOpenId={setMenuOpenId}
+                onOpen={() => openPackReveal(item.id)}
+                menuActions={packActions(item)}
+              />
+            )}
           />
-          {activePacksOpen ? (
-            <div className="library-section-body" id="active-pack-section">
-              <div className="library-list-card">
-                {activePackItems.length === 0 ? (
-                  <article className="library-list-empty">
-                    <h3>No active packs yet</h3>
-                  </article>
-                ) : null}
-                {activePackItems.map((item) => (
-                  <LibraryListRow
-                    key={item.id}
-                    item={item}
-                    title={item.representative.promptText}
-                    secondary={getLibraryPackSecondary(item)}
-                    menuOpenId={menuOpenId}
-                    setMenuOpenId={setMenuOpenId}
-                    onOpen={() => openPackReveal(item.id)}
-                    menuActions={packActions(item)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
         </section>
       </div>
     </section>
