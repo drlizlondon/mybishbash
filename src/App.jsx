@@ -27,6 +27,8 @@ import {
   saveProfile,
   saveActionCards,
   saveSetupComplete,
+  isAppPaused,
+  pauseApp,
 } from "./storage";
 import {
   createEventRecord,
@@ -2730,6 +2732,16 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      // ── App pause bypass ─────────────────────────────────────────────────
+      // If the user has paused this app, open the destination directly and
+      // skip the entire card flow. Pause expires automatically by timestamp.
+      if (isAppPaused(route.versionId)) {
+        console.log("[LAUNCHER] App paused — bypassing card flow", { versionId: route.versionId });
+        openDestinationApp(route.versionId, { source: "app_pause_bypass", reason: "app_paused" });
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
       const routeNow = new Date();
@@ -3225,6 +3237,14 @@ function App() {
 
   function handleOverlayFakeLauncherLaunch(versionId) {
     handleFakeLauncherLaunch(versionId, "overlay_fake_launcher");
+  }
+
+  // Called when the user selects a pause duration from the pause modal.
+  // Stores the expiry timestamp and immediately opens the real destination.
+  function handlePauseApp(appId, durationMinutes) {
+    const expiry = pauseApp(appId, durationMinutes);
+    console.log("[LAUNCHER] App paused by user", { appId, durationMinutes, expiry });
+    openDestinationApp(appId, { source: "app_pause_selected", reason: "user_paused" });
   }
 
   function updateCards(updater) {
@@ -5485,6 +5505,7 @@ function App() {
           }}
           fakeLauncherVersions={overlayLauncherVersions}
           onFakeLauncherLaunch={handleOverlayFakeLauncherLaunch}
+          onPauseApp={handlePauseApp}
         />
       ) : null}
 
@@ -8237,7 +8258,15 @@ function Overlay({
   fakeLauncherVersions,
   onFakeLauncherLaunch,
   onContinueToApp,
+  onPauseApp,
 }) {
+  // Identify the active launcher app for the pause button.
+  // Only surfaces the button when we're inside a fake-launcher flow.
+  const launcherAppId = (overlay.launchSource === "fake_launcher" && overlay.versionId) ? overlay.versionId : null;
+  const launcherAppName = launcherAppId ? (version?.displayName ?? version?.name ?? launcherAppId) : null;
+  const onPauseCurrentApp = (launcherAppId && onPauseApp)
+    ? (mins) => onPauseApp(launcherAppId, mins)
+    : null;
   const [showLauncherPreparingFallback, setShowLauncherPreparingFallback] = useState(false);
   const launcherPreparingPaintedRef = useRef(false);
   const launcherInterceptionClass = overlay?.launchSource === "fake_launcher" || overlay?.versionId
@@ -8415,6 +8444,9 @@ function Overlay({
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
       />
     );
   }
@@ -8508,6 +8540,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
       />
     );
   }
@@ -8523,6 +8558,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
       />
     );
   }
@@ -8539,6 +8577,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
       />
     );
   }
@@ -8573,6 +8614,9 @@ function Overlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseCurrentApp}
     />
   );
 }
@@ -8593,6 +8637,9 @@ function PremiumCardScreen({
   children,
   className = "",
   cardOverlayKey = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
 }) {
   return (
     <CardRevealTemplate
@@ -8611,6 +8658,9 @@ function PremiumCardScreen({
       onDashboard={onDashboard}
       onCreateCard={onCreateCard}
       className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
     >
       {children}
     </CardRevealTemplate>
@@ -8627,6 +8677,9 @@ function CommitmentCardOverlay({
   onCreateCard,
   cardOverlayKey = "",
   className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
 }) {
   const shownRef = useRef(false);
   const commitmentText = stripCommitmentPrefix(card.promptText);
@@ -8671,6 +8724,9 @@ function CommitmentCardOverlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
     />
   );
 }
@@ -8684,6 +8740,9 @@ function CommitmentMotivationOverlay({
   onCreateCard,
   cardOverlayKey = "",
   className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
 }) {
   return (
     <CardRevealTemplate
@@ -8702,6 +8761,9 @@ function CommitmentMotivationOverlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
     >
       <div className="commitment-motivation-copy">
         <p className="commitment-motivation-intro">Before you decide...</p>
@@ -8721,6 +8783,9 @@ function CommitmentCheckInOverlay({
   onCreateCard,
   cardOverlayKey = "",
   className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
 }) {
   return (
     <PremiumCardScreen
@@ -8740,6 +8805,9 @@ function CommitmentCheckInOverlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
     />
   );
 }
@@ -8760,9 +8828,13 @@ function CardRevealTemplate({
   children,
   className = "",
   cardOverlayKey = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
 }) {
   const hasLaunchers = launchers?.length > 0;
   const hasActions = actions?.length > 0;
+  const [showPauseModal, setShowPauseModal] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -8781,6 +8853,21 @@ function CardRevealTemplate({
     <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
       {showDashboardShortcut ? <PremiumDashboardShortcut href={dashboardHref} onClick={onDashboard} /> : null}
       {onCreateCard ? <PremiumCreateShortcut onClick={onCreateCard} /> : null}
+      {launcherAppId && onPauseApp ? (
+        <PremiumPauseShortcut
+          onClick={() => setShowPauseModal(true)}
+        />
+      ) : null}
+      {showPauseModal && launcherAppId && onPauseApp ? (
+        <AppPauseModal
+          appName={launcherAppName ?? launcherAppId}
+          onClose={() => setShowPauseModal(false)}
+          onPause={(mins) => {
+            setShowPauseModal(false);
+            onPauseApp(mins);
+          }}
+        />
+      ) : null}
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header">
           {greeting ? <p className="premium-greeting">{greeting}</p> : null}
@@ -8942,6 +9029,75 @@ function PremiumCreateShortcut({ onClick }) {
       <span aria-hidden="true">+</span>
       <span className="sr-only">Create a MyBishBash</span>
     </button>
+  );
+}
+
+// ─── PremiumPauseShortcut ────────────────────────────────────────────────────
+// White circular button with a two-bar pause icon.
+// Appears only during fake-launcher / protected-app flows (when launcherAppId is set).
+// Positioned below the dashboard (grid) shortcut on the top-right.
+
+function PremiumPauseShortcut({ onClick }) {
+  return (
+    <button
+      type="button"
+      className="premium-dashboard-shortcut premium-pause-shortcut"
+      onClick={onClick}
+      aria-label="Pause MyBishBash for this app"
+      title="Pause MyBishBash"
+      data-testid="pause-app-button"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+        <rect x="6" y="5" width="4" height="14" rx="1.5" />
+        <rect x="14" y="5" width="4" height="14" rx="1.5" />
+      </svg>
+    </button>
+  );
+}
+
+// ─── AppPauseModal ────────────────────────────────────────────────────────────
+// Bottom sheet asking the user how long to pause MyBishBash for the current app.
+
+const PAUSE_DURATION_OPTIONS = [
+  { label: "30 mins",  minutes: 30 },
+  { label: "1 hour",   minutes: 60 },
+  { label: "2 hours",  minutes: 120 },
+  { label: "3 hours",  minutes: 180 },
+];
+
+function AppPauseModal({ appName, onClose, onPause }) {
+  return (
+    <div className="modal-backdrop app-pause-backdrop" onClick={onClose}>
+      <div
+        className="app-pause-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pause-sheet-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="app-pause-sheet-title" id="pause-sheet-title">
+          Pause MyBishBash?
+        </p>
+        <p className="app-pause-sheet-body">
+          For a short time, {appName} will open directly without showing cards.
+        </p>
+        <div className="app-pause-options">
+          {PAUSE_DURATION_OPTIONS.map(({ label, minutes }) => (
+            <button
+              key={minutes}
+              type="button"
+              className="app-pause-option"
+              onClick={() => onPause(minutes)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="app-pause-cancel" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -9276,7 +9432,7 @@ function CustomPackOverlay({ overlay, onClose, onDashboard }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, onCreateCard, cardOverlayKey = "" }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, onCreateCard, cardOverlayKey = "", launcherAppId = null, launcherAppName = null, onPauseApp = null }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -9418,6 +9574,9 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         onCreateCard={onCreateCard}
         cardOverlayKey={`${cardOverlayKey}:${cards[activeIndex]?.id ?? activeIndex}`}
         className="launcher-interception-card"
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseApp}
       >
         {hasMultipleMessages ? (
           <div className="premium-card-pagination">
