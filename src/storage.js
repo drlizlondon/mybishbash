@@ -15,6 +15,7 @@ const ACTION_CARDS_KEY = "mybishbash.action-cards.v1";
 const ACTION_CARD_DEFAULTS_VERSION_KEY = "mybishbash.action-card-defaults-version.v1";
 const NOTIFICATIONS_KEY = "mybishbash.notifications.v1";
 const NOTIFICATION_SCHEDULE_KEY = "mybishbash.notification-schedule.v1";
+const APP_PAUSES_KEY = "mybishbash.app-pauses.v1";
 const ACTION_CARD_DEFAULTS_VERSION = "2026-05-13";
 const STORAGE_PREFIX = "mybishbash";
 const LEGACY_STORAGE_PREFIX = "bish" + "bash";
@@ -54,6 +55,7 @@ const SHARED_STORAGE_KEYS = [
   LAUNCHER_BEHAVIOR_SETTINGS_KEY,
   ACTION_CARDS_KEY,
   NOTIFICATIONS_KEY,
+  APP_PAUSES_KEY,
   "mybishbash.event-log.v1",
   "mybishbash.offline-event-queue.v1",
   "mybishbash.user-id.v1",
@@ -423,6 +425,53 @@ export function loadNotificationSchedule() {
 
 export function saveNotificationSchedule(value) {
   setStorageItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(value));
+}
+
+// ─── App-specific pause storage ─────────────────────────────────────────────
+// Stores per-app pause expiry timestamps under APP_PAUSES_KEY.
+// Format: { "instagram": "2026-06-08T21:00:00.000Z", ... }
+
+function getAppPausesMap() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(APP_PAUSES_KEY) ?? "{}");
+    return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAppPausesMap(map) {
+  window.localStorage.setItem(APP_PAUSES_KEY, JSON.stringify(map));
+}
+
+export function getAppPauseExpiry(appId) {
+  if (!appId) return null;
+  return getAppPausesMap()[appId] ?? null;
+}
+
+export function isAppPaused(appId) {
+  if (!appId) return false;
+  const expiry = getAppPauseExpiry(appId);
+  if (!expiry) return false;
+  return new Date(expiry).getTime() > Date.now();
+}
+
+export function pauseApp(appId, durationMinutes) {
+  if (!appId || !(durationMinutes > 0)) return null;
+  const expiry = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+  const map = getAppPausesMap();
+  map[appId] = expiry;
+  saveAppPausesMap(map);
+  return expiry;
+}
+
+export function clearExpiredAppPause(appId) {
+  if (!appId || isAppPaused(appId)) return;
+  const map = getAppPausesMap();
+  if (map[appId] !== undefined) {
+    delete map[appId];
+    saveAppPausesMap(map);
+  }
 }
 
 export function clearSharedMyBishBashState() {
