@@ -25,9 +25,10 @@ export function buildFakeLauncherFlowContext({
   };
 }
 
-export function getInitialFakeLauncherStep({ selectedCard = null, interruption = null } = {}) {
+export function getInitialFakeLauncherStep({ selectedCard = null, interruption = null, interruptionEnabled = false } = {}) {
   if (selectedCard) return FAKE_LAUNCHER_FLOW_STEPS.SELECTED_CARD;
   if (interruption) return FAKE_LAUNCHER_FLOW_STEPS.INTERRUPTION_CARD;
+  if (interruptionEnabled) return FAKE_LAUNCHER_FLOW_STEPS.CONTINUE_CARD;
   return FAKE_LAUNCHER_FLOW_STEPS.CAUGHT_UP;
 }
 

@@ -473,9 +473,10 @@ test('tester personal-first launcher with interruption off shows active pack car
 
 test('tester personal-first launcher with exhausted personal cards still shows active pack card before caught-up', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
+  const futureNotYetUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   await seedE2EState(page, {
     cards: [
-      { ...smokeCard('exhausted-personal-card', 'E2E exhausted personal card'), notYetUntil: '2026-06-03T12:00:00.000Z' },
+      { ...smokeCard('exhausted-personal-card', 'E2E exhausted personal card'), notYetUntil: futureNotYetUntil },
       packSmokeCard('pack-after-exhausted-personal', 'E2E pack after exhausted personal'),
     ],
     launcherBehaviorSettings: launcherSettings(false),
@@ -642,5 +643,33 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
     reason: 'fake_launcher_icon_clicked',
   });
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('warm launch after dashboard keeps fake launcher return target', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [
+      packSmokeCard('card-1', 'First task'),
+      packSmokeCard('card-2', 'Second task'),
+    ]
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  // In fake_launcher, pack cards have 'Continue'. In home, they have 'Back to home'
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+  await expect(page.getByTestId('card-action-back-to-home')).toHaveCount(0);
+
+  await page.getByTestId('dashboard-shortcut').click();
+  await expect(page).toHaveURL(/\/home/);
+
+  await navigateWithinApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+  await expect(page.getByTestId('card-action-back-to-home')).toHaveCount(0);
+
   await expectNoConsoleErrors(consoleErrors);
 });

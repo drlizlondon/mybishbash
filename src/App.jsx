@@ -1144,11 +1144,20 @@ function getCardSelectionSurfaceForOverlay(overlay) {
   return CARD_SELECTION_SURFACES.HOME;
 }
 
-function getActiveFakeLauncherReturnContext(route, overlay, interceptActivation) {
+function getActiveFakeLauncherReturnContext(route, overlay, interceptActivation, installedShellId = null) {
+  const isInterceptRoute = route?.kind === "intercept";
+  const isFakeLauncherOverlay = overlay?.launchSource === "fake_launcher" || !!overlay?.versionId;
+  const isStandaloneShell = !!installedShellId;
+
+  if (!isInterceptRoute && !isFakeLauncherOverlay && !isStandaloneShell) {
+    return null;
+  }
+
   const versionId =
     route?.versionId ||
     overlay?.versionId ||
     interceptActivation?.versionId ||
+    installedShellId ||
     null;
 
   const activationKey =
@@ -1556,7 +1565,7 @@ function App() {
   }
 
   function buildRevealOverlayForCurrentShell(cardId) {
-    const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current);
+    const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current, getFakeLauncherShellContextId());
     const installedLauncherId = getFakeLauncherShellContextId() || fakeContext?.versionId;
     if (installedLauncherId) {
       const nextSession = buildLaunchSession("fake_launcher", installedLauncherId);
@@ -2429,6 +2438,7 @@ function App() {
     const initialFlowStep = getInitialFakeLauncherStep({
       selectedCard: selected,
       interruption: plannedInterruption,
+      interruptionEnabled,
     });
 
     const selectedCard = selected ?? plannedInterruption?.pack?.cards?.[plannedInterruption.activeIndex ?? 0] ?? null;
@@ -2856,7 +2866,7 @@ function App() {
 
     if (route.kind === "caught-up") {
       setScreen("library");
-      const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current);
+      const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current, getFakeLauncherShellContextId());
       const nextOverlay = fakeContext
         ? { ...buildFakeLauncherEmptyOverlay(fakeContext.versionId, fakeContext.activationKey), origin: "home" }
         : { ...buildEmptyOverlay(), origin: "home" };
@@ -3027,10 +3037,11 @@ function App() {
   }
 
   function renderInterceptionDecision(versionId, activation, { source = "route" } = {}) {
-    const { selected, interruption, activationKey } = activation;
+    const { selected, interruption, activationKey, interruptionEnabled } = activation;
     const initialStep = getInitialFakeLauncherStep({
       selectedCard: selected,
       interruption,
+      interruptionEnabled,
     });
 
     setScreen(selected ? "library" : "interception");
@@ -3064,6 +3075,20 @@ function App() {
       };
       debugLaunch("[LAUNCHSOURCE PRESERVED]", nextOverlay);
       debugLaunch("[CARD_ORIGIN] launcher pack created", nextOverlay);
+      setOverlay(nextOverlay);
+      return nextOverlay;
+    }
+
+    if (initialStep === FAKE_LAUNCHER_FLOW_STEPS.CONTINUE_CARD) {
+      debugLaunch("[INTERCEPT] No eligible cards; continuing to app directly", { versionId, source });
+      debugLaunch("[LAUNCHER_FINAL_DECISION]", {
+        source,
+        versionId,
+        selectedCardId: null,
+        finalDecision: "continue_to_app",
+      });
+      const nextOverlay = buildFakeLauncherContinueOverlay(versionId, activationKey);
+      debugLaunch("[CARD_ORIGIN] launcher continue created", nextOverlay);
       setOverlay(nextOverlay);
       return nextOverlay;
     }
@@ -8140,6 +8165,7 @@ function Overlay({
       const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion));
       actions.push({
         label: `Continue to ${appName}`,
+              testId: "card-action-continue-to-app",
         variant: "primary",
         href: continueHref,
         onClick: (event) => {
@@ -8732,31 +8758,33 @@ function PremiumActionStack({ actions = [] }) {
     <div className="premium-action-stack">
       {actions.map((action) => (
         <PremiumActionButton
-          key={action.key || action.label}
+            key={action.key || action.testId || action.label}
           label={action.label}
           variant={action.variant}
           onClick={action.onClick}
           href={action.href}
+            testId={action.testId}
         />
       ))}
     </div>
   );
 }
 
-function PremiumActionButton({ label, variant = "secondary", onClick, href }) {
+function PremiumActionButton({ label, variant = "secondary", onClick, href, testId }) {
   const className = `premium-action-button premium-action-button-${variant === "primary" ? "primary" : "secondary"}`;
-  const testId = `card-action-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+  const derivedTestId = `card-action-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+  const resolvedTestId = testId || derivedTestId;
 
   if (href) {
     return (
-      <a className={className} href={href} data-testid={testId} onClick={(event) => onClick?.(event)}>
+      <a className={className} href={href} data-testid={resolvedTestId} onClick={(event) => onClick?.(event)}>
         {label}
       </a>
     );
   }
 
   return (
-    <button type="button" className={className} data-testid={testId} onClick={(event) => onClick?.(event)}>
+    <button type="button" className={className} data-testid={resolvedTestId} onClick={(event) => onClick?.(event)}>
       {label}
     </button>
   );
