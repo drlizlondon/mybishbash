@@ -103,4 +103,4 @@ Continued use of MyBishBash means you accept the updated Terms.
 
 # Contact
 
-support@bishbash.app
+support@mybishbash.app

@@ -90,7 +90,7 @@ Depending on your location, you may have rights to:
 - withdraw consent to optional communications
 
 To request deletion or support, contact:
-support@bishbash.app
+support@mybishbash.app
 
 ---
 
@@ -120,4 +120,4 @@ Continued use of MyBishBash after updates means you accept the revised policy.
 
 For questions about privacy or data handling:
 
-support@bishbash.app
+support@mybishbash.app
