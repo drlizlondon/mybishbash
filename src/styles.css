@@ -4902,6 +4902,7 @@ body {
 }
 
 .app-pause-sheet {
+  position: relative;
   width: min(100%, 480px);
   padding: 28px 24px calc(env(safe-area-inset-bottom) + 24px);
   border-radius: 28px;
@@ -4956,23 +4957,29 @@ body {
   transform: scale(0.98);
 }
 
-.app-pause-cancel {
-  width: 100%;
-  padding: 15px 20px;
+.app-pause-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-radius: 16px;
+  border-radius: 50%;
   background: transparent;
   color: var(--ink-muted);
-  font-size: 15px;
-  font-weight: 500;
-  text-align: center;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  margin-top: 4px;
-  transition: color 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
+  padding: 0;
 }
 
-.app-pause-cancel:active {
+.app-pause-close-btn:active {
   color: var(--charcoal);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* Confirmation state shown after the user picks a duration */
