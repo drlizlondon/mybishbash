@@ -1340,6 +1340,10 @@ function App() {
   const interceptActivationCounterRef = useRef(0);
   const launchAttemptCounterRef = useRef(0);
   const launchCompletedCardIdsRef = useRef(new Set());
+  // Tracks versionIds for which the app-pause bypass has already fired this
+  // page load so the routing useEffect doesn't call openDestinationApp on
+  // every state-change re-run.
+  const pauseBypassInitiatedRef = useRef(new Set());
   const loggedCardShownRef = useRef(new Set());
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
@@ -2732,16 +2736,6 @@ function App() {
     }
 
     if (route.kind === "intercept") {
-      // ── App pause bypass ─────────────────────────────────────────────────
-      // If the user has paused this app, open the destination directly and
-      // skip the entire card flow. Pause expires automatically by timestamp.
-      if (isAppPaused(route.versionId)) {
-        console.log("[LAUNCHER] App paused — bypassing card flow", { versionId: route.versionId });
-        openDestinationApp(route.versionId, { source: "app_pause_bypass", reason: "app_paused" });
-        return;
-      }
-      // ─────────────────────────────────────────────────────────────────────
-
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
       const routeNow = new Date();
@@ -2814,6 +2808,23 @@ function App() {
         }
         return;
       }
+
+      // ── App pause bypass ─────────────────────────────────────────────────
+      // Placed AFTER the readiness check so the "preparing" overlay is shown
+      // while data loads rather than a black screen.  The ref guard ensures
+      // openDestinationApp is called at most once per page load per versionId,
+      // preventing the rapid re-fire loop that occurred with every useEffect
+      // dependency change.
+      if (isAppPaused(route.versionId)) {
+        if (!pauseBypassInitiatedRef.current.has(route.versionId)) {
+          pauseBypassInitiatedRef.current.add(route.versionId);
+          console.log("[LAUNCHER] App paused — bypassing card flow", { versionId: route.versionId });
+          openDestinationApp(route.versionId, { source: "app_pause_bypass", reason: "app_paused" });
+        }
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       const isResumeInterceptLaunch = resumeLaunchNonce !== handledResumeLaunchNonceRef.current;
 
       if (
@@ -9066,8 +9077,16 @@ const PAUSE_DURATION_OPTIONS = [
 ];
 
 function AppPauseModal({ appName, onClose, onPause }) {
+  const [confirmedLabel, setConfirmedLabel] = useState(null);
+
+  function handleSelect(label, minutes) {
+    setConfirmedLabel(label);
+    // Brief confirmation before navigating so the user sees the selection land.
+    setTimeout(() => onPause(minutes), 1400);
+  }
+
   return (
-    <div className="modal-backdrop app-pause-backdrop" onClick={onClose}>
+    <div className="modal-backdrop app-pause-backdrop" onClick={confirmedLabel ? undefined : onClose}>
       <div
         className="app-pause-sheet"
         role="dialog"
@@ -9075,27 +9094,37 @@ function AppPauseModal({ appName, onClose, onPause }) {
         aria-labelledby="pause-sheet-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="app-pause-sheet-title" id="pause-sheet-title">
-          Pause MyBishBash?
-        </p>
-        <p className="app-pause-sheet-body">
-          For a short time, {appName} will open directly without showing cards.
-        </p>
-        <div className="app-pause-options">
-          {PAUSE_DURATION_OPTIONS.map(({ label, minutes }) => (
-            <button
-              key={minutes}
-              type="button"
-              className="app-pause-option"
-              onClick={() => onPause(minutes)}
-            >
-              {label}
+        {confirmedLabel ? (
+          <div className="app-pause-confirmed" aria-live="polite">
+            <span className="app-pause-confirmed-icon" aria-hidden="true">✓</span>
+            <p className="app-pause-sheet-title">Paused for {confirmedLabel}</p>
+            <p className="app-pause-sheet-body">Opening {appName}…</p>
+          </div>
+        ) : (
+          <>
+            <p className="app-pause-sheet-title" id="pause-sheet-title">
+              Pause MyBishBash?
+            </p>
+            <p className="app-pause-sheet-body">
+              For a short time, {appName} will open directly without showing cards.
+            </p>
+            <div className="app-pause-options">
+              {PAUSE_DURATION_OPTIONS.map(({ label, minutes }) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  className="app-pause-option"
+                  onClick={() => handleSelect(label, minutes)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="app-pause-cancel" onClick={onClose}>
+              Cancel
             </button>
-          ))}
-        </div>
-        <button type="button" className="app-pause-cancel" onClick={onClose}>
-          Cancel
-        </button>
+          </>
+        )}
       </div>
     </div>
   );

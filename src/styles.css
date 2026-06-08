@@ -4975,6 +4975,23 @@ body {
   color: var(--charcoal);
 }
 
+/* Confirmation state shown after the user picks a duration */
+.app-pause-confirmed {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0 4px;
+  text-align: center;
+  animation: fade-in 200ms ease both;
+}
+
+.app-pause-confirmed-icon {
+  display: block;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--coral, #e8745b);
+  margin-bottom: 4px;
+}
+
 .premium-greeting {
   margin: 0;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
