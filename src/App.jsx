@@ -9102,6 +9102,15 @@ function AppPauseModal({ appName, onClose, onPause }) {
           </div>
         ) : (
           <>
+            <button
+              type="button"
+              className="app-pause-close-btn"
+              aria-label="Close without pausing"
+              data-testid="pause-modal-close"
+              onClick={onClose}
+            >
+              ×
+            </button>
             <p className="app-pause-sheet-title" id="pause-sheet-title">
               Pause MyBishBash?
             </p>
@@ -9120,9 +9129,6 @@ function AppPauseModal({ appName, onClose, onPause }) {
                 </button>
               ))}
             </div>
-            <button type="button" className="app-pause-cancel" onClick={onClose}>
-              Cancel
-            </button>
           </>
         )}
       </div>
