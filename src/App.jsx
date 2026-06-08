@@ -3186,9 +3186,23 @@ function App() {
     return true;
   }
 
+  function isSafeExternalUrl(url) {
+    if (typeof url !== "string") return false;
+    try {
+      const parsed = new URL(url.trim());
+      return parsed.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
   function openExternalActionUrl(url, { source = "action_card", cardId = null } = {}) {
     if (!url) return;
-    console.log("[ACTION_CARD] opening external URL", { source, cardId, url });
+    if (!isSafeExternalUrl(url)) {
+      console.warn("[ACTION_CARD] blocked unsafe URL", { source, cardId, protocol: typeof url === "string" ? url.trim().split(":")[0] : typeof url });
+      return;
+    }
+    console.log("[ACTION_CARD] opening external URL", { source, cardId });
     const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
     if (typeof captureNavigation === "function") {
       const handled = captureNavigation(url, { source, cardId });
