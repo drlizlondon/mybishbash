@@ -984,15 +984,24 @@ textarea {
 }
 
 .library-section-chevron {
+  width: 20px;
+  height: 20px;
   color: var(--ink-muted);
-  font-size: 28px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transform: rotate(0deg);
   transition: transform 180ms ease;
+  flex-shrink: 0;
+}
+
+.library-section-chevron svg {
+  width: 100%;
+  height: 100%;
 }
 
 .library-section-chevron.open {
-  transform: rotate(90deg);
+  transform: rotate(180deg);
 }
 
 .library-section-body .card-stack {
@@ -1070,6 +1079,176 @@ textarea {
   font-size: 15px;
   line-height: 1.25;
   font-weight: 600;
+}
+
+/* ─── ExpandableCollection ─────────────────────────────────────────────────── */
+
+.expandable-collection {
+  display: grid;
+  gap: 0;
+}
+
+/* Animated body wrapper — CSS grid-template-rows trick.
+   Inner must have overflow: hidden so the row can collapse to 0. */
+.expandable-collection-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 250ms ease;
+}
+
+.expandable-collection-body-wrap.open {
+  grid-template-rows: 1fr;
+}
+
+.expandable-collection-body-inner {
+  overflow: hidden;
+  /* padding-top creates the gap between header and list card;
+     it is revealed gradually as the row grows */
+  padding-top: 0;
+  transition: padding-top 250ms ease;
+}
+
+.expandable-collection-body-wrap.open .expandable-collection-body-inner {
+  padding-top: 10px;
+}
+
+/* Fade + slide on the list card itself */
+.expandable-collection-body-inner .library-list-card {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 200ms ease 60ms, transform 200ms ease 60ms;
+}
+
+.expandable-collection-body-wrap.open .expandable-collection-body-inner .library-list-card {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── CollectionPreviewRow ─────────────────────────────────────────────────── */
+
+.collection-preview-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto 30px;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 11px 12px 11px 14px;
+  border-bottom: 1px solid rgba(120, 87, 65, 0.09);
+  color: var(--charcoal);
+  cursor: pointer;
+}
+
+.collection-preview-row:last-child,
+.collection-preview-row:has(+ .collection-view-all) {
+  border-bottom: 0;
+}
+
+.collection-preview-row.menu-open {
+  z-index: 130;
+}
+
+/* Small icon tile — reduced visual weight vs the section header icon */
+.collection-preview-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.collection-preview-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.collection-preview-copy {
+  min-width: 0;
+}
+
+.collection-preview-copy h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--charcoal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-preview-copy p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Optional status badge — same visual language as reminder-status-pill */
+.collection-preview-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(226, 237, 215, 0.82);
+  color: #7b986d;
+}
+
+.collection-preview-menu-trigger {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink-muted);
+}
+
+/* ─── View all footer ──────────────────────────────────────────────────────── */
+
+.collection-view-all {
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-top: 1px solid rgba(120, 87, 65, 0.07);
+  background: transparent;
+  color: var(--coral);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 0 0 24px 24px;
+  transition: background 120ms ease, opacity 120ms ease;
+}
+
+.collection-view-all:active {
+  background: rgba(232, 116, 91, 0.06);
+  opacity: 0.8;
+}
+
+/* ─── Reduced motion ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .expandable-collection-body-wrap,
+  .expandable-collection-body-inner,
+  .expandable-collection-body-inner .library-list-card {
+    transition: none;
+  }
+
+  /* Ensure content is visible immediately when reduced motion is on */
+  .expandable-collection-body-inner .library-list-card {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .library-card {
@@ -4153,6 +4332,37 @@ body {
 .library-list-copy p,
 .library-list-empty h3 {
   color: #6b6b6b;
+}
+
+.collection-preview-row {
+  border-bottom-color: #eeeae4;
+}
+
+.collection-preview-icon {
+  background: #fdf8f3;
+  border-color: #eeeae4;
+}
+
+.collection-preview-copy h3 {
+  color: #111111;
+}
+
+.collection-preview-copy p {
+  color: #6b6b6b;
+}
+
+.collection-preview-status {
+  background: #eaf4ec;
+  color: #2e7d32;
+}
+
+.collection-view-all {
+  color: #d85f47;
+  border-top-color: #eeeae4;
+}
+
+.collection-view-all:active {
+  background: #fff4ef;
 }
 
 .card-stack .library-card:first-of-type {

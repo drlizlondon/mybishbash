@@ -69,7 +69,8 @@ assertMatch("Library renders Commitment Cards section", appSource, /title="Commi
 assertMatch("Library renders Active Packs section", appSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
 assertMatch("Library default open states match product shape", appSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*\}\)/);
 assertMatch("Library uses compact list rows", appSource, /function LibraryListRow[\s\S]{0,1500}className=\{`library-list-row/);
-assertNoMatch("Library does not add View all links", appSource, /View all/);
+// "View all" footer is intentional — part of ExpandableCollection (shows when items > maxPreview)
+assertMatch("Library View all footer is gated on hasMore", appSource, /hasMore[\s\S]{0,160}collection-view-all/);
 assertMatch("Personal Library plus opens personal composer", appSource, /onCreatePersonal=\{\(\) => openCardComposerFromCurrentRoute\("personal"\)\}/);
 assertMatch("Commitment Library plus opens commitment composer", appSource, /onCreateCommitment=\{\(\) => openCardComposerFromCurrentRoute\("commitment"\)\}/);
 assertMatch("Active Packs Library plus opens Packs add/manage flow", appSource, /onAddPack=\{\(\) => navigateTo\("\/packs"\)\}/);
