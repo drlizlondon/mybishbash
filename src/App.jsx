@@ -4570,7 +4570,7 @@ function App() {
   }
 
   async function handleResetSharedState() {
-    const confirmed = window.confirm("Clear local development state on this launcher/device? This will log you out locally but not delete your cloud account.");
+    const confirmed = window.confirm("Clear all MyBishBash data from this device? This will remove your cards, packs, settings and local history. This cannot be undone. Your cloud account is not deleted.");
     if (!confirmed) return;
 
     try {
@@ -5229,6 +5229,7 @@ function App() {
                   onRefreshSession={handleRefreshSession}
                   onRefreshAppShell={refreshAppShell}
                   onResetSharedState={handleResetSharedState}
+                  isTester={testerStatus?.is_tester === true}
                   notificationSettings={notificationSettings}
                   notificationStatus={notificationStatus}
                   onEnableNotifications={enableNotifications}
@@ -7400,6 +7401,7 @@ function SettingsPanel({
   onRefreshSession,
   onRefreshAppShell,
   onResetSharedState,
+  isTester = false,
   notificationSettings,
   notificationStatus,
   onEnableNotifications,
@@ -7721,15 +7723,18 @@ function SettingsPanel({
           View deleted cards
         </button>
       </div>
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Development reset</p>
-          <span>Clear local development state on this launcher/device. This does not delete the cloud profile.</span>
+      {/* Dev-only: hidden from normal users. TODO: also gate Morning Summary debug the same way. */}
+      {isTester && (
+        <div className="settings-card">
+          <div className="settings-version-heading">
+            <p>Clear device data</p>
+            <span>Removes all cards, packs, settings and history from this device. Your cloud account is not deleted.</span>
+          </div>
+          <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
+            Clear all data from this device
+          </button>
         </div>
-        <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
-          Clear local development state
-        </button>
-      </div>
+      )}
 
       {isRestoreModalOpen ? (
         <RestoreActionCardsModal
