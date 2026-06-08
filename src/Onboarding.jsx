@@ -185,7 +185,17 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
               onPrimary={() => setStep("route")}
               canGoBack={Boolean(previousStep)}
               onBack={goBack}
-            />
+            >
+              <p className="tiny-note" style={{ textAlign: "center" }}>
+                Before you start, you can read the{" "}
+                <a href={`${import.meta.env.BASE_URL}privacy-policy.md`} target="_blank" rel="noreferrer">
+                  Privacy Policy
+                </a>{" "}and{" "}
+                <a href={`${import.meta.env.BASE_URL}terms-of-use.md`} target="_blank" rel="noreferrer">
+                  Terms of Use
+                </a>.
+              </p>
+            </OnboardingStep>
           ) : null}
 
           {step === "route" ? (
