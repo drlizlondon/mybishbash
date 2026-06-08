@@ -159,6 +159,13 @@ async function gotoApp(page: Page, path: string) {
   await page.goto(`/mybishbash${path}`);
 }
 
+async function navigateWithinApp(page: Page, path: string) {
+  await page.evaluate((nextPath) => {
+    window.history.pushState({}, '', `/mybishbash${nextPath}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
 async function simulateStandaloneDisplayMode(page: Page) {
   await page.addInitScript(() => {
     const originalMatchMedia = window.matchMedia?.bind(window);
