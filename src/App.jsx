@@ -1874,13 +1874,31 @@ function App() {
     setLauncherDataWaitExpired(false);
   }, [route.kind, route.versionId, resumeLaunchNonce]);
 
-  // When navigating away from an intercept route, prune the bypass ref so
-  // stale versionIds don't accumulate across a long session.
+  // Clear the pause-bypass ref and prune expired pause state on every route
+  // transition (kind or versionId change).  Adding versionId to the deps
+  // means switching between /intercept/instagram → /intercept/youtube also
+  // clears the ref, so each app gets a fresh bypass decision.
+  // clearExpiredAppPause is called here (once per transition) rather than
+  // inside the heavy routing useEffect (which runs on every state change).
   useEffect(() => {
-    if (route.kind !== "intercept" && pauseBypassInitiatedRef.current.size > 0) {
-      pauseBypassInitiatedRef.current.clear();
+    if (route.kind === "intercept") {
+      clearExpiredAppPause(route.versionId);
     }
-  }, [route.kind]);
+    pauseBypassInitiatedRef.current.clear();
+  }, [route.kind, route.versionId]);
+
+  // Clear the bypass ref on warm resume (app returns to foreground) so the
+  // pause bypass re-fires correctly when the user switches back to MyBishBash
+  // while still on an intercept route.
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        pauseBypassInitiatedRef.current.clear();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   useEffect(() => {
     if (route.kind !== "intercept") return undefined;
@@ -2745,10 +2763,9 @@ function App() {
     }
 
     if (route.kind === "intercept") {
-      // Prune any expired pause entry for this app so stale localStorage data
-      // doesn't accumulate. No-op if the pause is still active or never set.
-      clearExpiredAppPause(route.versionId);
-
+      // Expired app pauses are pruned once per route transition in a separate
+      // useEffect above — not here, to avoid a synchronous localStorage read
+      // on every state-change re-run of this effect.
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
       const routeNow = new Date();
