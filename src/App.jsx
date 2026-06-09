@@ -7926,24 +7926,26 @@ function SettingsPanel({
           Status: {notificationStatus || "unknown"}
         </p>
       </div>
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Morning Summary debug</p>
-          <span>Force yesterday’s reflection and inspect the raw events used by the summary.</span>
+      {isTester && (
+        <div className="settings-card">
+          <div className="settings-version-heading">
+            <p>Morning Summary debug</p>
+            <span>Force yesterday’s reflection and inspect the raw events used by the summary.</span>
+          </div>
+          <div className="sync-profile-row morning-summary-debug-actions">
+            <button type="button" className="pack-button secondary" onClick={onShowMorningSummaryNow}>
+              Show Morning Summary Now
+            </button>
+            <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForToday}>
+              Generate Summary for Today
+            </button>
+            <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForYesterday}>
+              Generate Summary for Yesterday
+            </button>
+          </div>
+          <MorningSummaryDebugLog summary={morningSummaryDebug} />
         </div>
-        <div className="sync-profile-row morning-summary-debug-actions">
-          <button type="button" className="pack-button secondary" onClick={onShowMorningSummaryNow}>
-            Show Morning Summary Now
-          </button>
-          <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForToday}>
-            Generate Summary for Today
-          </button>
-          <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForYesterday}>
-            Generate Summary for Yesterday
-          </button>
-        </div>
-        <MorningSummaryDebugLog summary={morningSummaryDebug} />
-      </div>
+      )}
       <div className="settings-card settings-compact">
         <div className="settings-version-heading">
           <p>Refresh MyBishBash</p>
@@ -7962,7 +7964,6 @@ function SettingsPanel({
           View deleted cards
         </button>
       </div>
-      {/* Dev-only: hidden from normal users. TODO: also gate Morning Summary debug the same way. */}
       {isTester && (
         <div className="settings-card">
           <div className="settings-version-heading">
