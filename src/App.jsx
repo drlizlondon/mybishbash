@@ -29,6 +29,7 @@ import {
   saveSetupComplete,
   isAppPaused,
   pauseApp,
+  clearExpiredAppPause,
 } from "./storage";
 import {
   createEventRecord,
@@ -1873,6 +1874,14 @@ function App() {
     setLauncherDataWaitExpired(false);
   }, [route.kind, route.versionId, resumeLaunchNonce]);
 
+  // When navigating away from an intercept route, prune the bypass ref so
+  // stale versionIds don't accumulate across a long session.
+  useEffect(() => {
+    if (route.kind !== "intercept" && pauseBypassInitiatedRef.current.size > 0) {
+      pauseBypassInitiatedRef.current.clear();
+    }
+  }, [route.kind]);
+
   useEffect(() => {
     if (route.kind !== "intercept") return undefined;
     const routeInterruptionPack = route.kind === "intercept"
@@ -2736,6 +2745,10 @@ function App() {
     }
 
     if (route.kind === "intercept") {
+      // Prune any expired pause entry for this app so stale localStorage data
+      // doesn't accumulate. No-op if the pause is still active or never set.
+      clearExpiredAppPause(route.versionId);
+
       const isTestMode = Boolean(testerStatus?.is_tester);
       const isDemoMode = window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
       const routeNow = new Date();

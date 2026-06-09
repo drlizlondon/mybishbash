@@ -17,7 +17,9 @@ export default defineConfig({
   testDir: './',
   testMatch: '**/*.spec.@(ts|js)',
   outputDir: 'test-results',
-  testIgnore: isStagingReleaseRun ? [] : ['e2e/staging-release.spec.js'],
+  testIgnore: isStagingReleaseRun
+    ? ['.claude/**']
+    : ['e2e/staging-release.spec.js', '.claude/**'],
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
