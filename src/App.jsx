@@ -5212,6 +5212,7 @@ function App() {
               {activeTab === "log" ? (
                 <LogPanel
                   events={logEventsForPanel}
+                  allEvents={events}
                   timezone={profile.timezone}
                   weeklyShiftCount={getWeeklyShiftCount(events)}
                   filter={logFilter}

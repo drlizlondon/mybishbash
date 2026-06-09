@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 import { formatTwentyFourHourTime } from "../eventLog";
 import { HeartGlyph, LogGlyph } from "./Glyphs";
 
@@ -43,6 +44,46 @@ function getLogEventDisplayLabel(event) {
     intercept_card_restored: "Restored interruption card",
   };
   return labels[event.event_type] ?? event.event_type;
+}
+
+const SHIFT_TYPES = new Set(["bash_done", "bash_do_now", "intercept_continue_to_app"]);
+
+function getDailyShiftData(events, timezone, days = 14) {
+  const today = new Date();
+  const buckets = [];
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toLocaleDateString("en-CA", { timeZone: timezone }); // YYYY-MM-DD
+    const shortLabel = d.toLocaleDateString("en-GB", { timeZone: timezone, day: "numeric", month: "short" });
+    const dayLabel = d.toLocaleDateString("en-GB", { timeZone: timezone, weekday: "short" });
+    buckets.push({ key, shortLabel, dayLabel, count: 0 });
+  }
+
+  const bucketMap = new Map(buckets.map((b) => [b.key, b]));
+
+  for (const event of events) {
+    if (!SHIFT_TYPES.has(event.event_type)) continue;
+    const dateKey = new Date(event.created_at).toLocaleDateString("en-CA", { timeZone: timezone });
+    const bucket = bucketMap.get(dateKey);
+    if (bucket) bucket.count++;
+  }
+
+  return buckets;
+}
+
+// ── Chart tooltip ─────────────────────────────────────────────────────────────
+
+function ShiftTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const { shortLabel, count } = payload[0].payload;
+  return (
+    <div className="log-chart-tooltip">
+      <span className="log-chart-tooltip-date">{shortLabel}</span>
+      <span className="log-chart-tooltip-count">{count} {count === 1 ? "shift" : "shifts"}</span>
+    </div>
+  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -145,16 +186,20 @@ function EventDetailModal({ event, timezone, onClose }) {
 // ── LogPanel ──────────────────────────────────────────────────────────────────
 
 /**
- * @param {object} props
- * @param {Array}  props.events            - Filtered events to display.
- * @param {string} props.timezone          - User's IANA timezone.
- * @param {number} props.weeklyShiftCount  - Shift count for the hero growth card.
- * @param {string} props.filter            - "all" | "intercepts"
- * @param {Function} [props.onShowSummary] - Opens yesterday's daily reflection overlay.
+ * @param {object}   props
+ * @param {Array}    props.events            - Filtered events for the list.
+ * @param {Array}    [props.allEvents]       - Full unfiltered events for the chart.
+ * @param {string}   props.timezone          - User's IANA timezone.
+ * @param {number}   props.weeklyShiftCount  - Shift count for the hero growth card.
+ * @param {string}   props.filter            - "all" | "intercepts"
+ * @param {Function} [props.onShowSummary]   - Opens yesterday's daily reflection overlay.
  */
-export function LogPanel({ events, timezone, weeklyShiftCount, filter, onShowSummary }) {
+export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter, onShowSummary }) {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const filledDots = Math.min(weeklyShiftCount, 14);
+
+  const chartData = getDailyShiftData(allEvents ?? events, timezone);
+  const maxCount = Math.max(...chartData.map((d) => d.count), 1);
 
   return (
     <section className="log-screen">
@@ -190,15 +235,39 @@ export function LogPanel({ events, timezone, weeklyShiftCount, filter, onShowSum
         )}
       </article>
 
-      {onShowSummary ? (
-        <article className="log-summary-card">
-          <h3>Daily reflection</h3>
-          <p>See how yesterday's little choices added up.</p>
-          <button type="button" className="log-summary-btn" onClick={onShowSummary}>
-            View yesterday's reflection
-          </button>
-        </article>
-      ) : null}
+      <article className="log-chart-card">
+        <h3>14-day activity</h3>
+        <div className="log-chart-wrap" aria-hidden="true">
+          <ResponsiveContainer width="100%" height={120}>
+            <BarChart data={chartData} barCategoryGap="30%" margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+              <XAxis
+                dataKey="dayLabel"
+                tick={{ fontSize: 11, fill: "#a0887a" }}
+                tickLine={false}
+                axisLine={false}
+                interval={1}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 11, fill: "#a0887a" }}
+                tickLine={false}
+                axisLine={false}
+                domain={[0, maxCount + 1]}
+                tickCount={Math.min(maxCount + 2, 5)}
+              />
+              <Tooltip content={<ShiftTooltip />} cursor={{ fill: "rgba(232,116,91,0.08)" }} />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={index}
+                    fill={entry.count > 0 ? "var(--coral, #e8745b)" : "rgba(232,116,91,0.15)"}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </article>
 
       <article className="recent-moments-card">
         <h3>Recent moments</h3>
@@ -224,6 +293,16 @@ export function LogPanel({ events, timezone, weeklyShiftCount, filter, onShowSum
           <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
         )}
       </article>
+
+      {onShowSummary ? (
+        <article className="log-summary-card">
+          <h3>Daily reflection</h3>
+          <p>See how yesterday's little choices added up.</p>
+          <button type="button" className="log-summary-btn" onClick={onShowSummary}>
+            View yesterday's reflection
+          </button>
+        </article>
+      ) : null}
 
       {selectedEvent ? (
         <EventDetailModal event={selectedEvent} timezone={timezone} onClose={() => setSelectedEvent(null)} />
