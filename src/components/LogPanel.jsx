@@ -81,7 +81,7 @@ function ShiftTooltip({ active, payload }) {
   return (
     <div className="log-chart-tooltip">
       <span className="log-chart-tooltip-date">{shortLabel}</span>
-      <span className="log-chart-tooltip-count">{count} {count === 1 ? "shift" : "shifts"}</span>
+      <span className="log-chart-tooltip-count">{count} {count === 1 ? "moment" : "moments"}</span>
     </div>
   );
 }
@@ -235,8 +235,18 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
         )}
       </article>
 
+      {onShowSummary ? (
+        <article className="log-summary-card">
+          <h3>Daily reflection</h3>
+          <p>See how yesterday's little choices added up.</p>
+          <button type="button" className="log-summary-btn" onClick={onShowSummary}>
+            View yesterday's reflection
+          </button>
+        </article>
+      ) : null}
+
       <article className="log-chart-card">
-        <h3>14-day activity</h3>
+        <h3>Your last 14 days</h3>
         <div className="log-chart-wrap" aria-hidden="true">
           <ResponsiveContainer width="100%" height={120}>
             <BarChart data={chartData} barCategoryGap="30%" margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
@@ -293,16 +303,6 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
           <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
         )}
       </article>
-
-      {onShowSummary ? (
-        <article className="log-summary-card">
-          <h3>Daily reflection</h3>
-          <p>See how yesterday's little choices added up.</p>
-          <button type="button" className="log-summary-btn" onClick={onShowSummary}>
-            View yesterday's reflection
-          </button>
-        </article>
-      ) : null}
 
       {selectedEvent ? (
         <EventDetailModal event={selectedEvent} timezone={timezone} onClose={() => setSelectedEvent(null)} />
