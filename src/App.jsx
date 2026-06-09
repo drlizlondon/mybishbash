@@ -3225,15 +3225,46 @@ function App() {
       return;
     }
 
-    openDestinationApp(versionId, {
-      source,
-      reason: "fake_launcher_icon_clicked",
-    });
+    // ── Settings / HQ context ────────────────────────────────────────────────
+    // The settings panel is admin/config only — not the ordinary user journey.
+    // Tapping a launcher icon from there goes directly to the app with no card.
+    if (source === "settings_fake_launcher") {
+      openDestinationApp(versionId, { source, reason: "fake_launcher_icon_clicked" });
+      return;
+    }
+
+    // ── Home-screen / overlay shortcut: enforce the card flow ────────────────
+    // Always clear a potentially-expired pause before deciding to bypass, so a
+    // stale localStorage entry can never accidentally skip the intervention.
+    clearExpiredAppPause(versionId);
+
+    if (isAppPaused(versionId)) {
+      // Active, unexpired, app-specific pause → open real destination directly.
+      console.log("[LAUNCHER] App paused — bypassing card flow from shortcut", { versionId, source });
+      openDestinationApp(versionId, { source, reason: "fake_launcher_icon_clicked" });
+      return;
+    }
+
+    // No active pause → navigate into the MyBishBash intervention flow.
+    // The routing useEffect will select a card (or show the caught-up empty screen).
+    // The pause button is shown on cards launched from this path.
+    console.log("[LAUNCHER] No active pause — entering card flow", { versionId, source });
+    navigateTo(`/intercept/${versionId}`);
   }
 
   function handleOverlayFakeLauncherLaunch(versionId) {
     handleFakeLauncherLaunch(versionId, "overlay_fake_launcher");
   }
+
+  // E2E test hook — lets Playwright tests drive handleFakeLauncherLaunch without
+  // needing a real Supabase session (which the FakeAppLauncherBar normally requires).
+  useEffect(() => {
+    if (!e2eMode) return;
+    window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH = (versionId, source = "home_fake_launcher_bar") => {
+      handleFakeLauncherLaunch(versionId, source);
+    };
+    return () => { delete window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH; };
+  });
 
   // Called when the user selects a pause duration from the pause modal.
   // pauseApp write is intentionally deferred here — AppPauseModal delays

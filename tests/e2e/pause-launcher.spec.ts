@@ -12,6 +12,14 @@
  *  - Pause is per-app: pausing safari does not affect youtube
  *  - Expired pauses are ignored; cards are shown as normal
  *  - Normal card completion still routes to continue-to-app
+ *
+ * Regression guard (fake-launcher bypass regression):
+ *  - Tapping a fake launcher icon with NO active pause must NOT go directly to the app;
+ *    it must enter the MyBishBash card/intervention flow.
+ *  - Tapping a fake launcher icon WITH an active pause bypasses cards and opens the app.
+ *  - Expired pause does not grant bypass when tapped from the fake launcher bar.
+ *  - Pause for safari does not bypass card flow for youtube.
+ *  - Warm resume after bypass does not keep stale bypass state.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -20,6 +28,7 @@ declare global {
   interface Window {
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
+    __MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?: (versionId: string, source?: string) => void;
   }
 }
 
@@ -241,6 +250,114 @@ test('continue-card-after-normal-completion — Done on personal card shows cont
 
   // Continue-to-app card must appear
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible({ timeout: 5000 });
+});
+
+// ── Fake-launcher bypass regression guard ─────────────────────────────────────
+// These tests call window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH (exposed only in
+// E2E mode) to simulate a home-screen fake launcher tap without needing a real
+// Supabase session. They directly guard against the regression where
+// handleFakeLauncherLaunch unconditionally called openDestinationApp.
+
+test('fake-launcher-no-pause-shows-card — fake launcher tap with no pause enters card flow', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('fl1', 'Fake launcher card')] });
+  await page.goto('/mybishbash/home');
+
+  // Wait for the E2E hook to be available (registered after first render).
+  await page.waitForFunction(() => typeof window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function', { timeout: 5000 });
+
+  // Trigger a fake launcher tap for safari with NO active pause.
+  await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('safari'));
+
+  // The card overlay must appear — no direct navigation to the real app.
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+
+  // No navigation attempt must have fired.
+  const attempts = await getNavigationAttempts(page);
+  expect(attempts).toHaveLength(0);
+});
+
+test('fake-launcher-with-pause-bypasses — fake launcher tap with active pause skips card flow', async ({ page }) => {
+  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await seedState(page, {
+    cards: [personalCard('fl2', 'Bypass card')],
+    appPauses: { safari: futureExpiry },
+  });
+  await page.goto('/mybishbash/home');
+
+  await page.waitForFunction(() => typeof window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function', { timeout: 5000 });
+
+  // Trigger fake launcher tap — safari IS paused, so direct launch expected.
+  await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('safari'));
+
+  // A navigation attempt must fire directly — no card shown.
+  await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+});
+
+test('fake-launcher-expired-pause-shows-card — expired pause does not grant bypass from fake launcher', async ({ page }) => {
+  const pastExpiry = new Date(Date.now() - 60 * 1000).toISOString();
+  await seedState(page, {
+    cards: [personalCard('fl3', 'Expired bypass card')],
+    appPauses: { safari: pastExpiry },
+  });
+  await page.goto('/mybishbash/home');
+
+  await page.waitForFunction(() => typeof window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function', { timeout: 5000 });
+
+  await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('safari'));
+
+  // Expired pause → card flow, no navigation.
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+  const attempts = await getNavigationAttempts(page);
+  expect(attempts).toHaveLength(0);
+});
+
+test('fake-launcher-app-specific — safari pause does not bypass card flow for youtube', async ({ page }) => {
+  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await seedState(page, {
+    cards: [personalCard('fl4', 'Cross-app fake launcher card')],
+    appPauses: { safari: futureExpiry },
+  });
+  await page.goto('/mybishbash/home');
+
+  await page.waitForFunction(() => typeof window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function', { timeout: 5000 });
+
+  // Tap youtube — safari is paused but youtube is not.
+  await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('youtube'));
+
+  // YouTube card flow must be entered, no direct navigation.
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+  const attempts = await getNavigationAttempts(page);
+  expect(attempts).toHaveLength(0);
+});
+
+test('fake-launcher-warm-resume-clears-bypass — revisiting home after bypass does not re-bypass', async ({ page }) => {
+  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await seedState(page, {
+    cards: [personalCard('fl5', 'Warm resume card')],
+    appPauses: { safari: futureExpiry },
+  });
+  await page.goto('/mybishbash/home');
+
+  await page.waitForFunction(() => typeof window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function', { timeout: 5000 });
+
+  // First tap — paused, direct bypass fires.
+  await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('safari'));
+  await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+
+  // Clear the pause so next tap should show cards.
+  await page.evaluate(() => {
+    const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
+    delete pauses['safari'];
+    window.localStorage.setItem('mybishbash.app-pauses.v1', JSON.stringify(pauses));
+    window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
+  });
+
+  // Second tap — no pause now, must enter card flow.
+  await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('safari'));
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+  const attempts = await getNavigationAttempts(page);
+  expect(attempts).toHaveLength(0);
 });
 
 test('no-button-overlap — pause button does not cover dashboard button on mobile viewport', async ({ page }) => {

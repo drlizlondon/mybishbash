@@ -215,37 +215,24 @@ test('app loads into a safe entry state without console errors', async ({ page }
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('in-app fake launchers open real destinations without showing interruption cards', async ({ page }) => {
+test('in-app fake launchers route to caught-up screen when no cards and no pause', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
   await gotoApp(page, '/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  const expectedDestinations = {
-    safari: safariDesktopDestination,
-    youtube: /^https:\/\/www\.youtube\.com/,
-    instagram: /^https:\/\/www\.instagram\.com/,
-  };
-
-  for (const [launcherId, expectedDestination] of Object.entries(expectedDestinations)) {
-    await page.getByTestId(`fake-launcher-${launcherId}`).click();
-    await expect.poll(async () => (await getNavigationAttempts(page)).length).toBeGreaterThan(0);
-    const attempts = await getNavigationAttempts(page);
-    const latest = attempts[attempts.length - 1];
-    expect(latest.href).toMatch(expectedDestination);
-    expect(latest.metadata).toMatchObject({
-      versionId: launcherId,
-      reason: 'fake_launcher_icon_clicked',
-    });
-    await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-    await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
-  }
+  // Tapping any fake launcher with no active pause must enter the card flow,
+  // not launch the real app directly.
+  await page.getByTestId('fake-launcher-safari').click();
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
 
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('Safari desktop fake launcher uses web fallback destination', async ({ page }) => {
+test('Safari desktop fake launcher routes to caught-up screen when no cards and no pause', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
@@ -253,20 +240,16 @@ test('Safari desktop fake launcher uses web fallback destination', async ({ page
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await page.getByTestId('fake-launcher-safari').click();
 
-  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
-  const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(safariDesktopDestination);
-  expect(attempt.href).not.toMatch(safariMarketingDestination);
-  expect(attempt.metadata).toMatchObject({
-    versionId: 'safari',
-    reason: 'fake_launcher_icon_clicked',
-  });
+  // No active pause → card flow → empty caught-up screen
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester in-app fake launcher shortcuts open destinations without starting intervention', async ({ page }) => {
+test('tester in-app fake launcher shortcuts enter card flow (no active pause)', async ({ page }) => {
+  // Per product requirement: direct launch ONLY when there is an active, unexpired pause.
+  // Tester mode does not bypass the card/intervention flow from the fake launcher bar.
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [
@@ -280,37 +263,16 @@ test('tester in-app fake launcher shortcuts open destinations without starting i
   await gotoApp(page, '/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  const expectedDestinations = {
-    safari: safariDesktopDestination,
-    instagram: /^https:\/\/www\.instagram\.com/,
-    youtube: /^https:\/\/www\.youtube\.com/,
-  };
-
-  for (const [launcherId, expectedDestination] of Object.entries(expectedDestinations)) {
-    const attemptsBefore = (await getNavigationAttempts(page)).length;
-    await page.getByTestId(`fake-launcher-${launcherId}`).click();
-    await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(attemptsBefore + 1);
-    const attempts = await getNavigationAttempts(page);
-    const latest = attempts[attempts.length - 1];
-    expect(latest.href).toMatch(expectedDestination);
-    expect(latest.metadata).toMatchObject({
-      versionId: launcherId,
-      source: 'home_fake_launcher_bar',
-      reason: 'fake_launcher_icon_clicked',
-    });
-    await expect(page).toHaveURL(/\/mybishbash\/home$/);
-    await expect(page.getByTestId('card-overlay-pack')).toHaveCount(0);
-    await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-    await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
-    await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
-    await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.entrySurface)).toBe('mybishbash_home');
-    await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.launcherId ?? null)).toBe(null);
-  }
+  // Tapping a fake launcher with no active pause must enter the card flow,
+  // even in tester mode — direct launch only happens with an active pause.
+  await page.getByTestId('fake-launcher-safari').click();
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
 
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('Safari iOS fake launcher attempts Safari-specific x-safari destination', async ({ browser }) => {
+test('Safari iOS fake launcher routes to caught-up screen when no cards and no pause', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 12'] });
   const page = await context.newPage();
   await simulateStandaloneDisplayMode(page);
@@ -321,16 +283,10 @@ test('Safari iOS fake launcher attempts Safari-specific x-safari destination', a
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await page.getByTestId('fake-launcher-safari').click();
 
-  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
-  const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(safariIOSDestination);
-  expect(attempt.href).not.toMatch(safariMarketingDestination);
-  expect(attempt.metadata).toMatchObject({
-    versionId: 'safari',
-    reason: 'fake_launcher_icon_clicked',
-  });
+  // No active pause → card flow → empty caught-up screen
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
   await expectNoConsoleErrors(consoleErrors);
   await context.close();
 });
@@ -642,13 +598,9 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
   await expect(page.getByTestId('home-panel')).toBeVisible();
 
   await page.getByTestId('fake-launcher-instagram').click();
-  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
-  const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(/^https:\/\/www\.instagram\.com/);
-  expect(attempt.metadata).toMatchObject({
-    versionId: 'instagram',
-    reason: 'fake_launcher_icon_clicked',
-  });
+  // No active pause → card flow → empty caught-up screen
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
   await expectNoConsoleErrors(consoleErrors);
 });
