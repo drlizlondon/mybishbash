@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   DEFAULT_ACTION_CARDS,
@@ -3251,7 +3251,9 @@ function App() {
   }
 
   // Called when the user selects a pause duration from the pause modal.
-  // Stores the expiry timestamp and immediately opens the real destination.
+  // pauseApp write is intentionally deferred here — AppPauseModal delays
+  // onPause by 1400ms so the confirmation screen is visible before navigating.
+  // The write therefore happens atomically with the navigation, not before.
   function handlePauseApp(appId, durationMinutes) {
     const expiry = pauseApp(appId, durationMinutes);
     console.log("[LAUNCHER] App paused by user", { appId, durationMinutes, expiry });
@@ -8846,6 +8848,7 @@ function CardRevealTemplate({
   const hasLaunchers = launchers?.length > 0;
   const hasActions = actions?.length > 0;
   const [showPauseModal, setShowPauseModal] = useState(false);
+  const pauseButtonRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -8866,12 +8869,14 @@ function CardRevealTemplate({
       {onCreateCard ? <PremiumCreateShortcut onClick={onCreateCard} /> : null}
       {launcherAppId && onPauseApp ? (
         <PremiumPauseShortcut
+          ref={pauseButtonRef}
           onClick={() => setShowPauseModal(true)}
         />
       ) : null}
       {showPauseModal && launcherAppId && onPauseApp ? (
         <AppPauseModal
           appName={launcherAppName ?? launcherAppId}
+          triggerRef={pauseButtonRef}
           onClose={() => setShowPauseModal(false)}
           onPause={(mins) => {
             setShowPauseModal(false);
@@ -9048,9 +9053,10 @@ function PremiumCreateShortcut({ onClick }) {
 // Appears only during fake-launcher / protected-app flows (when launcherAppId is set).
 // Positioned below the dashboard (grid) shortcut on the top-right.
 
-function PremiumPauseShortcut({ onClick }) {
+const PremiumPauseShortcut = React.forwardRef(function PremiumPauseShortcut({ onClick }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       className="premium-dashboard-shortcut premium-pause-shortcut"
       onClick={onClick}
@@ -9064,7 +9070,7 @@ function PremiumPauseShortcut({ onClick }) {
       </svg>
     </button>
   );
-}
+});
 
 // ─── AppPauseModal ────────────────────────────────────────────────────────────
 // Bottom sheet asking the user how long to pause MyBishBash for the current app.
@@ -9076,22 +9082,35 @@ const PAUSE_DURATION_OPTIONS = [
   { label: "3 hours",  minutes: 180 },
 ];
 
-function AppPauseModal({ appName, onClose, onPause }) {
+function AppPauseModal({ appName, onClose, onPause, triggerRef = null }) {
   const [confirmedLabel, setConfirmedLabel] = useState(null);
+  const sheetRef = useRef(null);
+
+  // Move focus into the dialog on mount; restore to the trigger button on close.
+  useEffect(() => {
+    const prev = document.activeElement;
+    sheetRef.current?.focus();
+    return () => {
+      (triggerRef?.current ?? prev)?.focus();
+    };
+  }, [triggerRef]);
 
   function handleSelect(label, minutes) {
     setConfirmedLabel(label);
-    // Brief confirmation before navigating so the user sees the selection land.
+    // pauseApp write is deferred to match the confirmation delay so the
+    // localStorage write and the navigation happen atomically.
     setTimeout(() => onPause(minutes), 1400);
   }
 
   return (
     <div className="modal-backdrop app-pause-backdrop" onClick={confirmedLabel ? undefined : onClose}>
       <div
+        ref={sheetRef}
         className="app-pause-sheet"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pause-sheet-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {confirmedLabel ? (
