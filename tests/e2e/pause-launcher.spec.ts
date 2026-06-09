@@ -242,3 +242,21 @@ test('continue-card-after-normal-completion — Done on personal card shows cont
   // Continue-to-app card must appear
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible({ timeout: 5000 });
 });
+
+test('no-button-overlap — pause button does not cover dashboard button on mobile viewport', async ({ page }) => {
+  // Use a narrow iPhone-style viewport where overlap is most likely.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seedState(page, { cards: [personalCard('p9', 'Overlap test card')] });
+  await page.goto('/mybishbash/intercept/safari');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+
+  const dashBox = await page.getByTestId('dashboard-shortcut').boundingBox();
+  const pauseBox = await page.getByTestId('pause-app-button').boundingBox();
+
+  expect(dashBox).not.toBeNull();
+  expect(pauseBox).not.toBeNull();
+
+  // Verify no vertical overlap: pause button top must be at or below dashboard bottom.
+  const dashBottom = dashBox!.y + dashBox!.height;
+  expect(pauseBox!.y).toBeGreaterThanOrEqual(dashBottom - 2); // 2px tolerance for sub-pixel rounding
+});
