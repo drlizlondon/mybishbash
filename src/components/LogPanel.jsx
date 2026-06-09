@@ -46,9 +46,7 @@ function getLogEventDisplayLabel(event) {
   return labels[event.event_type] ?? event.event_type;
 }
 
-const SHIFT_TYPES = new Set(["bash_done", "bash_do_now", "intercept_continue_to_app"]);
-
-function getDailyShiftData(events, timezone, days = 14) {
+function getDailyMomentData(events, timezone, days = 14) {
   const today = new Date();
   const buckets = [];
 
@@ -64,7 +62,6 @@ function getDailyShiftData(events, timezone, days = 14) {
   const bucketMap = new Map(buckets.map((b) => [b.key, b]));
 
   for (const event of events) {
-    if (!SHIFT_TYPES.has(event.event_type)) continue;
     const dateKey = new Date(event.created_at).toLocaleDateString("en-CA", { timeZone: timezone });
     const bucket = bucketMap.get(dateKey);
     if (bucket) bucket.count++;
@@ -198,7 +195,7 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
   const [selectedEvent, setSelectedEvent] = useState(null);
   const filledDots = Math.min(weeklyShiftCount, 14);
 
-  const chartData = getDailyShiftData(allEvents ?? events, timezone);
+  const chartData = getDailyMomentData(allEvents ?? events, timezone);
   const maxCount = Math.max(...chartData.map((d) => d.count), 1);
 
   return (
@@ -232,6 +229,31 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
             <h3>Your first little shift will appear here.</h3>
             <p>Every quiet choice begins somewhere.</p>
           </div>
+        )}
+      </article>
+
+      <article className="recent-moments-card">
+        <h3>Recent moments</h3>
+        {events.length > 0 ? (
+          <div className="recent-event-list">
+            {events.map((event, index) => (
+              <button
+                key={event.id}
+                type="button"
+                className={`event-row ${index === events.length - 1 ? "last" : ""}`}
+                onClick={() => setSelectedEvent(event)}
+                aria-label={`Open details for ${describeLogEvent(event)}`}
+              >
+                <span className="event-icon-bubble" aria-hidden="true">
+                  {event.event_type.startsWith("intercept_") ? <LogGlyph /> : <HeartGlyph />}
+                </span>
+                <span className="event-copy">{describeLogEvent(event)}</span>
+                <span className="event-time">{formatTwentyFourHourTime(event.created_at, timezone)}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
         )}
       </article>
 
@@ -277,31 +299,6 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </article>
-
-      <article className="recent-moments-card">
-        <h3>Recent moments</h3>
-        {events.length > 0 ? (
-          <div className="recent-event-list">
-            {events.map((event, index) => (
-              <button
-                key={event.id}
-                type="button"
-                className={`event-row ${index === events.length - 1 ? "last" : ""}`}
-                onClick={() => setSelectedEvent(event)}
-                aria-label={`Open details for ${describeLogEvent(event)}`}
-              >
-                <span className="event-icon-bubble" aria-hidden="true">
-                  {event.event_type.startsWith("intercept_") ? <LogGlyph /> : <HeartGlyph />}
-                </span>
-                <span className="event-copy">{describeLogEvent(event)}</span>
-                <span className="event-time">{formatTwentyFourHourTime(event.created_at, timezone)}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
-        )}
       </article>
 
       {selectedEvent ? (
