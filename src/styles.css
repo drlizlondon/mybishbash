@@ -3602,6 +3602,110 @@ textarea {
   outline-offset: 1px;
 }
 
+/* ── Time-window settings ──────────────────────────────────────────────────── */
+.tw-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tw-label {
+  min-width: 96px;
+  font-size: 0.93rem;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.tw-time-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tw-time-hint {
+  font-size: 0.82rem;
+  color: var(--ink-muted, #888);
+  white-space: nowrap;
+}
+
+.tw-time-input.settings-input {
+  width: auto;
+  min-width: 100px;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.92rem;
+}
+
+.tw-wraps-hint {
+  font-size: 0.78rem;
+  color: var(--ink-muted, #888);
+  font-style: italic;
+  margin-left: auto;
+}
+
+.tw-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.settings-save-btn {
+  padding: 10px 20px;
+  border-radius: 20px;
+  background: var(--coral, #e9785d);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+}
+
+.settings-save-btn:hover {
+  opacity: 0.88;
+}
+
+.tw-reset-btn {
+  background: none;
+  border: none;
+  color: var(--ink-muted, #888);
+  font-size: 0.86rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 0;
+}
+
+.tw-reset-btn:hover {
+  color: var(--charcoal);
+}
+
+.tw-error {
+  font-size: 0.86rem;
+  color: var(--coral, #e9785d);
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.tw-saved {
+  font-size: 0.86rem;
+  color: #5a9a6b;
+  margin-top: 8px;
+}
+
+/* ── Offline card overlay ──────────────────────────────────────────────────── */
+.premium-card-offline {
+  /* shares most chrome with .premium-card-empty — just a tonal shift */
+  opacity: 0.96;
+}
+
 .pack-editor-copy {
   color: var(--ink-muted);
   font-size: 0.92rem;

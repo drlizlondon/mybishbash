@@ -261,6 +261,46 @@ export const TIME_WINDOWS = [
   { id: "night", label: "At night" },
 ];
 
+/** Default hour boundaries for each time window (24-hour, inclusive start, exclusive end). */
+export const DEFAULT_WINDOW_DEFS = [
+  { id: "morning", label: "Morning",       start: 5,  end: 12 },
+  { id: "day",     label: "During the day", start: 12, end: 18 },
+  { id: "evening", label: "Evening",       start: 18, end: 23 },
+  { id: "night",   label: "At night",      start: 23, end: 5  }, // wraps midnight
+];
+
+/**
+ * Validates a window-defs array.  Returns true only when the value is an array
+ * of exactly 4 items each with a matching id, numeric start/end in [0,23].
+ */
+export function isValidWindowDefs(defs) {
+  const REQUIRED_IDS = ["morning", "day", "evening", "night"];
+  if (!Array.isArray(defs) || defs.length !== 4) return false;
+  return defs.every(
+    (d, i) =>
+      d &&
+      d.id === REQUIRED_IDS[i] &&
+      typeof d.start === "number" &&
+      typeof d.end === "number" &&
+      d.start >= 0 && d.start <= 23 &&
+      d.end >= 0 && d.end <= 23 &&
+      d.start !== d.end,
+  );
+}
+
+// Module-level singleton — set once on boot and updated whenever the user saves prefs.
+let _activeWindowDefs = DEFAULT_WINDOW_DEFS;
+
+/** Replace the active window definitions used by getCurrentWindow. */
+export function setWindowDefs(defs) {
+  _activeWindowDefs = isValidWindowDefs(defs) ? defs : DEFAULT_WINDOW_DEFS;
+}
+
+/** Return the current active window definitions. */
+export function getWindowDefs() {
+  return _activeWindowDefs;
+}
+
 export const FREQUENCY_OPTIONS = [
   { id: "once_daily", label: "Once a day" },
   { id: "multi_daily", label: "More than once a day" },
@@ -334,10 +374,17 @@ export function getGreeting(date = new Date(), timeZone) {
 
 export function getCurrentWindow(date = new Date(), timeZone) {
   const { hour } = getDateContext(date, timeZone);
-  if (hour >= 5 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 18) return "day";
-  if (hour >= 18 && hour < 23) return "evening";
-  return "night";
+  for (const def of _activeWindowDefs) {
+    if (def.start < def.end) {
+      // Normal window (e.g. morning 5–12)
+      if (hour >= def.start && hour < def.end) return def.id;
+    } else {
+      // Midnight-crossing window (e.g. night 23–5)
+      if (hour >= def.start || hour < def.end) return def.id;
+    }
+  }
+  // Fallback — should never occur if defs form a complete 24-hour partition.
+  return _activeWindowDefs[_activeWindowDefs.length - 1].id;
 }
 
 function getTimeOfDayMinutes(date = new Date(), timeZone) {

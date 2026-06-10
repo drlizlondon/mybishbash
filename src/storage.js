@@ -16,6 +16,7 @@ const ACTION_CARD_DEFAULTS_VERSION_KEY = "mybishbash.action-card-defaults-versio
 const NOTIFICATIONS_KEY = "mybishbash.notifications.v1";
 const NOTIFICATION_SCHEDULE_KEY = "mybishbash.notification-schedule.v1";
 const APP_PAUSES_KEY = "mybishbash.app-pauses.v1";
+const TIMING_WINDOWS_PREFS_KEY = "mybishbash.timing-windows-prefs.v1";
 const ACTION_CARD_DEFAULTS_VERSION = "2026-05-13";
 const STORAGE_PREFIX = "mybishbash";
 const LEGACY_STORAGE_PREFIX = "bish" + "bash";
@@ -425,6 +426,40 @@ export function loadNotificationSchedule() {
 
 export function saveNotificationSchedule(value) {
   setStorageItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(value));
+}
+
+// ─── Timing-window preferences ──────────────────────────────────────────────
+// Stores the user's custom hour boundaries for morning/day/evening/night.
+// Returns null if nothing is stored or the stored value is invalid — the caller
+// should fall back to DEFAULT_WINDOW_DEFS from utils.js in that case.
+
+export function loadTimingWindowsPrefs() {
+  try {
+    const stored = JSON.parse(getStorageItem(TIMING_WINDOWS_PREFS_KEY));
+    if (
+      Array.isArray(stored) &&
+      stored.length === 4 &&
+      stored.every(
+        (d) =>
+          d &&
+          typeof d.id === "string" &&
+          typeof d.start === "number" &&
+          typeof d.end === "number" &&
+          d.start >= 0 && d.start <= 23 &&
+          d.end >= 0 && d.end <= 23 &&
+          d.start !== d.end,
+      )
+    ) {
+      return stored;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveTimingWindowsPrefs(value) {
+  setStorageItem(TIMING_WINDOWS_PREFS_KEY, JSON.stringify(value));
 }
 
 // ─── App-specific pause storage ─────────────────────────────────────────────

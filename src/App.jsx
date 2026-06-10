@@ -32,6 +32,8 @@ import {
   isAppPaused,
   pauseApp,
   clearExpiredAppPause,
+  loadTimingWindowsPrefs,
+  saveTimingWindowsPrefs,
 } from "./storage";
 import {
   createEventRecord,
@@ -69,6 +71,9 @@ import {
   ICON_OPTIONS,
   THEMES,
   TIME_WINDOWS,
+  DEFAULT_WINDOW_DEFS,
+  setWindowDefs,
+  isValidWindowDefs,
   applyCardAction,
   buildCommitmentCheckInCard,
   buildEligibleCommitmentCheckInCards,
@@ -1236,9 +1241,15 @@ function App() {
       events: loadEventLog(),
       actionCards: loadActionCards(),
       notificationSettings: loadNotificationSettings(),
+      timingWindowsPrefs: loadTimingWindowsPrefs() ?? DEFAULT_WINDOW_DEFS,
     };
   }, []);
   const e2eMode = isE2EModeEnabled();
+
+  // Initialise the utils singleton with the user's stored prefs on first render.
+  // This runs synchronously before any isEligible / getCurrentWindow calls.
+  setWindowDefs(initialState.timingWindowsPrefs);
+
   const [cards, setCards] = useState(initialState.cards);
   const [mood, setMood] = useState(initialState.mood);
   const [profile, setProfile] = useState(initialState.profile);
@@ -1257,6 +1268,13 @@ function App() {
   const [authReady, setAuthReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
+  // Start optimistically online — we only flip to true when the browser fires
+  // an explicit 'offline' event. This avoids false positives from unreliable
+  // navigator.onLine values in test / sandboxed environments.
+  const [isOffline, setIsOffline] = useState(false);
+  const [timingWindowsPrefs, setTimingWindowsPrefs] = useState(
+    initialState.timingWindowsPrefs,
+  );
   const [isAdmin, setIsAdmin] = useState(false);
   const [testerStatus, setTesterStatus] = useState(() => {
     const e2eTesterMode = e2eMode && typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
@@ -2541,12 +2559,25 @@ function App() {
   useEffect(() => {
     function handleOnline() {
       console.log("[NETWORK] App is online. Processing offline event queue...");
+      setIsOffline(false);
       void processEventQueue();
     }
-
+    function handleOffline() {
+      console.log("[NETWORK] App is offline.");
+      setIsOffline(true);
+    }
     window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
+
+  // Keep the utils getCurrentWindow singleton in sync with the user's saved prefs.
+  useEffect(() => {
+    setWindowDefs(timingWindowsPrefs);
+  }, [timingWindowsPrefs]);
 
   useEffect(() => {
     if (syncStatus === "ready") {
@@ -4608,6 +4639,12 @@ function App() {
     }
   }
 
+  function handleSaveTimingWindowsPrefs(defs) {
+    if (!isValidWindowDefs(defs)) return;
+    saveTimingWindowsPrefs(defs);
+    setTimingWindowsPrefs(defs);
+  }
+
   function handleSetGlobalInterruptionMode(value) {
     setGlobalInterruptionMode(value);
     void logEvent({
@@ -5142,7 +5179,10 @@ function App() {
     );
   }
 
-  if (session && syncStatus === "loading" && !isFakeLauncherFlow) {
+  // Skip the sync loading screen when the user is offline but already has local
+  // cards — show the cached experience instead of a spinner.
+  const hasLocalCards = cards.length > 0;
+  if (session && syncStatus === "loading" && !isFakeLauncherFlow && !(isOffline && hasLocalCards)) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
@@ -5298,6 +5338,8 @@ function App() {
                   onFakeLauncherLaunch={(versionId) =>
                     handleFakeLauncherLaunch(versionId, "settings_fake_launcher")
                   }
+                  timingWindowsPrefs={timingWindowsPrefs}
+                  onSaveTimingWindowsPrefs={handleSaveTimingWindowsPrefs}
                 />
               ) : null}
             </main>
@@ -5414,6 +5456,11 @@ function App() {
           launchSession={effectiveLaunchSession}
           version={activeOverlayVersion}
           timezone={profile.timezone}
+          isOffline={isOffline}
+          onRetryConnection={() => {
+            setIsOffline(false);
+            void processEventQueue();
+          }}
           onClose={() => {
             if (overlay.type === "custom-pack-preview") {
               setOverlay(null);
@@ -7546,6 +7593,35 @@ function LegalModal({ docType, onClose }) {
   );
 }
 
+/** Convert a stored hour integer (0-23) to an HH:00 string for <input type="time">. */
+function hourToTimeString(h) {
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
+/** Parse an HH:MM string back to an integer hour (0-23), or null on failure. */
+function timeStringToHour(s) {
+  const m = typeof s === "string" && s.match(/^(\d{1,2}):\d{2}$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  return h >= 0 && h <= 23 ? h : null;
+}
+
+/** Check that four defs form a valid, gap-free 24-hour partition. */
+function validateWindowDefsGapFree(defs) {
+  if (!isValidWindowDefs(defs)) return { valid: false, error: "Each window needs a valid start and end time." };
+  // Check contiguity: each window's end must equal the next window's start.
+  for (let i = 0; i < defs.length; i++) {
+    const next = defs[(i + 1) % defs.length];
+    if (defs[i].end !== next.start) {
+      return {
+        valid: false,
+        error: `"${defs[i].label || defs[i].id}" ends at ${hourToTimeString(defs[i].end)} but "${next.label || next.id}" starts at ${hourToTimeString(next.start)}. Windows must connect without gaps.`,
+      };
+    }
+  }
+  return { valid: true, error: null };
+}
+
 function SettingsPanel({
   mood,
   onSelectMood,
@@ -7576,8 +7652,12 @@ function SettingsPanel({
   onGenerateMorningSummaryForToday,
   onGenerateMorningSummaryForYesterday,
   onFakeLauncherLaunch,
+  timingWindowsPrefs = DEFAULT_WINDOW_DEFS,
+  onSaveTimingWindowsPrefs,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [draftWindowDefs, setDraftWindowDefs] = useState(timingWindowsPrefs);
+  const [windowSaveStatus, setWindowSaveStatus] = useState(null); // null | "saved" | { error: string }
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("mybishbash");
 
@@ -7658,6 +7738,99 @@ function SettingsPanel({
               <span style={{ fontSize: "0.9em", opacity: 0.9 }}>have you stretched?</span>
             </button>
           ))}
+        </div>
+      </div>
+      <div className="settings-card" data-testid="timing-windows-settings-card">
+        <div className="settings-version-heading">
+          <p>Time windows</p>
+          <span>Adjust when each part of the day begins. Cards only show during their chosen windows.</span>
+        </div>
+        <div className="tw-rows">
+          {draftWindowDefs.map((def, idx) => {
+            const isNightWrapping = def.start > def.end || (def.id === "night" && def.start >= 22);
+            return (
+              <div key={def.id} className="tw-row" data-testid={`tw-row-${def.id}`}>
+                <span className="tw-label">{def.label || def.id}</span>
+                <label className="tw-time-label">
+                  <span className="tw-time-hint">from</span>
+                  <input
+                    type="time"
+                    step="3600"
+                    className="tw-time-input settings-input"
+                    value={hourToTimeString(def.start)}
+                    data-testid={`tw-start-${def.id}`}
+                    onChange={(e) => {
+                      const h = timeStringToHour(e.target.value);
+                      if (h === null) return;
+                      const next = draftWindowDefs.map((d, i) =>
+                        i === idx ? { ...d, start: h } : d,
+                      );
+                      setDraftWindowDefs(next);
+                      setWindowSaveStatus(null);
+                    }}
+                  />
+                </label>
+                <label className="tw-time-label">
+                  <span className="tw-time-hint">to</span>
+                  <input
+                    type="time"
+                    step="3600"
+                    className="tw-time-input settings-input"
+                    value={hourToTimeString(def.end)}
+                    data-testid={`tw-end-${def.id}`}
+                    onChange={(e) => {
+                      const h = timeStringToHour(e.target.value);
+                      if (h === null) return;
+                      const next = draftWindowDefs.map((d, i) =>
+                        i === idx ? { ...d, end: h } : d,
+                      );
+                      setDraftWindowDefs(next);
+                      setWindowSaveStatus(null);
+                    }}
+                  />
+                </label>
+                {isNightWrapping && (
+                  <span className="tw-wraps-hint">wraps midnight</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {windowSaveStatus && typeof windowSaveStatus === "object" && windowSaveStatus.error ? (
+          <p className="tw-error" role="alert" data-testid="tw-error">{windowSaveStatus.error}</p>
+        ) : null}
+        {windowSaveStatus === "saved" ? (
+          <p className="tw-saved" data-testid="tw-saved">Saved.</p>
+        ) : null}
+        <div className="tw-actions">
+          <button
+            type="button"
+            className="settings-save-btn"
+            data-testid="tw-save-btn"
+            onClick={() => {
+              const { valid, error } = validateWindowDefsGapFree(draftWindowDefs);
+              if (!valid) {
+                setWindowSaveStatus({ error });
+                return;
+              }
+              onSaveTimingWindowsPrefs?.(draftWindowDefs);
+              setWindowSaveStatus("saved");
+              setTimeout(() => setWindowSaveStatus(null), 2500);
+            }}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            className="tw-reset-btn"
+            data-testid="tw-reset-btn"
+            onClick={() => {
+              setDraftWindowDefs(DEFAULT_WINDOW_DEFS);
+              setWindowSaveStatus(null);
+            }}
+          >
+            Reset to defaults
+          </button>
         </div>
       </div>
       <div className="settings-card">
@@ -8130,6 +8303,8 @@ function Overlay({
   onFakeLauncherLaunch,
   onContinueToApp,
   onPauseApp,
+  isOffline = false,
+  onRetryConnection,
 }) {
   // Identify the active launcher app for the pause button.
   // Only surfaces the button when we're inside a fake-launcher flow.
@@ -8252,6 +8427,61 @@ function Overlay({
     const isIntercept = !!overlay.versionId;
     const interceptVersion = isIntercept ? version : null;
     const appName = interceptVersion?.name ?? "App";
+
+    // ── Offline fallback ──────────────────────────────────────────────────────
+    // When the device has no network and no eligible cards could be fetched,
+    // show a calm offline screen rather than a confusing "all caught up" message.
+    if (isOffline) {
+      const offlineActions = [
+        {
+          label: "Try again",
+          variant: "primary",
+          onClick: () => {
+            if (typeof navigator !== "undefined" && navigator.onLine) {
+              onRetryConnection?.();
+            } else {
+              // Trigger a hard reload so the app re-checks connectivity.
+              window.location.reload();
+            }
+          },
+        },
+      ];
+      if (isIntercept && interceptVersion) {
+        const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion));
+        offlineActions.push({
+          label: `Open ${appName} anyway`,
+          variant: "secondary",
+          href: continueHref,
+          onClick: (event) => {
+            const handled = onContinueToApp?.(interceptVersion.id, {
+              source: "offline_empty_card",
+              reason: "user_pressed_open_anyway_offline",
+              allowDefaultNavigation: Boolean(continueHref),
+            });
+            if (handled !== false) event?.preventDefault?.();
+          },
+        });
+      }
+      offlineActions.push({
+        label: "Back to MyBishBash",
+        variant: "secondary",
+        onClick: onClose,
+      });
+      return (
+        <PremiumCardScreen
+          type="offline"
+          greeting={isIntercept ? (interceptVersion?.name ?? "MyBishBash") : "MyBishBash"}
+          icon="heart"
+          headline="You appear to be offline."
+          subtitle="Cards can't load right now. Take a breath before you open another app."
+          actions={offlineActions}
+          onDashboard={onDashboard}
+          cardOverlayKey={cardOverlayKey}
+          className={launcherInterceptionClass}
+        />
+      );
+    }
+    // ── end offline fallback ──────────────────────────────────────────────────
     const canGoBackHome = normalizeLaunchSession(launchSession).allowBackHome;
 
     const actions = [];
