@@ -1,5 +1,9 @@
 import { supabase } from "./supabaseClient";
-import { assertKnownLauncherId } from "./launcherRegistry";
+import {
+  assertKnownLauncherId,
+  isStaticLauncher,
+  validateLauncherDraft,
+} from "./launcherRegistry";
 import { LAUNCHER_AVAILABILITY_STATUSES } from "./launcherAvailability";
 
 function requireSupabase() {
@@ -378,6 +382,21 @@ export async function saveLauncherEvent(payload) {
   if (error) console.error("[INTERCEPT] Error saving launcher event:", error);
 }
 
+// HQ role model: owner (full control incl. hard delete), admin (add/edit/
+// test/archive), analyst (view only), support (reports/testing notes).
+// Rows created before the role migration default to "admin".
+export async function fetchAdminRole(userId) {
+  if (isDemoMode()) return null;
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("admin_users")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.role ?? "admin";
+}
+
 export async function checkIsAdmin(userId) {
   if (isDemoMode()) return false;
   const client = requireSupabase();
@@ -544,6 +563,9 @@ function mapLauncherConfig(row = {}) {
     hqVisible: row.hq_visible,
     useInterruptionPack: row.use_interruption_pack,
     updatedAt: row.updated_at,
+    createdAt: row.created_at,
+    // Rows HQ created itself (not overrides of static registry IDs).
+    isCustom: row.is_custom === true,
   };
   const optionalFields = {
     displayName: row.display_name,
@@ -563,6 +585,7 @@ function mapLauncherConfig(row = {}) {
     appUrl: row.app_url,
     manualUrl: row.manual_url,
     qaNotes: row.qa_notes,
+    category: row.category,
   };
   Object.entries(optionalFields).forEach(([key, value]) => {
     if (typeof value === "string" && value.trim()) config[key] = value.trim();
@@ -610,13 +633,33 @@ function isMissingColumnError(error) {
 }
 
 export async function saveAdminLauncherConfig(config, userId) {
-  assertKnownLauncherId(config?.id);
+  const isCustom = config?.isCustom === true && !isStaticLauncher(config?.id);
+  if (!isCustom) {
+    // Overrides may only target supported, code-reviewed launcher IDs.
+    assertKnownLauncherId(config?.id);
+  }
 
   const client = requireSupabase();
   const now = new Date().toISOString();
-  const availabilityStatus = LAUNCHER_AVAILABILITY_STATUSES.includes(config.availabilityStatus)
+  let availabilityStatus = LAUNCHER_AVAILABILITY_STATUSES.includes(config.availabilityStatus)
     ? config.availabilityStatus
     : (config.enabled ? "public" : "disabled");
+  if (isCustom) {
+    // HQ-created launchers are re-validated on every save. Moving one to a
+    // user-facing status additionally requires an https web fallback (the
+    // go-live gate inside validateLauncherDraft), so a deployed app can never
+    // ship a dead Continue-to-app path.
+    const existingConfigs = await fetchLauncherConfigs().catch(() => []);
+    const validation = validateLauncherDraft(config, {
+      existingIds: existingConfigs.map((row) => row.id).filter((id) => id !== config.id),
+      targetStatus: availabilityStatus,
+    });
+    if (!validation.ok) {
+      const error = new Error(validation.errors.join("\n"));
+      error.code = "MYBISHBASH_INVALID_LAUNCHER_DRAFT";
+      throw error;
+    }
+  }
   const legacyPayload = {
     launcher_id: config.id,
     display_name: config.displayName || config.name || "",
@@ -645,6 +688,10 @@ export async function saveAdminLauncherConfig(config, userId) {
     manual_url: config.manualUrl || "",
     qa_notes: config.qaNotes || "",
   };
+  if (isCustom) {
+    payload.is_custom = true;
+    payload.category = config.category || "other";
+  }
 
   const upsert = (body) =>
     client
@@ -654,6 +701,12 @@ export async function saveAdminLauncherConfig(config, userId) {
       .single();
 
   let { data, error } = await upsert(payload);
+  if (error && isCustom && isMissingColumnError(error)) {
+    // Never silently save a custom app as an unflagged row on an old schema.
+    const schemaError = new Error("HQ-created apps need the custom-apps migration (is_custom/category columns). Apply the latest SQL migration, then try again.");
+    schemaError.code = "MYBISHBASH_CUSTOM_APPS_MIGRATION_MISSING";
+    throw schemaError;
+  }
   if (error && isMissingColumnError(error)) {
     // The availability migration has not been applied yet — save the legacy
     // column set so HQ keeps working against the old schema.
@@ -662,6 +715,77 @@ export async function saveAdminLauncherConfig(config, userId) {
   }
   if (error) throw error;
   return mapLauncherConfig(data);
+}
+
+// Permanent delete is only available for HQ-created (custom) rows. Supported
+// registry launchers are code-defined: archive them instead, or clear their
+// override row manually in Supabase.
+export async function deleteAdminLauncherConfig(launcherId) {
+  if (!launcherId || isStaticLauncher(launcherId)) {
+    throw new Error("Supported registry launchers cannot be deleted — archive them instead.");
+  }
+  const client = requireSupabase();
+  const { error } = await client
+    .from("hq_launcher_configs")
+    .delete()
+    .eq("launcher_id", launcherId)
+    .eq("is_custom", true);
+  if (error) throw error;
+}
+
+// Dependency summary used to warn admins before archive/delete. Historical
+// launcher_events keep their own launcher_name/category snapshot, so they
+// stay renderable after a delete — but new metadata is lost.
+export async function fetchLauncherUsageSummary(launcherId) {
+  const client = requireSupabase();
+  const summary = { launcherEvents: 0, testerReports: 0 };
+  if (!launcherId) return summary;
+
+  const [eventsResult, reportsResult] = await Promise.all([
+    client.from("launcher_events").select("id", { count: "exact", head: true }).eq("launcher_id", launcherId),
+    client.from("tester_reports").select("id", { count: "exact", head: true }).eq("launcher_context", launcherId),
+  ]);
+  if (!eventsResult.error) summary.launcherEvents = eventsResult.count ?? 0;
+  if (!reportsResult.error) summary.testerReports = reportsResult.count ?? 0;
+  return summary;
+}
+
+export const LAUNCHER_ICON_BUCKET = "launcher-icons";
+const LAUNCHER_ICON_ALLOWED_TYPES = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+const LAUNCHER_ICON_MAX_BYTES = 1024 * 1024;
+
+// Upload a launcher icon to Supabase Storage and return its public URL.
+// If the bucket has not been provisioned, fail with a clear message — the
+// custom image URL field remains the manual fallback path.
+export async function uploadLauncherIcon(launcherId, file) {
+  const client = requireSupabase();
+  if (!launcherId) throw new Error("A launcher ID is required to upload an icon.");
+  const extension = LAUNCHER_ICON_ALLOWED_TYPES[file?.type];
+  if (!extension) {
+    throw new Error("Unsupported image type. Use PNG, JPG, WebP or SVG.");
+  }
+  if (file.size > LAUNCHER_ICON_MAX_BYTES) {
+    throw new Error("Icon image must be under 1MB.");
+  }
+
+  const path = `${launcherId}/${Date.now()}.${extension}`;
+  const { error } = await client.storage
+    .from(LAUNCHER_ICON_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: true });
+  if (error) {
+    if (/bucket not found/i.test(error.message ?? "")) {
+      throw new Error(`Icon upload storage is not provisioned yet (missing "${LAUNCHER_ICON_BUCKET}" bucket). Apply the latest SQL migration, or paste an https image URL into the custom icon field instead.`);
+    }
+    throw error;
+  }
+  const { data } = client.storage.from(LAUNCHER_ICON_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error("Could not resolve the uploaded icon URL.");
+  return data.publicUrl;
 }
 
 export async function fetchAdminUsers() {

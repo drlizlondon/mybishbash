@@ -27,7 +27,7 @@ import {
 
 assert.deepEqual(
   [...LAUNCHER_AVAILABILITY_STATUSES].sort(),
-  ["disabled", "experimental", "hidden", "public", "tester_only"],
+  ["archived", "disabled", "draft", "experimental", "hidden", "public", "tester_only"],
 );
 
 for (const expectedId of ["safari", "youtube", "instagram", "chrome", "reddit", "linkedin", "whatsapp", "bbc-news", "duolingo"]) {
@@ -94,6 +94,8 @@ const fixtures = [
   { id: "exp", category: "social", availabilityStatus: "experimental" },
   { id: "tst", category: "social", availabilityStatus: "tester_only" },
   { id: "dis", category: "social", availabilityStatus: "disabled" },
+  { id: "drf", category: "social", availabilityStatus: "draft" },
+  { id: "arc", category: "social", availabilityStatus: "archived" },
 ];
 const normalUser = { launchers: fixtures, testerStatus: { is_tester: false } };
 const tester = { launchers: fixtures, testerStatus: { is_tester: true } };
@@ -116,7 +118,14 @@ const experimentalContext = getAvailableLaunchersForUser({ ...normalUser, contex
 assert.deepEqual(experimentalContext, ["pub", "exp"], "experimental launchers appear in tester/experimental contexts");
 
 const hqVisibleIds = getAvailableLaunchersForUser({ ...normalUser, context: LAUNCHER_CONTEXTS.HQ }).map((l) => l.id);
-assert.deepEqual(hqVisibleIds, ["pub", "hid", "exp", "tst", "dis"], "HQ can always see supported launchers");
+assert.deepEqual(hqVisibleIds, ["pub", "hid", "exp", "tst", "dis", "drf", "arc"], "HQ can always see supported launchers");
+
+// Draft and archived launchers stay HQ-only, even for testers.
+for (const context of [LAUNCHER_CONTEXTS.USER_SETUP, LAUNCHER_CONTEXTS.FAKE_LAUNCHER_BAR, LAUNCHER_CONTEXTS.SETTINGS, LAUNCHER_CONTEXTS.ONBOARDING, LAUNCHER_CONTEXTS.TESTER]) {
+  const visible = getAvailableLaunchersForUser({ ...tester, context }).map((l) => l.id);
+  assert.equal(visible.includes("drf"), false, `draft launchers must not appear in ${context}`);
+  assert.equal(visible.includes("arc"), false, `archived launchers must not appear in ${context}`);
+}
 
 assert.equal(isLauncherVisibleInContext(fixtures[1], { context: LAUNCHER_CONTEXTS.HQ }), true, "hidden apps stay visible in HQ");
 assert.equal(isLauncherVisibleInContext(fixtures[4], { context: LAUNCHER_CONTEXTS.HQ }), true, "disabled apps stay visible in HQ");

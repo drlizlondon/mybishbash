@@ -1,11 +1,12 @@
 import {
+  LAUNCHER_AVAILABILITY,
   deriveAvailabilityFromLegacyFlags,
   isAvailabilityStatusEnabledForUsers,
   isValidAvailabilityStatus,
 } from "./launcherAvailability.js";
 
 const LAUNCHER_TIMESTAMP = "2026-05-13T00:00:00.000Z";
-const PLACEHOLDER_ICON_SRC = "/mybishbash/icons/mybishbash-cover.png";
+export const PLACEHOLDER_ICON_SRC = "/mybishbash/icons/mybishbash-cover.png";
 
 export const LAUNCHER_THEME = {
   backgroundColor: "#F7F2EE",
@@ -325,6 +326,27 @@ const HQ_EDITABLE_FIELDS = [
   "interruptionPackId",
 ];
 
+// Icon values may be root-relative paths (static assets), https URLs
+// (HQ-provided/uploaded), or data URLs for common safe image types.
+export function sanitizeLauncherIconSrc(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "";
+  if (/^\/[^\s]+$/.test(trimmed)) return trimmed;
+  if (/^https:\/\/[^\s]+$/i.test(trimmed)) return trimmed;
+  if (/^data:image\/(png|jpeg|webp|svg\+xml|gif);/i.test(trimmed)) return trimmed;
+  return "";
+}
+
+// HQ is the source of truth for each app's visual identity. Resolution order:
+// 1. HQ-uploaded/custom image  2. default static icon  3. safe placeholder.
+export function resolveLauncherIconSrc(launcher = {}) {
+  return (
+    sanitizeLauncherIconSrc(launcher.customIconSrc) ||
+    sanitizeLauncherIconSrc(launcher.iconSrc) ||
+    PLACEHOLDER_ICON_SRC
+  );
+}
+
 export function sanitizeLauncherUrl(value) {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return "";
@@ -344,6 +366,11 @@ export function normalizeLauncherOverride(override = {}) {
     if (field.endsWith("Url")) {
       const safeUrl = sanitizeLauncherUrl(value);
       if (safeUrl) normalized[field] = safeUrl;
+      return;
+    }
+    if (field === "iconSrc" || field === "customIconSrc") {
+      const safeIcon = sanitizeLauncherIconSrc(value);
+      if (safeIcon) normalized[field] = safeIcon;
       return;
     }
     if (["enabled", "hqVisible", "useInterruptionPack"].includes(field)) {
@@ -399,13 +426,208 @@ export function mergeLauncherConfig(defaultLauncher, override = {}) {
   };
 }
 
+// ── HQ-created (custom) launchers ───────────────────────────────────────────
+//
+// HQ can create, test and deploy new protected-app records without a code
+// release. Custom rows (is_custom=true) become first-class launcher
+// definitions through the runtime registry below: routes, the fake launcher
+// bar, settings and onboarding all consult isKnownLauncher/getLauncherConfig,
+// which see both static and registered dynamic launchers. Going live is
+// gated by strict validation rather than a code release. The one static-host
+// limitation: per-app PWA home-screen manifests/install pages are build-time
+// files, so installable home-screen shortcuts still need the app promoted
+// into FAKE_APP_LAUNCHERS in a release (requiresRelease flags this).
+
+export const LAUNCHER_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+
+export const RESERVED_LAUNCHER_IDS = [
+  "mybishbash",
+  "intercept",
+  "install",
+  "launchers",
+  "settings",
+  "home",
+  "hq",
+  "library",
+  "log",
+  "packs",
+];
+
+// Statuses that expose a launcher beyond HQ. Moving a custom app into one of
+// these requires the stricter go-live validation below.
+export const USER_FACING_AVAILABILITY_STATUSES = [
+  LAUNCHER_AVAILABILITY.PUBLIC,
+  LAUNCHER_AVAILABILITY.TESTER_ONLY,
+  LAUNCHER_AVAILABILITY.EXPERIMENTAL,
+];
+
+export function isUserFacingAvailabilityStatus(status) {
+  return USER_FACING_AVAILABILITY_STATUSES.includes(status);
+}
+
+export function validateLauncherDraft(draft = {}, { existingIds = [], targetStatus = null } = {}) {
+  const errors = [];
+  const id = String(draft.id ?? "").trim();
+
+  if (!id) {
+    errors.push("App ID is required.");
+  } else if (!LAUNCHER_ID_PATTERN.test(id)) {
+    errors.push("App ID must be a URL-safe slug: lowercase letters, numbers and hyphens (max 40 chars).");
+  } else if (RESERVED_LAUNCHER_IDS.includes(id)) {
+    errors.push(`"${id}" is a reserved route name and cannot be an app ID.`);
+  }
+
+  const allKnownIds = new Set([...LAUNCHER_IDS, ...existingIds]);
+  if (id && allKnownIds.has(id)) {
+    errors.push(`An app with ID "${id}" already exists.`);
+  }
+
+  if (!String(draft.displayName ?? "").trim()) {
+    errors.push("Display name is required.");
+  }
+
+  const destinationFields = [
+    "webFallbackUrl",
+    "iosWebFallbackUrl",
+    "androidWebFallbackUrl",
+    "manualUrl",
+    "iosAppUrl",
+    "androidIntentUrl",
+  ];
+  const hasDestination = destinationFields.some((field) => sanitizeLauncherUrl(draft[field]));
+  if (!hasDestination) {
+    errors.push("At least one valid destination URL is required (https://, intent:// or a supported app scheme).");
+  }
+  for (const field of destinationFields) {
+    const raw = String(draft[field] ?? "").trim();
+    if (raw && !sanitizeLauncherUrl(raw)) {
+      errors.push(`${field} is not a safe destination URL.`);
+    }
+  }
+
+  const rawIcon = String(draft.customIconSrc ?? "").trim();
+  if (rawIcon && !sanitizeLauncherIconSrc(rawIcon)) {
+    errors.push("Custom icon must be an https URL, a site-relative path, or an uploaded image.");
+  }
+
+  // Go-live gate: before a launcher can be exposed to testers or users it
+  // must have a browser-safe web fallback, so "Continue to app" can never
+  // silently dead-end when the native app/scheme is unavailable.
+  if (isUserFacingAvailabilityStatus(targetStatus)) {
+    const webFallback = [draft.webFallbackUrl, draft.iosWebFallbackUrl, draft.androidWebFallbackUrl, draft.manualUrl]
+      .map((value) => sanitizeLauncherUrl(value))
+      .find((value) => /^https:\/\//i.test(value));
+    if (!webFallback) {
+      errors.push("A valid https web fallback URL is required before this app can be visible to testers or users.");
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+// Shape a stored custom config row into a full launcher object. Paths are
+// generated from the slug; routes work immediately through the runtime
+// registry, while requiresRelease marks that per-app PWA install assets
+// (manifest + install page) only exist after promotion into the static
+// registry. Invalid statuses fall back to draft.
+export function buildCustomLauncher(config = {}) {
+  const id = String(config.id ?? "").trim();
+  if (!LAUNCHER_ID_PATTERN.test(id) || RESERVED_LAUNCHER_IDS.includes(id) || LAUNCHER_REGISTRY[id]) {
+    return null;
+  }
+  const availabilityStatus = isValidAvailabilityStatus(config.availabilityStatus)
+    ? config.availabilityStatus
+    : LAUNCHER_AVAILABILITY.DRAFT;
+  const displayName = String(config.displayName ?? config.name ?? "").trim() || id;
+  return {
+    id,
+    displayName,
+    name: displayName,
+    realAppLabel: String(config.realAppLabel ?? "").trim() || displayName,
+    category: String(config.category ?? "").trim() || "other",
+    installPath: `/mybishbash/install/${id}/`,
+    launchPath: `/intercept/${id}`,
+    manifestPath: `/mybishbash/launchers/${id}/manifest.webmanifest`,
+    iconSrc: sanitizeLauncherIconSrc(config.iconSrc) || PLACEHOLDER_ICON_SRC,
+    customIconSrc: sanitizeLauncherIconSrc(config.customIconSrc) || "",
+    nativeAppUrl: sanitizeLauncherUrl(config.nativeAppUrl),
+    webFallbackUrl: sanitizeLauncherUrl(config.webFallbackUrl),
+    appUrl: sanitizeLauncherUrl(config.appUrl),
+    androidIntentUrl: sanitizeLauncherUrl(config.androidIntentUrl),
+    androidWebFallbackUrl: sanitizeLauncherUrl(config.androidWebFallbackUrl),
+    iosAppUrl: sanitizeLauncherUrl(config.iosAppUrl),
+    iosWebFallbackUrl: sanitizeLauncherUrl(config.iosWebFallbackUrl),
+    manualUrl: sanitizeLauncherUrl(config.manualUrl),
+    defaultInterruptionPackId: `${id}-interruption`,
+    interruptionPackId: String(config.interruptionPackId ?? "").trim(),
+    useInterruptionPack: config.useInterruptionPack !== false,
+    interruptionPaused: false,
+    availabilityStatus,
+    qaNotes: String(config.qaNotes ?? "").trim(),
+    enabled: isAvailabilityStatusEnabledForUsers(availabilityStatus),
+    hqVisible: config.hqVisible !== false,
+    isCustom: true,
+    requiresRelease: true,
+    createdAt: config.createdAt ?? null,
+    updatedAt: config.updatedAt ?? null,
+  };
+}
+
+// ── Runtime dynamic registry ────────────────────────────────────────────────
+//
+// HQ-created launchers registered here are first-class: isKnownLauncher and
+// getLauncherConfig consult this map after the static registry, which makes
+// /intercept/:id routes, the shell guard, destination resolution and the
+// availability selector work for them without a code release. Registration
+// happens from the localStorage cache at startup (cold-start routes) and from
+// fresh Supabase configs after fetch.
+
+const DYNAMIC_LAUNCHERS = new Map();
+
+export function registerDynamicLaunchers(configs = [], { replace = true } = {}) {
+  if (replace) DYNAMIC_LAUNCHERS.clear();
+  const registered = [];
+  for (const config of Array.isArray(configs) ? configs : []) {
+    if (config?.isCustom !== true) continue;
+    const launcher = buildCustomLauncher(config);
+    if (!launcher) continue;
+    DYNAMIC_LAUNCHERS.set(launcher.id, launcher);
+    registered.push(launcher);
+  }
+  return registered;
+}
+
+export function getDynamicLaunchers() {
+  return Array.from(DYNAMIC_LAUNCHERS.values());
+}
+
+export function isStaticLauncher(launcherId) {
+  return Boolean(LAUNCHER_REGISTRY[launcherId]);
+}
+
+export function getAllLauncherIds() {
+  return [...LAUNCHER_IDS, ...DYNAMIC_LAUNCHERS.keys()];
+}
+
+export function resetDynamicLaunchersForTests() {
+  DYNAMIC_LAUNCHERS.clear();
+}
+
 export function mergeLauncherConfigs(overrides = []) {
-  const byId = Object.fromEntries((Array.isArray(overrides) ? overrides : []).map((override) => [override.id, override]));
-  return FAKE_APP_LAUNCHERS.map((launcher) => mergeLauncherConfig(launcher, byId[launcher.id])).filter(Boolean);
+  const list = Array.isArray(overrides) ? overrides : [];
+  const byId = Object.fromEntries(list.map((override) => [override.id, override]));
+  const merged = FAKE_APP_LAUNCHERS.map((launcher) => mergeLauncherConfig(launcher, byId[launcher.id])).filter(Boolean);
+  // HQ-created drafts ride along after the supported registry. Rows must be
+  // explicitly flagged as custom — unknown non-custom IDs stay ignored.
+  const customLaunchers = list
+    .filter((override) => override?.isCustom === true && !LAUNCHER_REGISTRY[override.id])
+    .map((override) => buildCustomLauncher(override))
+    .filter(Boolean);
+  return [...merged, ...customLaunchers];
 }
 
 export function getLauncherConfig(launcherId) {
-  return LAUNCHER_REGISTRY[launcherId] ?? null;
+  return LAUNCHER_REGISTRY[launcherId] ?? DYNAMIC_LAUNCHERS.get(launcherId) ?? null;
 }
 
 export function isKnownLauncher(launcherId) {

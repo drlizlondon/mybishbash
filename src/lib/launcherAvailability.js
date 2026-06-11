@@ -12,9 +12,57 @@ export const LAUNCHER_AVAILABILITY = {
   EXPERIMENTAL: "experimental",
   TESTER_ONLY: "tester_only",
   DISABLED: "disabled",
+  DRAFT: "draft",
+  ARCHIVED: "archived",
 };
 
 export const LAUNCHER_AVAILABILITY_STATUSES = Object.values(LAUNCHER_AVAILABILITY);
+
+// Lifecycle/audience vocabulary layered over the stored availability status.
+// `availabilityStatus` stays the single persisted source of truth; these two
+// derived views make the "how launched is it" vs "who can see it" distinction
+// explicit in code and in HQ.
+export const LAUNCHER_LIFECYCLE = {
+  DRAFT: "draft",
+  TESTING: "testing",
+  LIVE: "live",
+  DISABLED: "disabled",
+  ARCHIVED: "archived",
+};
+
+export const LAUNCHER_AUDIENCE = {
+  ADMIN_ONLY: "admin_only",
+  TESTERS: "testers",
+  ALL_USERS: "all_users",
+};
+
+const AVAILABILITY_TO_LIFECYCLE = {
+  [LAUNCHER_AVAILABILITY.PUBLIC]: LAUNCHER_LIFECYCLE.LIVE,
+  [LAUNCHER_AVAILABILITY.TESTER_ONLY]: LAUNCHER_LIFECYCLE.TESTING,
+  [LAUNCHER_AVAILABILITY.EXPERIMENTAL]: LAUNCHER_LIFECYCLE.TESTING,
+  [LAUNCHER_AVAILABILITY.HIDDEN]: LAUNCHER_LIFECYCLE.DRAFT,
+  [LAUNCHER_AVAILABILITY.DRAFT]: LAUNCHER_LIFECYCLE.DRAFT,
+  [LAUNCHER_AVAILABILITY.DISABLED]: LAUNCHER_LIFECYCLE.DISABLED,
+  [LAUNCHER_AVAILABILITY.ARCHIVED]: LAUNCHER_LIFECYCLE.ARCHIVED,
+};
+
+const AVAILABILITY_TO_AUDIENCE = {
+  [LAUNCHER_AVAILABILITY.PUBLIC]: LAUNCHER_AUDIENCE.ALL_USERS,
+  [LAUNCHER_AVAILABILITY.TESTER_ONLY]: LAUNCHER_AUDIENCE.TESTERS,
+  [LAUNCHER_AVAILABILITY.EXPERIMENTAL]: LAUNCHER_AUDIENCE.TESTERS,
+  [LAUNCHER_AVAILABILITY.HIDDEN]: LAUNCHER_AUDIENCE.ADMIN_ONLY,
+  [LAUNCHER_AVAILABILITY.DRAFT]: LAUNCHER_AUDIENCE.ADMIN_ONLY,
+  [LAUNCHER_AVAILABILITY.DISABLED]: LAUNCHER_AUDIENCE.ADMIN_ONLY,
+  [LAUNCHER_AVAILABILITY.ARCHIVED]: LAUNCHER_AUDIENCE.ADMIN_ONLY,
+};
+
+export function getLauncherLifecycleStatus(launcher = {}) {
+  return AVAILABILITY_TO_LIFECYCLE[getLauncherAvailabilityStatus(launcher)] ?? LAUNCHER_LIFECYCLE.DISABLED;
+}
+
+export function getLauncherAudience(launcher = {}) {
+  return AVAILABILITY_TO_AUDIENCE[getLauncherAvailabilityStatus(launcher)] ?? LAUNCHER_AUDIENCE.ADMIN_ONLY;
+}
 
 // Surfaces that ask "which launchers can this person see here?".
 export const LAUNCHER_CONTEXTS = {
@@ -83,7 +131,10 @@ export function isLauncherVisibleInContext(launcher, {
     case LAUNCHER_AVAILABILITY.EXPERIMENTAL:
       return isTester || TESTER_CONTEXTS.has(context);
     case LAUNCHER_AVAILABILITY.HIDDEN:
-      // Hidden apps never appear to normal users; HQ-style callers can opt in.
+    case LAUNCHER_AVAILABILITY.DRAFT:
+    case LAUNCHER_AVAILABILITY.ARCHIVED:
+      // Hidden/draft/archived apps never appear to normal users (or testers);
+      // HQ-style callers can opt in.
       return includeHqHidden === true;
     case LAUNCHER_AVAILABILITY.DISABLED:
       return includeDisabled === true;

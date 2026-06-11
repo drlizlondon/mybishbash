@@ -110,7 +110,8 @@ import {
   getVersionOpenHref,
   resolveLauncherDestination,
 } from "./lib/launcherState";
-import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/launcherRegistry";
+import { buildCustomLauncher, getAllLauncherIds, getLauncherConfig, isKnownLauncher, mergeLauncherConfig, resolveLauncherIconSrc } from "./lib/launcherRegistry";
+import { cacheAndRegisterDynamicLaunchers } from "./lib/dynamicLauncherCache";
 import {
   LAUNCHER_CONTEXTS,
   getAvailableLaunchersForUser,
@@ -1018,7 +1019,7 @@ function normalizeLaunchSession(source = {}) {
       entrySurface,
       launcherId: null,
       allowBackHome: true,
-      allowedDestinationIds: [...INTERRUPTION_LAUNCHER_CONTEXTS],
+      allowedDestinationIds: getAllLauncherIds(),
       primaryAction: LAUNCH_PRIMARY_ACTIONS.BACK_TO_HOME,
       startedAt: source.startedAt ?? new Date().toISOString(),
     };
@@ -1407,11 +1408,18 @@ function App() {
 
       // Normal MyBishBash app — HQ availability decides which launchers a
       // user (or tester) can see here.
-      const candidates = INTERRUPTION_LAUNCHER_CONTEXTS
+      // Static registry contexts plus HQ-created launchers present in
+      // homeScreenVersions (registered dynamic apps merged after fetch).
+      const candidateIds = Array.from(new Set([
+        ...INTERRUPTION_LAUNCHER_CONTEXTS,
+        ...Object.keys(homeScreenVersions).filter((versionId) => isKnownLauncher(versionId)),
+      ]));
+      const candidates = candidateIds
         .map((versionId) =>
           resolveVersionConfig(
             homeScreenVersions[versionId] ??
-              DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+              DEFAULT_HOME_SCREEN_VERSIONS[versionId] ??
+              getLauncherConfig(versionId),
             launcherBehaviorSettings[versionId],
           ),
         )
@@ -1838,22 +1846,32 @@ function App() {
     fetchLauncherConfigs()
       .then((configs) => {
         if (cancelled || configs.length === 0) return;
+        // HQ-created launchers become first-class runtime launchers: register
+        // them (routes/shell guard/destination resolver) and cache them for
+        // cold-start route parsing on this device.
+        cacheAndRegisterDynamicLaunchers(configs);
         setHomeScreenVersions((current) => {
           const next = { ...current };
           configs.forEach((config) => {
             const defaults = DEFAULT_HOME_SCREEN_VERSIONS[config.id];
-            if (!defaults) return;
-            next[config.id] = mergeLauncherConfig(defaults, {
-              ...(current[config.id] ?? {}),
-              ...config,
-            });
+            if (defaults) {
+              next[config.id] = mergeLauncherConfig(defaults, {
+                ...(current[config.id] ?? {}),
+                ...config,
+              });
+              return;
+            }
+            if (config.isCustom === true) {
+              const customLauncher = buildCustomLauncher(config);
+              if (customLauncher) next[config.id] = customLauncher;
+            }
           });
           return next;
         });
         setLauncherBehaviorSettings((current) => {
           const next = { ...current };
           configs.forEach((config) => {
-            if (!DEFAULT_HOME_SCREEN_VERSIONS[config.id]) return;
+            if (!DEFAULT_HOME_SCREEN_VERSIONS[config.id] && config.isCustom !== true) return;
             next[config.id] = {
               ...(current[config.id] ?? {}),
               useInterruptionPack: config.useInterruptionPack ?? current[config.id]?.useInterruptionPack ?? false,
@@ -3231,7 +3249,7 @@ function App() {
     }
 
     const version = resolveVersionConfig(
-      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
+      homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId] ?? getLauncherConfig(versionId),
       launcherBehaviorSettings[versionId],
     );
     const preferFastDestination = reason === "fake_launcher_icon_clicked";
@@ -5240,7 +5258,10 @@ function App() {
   }, [logFilter, recentMeaningfulEvents]);
   const interruptionPacks = useMemo(
     () =>
-      INTERRUPTION_LAUNCHER_CONTEXTS.map((targetApp) =>
+      Array.from(new Set([
+        ...INTERRUPTION_LAUNCHER_CONTEXTS,
+        ...Object.keys(homeScreenVersions).filter((versionId) => isKnownLauncher(versionId)),
+      ])).map((targetApp) =>
         buildInterruptionFolder(targetApp, homeScreenVersions, launcherBehaviorSettings, cardPacks, {
           hiddenCardIds: hiddenPackCardIdsCompat,
           globalEnabled: globalInterruptionMode,
@@ -5296,7 +5317,7 @@ function App() {
     return (
       <ContinueToAppCard
         appName="Instagram"
-        appIcon="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
+        appIcon={resolveLauncherIconSrc(homeScreenVersions.instagram ?? DEFAULT_HOME_SCREEN_VERSIONS.instagram)}
         onContinue={() => openDestinationApp("instagram", { source: "preview_continue", reason: "user_pressed_continue" })}
         onBack={() => navigateTo("/home", { replace: true })}
         onDashboard={() => navigateTo("/home", { replace: true })}
@@ -7759,7 +7780,7 @@ function SettingsPanel({
 
   const isInsideFakeLauncher =
     launcherContext &&
-    INTERRUPTION_LAUNCHER_CONTEXTS.includes(launcherContext);
+    isKnownLauncher(launcherContext);
 
   const isSelectedCurrentLauncher =
     isInsideFakeLauncher && previewVersionId === launcherContext;
@@ -7964,7 +7985,7 @@ function SettingsPanel({
         <div className="home-screen-version-list">
           {(() => {
             const version = homeScreenVersions[selectedPreviewVersion] ?? DEFAULT_HOME_SCREEN_VERSIONS[selectedPreviewVersion] ?? DEFAULT_HOME_SCREEN_VERSIONS.mybishbash;
-            const previewIcon = version.customIconSrc || version.iconSrc;
+            const previewIcon = resolveLauncherIconSrc(version);
             const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
             const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
             const pack = interruptionPacks?.find((p) => p.targetApp === version.id);
@@ -8006,19 +8027,25 @@ function SettingsPanel({
                   <p>
                     {shortcutContexts[version.id] ?? `Uses launcherContext "${version.id}" and shares the same MyBishBash state.`}
                   </p>
-                    <a
-                      href={installUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="home-screen-install-link"
-                      onClick={() => {
-                        if (version.id !== "mybishbash") {
-                          void onLogLauncherEvent?.("launcher_install_clicked", version.id);
-                        }
-                      }}
-                    >
-                      Open install screen
-                    </a>
+                    {version.requiresRelease ? (
+                      <p className="tiny-note" style={{ margin: 0 }}>
+                        Home-screen shortcut coming soon — this app works from the in-app launcher for now.
+                      </p>
+                    ) : (
+                      <a
+                        href={installUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="home-screen-install-link"
+                        onClick={() => {
+                          if (version.id !== "mybishbash") {
+                            void onLogLauncherEvent?.("launcher_install_clicked", version.id);
+                          }
+                        }}
+                      >
+                        Open install screen
+                      </a>
+                    )}
                 </div>
                 <div className="home-screen-version-actions">
                   <label className="icon-upload-button">
@@ -8041,7 +8068,7 @@ function SettingsPanel({
                     Replace cover icon
                   </label>
                 </div>
-            {INTERRUPTION_LAUNCHER_CONTEXTS.includes(version.id) ? (
+            {isKnownLauncher(version.id) ? (
               <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
                 <div style={{ marginBottom: "12px" }}>
                   <strong style={{ display: "block" }}>Interruptions</strong>
@@ -8515,7 +8542,7 @@ function Overlay({
     return (
       <ContinueToAppCard
         appName={version?.name ?? "App"}
-        appIcon={version?.customIconSrc || version?.iconSrc}
+        appIcon={resolveLauncherIconSrc(version ?? {})}
         href={continueHref}
         onContinue={handleContinue}
         onBack={canGoBackHome ? handleBack : null}

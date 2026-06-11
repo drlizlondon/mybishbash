@@ -14,21 +14,37 @@ import {
 } from "recharts";
 import {
   deleteAdminGlobalPack,
+  deleteAdminLauncherConfig,
   fetchAdminAnalytics,
   fetchAdminGlobalPacks,
   fetchAdminLauncherConfigs,
   fetchAdminLiveActivity,
+  fetchAdminRole,
   fetchAdminUsers,
+  fetchLauncherUsageSummary,
   saveAdminGlobalPack,
   saveAdminLauncherConfig,
+  uploadLauncherIcon,
 } from "./lib/mybishbashSync";
 import {
   fetchAdminTesterReports,
   updateTesterReportStatus,
   updateTesterUser,
 } from "./testing/TestPilot";
-import { FAKE_APP_LAUNCHERS, mergeLauncherConfigs, normalizeLauncherOverride } from "./lib/launcherRegistry";
-import { LAUNCHER_AVAILABILITY_STATUSES, getLauncherAvailabilityStatus } from "./lib/launcherAvailability";
+import {
+  FAKE_APP_LAUNCHERS,
+  PLACEHOLDER_ICON_SRC,
+  mergeLauncherConfigs,
+  normalizeLauncherOverride,
+  resolveLauncherIconSrc,
+  validateLauncherDraft,
+} from "./lib/launcherRegistry";
+import {
+  LAUNCHER_AVAILABILITY_STATUSES,
+  getLauncherAvailabilityStatus,
+  getLauncherAudience,
+  getLauncherLifecycleStatus,
+} from "./lib/launcherAvailability";
 import { THEMES } from "./utils";
 
 const EMPTY_PACK_FORM = {
@@ -257,6 +273,18 @@ const HQContent = memo(function HQContent({
 
   const [adminPacks, setAdminPacks] = useState([]);
   const [launcherConfigs, setLauncherConfigs] = useState([]);
+  // HQ roles: owner (full control incl. hard delete), admin (add/edit/test/
+  // archive), analyst/support (view reports only). Pre-migration rows have no
+  // role column and default to admin.
+  const [adminRole, setAdminRole] = useState("admin");
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    fetchAdminRole(session.user.id)
+      .then((role) => { if (role) setAdminRole(role); })
+      .catch(() => {});
+  }, [session?.user?.id]);
+  const canEditLaunchers = ["owner", "admin"].includes(adminRole);
+  const canHardDeleteLaunchers = adminRole === "owner";
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [range, setRange] = useState("7d");
@@ -334,18 +362,55 @@ const HQContent = memo(function HQContent({
     setLoadingStatic(true);
     setStatus("");
     try {
-      const saved = await saveAdminLauncherConfig({ id: config.id, ...normalizeLauncherOverride(config) }, session?.user?.id);
+      const saved = await saveAdminLauncherConfig(
+        {
+          id: config.id,
+          ...normalizeLauncherOverride(config),
+          // Custom (HQ-created) apps carry fields the override normalizer
+          // does not manage; the save path re-validates and clamps them.
+          ...(config.isCustom
+            ? {
+                isCustom: true,
+                category: config.category,
+                availabilityStatus: config.availabilityStatus,
+                webFallbackUrl: config.webFallbackUrl,
+                iosAppUrl: config.iosAppUrl,
+                androidIntentUrl: config.androidIntentUrl,
+                manualUrl: config.manualUrl,
+              }
+            : {}),
+        },
+        session?.user?.id,
+      );
       setLauncherConfigs((current) => {
         const rest = current.filter((item) => item.id !== saved.id);
         return [...rest, saved];
       });
       setStatus("Launcher config saved.");
+      return true;
     } catch (error) {
       setStatus(error?.message ?? "Could not save launcher config.");
+      return false;
     } finally {
       setLoadingStatic(false);
     }
   }, [session?.user?.id]);
+
+  const handleDeleteLauncherConfig = useCallback(async (launcherId) => {
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      await deleteAdminLauncherConfig(launcherId);
+      setLauncherConfigs((current) => current.filter((item) => item.id !== launcherId));
+      setStatus("App deleted permanently.");
+      return true;
+    } catch (error) {
+      setStatus(error?.message ?? "Could not delete app.");
+      return false;
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, []);
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -484,6 +549,9 @@ const HQContent = memo(function HQContent({
             launchers={mergedLaunchers}
             interruptionPacks={interruptionPacks}
             onSaveLauncherConfig={handleSaveLauncherConfig}
+            onDeleteLauncherConfig={handleDeleteLauncherConfig}
+            canEdit={canEditLaunchers}
+            canHardDelete={canHardDeleteLaunchers}
             loading={loading}
           />
         ) : null}
@@ -901,7 +969,7 @@ const EmptyState = memo(function EmptyState({ title, body }) {
   );
 });
 
-const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], interruptionPacks = [], onSaveLauncherConfig, loading }) {
+const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], interruptionPacks = [], onSaveLauncherConfig, onDeleteLauncherConfig, canEdit = true, canHardDelete = false, loading }) {
   useRenderDiagnostics("LaunchersPage");
   const [launcherFilter, setLauncherFilter] = useState("all");
   const [identityFilter, setIdentityFilter] = useState("all");
@@ -926,19 +994,30 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
         title="Supported Launcher Performance"
         subtitle="Install views, installs, interruption opens, Do Something Else, Continue to app, and settings for supported launchers."
       />
-      <GlassPanel title="Supported Launchers" subtitle={`HQ can edit supported code-reviewed launchers only: ${supportedLauncherNames}. New apps need a reviewed release because routing, install pages, manifests, interruption contexts and tests are still static-ID based. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
+      <GlassPanel title="Protected Apps" subtitle={`Code-reviewed launchers (${supportedLauncherNames}) can be edited and go live; HQ-created apps stay admin-only drafts until a reviewed release ships their routes. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
         <div className="grid gap-4 xl:grid-cols-3">
           {(launchers.length ? launchers : FAKE_APP_LAUNCHERS).map((launcher) => (
             <LauncherConfigCard
               key={launcher.id}
+              onDelete={onDeleteLauncherConfig}
               launcher={launcher}
               interruptionPacks={interruptionPacks}
               onSave={onSaveLauncherConfig}
+              canEdit={canEdit}
+              canHardDelete={canHardDelete}
               loading={loading}
             />
           ))}
         </div>
       </GlassPanel>
+      {canEdit ? (
+        <GlassPanel
+          title="Add New Protected App"
+          subtitle="Creates a draft you can configure, test and deploy from HQ: draft → testing (testers) → live (all users) → disabled/archived. Going live requires a valid https web fallback. Home-screen shortcut install still needs a release promotion; everything in-app works immediately."
+        >
+          <AddLauncherForm launchers={launchers} onSave={onSaveLauncherConfig} loading={loading} />
+        </GlassPanel>
+      ) : null}
       <div className="grid gap-2 md:grid-cols-3">
         <select value={launcherFilter} onChange={(event) => setLauncherFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
           <option value="all">All launchers</option>
@@ -1078,36 +1157,136 @@ const EventsPage = memo(function EventsPage({ events, expandedEventId, setExpand
 });
 
 const AVAILABILITY_LABELS = {
-  public: "Public — visible to normal eligible users",
+  public: "Live — visible to all users",
   hidden: "Hidden — HQ only, not shown to users",
   experimental: "Experimental — testers/experimental flows only",
-  tester_only: "Tester only",
+  tester_only: "Testing — testers only",
   disabled: "Disabled — unavailable to users",
+  draft: "Draft — HQ only, not yet released",
+  archived: "Archived — retired, history preserved",
 };
 
-const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interruptionPacks, onSave, loading }) {
+const LIFECYCLE_LABELS = { draft: "Draft", testing: "Testing", live: "Live", disabled: "Disabled", archived: "Archived" };
+const AUDIENCE_LABELS = { admin_only: "Admin only", testers: "Testers", all_users: "All users" };
+
+function LauncherIconPicker({ launcherId, iconSrc, onUploaded, onError, disabled = false }) {
+  const [uploading, setUploading] = useState(false);
+
+  if (disabled) {
+    return <img src={iconSrc || PLACEHOLDER_ICON_SRC} alt="" className="h-12 w-12 rounded-xl object-cover" />;
+  }
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadLauncherIcon(launcherId, file);
+      onUploaded?.(url);
+    } catch (error) {
+      onError?.(error?.message ?? "Could not upload icon.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <label className="group relative block h-12 w-12 cursor-pointer" title="Change image">
+      <img
+        src={iconSrc || PLACEHOLDER_ICON_SRC}
+        alt=""
+        className="h-12 w-12 rounded-xl object-cover"
+        onError={(event) => {
+          if (event.currentTarget.src.endsWith(PLACEHOLDER_ICON_SRC)) return;
+          event.currentTarget.src = PLACEHOLDER_ICON_SRC;
+        }}
+      />
+      <span className="absolute inset-0 hidden items-center justify-center rounded-xl bg-slate-900/60 text-[9px] font-semibold uppercase tracking-wide text-white group-hover:flex">
+        {uploading ? "…" : "Change"}
+      </span>
+      <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
+    </label>
+  );
+}
+
+const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interruptionPacks, onSave, onDelete, canEdit = true, canHardDelete = false, loading }) {
   const [form, setForm] = useState(() => launcher);
+  const [cardError, setCardError] = useState("");
 
   useEffect(() => {
     setForm(launcher);
   }, [launcher]);
 
   const packOptions = interruptionPacks.filter((pack) => pack.targetApp === launcher.id || pack.linkedVersionId === launcher.id);
-  const iconPreview = form.customIconSrc || form.iconSrc;
   const availabilityStatus = getLauncherAvailabilityStatus(form);
-  const needsQa = availabilityStatus !== "public" && form.hqVisible !== false;
+  const lifecycle = getLauncherLifecycleStatus(form);
+  const audience = getLauncherAudience(form);
+  const needsQa = availabilityStatus !== "public" && availabilityStatus !== "archived" && form.hqVisible !== false;
+
+  async function handleSaveClick() {
+    setCardError("");
+    if (availabilityStatus === "archived" && getLauncherAvailabilityStatus(launcher) !== "archived") {
+      const usage = await fetchLauncherUsageSummary(launcher.id).catch(() => null);
+      const usageNote = usage
+        ? `It has ${usage.launcherEvents} launcher event(s) and ${usage.testerReports} tester report(s); historical data stays readable.`
+        : "Historical data stays readable.";
+      const confirmed = window.confirm(
+        `Archive ${form.displayName || launcher.id}? It will disappear from all user-facing setup, settings and fake launchers. ${usageNote}`,
+      );
+      if (!confirmed) return;
+    }
+    onSave?.(form);
+  }
+
+  async function handleDeleteClick() {
+    setCardError("");
+    const usage = await fetchLauncherUsageSummary(launcher.id).catch(() => null);
+    const usageNote = usage && (usage.launcherEvents > 0 || usage.testerReports > 0)
+      ? `WARNING: this app has ${usage.launcherEvents} launcher event(s) and ${usage.testerReports} tester report(s). `
+      : "";
+    if (usage && (usage.launcherEvents > 0 || usage.testerReports > 0)) {
+      const preferArchive = window.confirm(
+        `${usageNote}Archiving is safer than deleting when an app has history. Press OK to archive instead of deleting, or Cancel to continue with permanent delete.`,
+      );
+      if (preferArchive) {
+        onSave?.({ ...form, availabilityStatus: "archived", enabled: false });
+        return;
+      }
+    }
+    const first = window.confirm(
+      `${usageNote}Permanently delete ${form.displayName || launcher.id}? Historical logs may lose app display metadata (name/icon) unless preserved elsewhere. This cannot be undone.`,
+    );
+    if (!first) return;
+    const second = window.confirm(`Really delete "${launcher.id}" forever? This is the final confirmation.`);
+    if (!second) return;
+    onDelete?.(launcher.id);
+  }
 
   return (
     <article className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        {iconPreview ? <img src={iconPreview} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <div className="h-12 w-12 rounded-xl bg-slate-100" />}
+        <LauncherIconPicker
+          launcherId={launcher.id}
+          disabled={!canEdit}
+          iconSrc={resolveLauncherIconSrc(form)}
+          onUploaded={(url) => {
+            setCardError("");
+            setForm((current) => ({ ...current, customIconSrc: url }));
+          }}
+          onError={setCardError}
+        />
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}{launcher.isCustom ? " · HQ-created" : ""}</p>
           <h4 className="text-base font-semibold text-slate-950">{form.displayName || form.name}</h4>
-          <p className="text-xs text-slate-500">{AVAILABILITY_LABELS[availabilityStatus] ?? availabilityStatus} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
-          {needsQa ? <p className="mt-1 text-xs font-semibold text-amber-700">Not public — check icon/device QA before going live</p> : null}
+          <p className="text-xs text-slate-500">
+            {LIFECYCLE_LABELS[lifecycle] ?? lifecycle} · {AUDIENCE_LABELS[audience] ?? audience} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}
+          </p>
+          {launcher.isCustom ? <p className="mt-1 text-xs font-semibold text-violet-700">HQ-created app — deployable from HQ (in-app launcher); home-screen shortcut install needs release promotion</p> : null}
+          {needsQa && !launcher.isCustom ? <p className="mt-1 text-xs font-semibold text-amber-700">Not public — check icon/device QA before going live</p> : null}
         </div>
       </div>
+      {cardError ? <p className="mt-2 text-xs font-semibold text-red-600">{cardError}</p> : null}
       <div className="mt-4 grid gap-2">
         <input value={form.displayName ?? ""} onChange={(event) => setForm({ ...form, displayName: event.target.value, name: event.target.value })} placeholder="Display name" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
         <input value={form.realAppLabel ?? ""} onChange={(event) => setForm({ ...form, realAppLabel: event.target.value })} placeholder="Real app label" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
@@ -1152,11 +1331,99 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
           <input type="checkbox" checked={Boolean(form.useInterruptionPack)} onChange={(event) => setForm({ ...form, useInterruptionPack: event.target.checked })} />
           Use interruption pack by default
         </label>
-        <button type="button" disabled={loading} onClick={() => onSave?.(form)} className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          Save launcher config
-        </button>
+        {canEdit ? (
+          <button type="button" disabled={loading} onClick={handleSaveClick} className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            Save launcher config
+          </button>
+        ) : (
+          <p className="mt-2 text-xs text-slate-500">View only — your HQ role cannot edit launcher configs.</p>
+        )}
+        {launcher.isCustom && canHardDelete ? (
+          <button type="button" disabled={loading} onClick={handleDeleteClick} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">
+            Delete permanently…
+          </button>
+        ) : null}
+        {launcher.isCustom && !canHardDelete && canEdit ? (
+          <p className="text-xs text-slate-500">Hard delete is owner-only — archive instead.</p>
+        ) : null}
       </div>
     </article>
+  );
+});
+
+const ADD_LAUNCHER_EMPTY_FORM = {
+  id: "",
+  displayName: "",
+  realAppLabel: "",
+  category: "other",
+  customIconSrc: "",
+  iosAppUrl: "",
+  androidIntentUrl: "",
+  webFallbackUrl: "",
+  manualUrl: "",
+  qaNotes: "",
+};
+
+const AddLauncherForm = memo(function AddLauncherForm({ launchers = [], onSave, loading }) {
+  const [form, setForm] = useState(ADD_LAUNCHER_EMPTY_FORM);
+  const [errors, setErrors] = useState([]);
+
+  const field = (key, placeholder) => (
+    <input
+      value={form[key]}
+      onChange={(event) => setForm({ ...form, [key]: event.target.value })}
+      placeholder={placeholder}
+      className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm"
+    />
+  );
+
+  async function handleAdd() {
+    const draft = {
+      ...form,
+      id: form.id.trim().toLowerCase(),
+      isCustom: true,
+      // New apps start safely: admin-only draft, never enabled for users.
+      availabilityStatus: "draft",
+      enabled: false,
+      hqVisible: true,
+      useInterruptionPack: true,
+    };
+    const validation = validateLauncherDraft(draft, { existingIds: launchers.map((launcher) => launcher.id) });
+    if (!validation.ok) {
+      setErrors(validation.errors);
+      return;
+    }
+    setErrors([]);
+    const saved = await onSave?.(draft);
+    if (saved) setForm(ADD_LAUNCHER_EMPTY_FORM);
+  }
+
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {field("id", "App ID / slug (e.g. tiktok)")}
+      {field("displayName", "Display name")}
+      {field("realAppLabel", "Real app label")}
+      {field("category", "Category (e.g. social, video)")}
+      {field("customIconSrc", "Icon image URL (https) — or upload after creating")}
+      {field("iosAppUrl", "iOS app URL")}
+      {field("androidIntentUrl", "Android intent URL")}
+      {field("webFallbackUrl", "Web fallback URL (https) — at least one fallback required")}
+      {field("manualUrl", "Manual URL")}
+      {field("qaNotes", "Notes / testing status")}
+      {errors.length > 0 ? (
+        <ul className="md:col-span-2 list-disc pl-5 text-xs font-semibold text-red-600">
+          {errors.map((error) => <li key={error}>{error}</li>)}
+        </ul>
+      ) : null}
+      <button
+        type="button"
+        disabled={loading}
+        onClick={handleAdd}
+        className="md:col-span-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        Add app as admin-only draft
+      </button>
+    </div>
   );
 });
 

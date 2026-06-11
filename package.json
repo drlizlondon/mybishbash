@@ -13,7 +13,7 @@
     "test:release:staging": "npm run test:release && npm run test:staging-release",
     "test:launcher-flow": "node scripts/test-launcher-flow.mjs",
     "test:testpilot": "node scripts/test-testpilot.mjs",
-    "test:launchers": "node scripts/validate-launchers.mjs && node scripts/test-launcher-install-resolver.mjs && node scripts/test-whatsapp-launcher-qa.mjs && node scripts/test-launcher-availability.mjs && node scripts/test-destination-resolver.mjs",
+    "test:launchers": "node scripts/validate-launchers.mjs && node scripts/test-launcher-install-resolver.mjs && node scripts/test-whatsapp-launcher-qa.mjs && node scripts/test-launcher-availability.mjs && node scripts/test-hq-launcher-admin.mjs && node scripts/test-destination-resolver.mjs",
     "test:fake-launchers": "node scripts/test-fake-launcher-destinations.mjs",
     "test:release-guardrails": "node scripts/test-release-guardrails.mjs",
     "test:e2e": "playwright test",
