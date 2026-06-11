@@ -1256,7 +1256,14 @@ function App() {
 
   // Initialise the utils singleton with the user's stored prefs on first render.
   // This runs synchronously before any isEligible / getCurrentWindow calls.
-  setWindowDefs(initialState.timingWindowsPrefs);
+  // Guarded to the first render only: re-running it on every render would
+  // clobber prefs the user saved during this session back to the boot-time
+  // value (the sync effect below only fires when timingWindowsPrefs changes).
+  const windowDefsInitializedRef = useRef(false);
+  if (!windowDefsInitializedRef.current) {
+    windowDefsInitializedRef.current = true;
+    setWindowDefs(initialState.timingWindowsPrefs);
+  }
 
   const [cards, setCards] = useState(initialState.cards);
   const [mood, setMood] = useState(initialState.mood);
@@ -4133,6 +4140,10 @@ function App() {
         commitmentStatusToday: null,
         commitmentDecisionDate: null,
         commitmentDecisionAt: null,
+        commitmentCheckInPendingDate: null,
+        commitmentCheckInResponse: null,
+        commitmentCheckInResponseDate: null,
+        commitmentCheckInResponseAt: null,
         paused: false,
         deletedAt: null,
         sourcePackId: null,

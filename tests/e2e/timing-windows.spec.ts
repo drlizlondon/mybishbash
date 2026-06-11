@@ -330,6 +330,10 @@ test('settings — narrowing morning to 02:00–03:00 makes morning card ineligi
     cards: [card('tw11', 'Settings effect card', ['morning'])],
     timezone: 'Europe/London',
   });
+  // Fix the clock inside the DEFAULT morning window (06:00 UTC = 07:00 BST)
+  // so the card would be eligible if the saved custom prefs were ignored —
+  // this is what makes the assertion meaningful at any wall-clock run time.
+  await page.clock.setFixedTime('2026-06-01T06:00:00.000Z');
   await page.goto('/mybishbash/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
