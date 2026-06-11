@@ -1,0 +1,140 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  ACCESS_TIERS,
+  CAPABILITIES,
+  getCapabilities,
+  getEffectiveTier,
+  hasCapability,
+  isAccessActive,
+} from "../src/lib/accessCapabilities.js";
+
+const NOW = new Date("2026-06-12T12:00:00Z");
+const PAST = "2026-01-01T00:00:00Z";
+const FUTURE = "2026-12-31T00:00:00Z";
+
+// ── Active access mirrors public.has_active_access() ────────────────────────
+
+assert.equal(isAccessActive({ has_access: true }, NOW), true, "access with no expiry is active");
+assert.equal(isAccessActive({ has_access: false }, NOW), false, "explicit revoke blocks access");
+assert.equal(isAccessActive({ has_access: true, access_expires_at: FUTURE }, NOW), true, "future expiry is active");
+assert.equal(isAccessActive({ has_access: true, access_expires_at: PAST }, NOW), false, "past expiry is inactive");
+assert.equal(isAccessActive({}, NOW), true, "legacy profile without access columns keeps working");
+assert.equal(isAccessActive({ has_access: true, access_expires_at: "not-a-date" }, NOW), true, "malformed expiry does not lock users out");
+
+// ── Effective tier: expired premium degrades to free, not to no-access ──────
+
+assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true }, NOW), ACCESS_TIERS.PREMIUM);
+assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true, access_expires_at: FUTURE }, NOW), ACCESS_TIERS.PREMIUM);
+assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true, access_expires_at: PAST }, NOW), ACCESS_TIERS.FREE, "expired premium degrades to free");
+assert.equal(getEffectiveTier({ access_tier: "free", has_access: true }, NOW), ACCESS_TIERS.FREE);
+assert.equal(getEffectiveTier({}, NOW), ACCESS_TIERS.FREE, "missing tier defaults to free");
+assert.equal(getEffectiveTier({ access_tier: "nonsense" }, NOW), ACCESS_TIERS.FREE, "unknown tier values fail safe to free");
+
+// ── Capability sets ──────────────────────────────────────────────────────────
+
+const freeCapabilities = getCapabilities({ access_tier: "free", has_access: true }, NOW);
+const premiumCapabilities = getCapabilities({ access_tier: "premium", has_access: true }, NOW);
+
+// The free set includes everything shipped today — nothing user-facing is
+// gated yet. If this assertion ever changes, that is a deliberate product
+// decision (with grandfathering via cohort), not a side effect.
+for (const capability of [
+  CAPABILITIES.CAN_CONSUME_CONTENT,
+  CAPABILITIES.CAN_USE_MULTIPLE_APPS,
+  CAPABILITIES.CAN_USE_COMMITMENTS,
+  CAPABILITIES.CAN_USE_ADVANCED_SCHEDULING,
+  CAPABILITIES.CAN_CREATE_CARDS,
+  CAPABILITIES.CAN_CREATE_PACKS,
+]) {
+  assert.equal(freeCapabilities.has(capability), true, `free tier keeps ${capability}`);
+}
+
+assert.equal(freeCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), false, "publishing is born premium-gated");
+assert.equal(premiumCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), true, "premium grants publishing");
+
+for (const capability of freeCapabilities) {
+  assert.equal(premiumCapabilities.has(capability), true, `premium is a superset of free (${capability})`);
+}
+
+assert.equal(
+  hasCapability({ access_tier: "premium", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_PUBLISH_PACKS, NOW),
+  false,
+  "expired premium loses premium capabilities",
+);
+assert.equal(
+  hasCapability({ access_tier: "premium", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_CREATE_PACKS, NOW),
+  true,
+  "expired premium keeps free capabilities",
+);
+
+// ── Source-shape guardrails ──────────────────────────────────────────────────
+
+const root = resolve(import.meta.dirname, "..");
+const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
+
+assert.doesNotMatch(
+  syncSource,
+  /access_entitlements/,
+  "The vestigial access_entitlements table must stay deleted (user_profiles is the single source of truth)",
+);
+assert.match(
+  syncSource,
+  /has_access,access_tier,access_expires_at/,
+  "The session gate must read tier + expiry, not just has_access",
+);
+
+// Clients must never write access/tester columns directly: the migration
+// revokes the broad grants and replaces them with column-level ones, and the
+// only client writes to user_profiles stay heartbeat-shaped. These greps keep
+// both halves of that contract from regressing.
+const migrationSource = readFileSync(
+  resolve(root, "supabase", "migrations", "202606120001_access_tiers_grants_audit.sql"),
+  "utf8",
+);
+
+assert.match(
+  migrationSource,
+  /revoke update on public\.user_profiles from authenticated;\s*\ngrant update \(email, last_seen_at\) on public\.user_profiles to authenticated;/,
+  "user_profiles client updates must stay restricted to email/last_seen_at",
+);
+assert.match(
+  migrationSource,
+  /revoke insert on public\.user_profiles from authenticated;\s*\ngrant insert \(user_id, email, signed_up_at, last_seen_at\) on public\.user_profiles to authenticated;/,
+  "user_profiles client inserts must stay restricted to identity/heartbeat columns",
+);
+assert.match(
+  migrationSource,
+  /drop policy if exists "admins can update all profiles" on public\.user_profiles;/,
+  "the broad admin direct-update policy must stay dropped (admin writes go through audited RPCs)",
+);
+assert.doesNotMatch(
+  migrationSource,
+  /grant (insert|update|delete) on public\.access_audit_log/,
+  "the audit log must stay append-only: no client write grants",
+);
+
+const testPilotApiSource = readFileSync(resolve(root, "src", "testing", "TestPilot", "testPilotApi.js"), "utf8");
+assert.match(
+  testPilotApiSource,
+  /rpc\("hq_set_tester_status"/,
+  "tester updates must go through the audited hq_set_tester_status RPC",
+);
+assert.doesNotMatch(
+  testPilotApiSource,
+  /from\("user_profiles"\)\s*\.update\(/,
+  "no direct client updates to user_profiles tester/access columns",
+);
+
+for (const source of [syncSource, testPilotApiSource]) {
+  for (const restrictedField of ["has_access", "access_tier", "is_tester"]) {
+    assert.doesNotMatch(
+      source,
+      new RegExp(`\\.update\\(\\{[^)]*${restrictedField}`, "s"),
+      `clients must not attempt direct updates to ${restrictedField}`,
+    );
+  }
+}
+
+console.log("access capability checks passed");
