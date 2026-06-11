@@ -2,6 +2,11 @@ import { useMemo, useState } from "react";
 import "./landing.css";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
+import {
+  buildOnboardingLauncherContexts,
+  getDefaultOnboardingLauncherId,
+  isSafariOnboardingRouteAvailable,
+} from "./lib/onboardingLaunchers";
 
 export const DEFAULT_INTERRUPTER_CARDS = [
   "Do I actually want to open Instagram right now?",
@@ -37,21 +42,13 @@ const OPTIONAL_ACTION_CARD_TITLES = [
   "Read one page",
 ];
 
-const INTERRUPTION_CONTEXTS = {
-  social: {
-    label: "Social media",
-    launchers: [
-      { id: "instagram", label: "Instagram", launcherId: "instagram", available: true },
-      { id: "tiktok", label: "TikTok", available: false },
-    ],
-  },
-  videos: {
-    label: "Videos",
-    launchers: [
-      { id: "youtube", label: "YouTube", launcherId: "youtube", available: true },
-    ],
-  },
-};
+// Fallback when no availability-filtered launcher list is provided (e.g.
+// older callers): mirrors the long-standing static defaults.
+const FALLBACK_AVAILABLE_LAUNCHERS = [
+  { id: "safari", displayName: "Safari", category: "browser" },
+  { id: "instagram", displayName: "Instagram", category: "social" },
+  { id: "youtube", displayName: "YouTube", category: "video" },
+];
 
 function createChoice(text, selected = true) {
   return {
@@ -75,8 +72,15 @@ export default function Onboarding(props) {
   );
 }
 
-function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, onGoHome }) {
+function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, onGoHome, availableLaunchers = null }) {
   const { content } = useContentEdit();
+  const launcherPool = availableLaunchers?.length ? availableLaunchers : FALLBACK_AVAILABLE_LAUNCHERS;
+  const interruptionContexts = useMemo(() => buildOnboardingLauncherContexts(launcherPool), [launcherPool]);
+  const defaultLauncherId = useMemo(
+    () => getDefaultOnboardingLauncherId(interruptionContexts) ?? "instagram",
+    [interruptionContexts],
+  );
+  const safariRouteAvailable = isSafariOnboardingRouteAvailable(launcherPool);
   const [step, setStep] = useState("welcome");
   const [route, setRoute] = useState(null);
   const [personalCards, setPersonalCards] = useState(() => [
@@ -90,11 +94,13 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
     ...DEFAULT_ACTION_CARD_TITLES.map((text) => createChoice(text, true)),
     ...OPTIONAL_ACTION_CARD_TITLES.map((text) => createChoice(text, false)),
   ]);
-  const [interruptionContext, setInterruptionContext] = useState("social");
-  const [selectedLauncherId, setSelectedLauncherId] = useState("instagram");
-  const [savedLauncherId, setSavedLauncherId] = useState("instagram");
+  const contextIds = Object.keys(interruptionContexts);
+  const [interruptionContext, setInterruptionContext] = useState(() => (interruptionContexts.social ? "social" : contextIds[0]));
+  const [selectedLauncherId, setSelectedLauncherId] = useState(defaultLauncherId);
+  const [savedLauncherId, setSavedLauncherId] = useState(defaultLauncherId);
 
-  const contextLaunchers = INTERRUPTION_CONTEXTS[interruptionContext].launchers;
+  const activeContext = interruptionContexts[interruptionContext] ?? interruptionContexts[contextIds[0]];
+  const contextLaunchers = activeContext?.launchers ?? [];
   const selectedLauncher = useMemo(
     () => contextLaunchers.find((launcher) => launcher.id === selectedLauncherId && launcher.available) ?? contextLaunchers.find((launcher) => launcher.available),
     [contextLaunchers, selectedLauncherId],
@@ -115,14 +121,14 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
   }
 
   function savePauseSetup(launcher) {
-    const launcherId = launcher?.launcherId ?? launcher?.id ?? selectedLauncher?.launcherId ?? "instagram";
-    const appContext = launcher ?? selectedLauncher ?? { id: "instagram", label: "Instagram", launcherId: "instagram" };
-    setSavedLauncherId(launcherId || "instagram");
+    const launcherId = launcher?.launcherId ?? launcher?.id ?? selectedLauncher?.launcherId ?? defaultLauncherId;
+    const appContext = launcher ?? selectedLauncher ?? { id: defaultLauncherId, label: defaultLauncherId, launcherId: defaultLauncherId };
+    setSavedLauncherId(launcherId || defaultLauncherId);
     onSaveSetup({
       personalCards: selectedTexts(personalCards),
       interrupterCards: selectedTexts(interrupterCards),
       actionCards: selectedTexts(actionCards),
-      launcherId: launcherId || "instagram",
+      launcherId: launcherId || defaultLauncherId,
       appContext,
     });
     setStep("done");
@@ -207,11 +213,13 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
               onBack={goBack}
             >
               <div className="onboarding-route-options">
-                <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("frequent")}>
-                  <EditableText as="strong" path="route.frequent.title" />
-                  <EditableText as="span" path="route.frequent.body" />
-                  <EditableText as="em" path="route.frequent.meta" />
-                </button>
+                {safariRouteAvailable ? (
+                  <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("frequent")}>
+                    <EditableText as="strong" path="route.frequent.title" />
+                    <EditableText as="span" path="route.frequent.body" />
+                    <EditableText as="em" path="route.frequent.meta" />
+                  </button>
+                ) : null}
                 <button type="button" className="onboarding-route-card" onClick={() => chooseRoute("pause")}>
                   <EditableText as="strong" path="route.pause.title" />
                   <EditableText as="span" path="route.pause.body" />
@@ -276,14 +284,14 @@ function OnboardingContent({ onSaveSetup, onSavePersonalSetup, onTryLauncher, on
               onBack={goBack}
             >
               <div className="onboarding-context-options" role="radiogroup" aria-label="Choose interruption context">
-                {Object.entries(INTERRUPTION_CONTEXTS).map(([id, context]) => (
+                {Object.entries(interruptionContexts).map(([id, context]) => (
                   <button
                     key={id}
                     type="button"
                     className={`onboarding-app-option ${interruptionContext === id ? "selected" : ""}`}
                     onClick={() => {
                       setInterruptionContext(id);
-                      setSelectedLauncherId(context.launchers.find((launcher) => launcher.available)?.id ?? "instagram");
+                      setSelectedLauncherId(context.launchers.find((launcher) => launcher.available)?.id ?? defaultLauncherId);
                     }}
                     role="radio"
                     aria-checked={interruptionContext === id}

@@ -28,6 +28,7 @@ import {
   updateTesterUser,
 } from "./testing/TestPilot";
 import { FAKE_APP_LAUNCHERS, mergeLauncherConfigs, normalizeLauncherOverride } from "./lib/launcherRegistry";
+import { LAUNCHER_AVAILABILITY_STATUSES, getLauncherAvailabilityStatus } from "./lib/launcherAvailability";
 import { THEMES } from "./utils";
 
 const EMPTY_PACK_FORM = {
@@ -917,6 +918,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
     return true;
   });
   const stats = buildLauncherStats(filtered);
+  const testingMatrix = buildLauncherTestingMatrix(filtered);
 
   return (
     <div className="space-y-5">
@@ -968,6 +970,47 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
         <DistributionPanel title="Active Users By Launcher" rows={stats.activeUsersByLauncher} />
         <DistributionPanel title="Install Page Views" rows={stats.installViewsByLauncher} />
       </section>
+      <GlassPanel title="Launcher Testing Matrix" subtitle="Latest launch outcome per app, platform and display mode — built from launcher_events.">
+        {testingMatrix.length === 0 ? (
+          <EmptyState title="No launch attempts recorded yet." body="Continue-to-app, missing-destination, cross-app-block and pause-bypass events will appear here." />
+        ) : (
+          <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-200">
+            <div className="grid grid-cols-[110px_90px_100px_1fr_120px_130px_1fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              <span>App</span>
+              <span>Platform</span>
+              <span>Display</span>
+              <span>Route / Source</span>
+              <span>Last attempted</span>
+              <span>Outcome</span>
+              <span>Details</span>
+            </div>
+            {testingMatrix.map((row) => (
+              <div key={row.key} className="grid grid-cols-[110px_90px_100px_1fr_120px_130px_1fr] gap-2 border-b border-slate-100 px-3 py-2 text-xs">
+                <span className="font-semibold text-slate-800">{row.launcherName}</span>
+                <span className="text-slate-600">{row.platform}</span>
+                <span className="text-slate-600">{row.displayMode}</span>
+                <span className="truncate text-slate-600">{[row.route, row.source].filter(Boolean).join(" · ") || "—"}</span>
+                <span className="font-mono text-slate-500">{formatTime(row.lastAttemptedAt)}</span>
+                <span className={
+                  row.outcome === "destination_missing" || row.outcome === "cross_app_blocked"
+                    ? "font-semibold text-rose-700"
+                    : "font-semibold text-emerald-700"
+                }>
+                  {row.outcome.replaceAll("_", " ")}
+                </span>
+                <span className="truncate text-slate-500">
+                  {[
+                    row.strategy ? `strategy: ${row.strategy}` : null,
+                    row.details.sourceField ? `field: ${row.details.sourceField}` : null,
+                    row.details.requestedLauncherId ? `requested: ${row.details.requestedLauncherId}` : null,
+                    row.details.usedXSafariPrefix ? "x-safari" : null,
+                  ].filter(Boolean).join(" · ") || "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassPanel>
       <section className="grid gap-4 xl:grid-cols-2">
         <DistributionPanel title="Most Used Launcher Versions" rows={stats.mostUsedVersions} />
         <GlassPanel title="Recent Launcher Events" subtitle={`${filtered.length} rows in current filters`}>
@@ -1034,6 +1077,14 @@ const EventsPage = memo(function EventsPage({ events, expandedEventId, setExpand
   );
 });
 
+const AVAILABILITY_LABELS = {
+  public: "Public — visible to normal eligible users",
+  hidden: "Hidden — HQ only, not shown to users",
+  experimental: "Experimental — testers/experimental flows only",
+  tester_only: "Tester only",
+  disabled: "Disabled — unavailable to users",
+};
+
 const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interruptionPacks, onSave, loading }) {
   const [form, setForm] = useState(() => launcher);
 
@@ -1043,7 +1094,8 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
 
   const packOptions = interruptionPacks.filter((pack) => pack.targetApp === launcher.id || pack.linkedVersionId === launcher.id);
   const iconPreview = form.customIconSrc || form.iconSrc;
-  const needsQa = form.enabled === false && form.hqVisible !== false;
+  const availabilityStatus = getLauncherAvailabilityStatus(form);
+  const needsQa = availabilityStatus !== "public" && form.hqVisible !== false;
 
   return (
     <article className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-sm">
@@ -1052,8 +1104,8 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}</p>
           <h4 className="text-base font-semibold text-slate-950">{form.displayName || form.name}</h4>
-          <p className="text-xs text-slate-500">{form.enabled ? "Live for users" : "Not live for users"} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
-          {needsQa ? <p className="mt-1 text-xs font-semibold text-amber-700">Needs icon/device QA before enabling</p> : null}
+          <p className="text-xs text-slate-500">{AVAILABILITY_LABELS[availabilityStatus] ?? availabilityStatus} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}</p>
+          {needsQa ? <p className="mt-1 text-xs font-semibold text-amber-700">Not public — check icon/device QA before going live</p> : null}
         </div>
       </div>
       <div className="mt-4 grid gap-2">
@@ -1061,24 +1113,44 @@ const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interrup
         <input value={form.realAppLabel ?? ""} onChange={(event) => setForm({ ...form, realAppLabel: event.target.value })} placeholder="Real app label" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
         <input value={form.iconSrc ?? ""} onChange={(event) => setForm({ ...form, iconSrc: event.target.value })} placeholder="Default icon URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
         <input value={form.customIconSrc ?? ""} onChange={(event) => setForm({ ...form, customIconSrc: event.target.value })} placeholder="Uploaded icon URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <label className="text-xs font-semibold text-slate-700">
+          Availability
+          <select
+            value={availabilityStatus}
+            onChange={(event) => setForm({ ...form, availabilityStatus: event.target.value, enabled: event.target.value === "public" })}
+            className="mt-1 h-10 w-full rounded-xl border border-blue-100 bg-white px-3 text-sm font-normal"
+          >
+            {LAUNCHER_AVAILABILITY_STATUSES.map((status) => (
+              <option key={status} value={status}>{AVAILABILITY_LABELS[status] ?? status}</option>
+            ))}
+          </select>
+        </label>
         <input value={form.iosAppUrl ?? ""} onChange={(event) => setForm({ ...form, iosAppUrl: event.target.value })} placeholder="iOS URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
         <input value={form.androidIntentUrl ?? ""} onChange={(event) => setForm({ ...form, androidIntentUrl: event.target.value })} placeholder="Android intent URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
         <input value={form.webFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, webFallbackUrl: event.target.value })} placeholder="Web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.iosWebFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, iosWebFallbackUrl: event.target.value })} placeholder="iOS web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.androidWebFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, androidWebFallbackUrl: event.target.value })} placeholder="Android web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.nativeAppUrl ?? ""} onChange={(event) => setForm({ ...form, nativeAppUrl: event.target.value })} placeholder="Native app URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.appUrl ?? ""} onChange={(event) => setForm({ ...form, appUrl: event.target.value })} placeholder="App URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.manualUrl ?? ""} onChange={(event) => setForm({ ...form, manualUrl: event.target.value })} placeholder="Manual URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
         <select value={form.interruptionPackId ?? ""} onChange={(event) => setForm({ ...form, interruptionPackId: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
-          <option value="">Default interruption pack</option>
+          <option value="">{`System default pack (${form.defaultInterruptionPackId ?? "none"})`}</option>
           {packOptions.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-          <input type="checkbox" checked={Boolean(form.enabled)} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />
-          Enabled
-        </label>
+        <textarea
+          value={form.qaNotes ?? ""}
+          onChange={(event) => setForm({ ...form, qaNotes: event.target.value })}
+          placeholder="QA / testing notes"
+          rows={2}
+          className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm"
+        />
         <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
           <input type="checkbox" checked={Boolean(form.hqVisible)} onChange={(event) => setForm({ ...form, hqVisible: event.target.checked })} />
           HQ visible
         </label>
         <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
           <input type="checkbox" checked={Boolean(form.useInterruptionPack)} onChange={(event) => setForm({ ...form, useInterruptionPack: event.target.checked })} />
-          Use interruption pack
+          Use interruption pack by default
         </label>
         <button type="button" disabled={loading} onClick={() => onSave?.(form)} className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           Save launcher config
@@ -2021,6 +2093,54 @@ function getActorId(event) {
 
 function getEventLauncher(event) {
   return event?.launcher_context || event?.launcher_id || event?.target_app || event?.app_id || null;
+}
+
+const TESTING_MATRIX_OUTCOMES = {
+  fake_launcher_real_app_opened: "opened",
+  intercept_continue_to_app: "continue_pressed",
+  fake_launcher_destination_missing: "destination_missing",
+  fake_launcher_cross_app_blocked: "cross_app_blocked",
+  fake_launcher_pause_bypass_used: "pause_bypass",
+};
+
+// One row per app + platform + display mode combination, with the most
+// recent launch outcome — a practical launcher-testing matrix built from
+// the existing launcher_events stream.
+export function buildLauncherTestingMatrix(events = []) {
+  const rows = new Map();
+  for (const event of events) {
+    const outcome = TESTING_MATRIX_OUTCOMES[event?.event_type];
+    if (!outcome) continue;
+    const launcherId = getEventLauncher(event);
+    if (!launcherId) continue;
+    const platform = event.platform || "unknown";
+    const displayMode = event.app_display_mode || (event.is_standalone ? "standalone" : "browser");
+    const key = `${launcherId}|${platform}|${displayMode}`;
+    const existing = rows.get(key);
+    const time = new Date(event.created_at ?? 0).getTime();
+    if (existing && existing.time >= time) continue;
+    const metadata = event.metadata ?? {};
+    rows.set(key, {
+      key,
+      launcherId,
+      launcherName: event.launcher_name || launcherId,
+      platform,
+      displayMode,
+      route: event.route || metadata.route || "",
+      source: metadata.launched_from || event.source || "",
+      strategy: metadata.destination_strategy || null,
+      lastAttemptedAt: event.created_at ?? null,
+      outcome,
+      time,
+      details: {
+        sourceField: metadata.destination_source_field ?? null,
+        fallbackHref: metadata.destination_fallback_href ?? null,
+        usedXSafariPrefix: metadata.used_x_safari_prefix ?? null,
+        requestedLauncherId: metadata.requested_launcher_id ?? null,
+      },
+    });
+  }
+  return Array.from(rows.values()).sort((left, right) => right.time - left.time);
 }
 
 function isMeaningfulEvent(event) {

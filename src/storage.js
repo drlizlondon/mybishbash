@@ -284,6 +284,7 @@ export function loadHomeScreenVersions() {
             manualUrl: launcherConfig.manualUrl ?? defaults.manualUrl,
             nativeAppUrl: launcherConfig.nativeAppUrl ?? defaults.nativeAppUrl,
             webFallbackUrl: launcherConfig.webFallbackUrl ?? defaults.webFallbackUrl,
+            availabilityStatus: launcherConfig.availabilityStatus ?? defaults.availabilityStatus,
             enabled: launcherConfig.enabled ?? defaults.enabled ?? true,
             hqVisible: launcherConfig.hqVisible ?? defaults.hqVisible ?? true,
             useInterruptionPack:

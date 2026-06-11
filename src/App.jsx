@@ -30,6 +30,7 @@ import {
   saveActionCards,
   saveSetupComplete,
   isAppPaused,
+  getAppPauseExpiry,
   pauseApp,
   clearExpiredAppPause,
   loadTimingWindowsPrefs,
@@ -107,8 +108,15 @@ import {
   buildInterruptionHomeItem,
   pickInterruptionCardIndex,
   getVersionOpenHref,
+  resolveLauncherDestination,
 } from "./lib/launcherState";
 import { getLauncherConfig, isKnownLauncher, mergeLauncherConfig } from "./lib/launcherRegistry";
+import {
+  LAUNCHER_CONTEXTS,
+  getAvailableLaunchersForUser,
+  isLauncherVisibleInContext,
+  shouldBlockCrossAppLaunch,
+} from "./lib/launcherAvailability";
 import { buildLibrarySections } from "./lib/librarySections";
 import {
   FAKE_LAUNCHER_FLOW_STEPS,
@@ -1383,11 +1391,16 @@ function App() {
             DEFAULT_HOME_SCREEN_VERSIONS[launcherContext],
           launcherBehaviorSettings[launcherContext],
         );
-        return version?.realAppLabel && version.enabled !== false ? [version] : [];
+        const visible = version?.realAppLabel && isLauncherVisibleInContext(version, {
+          testerStatus,
+          context: LAUNCHER_CONTEXTS.FAKE_LAUNCHER_BAR,
+        });
+        return visible ? [version] : [];
       }
 
-      // Normal MyBishBash app
-      return INTERRUPTION_LAUNCHER_CONTEXTS
+      // Normal MyBishBash app — HQ availability decides which launchers a
+      // user (or tester) can see here.
+      const candidates = INTERRUPTION_LAUNCHER_CONTEXTS
         .map((versionId) =>
           resolveVersionConfig(
             homeScreenVersions[versionId] ??
@@ -1395,11 +1408,17 @@ function App() {
             launcherBehaviorSettings[versionId],
           ),
         )
-        .filter((version) => Boolean(version?.realAppLabel && version.enabled !== false));
+        .filter((version) => Boolean(version?.realAppLabel));
+      return getAvailableLaunchersForUser({
+        launchers: candidates,
+        testerStatus,
+        context: LAUNCHER_CONTEXTS.FAKE_LAUNCHER_BAR,
+      });
     }, [
       launcherContext,
       homeScreenVersions,
       launcherBehaviorSettings,
+      testerStatus,
     ]
   );
   const effectiveLaunchSession = useMemo(
@@ -2835,6 +2854,10 @@ function App() {
         if (!pauseBypassInitiatedRef.current.has(route.versionId)) {
           pauseBypassInitiatedRef.current.add(route.versionId);
           console.log("[LAUNCHER] App paused — bypassing card flow", { versionId: route.versionId });
+          void logLauncherEvent("fake_launcher_pause_bypass_used", route.versionId, {
+            launched_from: "app_pause_bypass",
+            pause_expiry: getAppPauseExpiry(route.versionId),
+          });
           openDestinationApp(route.versionId, { source: "app_pause_bypass", reason: "app_paused" });
         }
         return;
@@ -3172,22 +3195,74 @@ function App() {
   }
 
   function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false } = {}) {
+    // Only supported launcher IDs may ever be launched.
+    if (!isKnownLauncher(versionId)) {
+      console.warn("[LAUNCHER] Blocking unsupported launcher destination", { versionId, source, reason });
+      return false;
+    }
+
+    // Final shell-matching guard: a fake-launcher shell session may only
+    // continue to its own app (Safari shell → Safari, Instagram shell →
+    // Instagram, …). Anything else is blocked and logged.
+    if (shouldBlockCrossAppLaunch({ launchSession: effectiveLaunchSession, requestedLauncherId: versionId })) {
+      const shellLauncherId = effectiveLaunchSession.launcherId;
+      console.warn("[LAUNCHER] Blocked cross-app launch from fake launcher shell", {
+        shellLauncherId,
+        requestedLauncherId: versionId,
+        source,
+        reason,
+      });
+      void logLauncherEvent("fake_launcher_cross_app_blocked", shellLauncherId, {
+        requested_launcher_id: versionId,
+        shell_launcher_id: shellLauncherId,
+        launched_from: source,
+        reason,
+        route: getPathRelativeToKnownBase(window.location.pathname),
+      });
+      setOverlay(buildFlowConfirmationOverlay(shellLauncherId, "That app isn't available from this shortcut.", null, "OK"));
+      return false;
+    }
+
     const version = resolveVersionConfig(
       homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId],
       launcherBehaviorSettings[versionId],
     );
     const preferFastDestination = reason === "fake_launcher_icon_clicked";
-    const href = getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferFastDestination }));
+    const resolution = resolveLauncherDestination(version, { preferFastDestination });
+    const href = getBrowserSafeDestinationHref(resolution.href);
+    const destinationMetadata = {
+      destination_strategy: resolution.strategy,
+      destination_source_field: resolution.sourceField,
+      destination_fallback_href: resolution.fallbackHref || null,
+      used_x_safari_prefix: resolution.usedXSafariPrefix,
+      destination_platform: resolution.platform,
+      destination_attempted: Boolean(href),
+      destination_missing: !href,
+    };
+
+    if (!href) {
+      // Continue-to-app must never silently do nothing.
+      console.error("[LAUNCHER] No destination could be resolved", { versionId, source, reason, resolution });
+      void logLauncherEvent("fake_launcher_destination_missing", versionId, {
+        launched_from: source,
+        reason,
+        ...destinationMetadata,
+      });
+      setOverlay(buildFlowConfirmationOverlay(versionId, "We couldn't open this app — its destination link is missing.", null, "OK"));
+      return false;
+    }
 
     void logLauncherEvent("intercept_continue_to_app", versionId, {
       launched_from: source,
       reason,
       href,
+      ...destinationMetadata,
     });
     void logLauncherEvent("fake_launcher_real_app_opened", versionId, {
       launched_from: source,
       reason,
       href,
+      ...destinationMetadata,
     });
     void logEvent({
       event_type: "intercept_continue_to_app",
@@ -3203,6 +3278,7 @@ function App() {
         selectionModel: interceptActivationRef.current?.selectionModel ?? null,
         activationKey: interceptActivationRef.current?.activationKey ?? null,
         destinationOpened: Boolean(href),
+        ...destinationMetadata,
       },
     });
 
@@ -3272,6 +3348,10 @@ function App() {
     if (isAppPaused(versionId)) {
       // Active, unexpired, app-specific pause → open real destination directly.
       console.log("[LAUNCHER] App paused — bypassing card flow from shortcut", { versionId, source });
+      void logLauncherEvent("fake_launcher_pause_bypass_used", versionId, {
+        launched_from: source,
+        pause_expiry: getAppPauseExpiry(versionId),
+      });
       openDestinationApp(versionId, { source, reason: "fake_launcher_icon_clicked" });
       return;
     }
@@ -5377,6 +5457,11 @@ function App() {
           onSavePersonalSetup={savePersonalOnboardingSetup}
           onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
           onGoHome={() => finishOnboarding("home")}
+          availableLaunchers={getAvailableLaunchersForUser({
+            launchers: Object.values(homeScreenVersions).filter((version) => version.id !== "mybishbash"),
+            testerStatus,
+            context: LAUNCHER_CONTEXTS.ONBOARDING,
+          })}
         />
       ) : null}
 
@@ -7679,12 +7764,18 @@ function SettingsPanel({
     duolingo: "Pause before streak-checking",
     mybishbash: "Main MyBishBash home",
   };
-  const supportedShortcutNames = Object.values(homeScreenVersions)
-    .filter((version) => version.id !== "mybishbash" && version.enabled !== false)
+  const settingsTesterStatus = { is_tester: isTester };
+  const supportedShortcutNames = getAvailableLaunchersForUser({
+    launchers: Object.values(homeScreenVersions).filter((version) => version.id !== "mybishbash"),
+    testerStatus: settingsTesterStatus,
+    context: LAUNCHER_CONTEXTS.SETTINGS,
+  })
     .map((version) => version.name ?? version.displayName ?? version.id)
     .join(", ");
   const installableHomeScreenVersions = Object.values(homeScreenVersions).filter(
-    (version) => version.id === "mybishbash" || version.enabled !== false,
+    (version) =>
+      version.id === "mybishbash" ||
+      isLauncherVisibleInContext(version, { testerStatus: settingsTesterStatus, context: LAUNCHER_CONTEXTS.SETTINGS }),
   );
   const selectedPreviewVersion = installableHomeScreenVersions.some((version) => version.id === previewVersionId)
     ? previewVersionId

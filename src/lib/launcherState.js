@@ -1,5 +1,5 @@
 import { DEFAULT_HOME_SCREEN_VERSIONS } from "../storage";
-import { LAUNCHER_IDS, getLauncherConfig, isKnownLauncher } from "./launcherRegistry";
+import { LAUNCHER_IDS, isKnownLauncher } from "./launcherRegistry";
 
 export const NORMAL_LAUNCHER_CONTEXT = "normal";
 export const INTERRUPTION_LAUNCHER_CONTEXTS = LAUNCHER_IDS;
@@ -126,109 +126,7 @@ export const DEFAULT_INTERRUPTION_PACKS = {
   },
 };
 
-function getLauncherPlatform() {
-  const ua = navigator.userAgent || navigator.vendor || "";
-  const isAndroid = /android/i.test(ua);
-  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  if (isAndroid) return "android";
-  if (isIOS) return "ios";
-  return "desktop";
-}
-
-function firstNonEmpty(...values) {
-  return values.find((value) => typeof value === "string" && value.trim()) || "";
-}
-
-function normalizeWebHref(value) {
-  if (!value) return "";
-  return value.startsWith("x-safari-") ? value.replace(/^x-safari-/, "") : value;
-}
-
-export function getVersionOpenHref(version, { preferFastDestination = false } = {}) {
-  if (!version) return "";
-
-  const launcher = getLauncherConfig(version.id) ?? getLauncherConfig(version.type);
-  const merged = { ...(launcher ?? {}), ...(version ?? {}) };
-  const platform = getLauncherPlatform();
-
-  let href = "";
-
-  if (preferFastDestination) {
-    if (merged.id === "safari" && platform === "ios") {
-      href = firstNonEmpty(merged.iosAppUrl, merged.manualUrl, merged.webFallbackUrl);
-      if (href) {
-        console.log("[LAUNCHER_URL_RESOLVED]", {
-          versionId: merged.id,
-          platform,
-          href,
-          preferFastDestination,
-        });
-        return href;
-      }
-    }
-
-    href = normalizeWebHref(firstNonEmpty(
-      merged.webFallbackUrl,
-      merged.iosWebFallbackUrl,
-      merged.androidWebFallbackUrl,
-      merged.manualUrl
-    ));
-    if (href) {
-      console.log("[LAUNCHER_URL_RESOLVED]", {
-        versionId: merged.id,
-        platform,
-        href,
-        preferFastDestination,
-      });
-      return href;
-    }
-  }
-
-  if (platform === "android") {
-    href = firstNonEmpty(
-      merged.androidIntentUrl,
-      merged.androidWebFallbackUrl,
-      merged.webFallbackUrl,
-      merged.manualUrl
-    );
-
-    // Critical safety: never return iOS-only Safari scheme on Android.
-    if (href.startsWith("x-safari-")) {
-      href = href.replace(/^x-safari-/, "");
-    }
-    if (!href) href = "https://www.google.com";
-  } else if (platform === "ios") {
-    if (merged.id === "safari") {
-      href = firstNonEmpty(merged.iosAppUrl, merged.manualUrl, merged.webFallbackUrl);
-    } else {
-      href = firstNonEmpty(
-        merged.iosAppUrl,
-        merged.appUrl,
-        merged.nativeAppUrl,
-        merged.iosWebFallbackUrl,
-        merged.webFallbackUrl,
-        merged.manualUrl
-      );
-    }
-  } else {
-    href = firstNonEmpty(
-      merged.webFallbackUrl,
-      merged.manualUrl,
-      merged.androidWebFallbackUrl,
-      merged.iosWebFallbackUrl
-    );
-  }
-
-  console.log("[LAUNCHER_URL_RESOLVED]", {
-    versionId: merged.id,
-    platform,
-    href,
-    preferFastDestination,
-  });
-
-  return href;
-}
+export { resolveLauncherDestination, getVersionOpenHref } from "./launcherDestinations";
 
 export function isInterruptionLauncherContext(value) {
   return isKnownLauncher(value);

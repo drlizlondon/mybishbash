@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { assertKnownLauncherId } from "./launcherRegistry";
+import { LAUNCHER_AVAILABILITY_STATUSES } from "./launcherAvailability";
 
 function requireSupabase() {
   if (!supabase) {
@@ -554,6 +555,14 @@ function mapLauncherConfig(row = {}) {
     androidIntentUrl: row.android_intent_url,
     webFallbackUrl: row.web_fallback_url,
     interruptionPackId: row.interruption_pack_id,
+    // Columns added by the availability migration; absent on older schemas.
+    availabilityStatus: row.availability_status,
+    iosWebFallbackUrl: row.ios_web_fallback_url,
+    androidWebFallbackUrl: row.android_web_fallback_url,
+    nativeAppUrl: row.native_app_url,
+    appUrl: row.app_url,
+    manualUrl: row.manual_url,
+    qaNotes: row.qa_notes,
   };
   Object.entries(optionalFields).forEach(([key, value]) => {
     if (typeof value === "string" && value.trim()) config[key] = value.trim();
@@ -596,18 +605,27 @@ export async function fetchAdminLauncherConfigs() {
   return fetchLauncherConfigs();
 }
 
+function isMissingColumnError(error) {
+  return error?.code === "PGRST204" || error?.code === "42703" || /column .* does not exist|Could not find the '.*' column/i.test(error?.message ?? "");
+}
+
 export async function saveAdminLauncherConfig(config, userId) {
   assertKnownLauncherId(config?.id);
 
   const client = requireSupabase();
   const now = new Date().toISOString();
-  const payload = {
+  const availabilityStatus = LAUNCHER_AVAILABILITY_STATUSES.includes(config.availabilityStatus)
+    ? config.availabilityStatus
+    : (config.enabled ? "public" : "disabled");
+  const legacyPayload = {
     launcher_id: config.id,
     display_name: config.displayName || config.name || "",
     real_app_label: config.realAppLabel || "",
     icon_src: config.iconSrc || "",
     uploaded_icon_url: config.customIconSrc || "",
-    enabled: Boolean(config.enabled),
+    // Keep the legacy boolean consistent with availability so pre-migration
+    // clients see the same effective state.
+    enabled: availabilityStatus === "public",
     hq_visible: Boolean(config.hqVisible),
     ios_app_url: config.iosAppUrl || "",
     android_intent_url: config.androidIntentUrl || "",
@@ -617,12 +635,31 @@ export async function saveAdminLauncherConfig(config, userId) {
     updated_at: now,
     updated_by: userId ?? null,
   };
+  const payload = {
+    ...legacyPayload,
+    availability_status: availabilityStatus,
+    ios_web_fallback_url: config.iosWebFallbackUrl || "",
+    android_web_fallback_url: config.androidWebFallbackUrl || "",
+    native_app_url: config.nativeAppUrl || "",
+    app_url: config.appUrl || "",
+    manual_url: config.manualUrl || "",
+    qa_notes: config.qaNotes || "",
+  };
 
-  const { data, error } = await client
-    .from("hq_launcher_configs")
-    .upsert(payload, { onConflict: "launcher_id" })
-    .select("*")
-    .single();
+  const upsert = (body) =>
+    client
+      .from("hq_launcher_configs")
+      .upsert(body, { onConflict: "launcher_id" })
+      .select("*")
+      .single();
+
+  let { data, error } = await upsert(payload);
+  if (error && isMissingColumnError(error)) {
+    // The availability migration has not been applied yet — save the legacy
+    // column set so HQ keeps working against the old schema.
+    console.warn("[HQ LAUNCHERS] availability columns missing; saving legacy launcher config", error.message);
+    ({ data, error } = await upsert(legacyPayload));
+  }
   if (error) throw error;
   return mapLauncherConfig(data);
 }

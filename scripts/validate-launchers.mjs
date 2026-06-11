@@ -40,12 +40,14 @@ assert.equal(launcherIds.includes("hinge"), false, "Hinge should wait for a foll
 for (const id of liveLauncherIds) {
   const launcher = FAKE_APP_LAUNCHERS.find((item) => item.id === id);
   assert.equal(launcher?.enabled, true, `${id} should remain enabled`);
+  assert.equal(launcher?.availabilityStatus, "public", `${id} should remain publicly available`);
   assert.equal(launcher?.hqVisible, true, `${id} should remain visible in HQ`);
 }
 
 for (const id of acceptedPhaseTwoLauncherIds) {
   const launcher = FAKE_APP_LAUNCHERS.find((item) => item.id === id);
   assert.equal(launcher?.enabled, false, `${id} should stay disabled until icon/device QA`);
+  assert.equal(launcher?.availabilityStatus, "hidden", `${id} should stay hidden from users until icon/device QA`);
   assert.equal(launcher?.hqVisible, true, `${id} should stay visible in HQ for review`);
 }
 
@@ -197,17 +199,32 @@ assert.throws(
 
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
 assert.match(syncSource, /withTimeout\(query,\s*1200,\s*\{ data: \[\], error: null \}/);
+assert.match(
+  syncSource,
+  /isMissingColumnError\(error\)[\s\S]{0,300}upsert\(legacyPayload\)/,
+  "Launcher config saves must fall back to legacy columns when the availability migration is missing",
+);
+assert.match(
+  syncSource,
+  /availability_status: availabilityStatus/,
+  "Launcher config saves must persist the availability status",
+);
+assert.match(
+  syncSource,
+  /availabilityStatus: row\.availability_status/,
+  "Launcher config fetches must map the availability status when present",
+);
 
 const appSource = readFileSync(resolve(root, "src", "App.jsx"), "utf8");
 assert.match(
   appSource,
-  /filter\(\(version\) => Boolean\(version\?\.realAppLabel && version\.enabled !== false\)\)/,
-  "Fake launcher bar options must exclude disabled launchers",
+  /return getAvailableLaunchersForUser\(\{\s*launchers: candidates,\s*testerStatus,\s*context: LAUNCHER_CONTEXTS\.FAKE_LAUNCHER_BAR,\s*\}\);/,
+  "Fake launcher bar options must come from the central availability selector",
 );
 assert.match(
   appSource,
-  /installableHomeScreenVersions = Object\.values\(homeScreenVersions\)\.filter\([\s\S]*version\.id === "mybishbash" \|\| version\.enabled !== false/,
-  "Settings install options must exclude disabled launchers",
+  /installableHomeScreenVersions = Object\.values\(homeScreenVersions\)\.filter\([\s\S]{0,300}version\.id === "mybishbash" \|\|\s*isLauncherVisibleInContext\(version, \{ testerStatus: settingsTesterStatus, context: LAUNCHER_CONTEXTS\.SETTINGS \}\)/,
+  "Settings install options must come from the central availability selector",
 );
 assert.match(
   appSource,

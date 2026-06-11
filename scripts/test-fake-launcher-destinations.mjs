@@ -101,10 +101,50 @@ if (!/window\.location\.assign\(href\)/.test(appSource)) {
   pass("openDestinationApp still calls window.location.assign(href)");
 }
 
-if (!/const preferFastDestination = reason === "fake_launcher_icon_clicked";[\s\S]{0,120}getVersionOpenHref\(version,\s*\{\s*preferFastDestination\s*\}\)/.test(appSource)) {
+if (!/const preferFastDestination = reason === "fake_launcher_icon_clicked";[\s\S]{0,160}resolveLauncherDestination\(version,\s*\{\s*preferFastDestination\s*\}\)/.test(appSource)) {
   fail("fake launcher icon clicks must prefer fast app-capable destinations before slow native deep links");
 } else {
   pass("fake launcher icon clicks prefer fast app-capable destinations before slow native deep links");
+}
+
+// ── Final shell-matching guard ───────────────────────────────────────────────
+
+if (!/if \(!isKnownLauncher\(versionId\)\) \{[\s\S]{0,200}return false;/.test(appSource)) {
+  fail("openDestinationApp must refuse unsupported launcher IDs");
+} else {
+  pass("openDestinationApp refuses unsupported launcher IDs");
+}
+
+if (!/shouldBlockCrossAppLaunch\(\{ launchSession: effectiveLaunchSession, requestedLauncherId: versionId \}\)[\s\S]{0,900}fake_launcher_cross_app_blocked/.test(appSource)) {
+  fail("openDestinationApp must block and log cross-app launches from fake launcher shells");
+} else {
+  pass("openDestinationApp blocks and logs cross-app launches from fake launcher shells");
+}
+
+if (!/fake_launcher_cross_app_blocked[\s\S]{0,400}requested_launcher_id[\s\S]{0,200}shell_launcher_id[\s\S]{0,200}launched_from[\s\S]{0,200}route/.test(appSource)) {
+  fail("cross-app block events must include requested/shell launcher IDs, source and route metadata");
+} else {
+  pass("cross-app block events include requested/shell launcher IDs, source and route metadata");
+}
+
+// ── Missing destination handling ─────────────────────────────────────────────
+
+if (!/if \(!href\) \{[\s\S]{0,600}fake_launcher_destination_missing[\s\S]{0,600}return false;/.test(appSource)) {
+  fail("continue-to-app must log a missing destination instead of silently doing nothing");
+} else {
+  pass("continue-to-app logs a missing destination instead of silently doing nothing");
+}
+
+if (!/destination_strategy: resolution\.strategy/.test(appSource)) {
+  fail("continue-to-app must log the resolved destination strategy");
+} else {
+  pass("continue-to-app logs the resolved destination strategy");
+}
+
+if (!/fake_launcher_pause_bypass_used/.test(appSource)) {
+  fail("app pause bypasses must be logged");
+} else {
+  pass("app pause bypasses are logged");
 }
 
 if (failures.length > 0) {

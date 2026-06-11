@@ -1,3 +1,9 @@
+import {
+  deriveAvailabilityFromLegacyFlags,
+  isAvailabilityStatusEnabledForUsers,
+  isValidAvailabilityStatus,
+} from "./launcherAvailability.js";
+
 const LAUNCHER_TIMESTAMP = "2026-05-13T00:00:00.000Z";
 const PLACEHOLDER_ICON_SRC = "/mybishbash/icons/mybishbash-cover.png";
 
@@ -30,6 +36,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "public",
+    qaNotes: "",
     enabled: true,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -58,6 +66,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "public",
+    qaNotes: "",
     enabled: true,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -86,6 +96,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "public",
+    qaNotes: "",
     enabled: true,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -114,6 +126,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "hidden",
+    qaNotes: "",
     enabled: false,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -142,6 +156,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "hidden",
+    qaNotes: "",
     enabled: false,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -170,6 +186,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "hidden",
+    qaNotes: "",
     enabled: false,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -211,6 +229,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "hidden",
+    qaNotes: "",
     enabled: false,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -239,6 +259,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "hidden",
+    qaNotes: "",
     enabled: false,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -267,6 +289,8 @@ export const FAKE_APP_LAUNCHERS = [
     interruptionPackId: "",
     useInterruptionPack: true,
     interruptionPaused: false,
+    availabilityStatus: "hidden",
+    qaNotes: "",
     enabled: false,
     hqVisible: true,
     createdAt: LAUNCHER_TIMESTAMP,
@@ -293,6 +317,8 @@ const HQ_EDITABLE_FIELDS = [
   "androidWebFallbackUrl",
   "iosWebFallbackUrl",
   "manualUrl",
+  "availabilityStatus",
+  "qaNotes",
   "enabled",
   "hqVisible",
   "useInterruptionPack",
@@ -325,6 +351,10 @@ export function normalizeLauncherOverride(override = {}) {
       normalized[field] = Boolean(value);
       return;
     }
+    if (field === "availabilityStatus") {
+      if (isValidAvailabilityStatus(value)) normalized[field] = value;
+      return;
+    }
     normalized[field] = typeof value === "string" ? value.trim() : value;
   });
   return normalized;
@@ -343,8 +373,25 @@ export function mergeLauncherConfig(defaultLauncher, override = {}) {
     manifestPath: defaultLauncher.manifestPath,
     defaultInterruptionPackId: defaultLauncher.defaultInterruptionPackId,
   };
+  // Reconcile availability with the legacy enabled flag so the two can
+  // never contradict each other. An explicit status wins; otherwise a legacy
+  // enabled override maps onto a status.
+  let availabilityStatus = merged.availabilityStatus;
+  if (!isValidAvailabilityStatus(availabilityStatus)) availabilityStatus = undefined;
+  if (normalized.availabilityStatus == null && typeof normalized.enabled === "boolean") {
+    availabilityStatus = deriveAvailabilityFromLegacyFlags({
+      enabled: normalized.enabled,
+      hqVisible: merged.hqVisible,
+    });
+  }
+  if (!availabilityStatus) {
+    availabilityStatus = deriveAvailabilityFromLegacyFlags(merged);
+  }
+
   return {
     ...merged,
+    availabilityStatus,
+    enabled: isAvailabilityStatusEnabledForUsers(availabilityStatus),
     name: merged.name || merged.displayName || defaultLauncher.name,
     displayName: merged.displayName || merged.name || defaultLauncher.displayName,
     realAppLabel: merged.realAppLabel ?? defaultLauncher.realAppLabel,
