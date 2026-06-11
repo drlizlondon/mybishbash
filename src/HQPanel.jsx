@@ -15,6 +15,7 @@ import {
 import {
   deleteAdminGlobalPack,
   deleteAdminLauncherConfig,
+  fetchAccessCodes,
   fetchAdminAnalytics,
   fetchAdminGlobalPacks,
   fetchAdminLauncherConfigs,
@@ -22,6 +23,9 @@ import {
   fetchAdminRole,
   fetchAdminUsers,
   fetchLauncherUsageSummary,
+  hqCreateAccessCode,
+  hqSetAccessCodeActive,
+  hqSetUserAccess,
   saveAdminGlobalPack,
   saveAdminLauncherConfig,
   uploadLauncherIcon,
@@ -557,7 +561,7 @@ const HQContent = memo(function HQContent({
         ) : null}
         {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
         {activeView === "tester_reports" ? <TesterReportsPage /> : null}
-        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} /> : null}
+        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
         {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
         {activeView === "events" ? (
           <EventsPage
@@ -1618,7 +1622,7 @@ const TesterReportCard = memo(function TesterReportCard({ report, expanded, onTo
   );
 });
 
-const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, setStatus }) {
+const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, setStatus, canManageAccess = false }) {
   useRenderDiagnostics("UsersPage");
   const [userSearch, setUserSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState(null);
@@ -1641,7 +1645,7 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
         const stats = telemetry.userStats.get(user.user_id) ?? {};
         const lastActivity = stats.lastMeaningfulActivityAt || user.last_meaningful_activity_at || stats.lastEventAt || user.last_seen_at || user.signed_up_at;
         const lastSeen = user.last_login_at || user.last_sign_in_at || user.last_seen_at;
-        const searchable = [user.email, user.user_id, user.access_code, user.tester_group].filter(Boolean).join(" ").toLowerCase();
+        const searchable = [user.email, user.user_id, user.access_code, user.tester_group, user.access_tier, user.grant_reason, user.cohort].filter(Boolean).join(" ").toLowerCase();
         return { user, stats, lastActivity, lastSeen, searchable };
       })
       .filter((item) => !query || item.searchable.includes(query))
@@ -1654,6 +1658,9 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
         title="User Analytics"
         subtitle="Individual adoption paths: signup, onboarding, launcher install, interruptions, Do Something Else, and action-card completion."
       />
+      {canManageAccess ? (
+        <AccessManagementPanel onAccessChanged={onUserUpdated} setStatus={setStatus} />
+      ) : null}
       <div className="grid gap-2 md:grid-cols-[1fr_auto]">
         <input
           value={userSearch}
@@ -1683,6 +1690,11 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
                   <span className={`rounded-full px-2.5 py-1 ${activeBadge.className}`}>{activeBadge.label}</span>
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{user.is_tester ? `Tester${user.tester_group ? ` · ${user.tester_group}` : ""}` : "Not tester"}</span>
                   <span className={`rounded-full px-2.5 py-1 ${user.has_access === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{user.has_access === false ? "No access" : "Access granted"}</span>
+                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">
+                    {user.access_tier === "premium" ? "Premium" : "Free"}
+                    {user.access_expires_at ? ` · until ${formatDate(user.access_expires_at)}` : ""}
+                    {user.grant_reason ? ` · ${user.grant_reason}` : ""}
+                  </span>
                 </div>
                 <button type="button" onClick={() => setSelectedUserId(expanded ? null : user.user_id)} className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
                   {expanded ? "Hide timeline" : "View timeline"}
@@ -1724,6 +1736,9 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
                 Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(lastSeen)} - {user.event_count ?? 0} total events
               </div>
               <TesterUserControls user={user} onUpdate={handleTesterUpdate} />
+              {canManageAccess ? (
+                <AccessUserControls user={user} setStatus={setStatus} onAccessChanged={onUserUpdated} />
+              ) : null}
             </GlassPanel>
           );
         })}
@@ -1756,6 +1771,252 @@ const TesterUserControls = memo(function TesterUserControls({ user, onUpdate }) 
         <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Tester notes" className="h-10 rounded-xl border border-orange-100 bg-white px-3 text-sm" />
       </div>
       <button type="button" onClick={() => onUpdate(user, { is_tester: Boolean(user.is_tester), tester_group: group, tester_notes: notes })} className="mt-2 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700">Save tester fields</button>
+    </div>
+  );
+});
+
+// Expiry dates are entered as YYYY-MM-DD and granted until end of that day UTC.
+function accessExpiryToIso(dateValue) {
+  const trimmed = (dateValue ?? "").trim();
+  return trimmed ? `${trimmed}T23:59:59Z` : null;
+}
+
+function describeAccessResult(result, email) {
+  return result?.status === "pending"
+    ? `No account for ${email} yet — access will apply when they sign up.`
+    : `Access updated for ${email}.`;
+}
+
+const AccessUserControls = memo(function AccessUserControls({ user, setStatus, onAccessChanged }) {
+  const [expiresAt, setExpiresAt] = useState(user.access_expires_at ? String(user.access_expires_at).slice(0, 10) : "");
+  const [reason, setReason] = useState(user.grant_reason ?? "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setExpiresAt(user.access_expires_at ? String(user.access_expires_at).slice(0, 10) : "");
+    setReason(user.grant_reason ?? "");
+  }, [user.access_expires_at, user.grant_reason]);
+
+  async function applyAccess(grant) {
+    if (!user.email) {
+      setStatus?.("This user has no email on record; access can only be changed by email.");
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.(grant ? "Granting access..." : "Revoking access...");
+      const result = await hqSetUserAccess({
+        email: user.email,
+        grant,
+        tier: "premium",
+        expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
+        reason: reason.trim() || null,
+      });
+      await onAccessChanged?.();
+      setStatus?.(grant ? describeAccessResult(result, user.email) : `Access revoked for ${user.email}.`);
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update access.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Access</p>
+          <p className="text-xs text-slate-600">
+            {user.has_access === false ? "Revoked" : user.access_tier === "premium" ? "Premium" : "Free"}
+            {user.access_expires_at ? ` until ${formatDate(user.access_expires_at)}` : ""}
+            {user.cohort ? ` · ${user.cohort}` : ""}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" disabled={busy} onClick={() => applyAccess(true)} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
+            {user.access_tier === "premium" && user.has_access !== false ? "Update grant" : "Grant premium"}
+          </button>
+          <button type="button" disabled={busy} onClick={() => applyAccess(false)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700">
+            Revoke
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="text-xs text-slate-600">
+          Expires (blank = lifetime)
+          <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+        </label>
+        <label className="text-xs text-slate-600">
+          Reason (press, founder, promo...)
+          <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason" className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+        </label>
+      </div>
+    </div>
+  );
+});
+
+const EMPTY_CODE_FORM = {
+  code: "",
+  label: "",
+  maxUses: "",
+  grantReason: "",
+  cohort: "",
+  durationDays: "",
+  grantsTester: false,
+  testerGroup: "",
+};
+
+const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChanged, setStatus }) {
+  const [email, setEmail] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [reason, setReason] = useState("");
+  const [cohort, setCohort] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [codes, setCodes] = useState([]);
+  const [codeForm, setCodeForm] = useState(EMPTY_CODE_FORM);
+
+  const loadCodes = useCallback(async () => {
+    try {
+      setCodes(await fetchAccessCodes());
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not load access codes.");
+    }
+  }, [setStatus]);
+  useEffect(() => { loadCodes(); }, [loadCodes]);
+
+  async function submitAccess(grant) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setStatus?.("Enter an email address first.");
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.(grant ? "Granting access..." : "Revoking access...");
+      const result = await hqSetUserAccess({
+        email: trimmedEmail,
+        grant,
+        tier: "premium",
+        expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
+        reason: reason.trim() || null,
+        cohort: cohort.trim() || null,
+      });
+      await onAccessChanged?.();
+      setStatus?.(grant ? describeAccessResult(result, trimmedEmail) : `Access revoked for ${trimmedEmail}.`);
+      setEmail("");
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update access.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitCode() {
+    const trimmedCode = codeForm.code.trim();
+    if (!trimmedCode) {
+      setStatus?.("Enter a code first.");
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.("Creating access code...");
+      await hqCreateAccessCode({
+        code: trimmedCode,
+        label: codeForm.label.trim() || null,
+        maxUses: codeForm.maxUses ? Number(codeForm.maxUses) : null,
+        grantReason: codeForm.grantReason.trim() || null,
+        cohort: codeForm.cohort.trim() || null,
+        grantsDurationDays: codeForm.durationDays ? Number(codeForm.durationDays) : null,
+        grantsTester: codeForm.grantsTester,
+        testerGroup: codeForm.grantsTester ? (codeForm.testerGroup.trim() || null) : null,
+      });
+      setCodeForm(EMPTY_CODE_FORM);
+      await loadCodes();
+      setStatus?.(`Access code ${trimmedCode.toUpperCase()} created.`);
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not create the access code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleCode(code) {
+    try {
+      setBusy(true);
+      await hqSetAccessCodeActive(code.code, !code.active);
+      await loadCodes();
+      setStatus?.(`Code ${code.code} ${code.active ? "deactivated" : "reactivated"}.`);
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update the code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateCodeForm(field, value) {
+    setCodeForm((previous) => ({ ...previous, [field]: value }));
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <GlassPanel title="Grant Access" subtitle="By email — applies immediately, or on signup if the account does not exist yet. Every change is audit-logged.">
+        <div className="grid gap-2">
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@example.com" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="text-xs text-slate-600">
+              Expires (blank = lifetime)
+              <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Reason
+              <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="press, founder, promo..." className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Cohort
+              <input value={cohort} onChange={(event) => setCohort(event.target.value)} placeholder="founding-2026" className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" disabled={busy} onClick={() => submitAccess(true)} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Grant premium</button>
+            <button type="button" disabled={busy} onClick={() => submitAccess(false)} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-700">Revoke access</button>
+          </div>
+        </div>
+      </GlassPanel>
+      <GlassPanel title="Access Codes" subtitle="Create and manage invite codes. Codes grant premium; duration stamps an expiry at claim time.">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input value={codeForm.code} onChange={(event) => updateCodeForm("code", event.target.value)} placeholder="Code (e.g. PRESS-TIMES)" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.label} onChange={(event) => updateCodeForm("label", event.target.value)} placeholder="Label" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.maxUses} onChange={(event) => updateCodeForm("maxUses", event.target.value)} placeholder="Max uses (blank = unlimited)" inputMode="numeric" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.durationDays} onChange={(event) => updateCodeForm("durationDays", event.target.value)} placeholder="Duration days (blank = permanent)" inputMode="numeric" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.grantReason} onChange={(event) => updateCodeForm("grantReason", event.target.value)} placeholder="Reason (press, promo...)" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.cohort} onChange={(event) => updateCodeForm("cohort", event.target.value)} placeholder="Cohort" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+        </div>
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={codeForm.grantsTester} onChange={(event) => updateCodeForm("grantsTester", event.target.checked)} />
+          Also grants tester mode
+        </label>
+        {codeForm.grantsTester ? (
+          <input value={codeForm.testerGroup} onChange={(event) => updateCodeForm("testerGroup", event.target.value)} placeholder="Tester group" className="mt-2 h-10 w-full rounded-xl border border-orange-100 bg-white px-3 text-sm" />
+        ) : null}
+        <button type="button" disabled={busy} onClick={submitCode} className="mt-3 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Create code</button>
+        <div className="mt-4 space-y-2">
+          {codes.length === 0 ? <p className="text-xs text-slate-500">No access codes yet.</p> : null}
+          {codes.map((code) => (
+            <div key={code.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+              <span className="font-mono font-semibold text-slate-700">{code.code}</span>
+              <span className="text-slate-500">
+                {code.label || code.grant_reason || "—"}
+                {" · "}
+                {code.use_count ?? 0}{code.max_uses ? `/${code.max_uses}` : ""} used
+                {code.grants_duration_days ? ` · ${code.grants_duration_days}d access` : ""}
+                {code.grants_tester ? " · tester" : ""}
+              </span>
+              <button type="button" disabled={busy} onClick={() => toggleCode(code)} className={`rounded-lg border px-2.5 py-1 font-semibold ${code.active ? "border-red-200 text-red-700" : "border-emerald-200 text-emerald-700"}`}>
+                {code.active ? "Deactivate" : "Reactivate"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </GlassPanel>
     </div>
   );
 });

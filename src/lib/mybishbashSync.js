@@ -5,6 +5,7 @@ import {
   validateLauncherDraft,
 } from "./launcherRegistry";
 import { LAUNCHER_AVAILABILITY_STATUSES } from "./launcherAvailability";
+import { isAccessActive } from "./accessCapabilities";
 
 function requireSupabase() {
   if (!supabase) {
@@ -144,83 +145,40 @@ function logSupabaseAccessError(operation, error) {
   });
 }
 
-const LOCAL_INVITATION_CODES = [
-  "REDDIT-14",
-  "FAMILY-ALPHA",
-  "FOUNDER-EARLY",
-  "TESTER"
-];
-
+// Codes are validated and claimed server-side only. The previous hardcoded
+// LOCAL_INVITATION_CODES bypass (and the never-created access_invitation_codes
+// fallback table) are gone: a code that should work must exist in
+// mybishbash_access_codes, where HQ can manage and deactivate it.
 async function validateAccessCode(accessCode) {
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
-
   if (!normalizedAccessCode) return false;
-  if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
 
-  const { data: rpcData, error: rpcError } = await client.rpc("validate_mybishbash_access_code", {
+  const { data, error } = await client.rpc("validate_mybishbash_access_code", {
     access_code: normalizedAccessCode,
   });
 
-  if (!rpcError) return rpcData === true;
-  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") {
-    logSupabaseAccessError("rpc:validate_mybishbash_access_code", rpcError);
-  }
-
-  const { data, error } = await client
-    .from("access_invitation_codes")
-    .select("code, active, usage_count, max_uses")
-    .eq("code", normalizedAccessCode)
-    .maybeSingle();
-
   if (error) {
-    logSupabaseAccessError("query:validate_access_code", error);
+    logSupabaseAccessError("rpc:validate_mybishbash_access_code", error);
     return false;
   }
-
-  if (!data) return false;
-  if (data.active === false) return false;
-  if (data.max_uses !== null && data.usage_count >= data.max_uses) return false;
-
-  return true;
+  return data === true;
 }
 
 async function claimAccessCode(accessCode) {
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
-  if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
 
-  const { data: rpcData, error: rpcError } = await client.rpc("claim_mybishbash_access_code", {
+  const { data, error } = await client.rpc("claim_mybishbash_access_code", {
     access_code: normalizedAccessCode,
   });
 
-  if (!rpcError) return rpcData === true;
-  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") {
-    logSupabaseAccessError("rpc:claim_mybishbash_access_code", rpcError);
-  }
-
-  const { data, error: fetchError } = await client
-    .from("access_invitation_codes")
-    .select("usage_count")
-    .eq("code", normalizedAccessCode)
-    .maybeSingle();
-
-  if (fetchError || !data) {
-    logSupabaseAccessError("query:claim_access_code_fetch", fetchError);
+  if (error) {
+    logSupabaseAccessError("rpc:claim_mybishbash_access_code", error);
     return false;
   }
-
-  const { error: updateError } = await client
-    .from("access_invitation_codes")
-    .update({ usage_count: (data.usage_count || 0) + 1, updated_at: new Date().toISOString() })
-    .eq("code", normalizedAccessCode);
-
-  if (updateError) {
-    logSupabaseAccessError("update:claim_access_code", updateError);
-    return false;
-  }
-  return true;
+  return data === true;
 }
 
 export async function hasAccessEntitlement(userId) {
@@ -229,32 +187,20 @@ export async function hasAccessEntitlement(userId) {
 
   const { data: profile, error: profileError } = await client
     .from("user_profiles")
-    .select("has_access")
+    .select("has_access,access_tier,access_expires_at")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (!profileError) {
-    if (profile?.has_access === false) return false;
-    if (profile?.has_access === true) return true;
-  } else if (!isMissingTableError(profileError)) {
-    logSupabaseAccessError("query:user_profiles.has_access", profileError);
+  if (profileError) {
+    if (!isMissingTableError(profileError)) {
+      logSupabaseAccessError("query:user_profiles.has_access", profileError);
+    }
+    // Transient/offline errors must not lock out a signed-in user; only an
+    // explicit revoke or expiry below fails closed.
+    return true;
   }
 
-  const { data, error } = await client
-    .from("access_entitlements")
-    .select("has_access")
-    .eq("user_id", userId)
-    .maybeSingle();
-    
-  if (error && error.code !== "PGRST205" && !/Could not find the table/i.test(error.message)) {
-    logSupabaseAccessError("query:access_entitlements.has_access", error);
-  }
-
-  // If an admin has explicitly revoked access, block them.
-  if (data?.has_access === false) return false;
-
-  // Otherwise, if they have an active session, they passed the access code gate at signup!
-  return true;
+  return isAccessActive(profile ?? {});
 }
 
 export function onAuthStateChange(callback) {
@@ -469,20 +415,6 @@ export async function touchUserProfile(user) {
   if (!isMissingTableError(profileError)) {
     logSupabaseAccessError("update:user_profiles.touchUserProfile", profileError);
     console.warn("Could not update user profile heartbeat", profileError);
-    return;
-  }
-
-  const { error } = await client.from("access_entitlements").upsert(
-    {
-      user_id: user.id,
-      email: user.email,
-      last_seen_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
-  if (error) {
-    logSupabaseAccessError("upsert:access_entitlements.touchUserProfile", error);
-    console.warn("Could not update user profile heartbeat", error);
   }
 }
 
@@ -794,6 +726,81 @@ export async function fetchAdminUsers() {
     .from("user_summary")
     .select("*")
     .order("last_seen_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ── HQ access management (owner/admin only; every call is audit-logged) ─────
+
+export async function hqSetUserAccess({ email, grant, tier = "premium", expiresAt = null, reason = null, cohort = null }) {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_set_user_access", {
+    p_email: email,
+    p_grant: grant,
+    p_tier: tier,
+    p_expires_at: expiresAt,
+    p_reason: reason,
+    p_cohort: cohort,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function hqCreateAccessCode({
+  code,
+  label = null,
+  maxUses = null,
+  grantsTier = "premium",
+  grantReason = null,
+  cohort = null,
+  grantsDurationDays = null,
+  expiresAt = null,
+  grantsTester = false,
+  testerGroup = null,
+}) {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_create_access_code", {
+    p_code: code,
+    p_label: label,
+    p_max_uses: maxUses,
+    p_grants_tier: grantsTier,
+    p_grant_reason: grantReason,
+    p_cohort: cohort,
+    p_grants_duration_days: grantsDurationDays,
+    p_expires_at: expiresAt,
+    p_grants_tester: grantsTester,
+    p_tester_group: testerGroup,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function hqSetAccessCodeActive(code, active) {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_set_access_code_active", {
+    p_code: code,
+    p_active: active,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchAccessCodes() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("mybishbash_access_codes")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchPendingAccessGrants() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("pending_access_grants")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
