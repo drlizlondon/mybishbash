@@ -101,6 +101,33 @@ test('Library shows all four sections including Do Instead Cards', async ({ page
   await expect(page.getByText('Call a family member')).toBeVisible();
 });
 
+test('packs without uploaded artwork render generated covers', async ({ page }) => {
+  await seedE2EState(page);
+  await page.goto('/mybishbash/explore');
+
+  // Grid: generated cover carries the hook quote inside the art, and the
+  // under-card copy does not repeat it.
+  const card = page.getByTestId(`explore-pack-card-${STATIC_PACK_ID}`);
+  const gridCover = card.getByTestId('generated-cover');
+  await expect(gridCover).toBeVisible();
+  await expect(gridCover).toContainText('Start where you are.');
+  await expect(gridCover).toContainText('Motivational Quote');
+  await expect(card.locator('.explore-cover-quote')).toHaveCount(0);
+
+  // Detail: title-focused generated cover.
+  await card.click();
+  const detailCover = page.getByTestId('explore-pack-detail').getByTestId('generated-cover');
+  await expect(detailCover).toBeVisible();
+  await expect(detailCover).toContainText('Motivational Quote');
+
+  // Library thumbnail after install.
+  await page.getByTestId('explore-install-button').click();
+  await page.getByTestId('explore-detail-close').click();
+  await page.getByTestId('bottom-nav-library').click();
+  await page.getByTestId('library-active-packs-section-toggle').click();
+  await expect(page.getByTestId('library-active-packs-section').getByTestId('generated-cover')).toBeVisible();
+});
+
 test('bottom nav no longer exposes Packs', async ({ page }) => {
   await seedE2EState(page);
   await page.goto('/mybishbash/home');

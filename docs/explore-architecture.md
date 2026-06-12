@@ -378,6 +378,39 @@ Three PRs; content work runs in parallel from day one.
 
 ≈6 dev-days of code to staging. The long pole is editorial: ~7 packs × ~15 cards + covers + why-lines, which PR 1 unblocks on day one.
 
+## K. Generated covers (decided after PR2)
+
+**Default workflow: Create Pack → Publish.** Custom cover upload becomes an optional enhancement; every pack without `cover_image_url` renders a production-quality generated cover from its own metadata. Decision drivers: no designer dependency, supports 50+ packs, zero pipeline.
+
+### K1. Architecture: a React component, not an image pipeline
+
+Covers are **rendered live as a component** (`GeneratedPackCover`), not generated/cached as image files. Rationale: all inputs (title, goal, preview quote, premium) are already in the pack object ExplorePanel holds; rendering is instant, always in sync with HQ edits, retina-perfect, themable, and needs no storage, no server, no staleness handling. Image *files* only become necessary when covers must leave the app (social share cards, install pages, push) — at that point, render the same component to PNG once (satori/html-to-image) and cache to the existing `pack-covers` bucket. Not now.
+
+Resolution order (everywhere a cover appears — grid, hero, detail, Library thumbnails, HQ):
+`coverImageUrl` present → `<img>` · otherwise → `<GeneratedPackCover>`. No flags, no third state.
+
+### K2. Visual specification
+
+- **Canvas:** 3:2, same frame/radius/shadow as uploaded covers.
+- **Composition (one template, three sizes):** goal-palette gradient background with a seeded accent (gradient angle + radial highlight position derived from a hash of the pack id, so the catalogue varies without configuration); **the hook quote** (first `is_preview` card) as the typographic centrepiece, quoted, balanced wrapping, clamped ~90 chars; **title** in small caps at the bottom edge; premium badge top-left as today. No quote → title-centred variant. `why_text` stays on the detail page only — covers stay uncrowded.
+- **Variant rule to avoid duplication:** when the art is generated, the quote lives *inside* the art and the under-card copy shows title + description only (the grid card becomes a mini-hero, matching the hero treatment). The detail page uses the title-focused variant since the same quote appears in "A taste" below.
+- **Goal palettes** (code-owned in `packGoals.js`, AA-contrast pairs): Confidence — warm coral/ember on deep warm brown; Focus — deep ink/indigo, single accent; Calm — sage/moss/mist; Create — violet/plum; Health — fresh green/teal; Relationships — blush/rose; no goal — brand sand/charcoal neutral.
+
+### K3. Code changes required (no schema, no sync changes)
+
+1. `src/lib/packGoals.js` — add `GOAL_STYLES` palette map (+ neutral default).
+2. New `src/GeneratedPackCover.jsx` — the component, `variant: grid | hero | detail | thumb`.
+3. `src/ExplorePanel.jsx` — `ExploreCoverArt` renders it when no `coverImageUrl`; grid-card copy adjusts per the variant rule.
+4. `src/styles.css` — generated-cover styles.
+5. `src/HQPanel.jsx` — PR1's red "No cover" warning becomes a neutral "Auto cover" badge (absence is no longer a defect), and the pack form shows the generated cover as its preview placeholder so HQ sees the default before deciding to upload.
+6. Tests — guardrail + an explore.spec assertion that a coverless pack renders a generated cover.
+
+PR1's schema needs **zero changes** (`cover_image_url` nullable already encodes "generated"). PR2's only adjustment is the fallback-div replacement and the grid copy rule.
+
+### K4. Sequencing
+
+**Implement immediately, before PR3** (~0.5–1 day, "PR2.5"). It unblocks publishing the full catalogue without artwork, and PR3's commitment-template rail reuses the same generated-card styling — building it first means the rail is born consistent.
+
 ### Remaining open questions for product owner
 
 1. **Faith content** — does Bible Verse (and the Missionary Stories shell) launch as a visible Faith goal, stay unfeatured-but-searchable, or hold? (See I2.)

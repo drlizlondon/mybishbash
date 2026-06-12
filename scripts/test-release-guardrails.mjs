@@ -5,6 +5,7 @@ import { buildLibrarySections } from "../src/lib/librarySections.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
+const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
@@ -89,6 +90,12 @@ assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-ex
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
 assertMatch("Settings keeps interruption message editing", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
+// Generated covers are the standard cover system; uploads are an optional
+// override and a missing upload is never treated as an incomplete pack.
+assertMatch("Explore renders generated covers when no upload exists", exploreSource, /pack\.coverImageUrl\) \{\s*return <img[\s\S]{0,200}<GeneratedPackCover/);
+assertNoMatch("HQ never frames a missing upload as a defect", hqSource, /No cover|Missing cover|Cover required/i);
+assertMatch("HQ labels covers as Auto/Custom", hqSource, /\{pack\.coverImageUrl \? "Custom cover" : "Auto cover"\}/);
+assertMatch("HQ pack form previews the generated cover live", hqSource, /data-testid="hq-generated-cover-preview"[\s\S]{0,120}<GeneratedPackCover pack=\{previewPack\}/);
 assertMatch("Explore premium CTA is Coming Soon, not a payment flow", exploreSource, /Premium — Coming Soon/);
 assertMatch("Premium install fails closed in activatePack", appSource, /pack\.isPremium === true && !canUsePremiumContent\) return;/);
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);

@@ -33,6 +33,7 @@ import {
 } from "./lib/mybishbashSync";
 import { PACK_GOALS, PACK_CONTENT_TYPES } from "./lib/packGoals";
 import { parseImportedCards, formatImportedCard } from "./lib/packImport";
+import GeneratedPackCover from "./GeneratedPackCover";
 import {
   fetchAdminTesterReports,
   updateTesterReportStatus,
@@ -2295,7 +2296,7 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
             {pack.isPremium ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Premium</span> : null}
             {pack.isExperimental ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Experimental</span> : null}
             {pack.contentType && pack.contentType !== "cards" ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{pack.contentType}</span> : null}
-            {!pack.coverImageUrl ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">No cover</span> : null}
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{pack.coverImageUrl ? "Custom cover" : "Auto cover"}</span>
           </div>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pack.published ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
@@ -2330,7 +2331,7 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
 const PACK_EDITOR_INPUT_CLASS = "h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 const PACK_EDITOR_AREA_CLASS = "rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 
-function PackCoverField({ value, onChange, onError }) {
+function PackCoverField({ value, onChange, onError, previewPack }) {
   const [uploading, setUploading] = useState(false);
 
   async function handleFile(event) {
@@ -2351,22 +2352,27 @@ function PackCoverField({ value, onChange, onError }) {
     <div className="grid gap-2">
       <div className="flex items-center gap-3">
         {value ? (
-          <img src={value} alt="Pack cover" className="h-14 w-21 rounded-lg border border-blue-100 object-cover" style={{ aspectRatio: "3 / 2" }} />
+          <img src={value} alt="Pack cover" className="h-24 w-36 rounded-lg border border-blue-100 object-cover" style={{ aspectRatio: "3 / 2" }} />
         ) : (
-          <div className="flex h-14 w-21 items-center justify-center rounded-lg border border-dashed border-blue-200 text-[10px] text-slate-400" style={{ aspectRatio: "3 / 2" }}>
-            3:2 cover
+          <div className="h-24 w-36 overflow-hidden rounded-lg" style={{ aspectRatio: "3 / 2" }} data-testid="hq-generated-cover-preview">
+            <GeneratedPackCover pack={previewPack} variant="grid" />
           </div>
         )}
-        <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-          {uploading ? "Uploading…" : "Upload cover"}
-          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
-        </label>
+        <div className="grid gap-1">
+          <label className="cursor-pointer justify-self-start rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+            {uploading ? "Uploading…" : "Upload custom cover"}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
+          </label>
+          <p className="text-[11px] text-slate-500">
+            {value ? "Custom cover override in use." : "Auto cover — generated live from title, goal and the first preview card. Uploading is optional."}
+          </p>
+        </div>
       </div>
       <input
         className={PACK_EDITOR_INPUT_CLASS}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Cover image URL (https) — or upload above"
+        placeholder="Custom cover image URL (https) — optional override"
       />
     </div>
   );
@@ -2378,6 +2384,14 @@ const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading, 
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
     setForm((current) => ({ ...current, [key]: value }));
   };
+  // Live auto-cover preview: regenerates as title/goal/cards are edited.
+  const previewPack = useMemo(() => ({
+    id: form.id ?? form.title,
+    title: form.title.trim() || "Untitled pack",
+    goal: form.goal,
+    isPremium: form.isPremium,
+    entries: parseImportedCards(form.importText),
+  }), [form.id, form.title, form.goal, form.isPremium, form.importText]);
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
       <input
@@ -2404,6 +2418,7 @@ const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading, 
         value={form.coverImageUrl}
         onChange={(url) => setForm((current) => ({ ...current, coverImageUrl: url }))}
         onError={onError}
+        previewPack={previewPack}
       />
       <div className="grid gap-3 md:grid-cols-3">
         <select className={PACK_EDITOR_INPUT_CLASS} value={form.goal} onChange={field("goal")}>

@@ -6055,10 +6055,77 @@ body {
   color: var(--ink-muted);
 }
 
-.explore-cover-fallback {
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.08)),
-    var(--sand-deep);
+/* Generated covers — the standard cover system; uploads are an optional
+   override (docs/explore-architecture.md K). Background/colour come inline
+   from the goal palette + pack-id seed. */
+.generated-cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  gap: 8px;
+  padding: 9%;
+  text-align: center;
+  overflow: hidden;
+}
+
+.generated-cover-quote {
+  font-size: clamp(13px, 1.9vw, 17px);
+  font-weight: 600;
+  line-height: 1.35;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.generated-cover-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.generated-cover-headline {
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+
+.generated-cover-goal {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.generated-cover-detail .generated-cover-headline {
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+/* In the detail frame the art is sized by aspect-ratio, which an explicit
+   height would override. */
+.explore-detail-art.generated-cover {
+  display: flex;
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+.library-pack-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .explore-premium-badge {
