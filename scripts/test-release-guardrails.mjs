@@ -58,9 +58,14 @@ assertMatch("/intercept/:launcherId still starts the interception flow", appSour
 assertMatch("continue-to-app still opens the real destination through openDestinationApp", appSource, /onContinueToApp=\{\(versionId, options\) => openDestinationApp\(versionId, options\)\}/);
 assertMatch("openDestinationApp is the single destination href assignment", appSource, /window\.location\.assign\(href\)/);
 assertMatch(
-  "custom-scheme launches schedule a timed web fallback before navigating",
+  "custom-scheme launches compute the timed-fallback decision",
   appSource,
-  /shouldUseTimedWebFallback\(href\) && fallbackHref && fallbackHref !== href[\s\S]{0,200}scheduleNativeSchemeFallback\(/,
+  /const needsTimedFallback = shouldUseTimedWebFallback\(href\) && fallbackHref && fallbackHref !== href/,
+);
+assertMatch(
+  "anchor-default continue links also arm the timed fallback",
+  appSource,
+  /if \(allowDefaultNavigation\) \{[\s\S]{0,500}scheduleNativeSchemeFallback\([\s\S]{0,200}return false;/,
 );
 assertMatch(
   "scheme fallback cancels on pagehide/blur/hidden so it never double-navigates",
