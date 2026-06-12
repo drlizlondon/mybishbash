@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
 
 const isStagingReleaseRun = Boolean(process.env.MYBISHBASH_STAGING_URL) || process.argv.some((arg) => arg.includes('staging-release.spec'));
+
+// Ignore only the project root's own .claude dir. The bare glob '.claude/**'
+// matches anywhere in the absolute path, which silently discovered zero tests
+// when the checkout itself lives inside .claude/worktrees/.
+const projectClaudeDir = `${fileURLToPath(new URL('./.claude', import.meta.url))}/**`;
 
 /**
  * Read environment variables from file.
@@ -18,8 +24,8 @@ export default defineConfig({
   testMatch: '**/*.spec.@(ts|js)',
   outputDir: 'test-results',
   testIgnore: isStagingReleaseRun
-    ? ['.claude/**']
-    : ['e2e/staging-release.spec.js', '.claude/**'],
+    ? [projectClaudeDir]
+    : ['e2e/staging-release.spec.js', projectClaudeDir],
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

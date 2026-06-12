@@ -203,6 +203,31 @@ export async function hasAccessEntitlement(userId) {
   return isAccessActive(profile ?? {});
 }
 
+// Fetch the caller's own access profile for capability checks (premium
+// gating). Returns null on any failure — capability callers treat null as
+// the free tier, so premium installs fail CLOSED, the opposite default to
+// the fail-open session gate above.
+export async function fetchOwnAccessProfile(userId) {
+  if (!userId || isDemoMode()) return null;
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("user_profiles")
+      .select("has_access,access_tier,access_expires_at,is_tester")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      if (!isMissingTableError(error)) {
+        logSupabaseAccessError("query:user_profiles.access_profile", error);
+      }
+      return null;
+    }
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function onAuthStateChange(callback) {
   if (isDemoMode() || !supabase) {
     return { data: { subscription: { unsubscribe: () => {} } } };

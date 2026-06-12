@@ -32,6 +32,12 @@ export const CAPABILITIES = {
   // Publishing/sharing — the community/UGC surface. Does not exist yet, so it
   // is born premium-gated; Explore should check this from day one.
   CAN_PUBLISH_PACKS: "can_publish_packs",
+
+  // Installing premium Explore packs. Born premium-gated: free users see the
+  // full cover and preview cards, but the install CTA is locked
+  // ("Premium — Coming Soon"). Unlike the session gate, callers of this
+  // capability must fail CLOSED when profile data is unavailable.
+  CAN_USE_PREMIUM_CONTENT: "can_use_premium_content",
 };
 
 const FREE_CAPABILITIES = new Set([
@@ -46,6 +52,7 @@ const FREE_CAPABILITIES = new Set([
 const PREMIUM_CAPABILITIES = new Set([
   ...FREE_CAPABILITIES,
   CAPABILITIES.CAN_PUBLISH_PACKS,
+  CAPABILITIES.CAN_USE_PREMIUM_CONTENT,
 ]);
 
 const TIER_CAPABILITIES = {

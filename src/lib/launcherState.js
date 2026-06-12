@@ -226,7 +226,7 @@ export function buildInterruptionFolder(targetApp, versions, behaviors, customPa
     linkedVersionId: targetApp,
     active: Boolean(globalEnabled && version.useInterruptionPack),
     name: `${version.name} Interruptions`,
-    description: `Cards shown only when launcherContext is "${targetApp}".`,
+    description: `Shown before ${version.name} opens.`,
     editable: true,
     cards,
     messages: cards.map((card) => card.text),
