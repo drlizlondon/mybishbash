@@ -57,6 +57,16 @@ assertNoMatch("FakeLauncherBar does not navigate by itself", fakeLauncherBarSour
 assertMatch("/intercept/:launcherId still starts the interception flow", appSource, /beginInterceptionFlow\(route\.versionId/);
 assertMatch("continue-to-app still opens the real destination through openDestinationApp", appSource, /onContinueToApp=\{\(versionId, options\) => openDestinationApp\(versionId, options\)\}/);
 assertMatch("openDestinationApp is the single destination href assignment", appSource, /window\.location\.assign\(href\)/);
+assertMatch(
+  "custom-scheme launches schedule a timed web fallback before navigating",
+  appSource,
+  /shouldUseTimedWebFallback\(href\) && fallbackHref && fallbackHref !== href[\s\S]{0,200}scheduleNativeSchemeFallback\(/,
+);
+assertMatch(
+  "scheme fallback cancels on pagehide/blur/hidden so it never double-navigates",
+  appSource,
+  /function scheduleNativeSchemeFallback\(\{[\s\S]{0,900}visibilitychange[\s\S]{0,400}pagehide[\s\S]{0,400}blur[\s\S]{0,900}window\.location\.assign\(fallbackHref\)/,
+);
 assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
 assertNoMatch("old weighted launcher selector is not used by the app", appSource, /selectWeightedLauncherCard\(\{/);
 assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
