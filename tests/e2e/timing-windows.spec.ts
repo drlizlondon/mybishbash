@@ -268,9 +268,8 @@ test('malformed timing prefs fall back to defaults — morning card shown at 07:
 
 test('settings — time windows card is visible with all four rows', async ({ page }) => {
   await seedState(page, {});
-  await page.goto('/mybishbash/home');
+  await page.goto('/mybishbash/settings');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('bottom-nav-settings').click();
   await expect(page.getByTestId('timing-windows-settings-card')).toBeVisible();
   for (const id of ['morning', 'day', 'evening', 'night']) {
     await expect(page.getByTestId(`tw-row-${id}`)).toBeVisible();
@@ -288,8 +287,7 @@ test('settings — reset to defaults restores 05:00 start for morning', async ({
       { id: 'night',   label: 'At night',       start: 23, end: 8  },
     ],
   });
-  await page.goto('/mybishbash/home');
-  await page.getByTestId('bottom-nav-settings').click();
+  await page.goto('/mybishbash/settings');
   await expect(page.getByTestId('timing-windows-settings-card')).toBeVisible();
   // Custom value is displayed
   await expect(page.getByTestId('tw-start-morning')).toHaveValue('08:00');
@@ -300,8 +298,7 @@ test('settings — reset to defaults restores 05:00 start for morning', async ({
 
 test('settings — saving non-contiguous windows shows validation error', async ({ page }) => {
   await seedState(page, {});
-  await page.goto('/mybishbash/home');
-  await page.getByTestId('bottom-nav-settings').click();
+  await page.goto('/mybishbash/settings');
   await expect(page.getByTestId('timing-windows-settings-card')).toBeVisible();
   // Create a gap: morning ends at 10, day still starts at 12 → gap at 10–12
   await page.getByTestId('tw-end-morning').fill('10:00');
@@ -312,8 +309,7 @@ test('settings — saving non-contiguous windows shows validation error', async 
 
 test('settings — saving valid custom windows shows confirmation', async ({ page }) => {
   await seedState(page, {});
-  await page.goto('/mybishbash/home');
-  await page.getByTestId('bottom-nav-settings').click();
+  await page.goto('/mybishbash/settings');
   await expect(page.getByTestId('timing-windows-settings-card')).toBeVisible();
   // Set a valid contiguous set: morning 08–12, day 12–18, evening 18–23, night 23–08
   await page.getByTestId('tw-start-morning').fill('08:00');
@@ -334,11 +330,10 @@ test('settings — narrowing morning to 02:00–03:00 makes morning card ineligi
   // so the card would be eligible if the saved custom prefs were ignored —
   // this is what makes the assertion meaningful at any wall-clock run time.
   await page.clock.setFixedTime('2026-06-01T06:00:00.000Z');
-  await page.goto('/mybishbash/home');
+  await page.goto('/mybishbash/settings');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   // Save custom prefs: move "morning" to 02:00–03:00 (night becomes 23:00–02:00)
-  await page.getByTestId('bottom-nav-settings').click();
   await expect(page.getByTestId('timing-windows-settings-card')).toBeVisible();
   await page.getByTestId('tw-start-morning').fill('02:00');
   await page.getByTestId('tw-end-morning').fill('03:00');

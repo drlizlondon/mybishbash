@@ -385,11 +385,12 @@ for (const launcherId of launcherIds) {
     await expect(page).toHaveURL(new RegExp(`/mybishbash/intercept/${launcherId}$`));
     await expectFakeLauncherPackCard(page, launcherId);
 
-    await page.goto('/mybishbash/home');
-    await expect(page).toHaveURL(/\/mybishbash\/home$/);
-    await expect(page.getByTestId('home-panel')).toBeVisible();
+    await page.goto('/mybishbash/library');
+    await expect(page).toHaveURL(/\/mybishbash\/library$/);
+    await expect(page.getByTestId('library-active-packs-section-toggle')).toBeVisible();
+    await page.getByTestId('library-active-packs-section-toggle').click();
 
-    await page.getByTestId('home-card-downloaded-shell-pack').click();
+    await page.getByTestId('library-row-downloaded-shell-pack').click();
     await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
     await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
     await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toHaveCount(0);
@@ -424,9 +425,10 @@ test('fake launcher first rendered frame never contains legacy pack labels', asy
 test('normal MyBishBash home pack browsing keeps Back to home neutral CTA', async ({ page }) => {
   await seedDownloadedShellState(page, { interruptionOn: false });
 
-  await page.goto('/mybishbash/home');
-  await expect(page.getByTestId('home-panel')).toBeVisible();
-  await page.getByTestId('home-card-downloaded-shell-pack').click();
+  await page.goto('/mybishbash/library');
+  await expect(page.getByTestId('library-active-packs-section-toggle')).toBeVisible();
+  await page.getByTestId('library-active-packs-section-toggle').click();
+  await page.getByTestId('library-row-downloaded-shell-pack').click();
 
   await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
   await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toBeVisible();

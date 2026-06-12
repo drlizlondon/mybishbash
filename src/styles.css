@@ -5089,6 +5089,11 @@ body {
   stroke: none;
 }
 
+.premium-manage-app-shortcut {
+  right: max(18px, env(safe-area-inset-right));
+  top: calc(env(safe-area-inset-top) + 20px + (var(--dashboard-shortcut-size) * 2) + 20px);
+}
+
 /* ─── App pause modal (bottom sheet) ───────────────────────────────────────── */
 
 .app-pause-backdrop {
@@ -5604,6 +5609,11 @@ body {
     right: 28px;
   }
 
+  .premium-manage-app-shortcut {
+    top: calc(env(safe-area-inset-top) + 22px + (var(--dashboard-shortcut-size) * 2) + 20px);
+    right: 28px;
+  }
+
   .premium-create-shortcut {
     right: auto;
     left: 28px;
@@ -5639,6 +5649,11 @@ body {
 
   .premium-pause-shortcut {
     top: calc(env(safe-area-inset-top) + 22px + var(--dashboard-shortcut-size) + 10px);
+    right: 32px;
+  }
+
+  .premium-manage-app-shortcut {
+    top: calc(env(safe-area-inset-top) + 22px + (var(--dashboard-shortcut-size) * 2) + 20px);
     right: 32px;
   }
 

@@ -48,13 +48,19 @@ function assertInAppLauncherUsesSharedHandler(source) {
   pass(`${source} uses handleFakeLauncherLaunch`);
 }
 
-assertInAppLauncherUsesSharedHandler("home_fake_launcher_bar");
+assertInAppLauncherUsesSharedHandler("apps_protected_launch");
 assertInAppLauncherUsesSharedHandler("overlay_fake_launcher");
 assertInAppLauncherUsesSharedHandler("settings_fake_launcher");
 
+if (/onLaunch=\{\(versionId\) =>\s*handleFakeLauncherLaunch\(versionId, "home_fake_launcher_bar"\)/.test(appSource)) {
+  fail("Home must not render a global fake launcher bar");
+} else {
+  pass("Home does not render a global fake launcher bar");
+}
+
 assertPattern(
   "in-app fake launcher sources are separated from installed launcher entries",
-  /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"[\s\S]{0,120}\]\);[\s\S]{0,260}const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/g,
+  /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"apps_protected_launch"[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"[\s\S]{0,120}\]\);[\s\S]{0,260}const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/g,
 );
 
 assertPattern(
@@ -62,7 +68,7 @@ assertPattern(
   /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
 );
 
-for (const source of ["home_fake_launcher_bar", "overlay_fake_launcher", "settings_fake_launcher"]) {
+for (const source of ["apps_protected_launch", "home_fake_launcher_bar", "overlay_fake_launcher", "settings_fake_launcher"]) {
   const calls = findCallWithSource("beginInterceptionFlow", source);
   if (calls.length > 0) {
     fail(`${source} must not call beginInterceptionFlow`, calls[0]);

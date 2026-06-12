@@ -94,9 +94,7 @@ async function seedState(
       window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
       window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
       window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(seededSettings));
-      if (Object.keys(seededAppPauses).length > 0) {
-        window.localStorage.setItem('mybishbash.app-pauses.v1', JSON.stringify(seededAppPauses));
-      }
+      window.localStorage.setItem('mybishbash.app-pauses.v1', JSON.stringify(seededAppPauses));
       // Capture navigation attempts instead of actually leaving the page.
       window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
       window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION = (href, metadata) => {
@@ -358,6 +356,97 @@ test('fake-launcher-warm-resume-clears-bypass — revisiting home after bypass d
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
   const attempts = await getNavigationAttempts(page);
   expect(attempts).toHaveLength(0);
+});
+
+test('apps-route-renders — /apps and Apps nav item are visible', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps1', 'Apps route card')] });
+  await page.goto('/mybishbash/apps');
+
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
+  await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
+  await expect(page.getByTestId('protected-apps-list')).toBeVisible();
+  await expect(page.getByTestId('apps-direct-open-safari')).toHaveText('Test direct open');
+});
+
+test('home-no-global-fake-launchers — Home no longer shows all fake app shortcut buttons', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps2', 'Quiet home card')] });
+  await page.goto('/mybishbash/home');
+
+  await expect(page.getByTestId('home-dashboard-summary')).toBeVisible();
+  await expect(page.getByTestId('fake-launcher-safari')).toHaveCount(0);
+  await expect(page.getByTestId('fake-launcher-youtube')).toHaveCount(0);
+  await expect(page.getByTestId('fake-launcher-instagram')).toHaveCount(0);
+});
+
+test('apps-pause-status-and-end-pause — paused app is visible and can resume MyBishBash', async ({ page }) => {
+  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await seedState(page, {
+    cards: [personalCard('apps3', 'Resume card')],
+    appPauses: { safari: futureExpiry },
+  });
+  await page.goto('/mybishbash/apps/safari');
+
+  await expect(page.getByTestId('apps-pause-safari')).toBeVisible();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText(/Paused:/);
+
+  await page.getByTestId('apps-end-pause-safari').click();
+  await expect(page.getByTestId('apps-pause-safari')).toHaveCount(0);
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Not paused');
+
+  const expiry = await page.evaluate(() => {
+    const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
+    return pauses['safari'] ?? null;
+  });
+  expect(expiry).toBeNull();
+
+  await page.getByTestId('apps-protected-launch-safari').click();
+  await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+  const attempts = await getNavigationAttempts(page);
+  expect(attempts).toHaveLength(0);
+});
+
+test('apps-protected-launch-paused — active pause bypasses only that app', async ({ page }) => {
+  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await seedState(page, {
+    cards: [personalCard('apps4', 'App-specific protected launch card')],
+    appPauses: { safari: futureExpiry },
+  });
+  await page.goto('/mybishbash/apps/safari');
+
+  await page.getByTestId('apps-protected-launch-safari').click();
+  await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBe(1);
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+
+  await page.evaluate(() => { window.__MYBISHBASH_NAVIGATION_ATTEMPTS = []; });
+  await page.goto('/mybishbash/apps/youtube');
+  await page.getByTestId('apps-protected-launch-youtube').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/intercept\/youtube$/);
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+  const attempts = await getNavigationAttempts(page);
+  expect(attempts).toHaveLength(0);
+});
+
+test('fake-shell-manage-link — fake shell links back to Apps for the current app', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps5', 'Manage this app card')] });
+  await page.goto('/mybishbash/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await page.getByTestId('manage-app-link').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/safari$/);
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
+  await expect(page.getByTestId('protected-app-safari')).toBeVisible();
+});
+
+test('settings-no-protected-app-owner — Settings no longer owns protected app management', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps6', 'Settings ownership card')] });
+  await page.goto('/mybishbash/settings');
+
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page.getByTestId('protected-apps-list')).toHaveCount(0);
+  await expect(page.getByText('Home Screen Shortcuts')).toHaveCount(0);
 });
 
 test('no-button-overlap — pause button does not cover dashboard button on mobile viewport', async ({ page }) => {

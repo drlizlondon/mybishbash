@@ -113,6 +113,12 @@ async function gotoHome(page: Page) {
   await expect(page.getByTestId('app-shell')).toBeVisible();
 }
 
+async function gotoLibrary(page: Page, section: 'personal' | 'commitment' | 'active-packs' = 'personal') {
+  await page.goto('/mybishbash/library');
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await page.getByTestId(`library-${section}-section-toggle`).click();
+}
+
 async function gotoLauncher(page: Page, launcherId = 'safari') {
   await page.goto(`/mybishbash/intercept/${launcherId}`);
 }
@@ -310,11 +316,11 @@ test('Commitment Card preset and custom timing controls eligibility', async ({ p
     }),
   ]);
 
-  await gotoHome(page);
+  await gotoLibrary(page, 'commitment');
 
-  await expect(page.getByTestId('home-card-evening-card').getByText('upcoming')).toBeVisible();
-  await expect(page.getByTestId('home-card-custom-later-card').getByText('upcoming')).toBeVisible();
-  await expect(page.getByTestId('home-card-custom-now-card').getByText('ready')).toBeVisible();
+  await expect(page.getByTestId('library-row-evening-card').getByText('commitment')).toBeVisible();
+  await expect(page.getByTestId('library-row-custom-later-card').getByText('custom timing')).toBeVisible();
+  await expect(page.getByTestId('library-row-custom-now-card').getByText('custom timing')).toBeVisible();
 });
 
 test('custom start and end time window is saved exactly from the composer', async ({ page }) => {
@@ -434,9 +440,9 @@ test('commitment declined yesterday appears again today', async ({ page }) => {
 
 test('Not this time shows motivation reminder before a final decision', async ({ page }) => {
   await seedE2EState(page, [commitmentCard()]);
-  await gotoHome(page);
+  await gotoLibrary(page, 'commitment');
 
-  await page.getByTestId('home-card-commitment-card').click();
+  await page.getByTestId('library-row-commitment-card').click();
   await page.getByTestId('card-action-not-this-time').click();
 
   await expect(page.getByText('MESSAGE FROM YOURSELF')).toBeVisible();
@@ -450,9 +456,9 @@ test('Not this time shows motivation reminder before a final decision', async ({
 
 test('I’ll commit after all records made and shows acknowledgement', async ({ page }) => {
   await seedE2EState(page, [commitmentCard({ commitmentCheckInEnabled: true, commitmentCheckInTime: '12:00' })]);
-  await gotoHome(page);
+  await gotoLibrary(page, 'commitment');
 
-  await page.getByTestId('home-card-commitment-card').click();
+  await page.getByTestId('library-row-commitment-card').click();
   await page.getByTestId('card-action-not-this-time').click();
   await page.getByTestId('card-action-i-ll-commit-after-all').click();
 
@@ -465,9 +471,9 @@ test('I’ll commit after all records made and shows acknowledgement', async ({ 
 
 test('final Not this time from motivation records declined and shows soft acknowledgement', async ({ page }) => {
   await seedE2EState(page, [commitmentCard()]);
-  await gotoHome(page);
+  await gotoLibrary(page, 'commitment');
 
-  await page.getByTestId('home-card-commitment-card').click();
+  await page.getByTestId('library-row-commitment-card').click();
   await page.getByTestId('card-action-not-this-time').click();
   await page.getByTestId('card-action-not-this-time').click();
 

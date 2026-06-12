@@ -106,6 +106,10 @@ function isTesterStatus(testerStatus, user) {
   return testerStatus?.is_tester === true || user?.isTester === true;
 }
 
+function hasConfirmedNativeDestinationQa(launcher = {}) {
+  return launcher.destinationQaConfirmed === true || launcher.nativeDestinationQaConfirmed === true;
+}
+
 // Decide whether one launcher is visible for a viewer in a context.
 export function isLauncherVisibleInContext(launcher, {
   user = null,
@@ -121,6 +125,10 @@ export function isLauncherVisibleInContext(launcher, {
     // HQ can always see supported launchers — disabled and hidden apps stay
     // reviewable there unless the caller explicitly filters them out.
     return true;
+  }
+
+  if (launcher?.id === "whatsapp" && !hasConfirmedNativeDestinationQa(launcher)) {
+    return isTester && [LAUNCHER_AVAILABILITY.PUBLIC, LAUNCHER_AVAILABILITY.TESTER_ONLY, LAUNCHER_AVAILABILITY.EXPERIMENTAL].includes(status);
   }
 
   switch (status) {

@@ -501,6 +501,15 @@ export function pauseApp(appId, durationMinutes) {
   return expiry;
 }
 
+export function clearAppPause(appId) {
+  if (!appId) return;
+  const map = getAppPausesMap();
+  if (map[appId] !== undefined) {
+    delete map[appId];
+    saveAppPausesMap(map);
+  }
+}
+
 export function clearExpiredAppPause(appId) {
   if (!appId || isAppPaused(appId)) return;
   const map = getAppPausesMap();

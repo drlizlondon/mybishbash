@@ -219,12 +219,12 @@ test('in-app fake launchers route to caught-up screen when no cards and no pause
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  // Tapping any fake launcher with no active pause must enter the card flow,
-  // not launch the real app directly.
-  await page.getByTestId('fake-launcher-safari').click();
+  // Tapping the protected-launch control with no active pause must enter the
+  // card flow, not launch the real app directly.
+  await page.getByTestId('apps-protected-launch-safari').click();
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
@@ -236,9 +236,9 @@ test('Safari desktop fake launcher routes to caught-up screen when no cards and 
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('fake-launcher-safari').click();
+  await page.getByTestId('apps-protected-launch-safari').click();
 
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
@@ -260,12 +260,12 @@ test('tester in-app fake launcher shortcuts enter card flow (no active pause)', 
     testerMode: true,
   });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  // Tapping a fake launcher with no active pause must enter the card flow,
+  // Tapping a protected launcher with no active pause must enter the card flow,
   // even in tester mode — direct launch only happens with an active pause.
-  await page.getByTestId('fake-launcher-safari').click();
+  await page.getByTestId('apps-protected-launch-safari').click();
   await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);
 
@@ -279,9 +279,9 @@ test('Safari iOS fake launcher routes to caught-up screen when no cards and no p
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('fake-launcher-safari').click();
+  await page.getByTestId('apps-protected-launch-safari').click();
 
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
@@ -323,13 +323,14 @@ test('continue-to-app opens the destination from no-card intercept state', async
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('normal Home opens personal cards separately from fake launcher behaviour', async ({ page }) => {
+test('normal Library opens personal cards separately from fake launcher behaviour', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [smokeCard('home-card', 'E2E home card')] });
 
-  await gotoApp(page, '/home');
-  await expect(page.getByTestId('home-panel')).toBeVisible();
-  await page.getByTestId('home-card-home-card').click();
+  await gotoApp(page, '/library');
+  await expect(page.getByTestId('library-personal-section-toggle')).toBeVisible();
+  await page.getByTestId('library-personal-section-toggle').click();
+  await page.getByTestId('library-row-home-card').click();
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'E2E home card' })).toBeVisible();
@@ -574,14 +575,17 @@ test('basic card create, open, complete flow does not immediately reappear', asy
   await page.getByTestId('card-prompt-input').fill('E2E created card');
   await page.getByTestId('save-card-button').click();
 
-  await expect(page.getByText('E2E created card')).toBeVisible();
-  await page.getByText('E2E created card').click();
+  await page.getByTestId('bottom-nav-library').click();
+  await page.getByTestId('library-personal-section-toggle').click();
+  const createdLibraryRow = page.locator('[data-testid^="library-row-"]').filter({ hasText: 'E2E created card' });
+  await expect(createdLibraryRow).toBeVisible();
+  await createdLibraryRow.click();
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await page.getByTestId('card-action-done').click();
 
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'E2E created card' })).toBeVisible();
+  await expect(page.getByTestId('home-dashboard-summary').getByText('E2E created card')).toBeVisible();
   await expectNoConsoleErrors(consoleErrors);
 });
 
@@ -592,12 +596,14 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
 
   await gotoApp(page, '/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('bottom-nav-settings').click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.getByTestId('bottom-nav-apps').click();
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
   await page.getByTestId('bottom-nav-home').click();
   await expect(page.getByTestId('home-panel')).toBeVisible();
 
-  await page.getByTestId('fake-launcher-instagram').click();
+  await page.getByTestId('bottom-nav-apps').click();
+  await page.getByTestId('apps-select').selectOption('instagram');
+  await page.getByTestId('apps-protected-launch-instagram').click();
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);

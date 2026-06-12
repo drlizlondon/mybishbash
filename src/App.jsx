@@ -32,6 +32,7 @@ import {
   isAppPaused,
   getAppPauseExpiry,
   pauseApp,
+  clearAppPause,
   clearExpiredAppPause,
   loadTimingWindowsPrefs,
   saveTimingWindowsPrefs,
@@ -524,6 +525,11 @@ function parseRoute(path) {
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
   if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
   if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
+  if (normalized === "/apps") return { kind: "apps", path: normalized, tab: "apps" };
+  const appsMatch = normalized.match(/^\/apps\/([^/]+)$/);
+  if (appsMatch && isKnownLauncher(appsMatch[1])) {
+    return { kind: "apps", path: normalized, tab: "apps", versionId: appsMatch[1] };
+  }
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
   return { kind: "home", path: "/home", tab: "home" };
@@ -591,6 +597,19 @@ function getWeeklyShiftCount(events, now = new Date()) {
     if (!shiftTypes.has(event.event_type)) return false;
     return new Date(event.created_at).getTime() >= weekStart;
   }).length;
+}
+
+function formatPauseRemaining(expiry) {
+  if (!expiry) return "";
+  const remainingMs = new Date(expiry).getTime() - Date.now();
+  if (!(remainingMs > 0)) return "";
+  const remainingMinutes = Math.ceil(remainingMs / 60000);
+  if (remainingMinutes < 60) return `${remainingMinutes} min${remainingMinutes === 1 ? "" : "s"} left`;
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  return minutes === 0
+    ? `${hours} hr${hours === 1 ? "" : "s"} left`
+    : `${hours} hr ${minutes} mins left`;
 }
 
 // describeLogEvent, getLogEventDisplayLabel → moved to src/components/LogPanel.jsx
@@ -989,6 +1008,7 @@ const LAUNCH_PRIMARY_ACTIONS = {
   BACK_TO_HOME: "back_to_home",
 };
 const IN_APP_SHORTCUT_SOURCES = new Set([
+  "apps_protected_launch",
   "home_fake_launcher_bar",
   "overlay_fake_launcher",
   "settings_fake_launcher",
@@ -1299,6 +1319,7 @@ function App() {
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
+  const [appPauseRevision, setAppPauseRevision] = useState(0);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
   const initialRoute = useMemo(() => parseRoute(routePath), []);
   const [screen, setScreen] = useState(initialRoute.kind === "intercept" ? "interception" : initialState.setupComplete ? "library" : "onboarding");
@@ -1436,6 +1457,48 @@ function App() {
       testerStatus,
     ]
   );
+  const protectedAppStatuses = useMemo(() => {
+    const candidateIds = Array.from(new Set([
+      ...INTERRUPTION_LAUNCHER_CONTEXTS,
+      ...Object.keys(homeScreenVersions).filter((versionId) => isKnownLauncher(versionId)),
+    ]));
+    const candidates = candidateIds
+      .map((versionId) =>
+        resolveVersionConfig(
+          homeScreenVersions[versionId] ??
+            DEFAULT_HOME_SCREEN_VERSIONS[versionId] ??
+            getLauncherConfig(versionId),
+          launcherBehaviorSettings[versionId],
+        ),
+      )
+      .filter((version) => Boolean(version?.id && version.id !== "mybishbash" && version.realAppLabel));
+    const visibleVersions = getAvailableLaunchersForUser({
+      launchers: candidates,
+      testerStatus,
+      context: LAUNCHER_CONTEXTS.SETTINGS,
+    });
+    return visibleVersions.map((version) => {
+      const behavior = launcherBehaviorSettings[version.id] ?? {};
+      const pauseExpiry = getAppPauseExpiry(version.id);
+      const paused = isAppPaused(version.id);
+      return {
+        version,
+        protectedOn: Boolean(behavior.useInterruptionPack ?? version.useInterruptionPack),
+        pauseExpiry,
+        paused,
+        pauseRemaining: paused ? formatPauseRemaining(pauseExpiry) : "",
+      };
+    });
+  }, [
+    appPauseRevision,
+    homeScreenVersions,
+    launcherBehaviorSettings,
+    testerStatus,
+  ]);
+  const activePauseStatuses = useMemo(
+    () => protectedAppStatuses.filter((status) => status.paused),
+    [protectedAppStatuses],
+  );
   const effectiveLaunchSession = useMemo(
     () => getLaunchSessionForOverlay(launchSession, overlay),
     [launchSession, overlay],
@@ -1461,7 +1524,7 @@ function App() {
     [actionCards],
   );
   const isHomeRoute = route.kind === "home";
-  const isAppTabRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
+  const isAppTabRoute = ["home", "library", "log", "packs", "apps", "settings"].includes(route.kind);
   const isLaunchingHomeOverlay = isHomeRoute && shouldLaunchOverlay && overlay == null;
   const isPreparingIntercept = route.kind === "intercept" && overlay == null;
   const isPreparingSpecificCard = route.kind === "card" && overlay == null;
@@ -3409,7 +3472,14 @@ function App() {
   function handlePauseApp(appId, durationMinutes) {
     const expiry = pauseApp(appId, durationMinutes);
     console.log("[LAUNCHER] App paused by user", { appId, durationMinutes, expiry });
+    setAppPauseRevision((current) => current + 1);
     openDestinationApp(appId, { source: "app_pause_selected", reason: "user_paused" });
+  }
+
+  function handleClearAppPause(appId) {
+    clearAppPause(appId);
+    pauseBypassInitiatedRef.current.delete(appId);
+    setAppPauseRevision((current) => current + 1);
   }
 
   function updateCards(updater) {
@@ -5355,18 +5425,29 @@ function App() {
                 <HomePanel
                   reminderItems={homeReminderItems}
                   timezone={profile.timezone}
-                  menuOpenId={menuOpenId}
-                  setMenuOpenId={setMenuOpenId}
-                  openSpecificReveal={openSpecificReveal}
-                  openPackReveal={openPackReveal}
-                  openInterruptionHomeReveal={openInterruptionHomeReveal}
-                  openEditor={openEditor}
-                  handleResetItem={handleResetItem}
-                  handleTogglePause={handleTogglePause}
-                  handleDeleteCard={handleDeleteCard}
-                  handleDuplicateCard={handleDuplicateCard}
-                  deactivatePack={deactivatePack}
+                  profile={profile}
+                  protectedAppStatuses={protectedAppStatuses}
+                  activePauseStatuses={activePauseStatuses}
                   onCreate={openCardComposerFromCurrentRoute}
+                />
+              ) : null}
+
+              {activeTab === "apps" ? (
+                <AppsPanel
+                  protectedAppStatuses={protectedAppStatuses}
+                  launcherBehaviorSettings={launcherBehaviorSettings}
+                  onSaveVersionBehavior={handleSaveVersionBehavior}
+                  onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
+                  onOpenDestinationApp={(versionId) =>
+                    openDestinationApp(versionId, { source: "apps_direct_open_test", reason: "labelled_direct_open_test" })
+                  }
+                  onProtectedLaunch={(versionId) =>
+                    handleFakeLauncherLaunch(versionId, "apps_protected_launch")
+                  }
+                  onClearAppPause={handleClearAppPause}
+                  onLogLauncherEvent={logLauncherEvent}
+                  selectedVersionId={route.versionId}
+                  appPauseRevision={appPauseRevision}
                 />
               ) : null}
 
@@ -5462,6 +5543,10 @@ function App() {
               <HomeGlyph />
               <span>Home</span>
             </button>
+            <button type="button" className={`nav-item ${activeTab === "packs" ? "active" : ""}`} data-testid="bottom-nav-packs" onClick={() => navigateTo("/packs")}>
+              <PacksGlyph />
+              <span>Explore</span>
+            </button>
             <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => navigateTo("/library")}>
               <BookGlyph />
               <span>Library</span>
@@ -5470,13 +5555,9 @@ function App() {
               <LogGlyph />
               <span>Log</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "packs" ? "active" : ""}`} data-testid="bottom-nav-packs" onClick={() => navigateTo("/packs")}>
-              <PacksGlyph />
-              <span>Packs</span>
-            </button>
-            <button type="button" className={`nav-item ${activeTab === "settings" ? "active" : ""}`} data-testid="bottom-nav-settings" onClick={() => navigateTo("/settings")}>
-              <SettingsGlyph />
-              <span>Settings</span>
+            <button type="button" className={`nav-item ${activeTab === "apps" ? "active" : ""}`} data-testid="bottom-nav-apps" onClick={() => navigateTo("/apps")}>
+              <AppsGlyph />
+              <span>Apps</span>
             </button>
           </nav>
         </div>
@@ -5701,16 +5782,10 @@ function App() {
           fakeLauncherVersions={overlayLauncherVersions}
           onFakeLauncherLaunch={handleOverlayFakeLauncherLaunch}
           onPauseApp={handlePauseApp}
-        />
-      ) : null}
-
-      {session?.user?.id && setupComplete && fakeLauncherVersions.length > 0 && !overlay ? (
-        <FakeAppLauncherBar
-          versions={fakeLauncherVersions}
-          raised={false}
-          onLaunch={(versionId) =>
-            handleFakeLauncherLaunch(versionId, "home_fake_launcher_bar")
-          }
+          onManageApp={(versionId) => {
+            setOverlay(null);
+            navigateTo(`/apps/${versionId}`);
+          }}
         />
       ) : null}
 
@@ -6199,172 +6274,58 @@ function Masthead({ onCreate }) {
 function HomePanel({
   reminderItems,
   timezone,
-  menuOpenId,
-  setMenuOpenId,
-  openSpecificReveal,
-  openPackReveal,
-  openInterruptionHomeReveal,
-  openEditor,
-  handleResetItem,
-  handleTogglePause,
-  handleDeleteCard,
-  handleDuplicateCard,
-  deactivatePack,
+  profile = {},
+  protectedAppStatuses = [],
+  activePauseStatuses = [],
   onCreate,
 }) {
+  const today = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: timezone,
+  }).format(new Date());
+  const protectedCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
+  const firstPrompt = reminderItems.find((item) => item?.representative?.promptText)?.representative?.promptText;
+
   return (
-    <section className="library" data-testid="home-panel">
+    <section className="library home-dashboard" data-testid="home-panel">
       <div className="section-heading solo">
         <div>
-          <h2>Your MyBishBash list</h2>
-          <p>Ready cards and actions for right now.</p>
+          <h2>{getGreeting(new Date(), timezone)}{profile?.name ? `, ${profile.name}` : ""}</h2>
+          <p>{today}</p>
         </div>
       </div>
-      <div className="card-stack">
-        {reminderItems.length === 0 ? (
-          <article className="home-empty-card">
-            <h3>No cards yet</h3>
-            <p>Start by creating one small nudge</p>
+      <div className="card-stack" data-testid="home-dashboard-summary">
+        <article className="home-empty-card">
+          <h3>{protectedCount} protected app{protectedCount === 1 ? "" : "s"}</h3>
+          <p>
+            {activePauseStatuses.length > 0
+              ? `${activePauseStatuses.length} pause${activePauseStatuses.length === 1 ? "" : "s"} active right now.`
+              : "MyBishBash is ready when a protected shortcut opens."}
+          </p>
+        </article>
+
+        {activePauseStatuses.length > 0 ? (
+          <article className="home-empty-card" data-testid="home-active-pause-summary">
+            <h3>Active pause</h3>
+            <p>
+              {activePauseStatuses
+                .map((status) => `${status.version.name ?? status.version.displayName}: ${status.pauseRemaining}`)
+                .join(", ")}
+            </p>
+          </article>
+        ) : null}
+
+        <article className="home-empty-card">
+          <h3>{firstPrompt ? "Today's prompt" : "A small nudge"}</h3>
+          <p>{firstPrompt || "Start by creating one small nudge."}</p>
+          {!firstPrompt ? (
             <button type="button" className="pack-button" data-testid="empty-create-card-button" onClick={onCreate}>
               Create card
             </button>
-          </article>
-        ) : null}
-        {reminderItems.map((item) => {
-          const status = getStatusMeta(item.representative, new Date(), timezone);
-          function openItem() {
-            if (item.type === "interruption-card" || item.type === "interruption-version") {
-              openInterruptionHomeReveal(item.versionId, item.cardIndex ?? null);
-              return;
-            }
-            if (item.type === "pack") {
-              openPackReveal(item.id);
-              return;
-            }
-            openSpecificReveal(item.id);
-          }
-
-          return (
-            <article
-              key={item.id}
-              className={`library-card ${menuOpenId === item.id ? "menu-open" : ""} theme-${getThemeClass(item.representative.theme)}`}
-              data-testid={`home-card-${item.id}`}
-              onClick={openItem}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openItem();
-                }
-              }}
-            >
-              <div className="tile">
-                <CardIcon icon={item.representative.icon} sourcePackId={item.representative.sourcePackId} />
-              </div>
-              <div className="card-copy">
-                <h3>{item.representative.promptText}</h3>
-              </div>
-              <div className="card-status">
-                <span className={`badge ${status.badge}`}>{status.badge}</span>
-              </div>
-              <div className="menu-wrap">
-                <button
-                  type="button"
-                  className="menu-trigger"
-                  data-testid={`card-menu-${item.id}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setMenuOpenId((current) => (current === item.id ? null : item.id));
-                  }}
-                  aria-label="Card menu"
-                >
-                  •••
-                </button>
-                {menuOpenId === item.id ? (
-                  <div className="menu">
-                    <button
-                      type="button"
-                      data-testid={`card-edit-${item.id}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (item.type === "interruption-card" || item.type === "interruption-version") {
-                          openInterruptionHomeReveal(item.versionId, item.cardIndex ?? null);
-                          return;
-                        }
-                        if (item.type === "pack") {
-                          openPackReveal(item.id);
-                          return;
-                        }
-                        openEditor(item.id);
-                      }}
-                    >
-                      {item.type === "interruption-card" || item.type === "interruption-version" || item.type === "pack" ? "Open card" : "Edit"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (item.type === "interruption-card" || item.type === "interruption-version" || item.type === "pack") {
-                          return;
-                        }
-                        handleDuplicateCard(item.id);
-                      }}
-                      disabled={item.type === "interruption-card" || item.type === "interruption-version" || item.type === "pack"}
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (item.type === "interruption-card" || item.type === "interruption-version") {
-                          return;
-                        }
-                        handleResetItem(item);
-                      }}
-                      disabled={item.type === "interruption-card" || item.type === "interruption-version"}
-                    >
-                      Reset for today
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (item.type === "interruption-card" || item.type === "interruption-version") {
-                          return;
-                        }
-                        handleTogglePause(item);
-                      }}
-                      disabled={item.type === "interruption-card" || item.type === "interruption-version"}
-                    >
-                      {item.representative.paused ? "Unpause" : "Pause"}
-                    </button>
-                    <button
-                      type="button"
-                      className="danger-soft"
-                      data-testid={`card-delete-${item.id}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (item.type === "interruption-card" || item.type === "interruption-version") {
-                          return;
-                        }
-                        if (item.type === "pack") {
-                          deactivatePack(item.id);
-                          return;
-                        }
-                        handleDeleteCard(item.id);
-                      }}
-                      disabled={item.type === "interruption-card" || item.type === "interruption-version"}
-                    >
-                      {item.type === "pack" ? "Remove pack" : "Delete"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </article>
-          );
-        })}
+          ) : null}
+        </article>
       </div>
     </section>
   );
@@ -6732,6 +6693,7 @@ function CollectionPreviewRow({
   return (
     <article
       className={`collection-preview-row${menuOpenId === item.id ? " menu-open" : ""}`}
+      data-testid={`library-row-${item.id}`}
       onClick={onOpen}
       role="button"
       tabIndex={0}
@@ -7739,6 +7701,255 @@ function validateWindowDefsGapFree(defs) {
   return { valid: true, error: null };
 }
 
+function AppsPanel({
+  protectedAppStatuses,
+  launcherBehaviorSettings,
+  onSaveVersionBehavior,
+  onUpdateHomeScreenIcon,
+  onOpenDestinationApp,
+  onProtectedLaunch,
+  onClearAppPause,
+  onLogLauncherEvent,
+  selectedVersionId = null,
+  appPauseRevision = 0,
+}) {
+  const [selectedAppId, setSelectedAppId] = useState(selectedVersionId ?? protectedAppStatuses[0]?.version?.id ?? "");
+  const [, setClockTick] = useState(0);
+
+  useEffect(() => {
+    if (selectedVersionId) setSelectedAppId(selectedVersionId);
+  }, [selectedVersionId]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setClockTick((value) => value + 1), 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    setClockTick((value) => value + 1);
+  }, [appPauseRevision]);
+
+  const selectedStatus =
+    protectedAppStatuses.find((status) => status.version.id === selectedAppId) ??
+    protectedAppStatuses[0] ??
+    null;
+  const activePauses = protectedAppStatuses.filter((status) => status.paused);
+  const protectedCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
+  const shortcutContexts = {
+    safari: "Reminders during everyday phone use",
+    instagram: "Pause before social scrolling",
+    youtube: "Pause before video scrolling",
+    chrome: "Pause before open-ended browsing",
+    reddit: "Pause before thread-hopping",
+    linkedin: "Pause before professional comparison",
+    whatsapp: "Pause before reactive messaging",
+    "bbc-news": "Pause before checking the news",
+    duolingo: "Pause before streak-checking",
+  };
+
+  return (
+    <section className="panel-section" data-testid="apps-panel">
+      <div className="section-heading solo">
+        <div>
+          <h2>Apps</h2>
+          <p>Protected apps, pauses and shortcut setup.</p>
+        </div>
+      </div>
+
+      <div className="settings-card settings-compact" data-testid="apps-status-summary">
+        <div className="settings-version-heading">
+          <p>{protectedCount} protected app{protectedCount === 1 ? "" : "s"}</p>
+          <span>
+            {activePauses.length > 0
+              ? `${activePauses.length} active pause${activePauses.length === 1 ? "" : "s"}`
+              : "No active pauses"}
+          </span>
+        </div>
+      </div>
+
+      {activePauses.length > 0 ? (
+        <div className="settings-card" data-testid="apps-active-pauses">
+          <div className="settings-version-heading">
+            <p>Active pauses</p>
+            <span>End a pause to restore the normal MyBishBash card flow.</span>
+          </div>
+          <div className="home-screen-version-list">
+            {activePauses.map(({ version, pauseRemaining }) => (
+              <article className="home-screen-version-card" key={`pause:${version.id}`} data-testid={`apps-pause-${version.id}`}>
+                <img
+                  src={resolveLauncherIconSrc(version)}
+                  alt={`${version.name} icon`}
+                  className="home-screen-version-icon"
+                />
+                <div className="home-screen-version-copy">
+                  <strong>{version.name ?? version.displayName}</strong>
+                  <p>{pauseRemaining || "Pause ending soon"}</p>
+                </div>
+                <div className="home-screen-version-actions">
+                  <button
+                    type="button"
+                    className="pack-button"
+                    data-testid={`apps-end-pause-${version.id}`}
+                    onClick={() => onClearAppPause(version.id)}
+                  >
+                    End Pause
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="settings-card" data-testid="protected-apps-list">
+        <div className="settings-version-heading">
+          <p>Protected apps</p>
+          <span>Protected launch opens MyBishBash first. Direct test open skips cards by design.</span>
+        </div>
+        {protectedAppStatuses.length === 0 ? (
+          <p className="tiny-note">No protected apps are available for this account yet.</p>
+        ) : (
+          <>
+            <label className="field" style={{ marginBottom: "16px" }}>
+              <select
+                className="settings-input"
+                value={selectedStatus?.version.id ?? ""}
+                onChange={(event) => setSelectedAppId(event.target.value)}
+                data-testid="apps-select"
+              >
+                {protectedAppStatuses.map(({ version }) => (
+                  <option key={version.id} value={version.id}>{version.name ?? version.displayName}</option>
+                ))}
+              </select>
+            </label>
+
+            {selectedStatus ? (
+              <ProtectedAppCard
+                status={selectedStatus}
+                behavior={launcherBehaviorSettings[selectedStatus.version.id] ?? {}}
+                description={shortcutContexts[selectedStatus.version.id]}
+                onSaveVersionBehavior={onSaveVersionBehavior}
+                onUpdateHomeScreenIcon={onUpdateHomeScreenIcon}
+                onProtectedLaunch={onProtectedLaunch}
+                onOpenDestinationApp={onOpenDestinationApp}
+                onClearAppPause={onClearAppPause}
+                onLogLauncherEvent={onLogLauncherEvent}
+              />
+            ) : null}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ProtectedAppCard({
+  status,
+  behavior,
+  description,
+  onSaveVersionBehavior,
+  onUpdateHomeScreenIcon,
+  onProtectedLaunch,
+  onOpenDestinationApp,
+  onClearAppPause,
+  onLogLauncherEvent,
+}) {
+  const { version, protectedOn, paused, pauseRemaining } = status;
+  const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
+
+  return (
+    <article className="home-screen-version-card" data-testid={`protected-app-${version.id}`}>
+      <button
+        type="button"
+        className="home-screen-version-icon-link"
+        aria-label={`Protected launch ${version.name}`}
+        data-testid={`apps-protected-launch-${version.id}`}
+        onClick={() => onProtectedLaunch(version.id)}
+      >
+        <img
+          src={resolveLauncherIconSrc(version)}
+          alt={`${version.name} icon`}
+          className="home-screen-version-icon"
+        />
+      </button>
+      <div className="home-screen-version-copy">
+        <div className="home-screen-version-title">
+          <strong>{version.name ?? version.displayName}</strong>
+        </div>
+        <p>{description ?? `Protected shortcut for ${version.name ?? version.id}.`}</p>
+        <p className="tiny-note" data-testid={`apps-pause-status-${version.id}`}>
+          {paused ? `Paused: ${pauseRemaining || "ending soon"}` : "Not paused"}
+        </p>
+        {version.requiresRelease ? (
+          <p className="tiny-note" style={{ margin: 0 }}>
+            Home-screen shortcut coming soon.
+          </p>
+        ) : (
+          <a
+            href={installUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="home-screen-install-link"
+            onClick={() => {
+              void onLogLauncherEvent?.("launcher_install_clicked", version.id);
+            }}
+          >
+            Add shortcut
+          </a>
+        )}
+      </div>
+      <div className="home-screen-version-actions">
+        <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
+          <input
+            type="checkbox"
+            checked={protectedOn}
+            data-testid={`apps-interruptions-toggle-${version.id}`}
+            onChange={(event) => onSaveVersionBehavior(version.id, { useInterruptionPack: event.target.checked })}
+          />
+          <span>{protectedOn ? "Protected on" : "Protected off"}</span>
+        </label>
+        {paused ? (
+          <button
+            type="button"
+            className="pack-button"
+            data-testid={`apps-end-pause-inline-${version.id}`}
+            onClick={() => onClearAppPause(version.id)}
+          >
+            Resume MyBishBash
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="pack-button secondary"
+          data-testid={`apps-direct-open-${version.id}`}
+          onClick={() => onOpenDestinationApp(version.id)}
+        >
+          Test direct open
+        </button>
+        <label className="icon-upload-button">
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (typeof reader.result === "string") {
+                  onUpdateHomeScreenIcon(version.id, reader.result);
+                }
+              };
+              reader.readAsDataURL(file);
+              event.target.value = "";
+            }}
+          />
+          Replace cover icon
+        </label>
+      </div>
+    </article>
+  );
+}
+
 function SettingsPanel({
   mood,
   onSelectMood,
@@ -7954,149 +8165,6 @@ function SettingsPanel({
           >
             Reset to defaults
           </button>
-        </div>
-      </div>
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Home Screen Shortcuts</p>
-          <span>Install separate home-screen shortcuts for supported apps. Each shortcut shares your MyBishBash cards and settings.</span>
-        </div>
-        <div className="shortcut-context-grid">
-          <div>
-            <strong>Installed shortcuts</strong>
-            <p>{isInsideFakeLauncher ? `${homeScreenVersions[launcherContext]?.name ?? launcherContext}: ${shortcutContexts[launcherContext] ?? "MyBishBash shortcut"}` : "Open a Home Screen shortcut to see it here."}</p>
-          </div>
-          <div>
-            <strong>Available shortcuts</strong>
-            <p>{supportedShortcutNames || "Supported launcher shortcuts appear here."}</p>
-          </div>
-        </div>
-        <label className="field" style={{ marginBottom: "16px" }}>
-          <select
-            className="settings-input"
-            value={selectedPreviewVersion}
-            onChange={(e) => setPreviewVersionId(e.target.value)}
-          >
-            {installableHomeScreenVersions.map((v) => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </select>
-        </label>
-        <div className="home-screen-version-list">
-          {(() => {
-            const version = homeScreenVersions[selectedPreviewVersion] ?? DEFAULT_HOME_SCREEN_VERSIONS[selectedPreviewVersion] ?? DEFAULT_HOME_SCREEN_VERSIONS.mybishbash;
-            const previewIcon = resolveLauncherIconSrc(version);
-            const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
-            const resolvedVersion = resolveVersionConfig(version, launcherBehaviorSettings[version.id]);
-            const pack = interruptionPacks?.find((p) => p.targetApp === version.id);
-            const behavior = launcherBehaviorSettings[version.id] ?? {};
-            const interruptionsOn = Boolean(behavior.useInterruptionPack);
-
-            return (
-              <article
-                key={version.id}
-                className="home-screen-version-card"
-              >
-                {version.id !== "mybishbash" ? (
-                  <a
-                    href={`${BASE_PATH}/intercept/${version.id}`}
-                    className="home-screen-version-icon-link"
-                    aria-label={`Open ${version.name} launcher`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      onFakeLauncherLaunch?.(version.id);
-                    }}
-                  >
-                    <img
-                      src={previewIcon}
-                      alt={`${version.name} cover icon`}
-                      className="home-screen-version-icon"
-                    />
-                  </a>
-                ) : (
-                  <img
-                    src={previewIcon}
-                    alt={`${version.name} cover icon`}
-                    className="home-screen-version-icon"
-                  />
-                )}
-                <div className="home-screen-version-copy">
-                  <div className="home-screen-version-title">
-                    <strong>{version.name}</strong>
-                  </div>
-                  <p>
-                    {shortcutContexts[version.id] ?? `Uses launcherContext "${version.id}" and shares the same MyBishBash state.`}
-                  </p>
-                    {version.requiresRelease ? (
-                      <p className="tiny-note" style={{ margin: 0 }}>
-                        Home-screen shortcut coming soon — this app works from the in-app launcher for now.
-                      </p>
-                    ) : (
-                      <a
-                        href={installUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="home-screen-install-link"
-                        onClick={() => {
-                          if (version.id !== "mybishbash") {
-                            void onLogLauncherEvent?.("launcher_install_clicked", version.id);
-                          }
-                        }}
-                      >
-                        Open install screen
-                      </a>
-                    )}
-                </div>
-                <div className="home-screen-version-actions">
-                  <label className="icon-upload-button">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          if (typeof reader.result === "string") {
-                            onUpdateHomeScreenIcon(version.id, reader.result);
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                        event.target.value = "";
-                      }}
-                    />
-                    Replace cover icon
-                  </label>
-                </div>
-            {isKnownLauncher(version.id) ? (
-              <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
-                <div style={{ marginBottom: "12px" }}>
-                  <strong style={{ display: "block" }}>Interruptions</strong>
-                  <span style={{ fontSize: "14px", opacity: 0.8 }}>Pause before opening this app.</span>
-                </div>
-                <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
-                  <input
-                    type="checkbox"
-                    checked={interruptionsOn}
-                    onChange={(e) => onSaveVersionBehavior(version.id, { useInterruptionPack: e.target.checked })}
-                  />
-                  <span>{interruptionsOn ? "On" : "Off"}</span>
-                </label>
-                <p className="tiny-note" style={{ margin: 0 }}>
-                  {interruptionsOn
-                    ? "You’ll see interruption cards before continuing."
-                    : "You’ll see normal MyBishBash cards instead."}
-                </p>
-                {pack ? (
-                  <p className="tiny-note" style={{ margin: 0 }}>
-                    Linked pack: {pack.name}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-              </article>
-            );
-          })()}
         </div>
       </div>
       <div className="settings-card settings-compact">
@@ -8432,6 +8500,7 @@ function Overlay({
   onFakeLauncherLaunch,
   onContinueToApp,
   onPauseApp,
+  onManageApp,
   isOffline = false,
   onRetryConnection,
 }) {
@@ -8607,6 +8676,9 @@ function Overlay({
           onDashboard={onDashboard}
           cardOverlayKey={cardOverlayKey}
           className={launcherInterceptionClass}
+          launcherAppId={launcherAppId}
+          launcherAppName={launcherAppName}
+          onManageApp={onManageApp}
         />
       );
     }
@@ -8657,6 +8729,9 @@ function Overlay({
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={launcherInterceptionClass}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onManageApp={onManageApp}
     />
     );
   }
@@ -8677,6 +8752,7 @@ function Overlay({
         launcherAppId={launcherAppId}
         launcherAppName={launcherAppName}
         onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -8773,6 +8849,7 @@ function Overlay({
         launcherAppId={launcherAppId}
         launcherAppName={launcherAppName}
         onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -8791,6 +8868,7 @@ function Overlay({
         launcherAppId={launcherAppId}
         launcherAppName={launcherAppName}
         onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -8847,6 +8925,7 @@ function Overlay({
       launcherAppId={launcherAppId}
       launcherAppName={launcherAppName}
       onPauseApp={onPauseCurrentApp}
+      onManageApp={onManageApp}
     />
   );
 }
@@ -8870,6 +8949,7 @@ function PremiumCardScreen({
   launcherAppId = null,
   launcherAppName = null,
   onPauseApp = null,
+  onManageApp = null,
 }) {
   return (
     <CardRevealTemplate
@@ -8886,6 +8966,7 @@ function PremiumCardScreen({
       showDashboardShortcut={showDashboardShortcut}
       dashboardHref={dashboardHref}
       onDashboard={onDashboard}
+      onManageApp={onManageApp}
       onCreateCard={onCreateCard}
       className={className}
       launcherAppId={launcherAppId}
@@ -8910,6 +8991,7 @@ function CommitmentCardOverlay({
   launcherAppId = null,
   launcherAppName = null,
   onPauseApp = null,
+  onManageApp = null,
 }) {
   const shownRef = useRef(false);
   const commitmentText = stripCommitmentPrefix(card.promptText);
@@ -8957,6 +9039,7 @@ function CommitmentCardOverlay({
       launcherAppId={launcherAppId}
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
     />
   );
 }
@@ -8973,6 +9056,7 @@ function CommitmentMotivationOverlay({
   launcherAppId = null,
   launcherAppName = null,
   onPauseApp = null,
+  onManageApp = null,
 }) {
   return (
     <CardRevealTemplate
@@ -8994,6 +9078,7 @@ function CommitmentMotivationOverlay({
       launcherAppId={launcherAppId}
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
     >
       <div className="commitment-motivation-copy">
         <p className="commitment-motivation-intro">Before you decide...</p>
@@ -9016,6 +9101,7 @@ function CommitmentCheckInOverlay({
   launcherAppId = null,
   launcherAppName = null,
   onPauseApp = null,
+  onManageApp = null,
 }) {
   return (
     <PremiumCardScreen
@@ -9038,6 +9124,7 @@ function CommitmentCheckInOverlay({
       launcherAppId={launcherAppId}
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
     />
   );
 }
@@ -9054,6 +9141,7 @@ function CardRevealTemplate({
   showDashboardShortcut = true,
   dashboardHref,
   onDashboard,
+  onManageApp,
   onCreateCard,
   children,
   className = "",
@@ -9089,6 +9177,19 @@ function CardRevealTemplate({
           ref={pauseButtonRef}
           onClick={() => setShowPauseModal(true)}
         />
+      ) : null}
+      {launcherAppId && onManageApp ? (
+        <button
+          type="button"
+          className="premium-dashboard-shortcut premium-manage-app-shortcut"
+          onClick={() => onManageApp(launcherAppId)}
+          aria-label={`Manage ${launcherAppName ?? launcherAppId}`}
+          title="Manage this app"
+          data-testid="manage-app-link"
+        >
+          <AppsGlyph />
+          <span className="sr-only">Manage this app</span>
+        </button>
       ) : null}
       {showPauseModal && launcherAppId && onPauseApp ? (
         <AppPauseModal
@@ -9703,7 +9804,7 @@ function CustomPackOverlay({ overlay, onClose, onDashboard }) {
   );
 }
 
-function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, onCreateCard, cardOverlayKey = "", launcherAppId = null, launcherAppName = null, onPauseApp = null }) {
+function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLogLauncherEvent, onContinueToApp, onFakeLauncherLaunch, onDashboard, onCreateCard, cardOverlayKey = "", launcherAppId = null, launcherAppName = null, onPauseApp = null, onManageApp = null }) {
   const [activeIndex, setActiveIndex] = useState(overlay.activeIndex ?? 0);
   const [showFallbackLink, setShowFallbackLink] = useState(false);
   const touchStartX = useRef(null);
@@ -9848,6 +9949,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         launcherAppId={launcherAppId}
         launcherAppName={launcherAppName}
         onPauseApp={onPauseApp}
+        onManageApp={onManageApp}
       >
         {hasMultipleMessages ? (
           <div className="premium-card-pagination">
@@ -10060,6 +10162,17 @@ function PacksGlyph() {
       <path d="M7 10h18v6H7z" />
       <path d="M9 16h14v10H9z" />
       <path d="M14 7h4" />
+    </svg>
+  );
+}
+
+function AppsGlyph() {
+  return (
+    <svg viewBox="0 0 32 32" className="nav-glyph" aria-hidden="true">
+      <rect x="7" y="7" width="7" height="7" rx="2" />
+      <rect x="18" y="7" width="7" height="7" rx="2" />
+      <rect x="7" y="18" width="7" height="7" rx="2" />
+      <rect x="18" y="18" width="7" height="7" rx="2" />
     </svg>
   );
 }

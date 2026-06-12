@@ -130,6 +130,23 @@ for (const context of [LAUNCHER_CONTEXTS.USER_SETUP, LAUNCHER_CONTEXTS.FAKE_LAUN
 assert.equal(isLauncherVisibleInContext(fixtures[1], { context: LAUNCHER_CONTEXTS.HQ }), true, "hidden apps stay visible in HQ");
 assert.equal(isLauncherVisibleInContext(fixtures[4], { context: LAUNCHER_CONTEXTS.HQ }), true, "disabled apps stay visible in HQ");
 
+const whatsappPublicWithoutQa = { id: "whatsapp", category: "messaging", availabilityStatus: "public" };
+assert.equal(
+  isLauncherVisibleInContext(whatsappPublicWithoutQa, { testerStatus: { is_tester: false }, context: LAUNCHER_CONTEXTS.SETTINGS }),
+  false,
+  "WhatsApp must not become user-visible if native destination QA is not confirmed",
+);
+assert.equal(
+  isLauncherVisibleInContext(whatsappPublicWithoutQa, { testerStatus: { is_tester: true }, context: LAUNCHER_CONTEXTS.SETTINGS }),
+  true,
+  "WhatsApp may remain tester-visible while destination QA is pending",
+);
+assert.equal(
+  isLauncherVisibleInContext({ ...whatsappPublicWithoutQa, destinationQaConfirmed: true }, { testerStatus: { is_tester: false }, context: LAUNCHER_CONTEXTS.SETTINGS }),
+  true,
+  "WhatsApp may become user-visible after native destination QA is confirmed",
+);
+
 // Users can only enable/disable apps that are available to them, and a local
 // preference can never resurface an unavailable app.
 assert.equal(canUserToggleLauncher(fixtures[0], { testerStatus: { is_tester: false } }), true);
