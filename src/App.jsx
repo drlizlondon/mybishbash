@@ -70,6 +70,7 @@ import {
 } from "./lib/mybishbashSync";
 import { CAPABILITIES, getCapabilities } from "./lib/accessCapabilities";
 import ExplorePanel from "./ExplorePanel";
+import GeneratedPackCover from "./GeneratedPackCover";
 import {
   PACKS,
   FREQUENCY_OPTIONS,
@@ -5503,6 +5504,7 @@ function App() {
                   personalItems={librarySections.personal}
                   commitmentItems={librarySections.commitments}
                   activePackItems={librarySections.activePacks}
+                  libraryPacks={visibleLibraryPacks}
                   timezone={profile.timezone}
                   menuOpenId={menuOpenId}
                   setMenuOpenId={setMenuOpenId}
@@ -6732,6 +6734,7 @@ function ExpandableCollection({
 function CollectionPreviewRow({
   item,
   icon = "heart",
+  art = null,
   title,
   secondary,
   statusBadge,
@@ -6755,7 +6758,7 @@ function CollectionPreviewRow({
       }}
     >
       <span className="collection-preview-icon">
-        <CardIcon icon={icon} />
+        {art ?? <CardIcon icon={icon} />}
       </span>
       <div className="collection-preview-copy">
         <h3>{title}</h3>
@@ -6823,6 +6826,7 @@ function StandardLibraryPanel({
   commitmentItems,
   activePackItems,
   doInsteadItems,
+  libraryPacks = [],
   timezone,
   menuOpenId,
   setMenuOpenId,
@@ -6962,19 +6966,27 @@ function StandardLibraryPanel({
             addLabel="Add active pack"
             testId="library-active-packs-section"
             emptyLabel="No active packs yet"
-            renderRow={(item) => (
-              <CollectionPreviewRow
-                key={item.id}
-                item={item}
-                icon={item.representative.icon ?? "book"}
-                title={item.representative.promptText}
-                secondary={getLibraryPackSecondary(item)}
-                menuOpenId={menuOpenId}
-                setMenuOpenId={setMenuOpenId}
-                onOpen={() => openPackReveal(item.id)}
-                menuActions={packActions(item)}
-              />
-            )}
+            renderRow={(item) => {
+              const pack = libraryPacks.find((candidate) => candidate.id === item.id || candidate.sourceKey === item.id);
+              return (
+                <CollectionPreviewRow
+                  key={item.id}
+                  item={item}
+                  icon={item.representative.icon ?? "book"}
+                  art={pack ? (
+                    pack.coverImageUrl
+                      ? <img src={pack.coverImageUrl} alt="" className="library-pack-thumb" loading="lazy" />
+                      : <GeneratedPackCover pack={pack} variant="bare" className="library-pack-thumb" />
+                  ) : null}
+                  title={item.representative.promptText}
+                  secondary={getLibraryPackSecondary(item)}
+                  menuOpenId={menuOpenId}
+                  setMenuOpenId={setMenuOpenId}
+                  onOpen={() => openPackReveal(item.id)}
+                  menuActions={packActions(item)}
+                />
+              );
+            }}
           />
         </section>
 

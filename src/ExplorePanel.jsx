@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { PACK_GOALS, MIN_PACKS_PER_GOAL_SECTION } from "./lib/packGoals";
 import { getThemeClass } from "./utils";
+import GeneratedPackCover from "./GeneratedPackCover";
 
 // Explore — the read-only discovery surface (docs/explore-architecture.md).
 // Structure: Start Here hero → goal sections (>=2 packs each) → More to
@@ -74,11 +75,13 @@ function PremiumBadge() {
   return <span className="explore-premium-badge">Premium</span>;
 }
 
-function ExploreCoverArt({ pack, className }) {
+// Generated covers are the standard; an uploaded cover_image_url is an
+// optional override that replaces them with no additional states.
+function ExploreCoverArt({ pack, className, variant = "grid" }) {
   if (pack.coverImageUrl) {
     return <img src={pack.coverImageUrl} alt="" className={className} loading="lazy" />;
   }
-  return <div className={`${className} explore-cover-fallback theme-${getThemeClass(pack.theme)}`} aria-hidden="true" />;
+  return <GeneratedPackCover pack={pack} variant={variant} className={className} />;
 }
 
 function ExploreHero({ pack, onOpen }) {
@@ -87,7 +90,7 @@ function ExploreHero({ pack, onOpen }) {
     <section className="explore-section explore-hero-section">
       <p className="explore-section-title">Start Here</p>
       <button type="button" className="explore-hero" data-testid="explore-hero" onClick={() => onOpen(pack.id)}>
-        <ExploreCoverArt pack={pack} className="explore-hero-art" />
+        <ExploreCoverArt pack={pack} className="explore-hero-art" variant="bare" />
         <span className="explore-hero-scrim" aria-hidden="true" />
         <span className="explore-hero-copy">
           {pack.isPremium ? <PremiumBadge /> : null}
@@ -102,6 +105,9 @@ function ExploreHero({ pack, onOpen }) {
 
 function ExploreCoverCard({ pack, onOpen }) {
   const quote = getCoverQuote(pack);
+  // Generated covers carry the quote inside the art; only uploaded covers
+  // need it repeated in the copy below.
+  const quoteInArt = !pack.coverImageUrl;
   return (
     <button
       type="button"
@@ -110,11 +116,11 @@ function ExploreCoverCard({ pack, onOpen }) {
       onClick={() => onOpen(pack.id)}
     >
       <span className="explore-cover-art-frame">
-        <ExploreCoverArt pack={pack} className="explore-cover-art" />
+        <ExploreCoverArt pack={pack} className="explore-cover-art" variant="grid" />
         {pack.isPremium ? <PremiumBadge /> : null}
       </span>
       <span className="explore-cover-copy">
-        {quote ? <span className="explore-cover-quote">“{quote}”</span> : null}
+        {quote && !quoteInArt ? <span className="explore-cover-quote">“{quote}”</span> : null}
         <span className="explore-cover-title">{pack.title}</span>
         {pack.description ? <span className="explore-cover-description">{pack.description}</span> : null}
       </span>
@@ -144,7 +150,7 @@ function ExplorePackDetail({
             ← Explore
           </button>
         </div>
-        <ExploreCoverArt pack={pack} className="explore-detail-art" />
+        <ExploreCoverArt pack={pack} className="explore-detail-art" variant="detail" />
         <div className="explore-detail-body">
           <div className="explore-detail-heading">
             <h2>{pack.title}</h2>
