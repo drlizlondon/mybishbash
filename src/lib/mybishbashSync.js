@@ -363,6 +363,17 @@ function mapGlobalPack(pack, cards = []) {
     icon: pack.icon,
     published: pack.published,
     sourceKey: pack.source_key,
+    // Explore metadata (migration 202606120002); defaults cover older schemas.
+    goal: pack.goal ?? "",
+    coverImageUrl: pack.cover_image_url ?? "",
+    whyText: pack.why_text ?? "",
+    isPremium: pack.is_premium === true,
+    isFeatured: pack.is_featured === true,
+    isExperimental: pack.is_experimental === true,
+    contentType: pack.content_type ?? "cards",
+    sourceLabel: pack.source_label ?? "MyBishBash",
+    publishedAt: pack.published_at ?? null,
+    sortOrder: pack.sort_order ?? 0,
     entries: cards
       .filter((card) => card.pack_id === pack.id)
       .sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
@@ -374,6 +385,8 @@ function mapGlobalPack(pack, cards = []) {
         sourceUrl: card.source_url,
         frequency: card.frequency,
         timingWindows: card.timing_windows,
+        isPreview: card.is_preview === true,
+        commitmentDefaults: card.commitment_defaults ?? null,
       })),
     isGlobal: true,
   };
@@ -445,6 +458,18 @@ export async function saveAdminGlobalPack(pack, userId) {
     icon: pack.icon || null,
     source_key: pack.sourceKey || null,
     published: Boolean(pack.published),
+    goal: pack.goal?.trim() || null,
+    cover_image_url: pack.coverImageUrl?.trim() || null,
+    why_text: pack.whyText?.trim() || null,
+    is_premium: Boolean(pack.isPremium),
+    is_featured: Boolean(pack.isFeatured),
+    is_experimental: Boolean(pack.isExperimental),
+    content_type: pack.contentType || "cards",
+    source_label: pack.sourceLabel?.trim() || "MyBishBash",
+    sort_order: Number.isFinite(Number(pack.sortOrder)) ? Number(pack.sortOrder) : 0,
+    // First publish stamps published_at; later edits keep the original date
+    // so "newest first" ordering inside goal sections stays stable.
+    published_at: pack.published ? (pack.publishedAt ?? now) : pack.publishedAt ?? null,
     updated_at: now,
   };
 
@@ -470,6 +495,8 @@ export async function saveAdminGlobalPack(pack, userId) {
       source_url: entry.sourceUrl?.trim() || null,
       frequency: entry.frequency || "once_daily",
       timing_windows: entry.timingWindows?.length ? entry.timingWindows : ["morning", "day", "evening"],
+      is_preview: entry.isPreview === true,
+      commitment_defaults: entry.commitmentDefaults ?? null,
       position: index,
     }))
     .filter((entry) => entry.prompt_text);
@@ -717,6 +744,37 @@ export async function uploadLauncherIcon(launcherId, file) {
   }
   const { data } = client.storage.from(LAUNCHER_ICON_BUCKET).getPublicUrl(path);
   if (!data?.publicUrl) throw new Error("Could not resolve the uploaded icon URL.");
+  return data.publicUrl;
+}
+
+export const PACK_COVER_BUCKET = "pack-covers";
+const PACK_COVER_MAX_BYTES = 2 * 1024 * 1024;
+
+// Upload an Explore pack cover image and return its public URL. Same model
+// as launcher icons: public bucket, admin-only writes, manual https URL in
+// the form remains the fallback if the bucket is not provisioned.
+export async function uploadPackCover(file) {
+  const client = requireSupabase();
+  const extension = LAUNCHER_ICON_ALLOWED_TYPES[file?.type];
+  if (!extension) {
+    throw new Error("Unsupported image type. Use PNG, JPG, WebP or SVG.");
+  }
+  if (file.size > PACK_COVER_MAX_BYTES) {
+    throw new Error("Cover image must be under 2MB.");
+  }
+
+  const path = `covers/${Date.now()}.${extension}`;
+  const { error } = await client.storage
+    .from(PACK_COVER_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: true });
+  if (error) {
+    if (/bucket not found/i.test(error.message ?? "")) {
+      throw new Error(`Cover upload storage is not provisioned yet (missing "${PACK_COVER_BUCKET}" bucket). Apply the latest SQL migration, or paste an https image URL instead.`);
+    }
+    throw error;
+  }
+  const { data } = client.storage.from(PACK_COVER_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error("Could not resolve the uploaded cover URL.");
   return data.publicUrl;
 }
 
