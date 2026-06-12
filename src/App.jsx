@@ -64,8 +64,11 @@ import {
   checkIsAdmin,
   fetchGlobalPacks,
   fetchLauncherConfigs,
+  fetchOwnAccessProfile,
   touchUserProfile,
 } from "./lib/mybishbashSync";
+import { CAPABILITIES, getCapabilities } from "./lib/accessCapabilities";
+import ExplorePanel from "./ExplorePanel";
 import {
   PACKS,
   FREQUENCY_OPTIONS,
@@ -522,7 +525,9 @@ function parseRoute(path) {
   if (normalized === "/hq") return { kind: "hq", path: normalized, tab: null };
   if (normalized === "/preview-continue") return { kind: "preview-continue", path: normalized, tab: null };
   if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
-  if (normalized === "/packs") return { kind: "packs", path: normalized, tab: "packs" };
+  if (normalized === "/explore") return { kind: "explore", path: normalized, tab: "explore" };
+  // Legacy route: Packs became Explore (docs/explore-architecture.md).
+  if (normalized === "/packs") return { kind: "explore", path: "/explore", tab: "explore" };
   if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
@@ -1298,6 +1303,10 @@ function App() {
   });
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
+  // Own access profile for capability checks (premium pack gating). null =
+  // unknown/unavailable, which getCapabilities treats as the free tier, so
+  // premium installs fail closed.
+  const [accessProfile, setAccessProfile] = useState(null);
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
   const initialRoute = useMemo(() => parseRoute(routePath), []);
@@ -1461,7 +1470,7 @@ function App() {
     [actionCards],
   );
   const isHomeRoute = route.kind === "home";
-  const isAppTabRoute = ["home", "library", "log", "packs", "settings"].includes(route.kind);
+  const isAppTabRoute = ["home", "library", "log", "explore", "settings"].includes(route.kind);
   const isLaunchingHomeOverlay = isHomeRoute && shouldLaunchOverlay && overlay == null;
   const isPreparingIntercept = route.kind === "intercept" && overlay == null;
   const isPreparingSpecificCard = route.kind === "card" && overlay == null;
@@ -1838,6 +1847,20 @@ function App() {
     fetchGlobalPacks()
       .then(setGlobalPacks)
       .catch((err) => console.warn("Could not load global packs", err));
+  }, [authReady, e2eMode, session?.user?.id]);
+
+  useEffect(() => {
+    if (!authReady || e2eMode || !session?.user?.id) {
+      setAccessProfile(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchOwnAccessProfile(session.user.id).then((profileRow) => {
+      if (!cancelled) setAccessProfile(profileRow);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [authReady, e2eMode, session?.user?.id]);
 
   useEffect(() => {
@@ -4265,9 +4288,23 @@ function App() {
     return cards.some((card) => card.sourcePackId === packId && !card.deletedAt);
   }
 
+  function handlePremiumInterest(pack) {
+    void logEvent({
+      event_type: "premium_interest",
+      source_type: "explore",
+      card_source: "explore",
+      pack_id: pack.id,
+      action_taken: "premium_interest",
+      metadata: { packTitle: pack.title },
+    });
+  }
+
   function activatePack(packId) {
     const pack = visibleLibraryPacks.find((item) => item.id === packId);
     if (!pack || isPackActive(packId)) return;
+    // Premium installs fail closed; the Explore CTA is also gated, this is
+    // the backstop.
+    if (pack.isPremium === true && !canUsePremiumContent) return;
 
     setCards((current) => {
       const hasOldCards = current.some((c) => c.sourcePackId === packId);
@@ -5235,6 +5272,16 @@ function App() {
     },
     [hiddenLibraryPacks, globalPacks],
   );
+  const canUsePremiumContent = useMemo(
+    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT),
+    [accessProfile],
+  );
+  // Unlike visibleActionCards (intercept surface), the Library list keeps
+  // hidden starters so they can be restored.
+  const libraryDoInsteadItems = useMemo(
+    () => actionCards.filter((card) => !card.deletedAt),
+    [actionCards],
+  );
   const librarySections = useMemo(
     () => buildLibrarySections({ cards, libraryPacks: visibleLibraryPacks }),
     [cards, visibleLibraryPacks],
@@ -5388,7 +5435,11 @@ function App() {
                   deactivatePack={deactivatePack}
                   onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
                   onCreateCommitment={() => openCardComposerFromCurrentRoute("commitment")}
-                  onAddPack={() => navigateTo("/packs")}
+                  onAddPack={() => navigateTo("/explore")}
+                  doInsteadItems={libraryDoInsteadItems}
+                  onToggleActionCardHidden={handleToggleActionCardHidden}
+                  onDeleteActionCard={handleDeleteActionCard}
+                  onCreateActionCard={() => setIsActionCardEditorOpen(true)}
                 />
               ) : null}
 
@@ -5403,18 +5454,16 @@ function App() {
                 />
               ) : null}
 
-              {activeTab === "packs" ? (
-                <PacksPanel
-                  cards={cards}
-                  actionCards={actionCards}
-                  interruptionPacks={interruptionPacks}
-                  libraryPacks={visibleLibraryPacks}
-                  onActivateLibraryPack={activatePack}
-                  onDeactivateLibraryPack={deactivatePack}
-                  onOpenPack={setSelectedPackDetail}
-                  onToggleActionCardHidden={handleToggleActionCardHidden}
-                  onDeleteActionCard={handleDeleteActionCard}
-                  onCreateActionCard={() => setIsActionCardEditorOpen(true)}
+              {activeTab === "explore" ? (
+                <ExplorePanel
+                  packs={visibleLibraryPacks}
+                  isPackActive={isPackActive}
+                  onInstallPack={activatePack}
+                  onRemovePack={deactivatePack}
+                  onManageCards={(packId) => setSelectedPackDetail({ type: "library", id: packId })}
+                  isTester={testerStatus?.is_tester === true}
+                  canUsePremiumContent={canUsePremiumContent}
+                  onPremiumInterest={handlePremiumInterest}
                 />
               ) : null}
               {activeTab === "settings" ? (
@@ -5441,6 +5490,7 @@ function App() {
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
+                  onOpenInterruptionPack={setSelectedPackDetail}
                   launcherContext={launcherContext}
                   onLogLauncherEvent={logLauncherEvent}
                   morningSummaryDebug={morningSummaryDebug}
@@ -5470,9 +5520,9 @@ function App() {
               <LogGlyph />
               <span>Log</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "packs" ? "active" : ""}`} data-testid="bottom-nav-packs" onClick={() => navigateTo("/packs")}>
+            <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => navigateTo("/explore")}>
               <PacksGlyph />
-              <span>Packs</span>
+              <span>Explore</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "settings" ? "active" : ""}`} data-testid="bottom-nav-settings" onClick={() => navigateTo("/settings")}>
               <SettingsGlyph />
@@ -6635,7 +6685,7 @@ function ExpandableCollection({
   }
 
   return (
-    <div className={`expandable-collection${isOpen ? " open" : ""}`}>
+    <div className={`expandable-collection${isOpen ? " open" : ""}`} data-testid={testId}>
       {/* Header ─ the toggle button covers the icon + copy; add + chevron are independent */}
       <div className="library-section-header">
         <button
@@ -6810,6 +6860,7 @@ function StandardLibraryPanel({
   personalItems,
   commitmentItems,
   activePackItems,
+  doInsteadItems,
   timezone,
   menuOpenId,
   setMenuOpenId,
@@ -6824,18 +6875,24 @@ function StandardLibraryPanel({
   onCreatePersonal,
   onCreateCommitment,
   onAddPack,
+  onToggleActionCardHidden,
+  onDeleteActionCard,
+  onCreateActionCard,
 }) {
   const [openSections, setOpenSections] = useState({
     personal: false,
     commitments: false,
     activePacks: false,
+    doInstead: false,
   });
   const personalOpen = openSections.personal;
   const commitmentsOpen = openSections.commitments;
   const activePacksOpen = openSections.activePacks;
+  const doInsteadOpen = openSections.doInstead;
   const personalCountLabel = `${personalItems.length} ${personalItems.length === 1 ? "card" : "cards"}`;
   const commitmentCountLabel = `${commitmentItems.length} ${commitmentItems.length === 1 ? "card" : "cards"}`;
   const activePackCountLabel = `${activePackItems.length} ${activePackItems.length === 1 ? "pack" : "packs"}`;
+  const doInsteadCountLabel = `${doInsteadItems.length} ${doInsteadItems.length === 1 ? "card" : "cards"}`;
 
   function toggleSection(sectionId) {
     setOpenSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
@@ -6954,6 +7011,40 @@ function StandardLibraryPanel({
                 setMenuOpenId={setMenuOpenId}
                 onOpen={() => openPackReveal(item.id)}
                 menuActions={packActions(item)}
+              />
+            )}
+          />
+        </section>
+
+        <section className="library-section-group">
+          <ExpandableCollection
+            id="do-instead-card-section"
+            icon="star"
+            title="Do Instead Cards"
+            description="Things to do instead of opening an app."
+            countLabel={doInsteadCountLabel}
+            items={doInsteadItems}
+            isOpen={doInsteadOpen}
+            onToggle={() => toggleSection("doInstead")}
+            onAdd={onCreateActionCard}
+            addLabel="Create Do Instead card"
+            testId="library-do-instead-section"
+            emptyLabel="No Do Instead cards yet"
+            renderRow={(item) => (
+              <CollectionPreviewRow
+                key={item.id}
+                item={item}
+                icon="star"
+                title={item.title}
+                secondary={item.hidden ? "Hidden" : item.body || item.category || ""}
+                menuOpenId={menuOpenId}
+                setMenuOpenId={setMenuOpenId}
+                onOpen={() => setMenuOpenId((current) => (current === item.id ? null : item.id))}
+                menuActions={
+                  item.source === "starter"
+                    ? [{ label: item.hidden ? "Restore" : "Hide", onClick: () => onToggleActionCardHidden(item.id, !item.hidden) }]
+                    : [{ label: "Delete", danger: true, onClick: () => onDeleteActionCard(item.id) }]
+                }
               />
             )}
           />
@@ -7177,145 +7268,7 @@ function ActionCardEditor({ onClose, onSave }) {
   );
 }
 
-function PacksPanel({
-  cards,
-  actionCards,
-  interruptionPacks,
-  libraryPacks,
-  onActivateLibraryPack,
-  onDeactivateLibraryPack,
-  onOpenPack,
-  onToggleActionCardHidden,
-  onCreateActionCard,
-}) {
-  return (
-    <section className="panel-section">
-      <div className="section-heading solo">
-        <div>
-          <h2>Packs</h2>
-          <p>Manage the card content MyBishBash can draw from.</p>
-        </div>
-      </div>
-
-      <section className="packs-section">
-        <div className="home-section-heading packs-heading">
-          <div>
-            <h2>Interruption Packs</h2>
-            <p>Folders selected automatically by launcher context.</p>
-          </div>
-        </div>
-        <div className="packs-list-card">
-          {interruptionPacks.map((pack) => {
-            return (
-              <article key={pack.id} className="pack-row pack-row-interruption">
-                <div className="pack-row-icon">
-                  <CardIcon icon={pack.targetApp === "instagram" ? "heart" : pack.targetApp === "youtube" ? "star" : "book"} />
-                </div>
-                <div className="pack-row-copy">
-                  <h3>{pack.name}</h3>
-                </div>
-                <button
-                  type="button"
-                  className="pack-row-indicator"
-                  onClick={() => onOpenPack({ type: "interruption", id: pack.id, targetApp: pack.targetApp })}
-                  aria-label={`Open ${pack.name}`}
-                >
-                  <ChevronRightGlyph />
-                </button>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="packs-section">
-        <div className="home-section-heading packs-heading">
-          <div>
-            <h2>Active Actions</h2>
-            <p>Things you can do instead of opening apps.</p>
-          </div>
-        </div>
-        <div className="packs-list-card">
-          {actionCards.filter((c) => !c.deletedAt).map((card) => (
-            <article key={card.id} className="home-screen-version-card pack-manager-card">
-              <div className="home-screen-version-copy pack-manager-copy">
-                <div className="home-screen-version-title">
-                  <strong>{card.title}</strong>
-                  <span>{card.source === "starter" ? (card.hidden ? "Hidden" : "Visible") : "User created"}</span>
-                </div>
-                <p>{card.body}</p>
-              </div>
-              <div className="home-screen-version-actions">
-                {card.source === "starter" ? (
-                  <button type="button" className="pack-button secondary" onClick={() => onToggleActionCardHidden(card.id, !card.hidden)}>
-                    {card.hidden ? "Restore" : "Hide"}
-                  </button>
-                ) : (
-                  <button type="button" className="pack-button secondary danger-soft-button" onClick={() => onDeleteActionCard(card.id)}>
-                    Delete
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-        <button type="button" className="pack-button" style={{ marginTop: "16px" }} onClick={onCreateActionCard}>Create action card</button>
-      </section>
-
-      <section className="packs-section">
-        <div className="home-section-heading packs-heading">
-          <div>
-            <h2>Library Packs</h2>
-            <p>Ready-made MyBishBashes you can add into your day.</p>
-          </div>
-        </div>
-        <div className="library-pack-stack">
-          {libraryPacks.map((pack, index) => {
-            const active = cards.some((card) => card.sourcePackId === pack.id && !card.deletedAt);
-            const canActivate = Array.isArray(pack.entries) && pack.entries.length > 0;
-            return (
-              <article
-                key={pack.id}
-                className={`library-pack-card theme-${getThemeClass(pack.theme)} ${active ? "active" : ""} ${index === libraryPacks.length - 1 ? "last" : ""}`}
-              >
-                <div className="library-pack-copy">
-                  <p className="eyebrow">{active ? "Active pack" : "Pack"}</p>
-                  <h3>{pack.title}</h3>
-                  <p>{pack.description}</p>
-                </div>
-                <div className="home-screen-version-actions">
-                  <button
-                    type="button"
-                    className={`library-pack-button ${active ? "secondary" : ""}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (active) {
-                        onDeactivateLibraryPack(pack.id);
-                        return;
-                      }
-                      onActivateLibraryPack(pack.id);
-                    }}
-                    disabled={!canActivate}
-                  >
-                    {canActivate ? (active ? "Deactivate pack" : "Activate pack") : "Coming soon"}
-                  </button>
-                </div>
-                {active ? <p className="pack-active-note">Active in your MyBishBashes</p> : null}
-              </article>
-            );
-          })}
-          {libraryPacks.length === 0 ? (
-            <article className="pack-row pack-row-library last">
-              <div className="pack-row-copy full">
-                <p>Hidden pack suggestions will stay out of the way for now.</p>
-              </div>
-            </article>
-          ) : null}
-        </div>
-      </section>
-    </section>
-  );
-}
+// PacksPanel → replaced by src/ExplorePanel.jsx (docs/explore-architecture.md)
 
 function PackDetailModal({
   detail,
@@ -7366,7 +7319,7 @@ function PackDetailModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="composer pack-editor" onClick={(event) => event.stopPropagation()}>
         <div className="composer-heading">
-          <p className="eyebrow">{libraryPack ? "Library pack" : "Interruption folder"}</p>
+          <p className="eyebrow">{libraryPack ? "Manage cards" : "Interruption messages"}</p>
           <button type="button" className="text-button" onClick={onClose}>
             Close
           </button>
@@ -7391,7 +7344,7 @@ function PackDetailModal({
               }}
               disabled={libraryPack.entries.length === 0}
             >
-              {active ? "Deactivate pack" : "Activate pack"}
+              {active ? "Remove pack" : "Install pack"}
             </button>
             <div className="custom-pack-message-grid">
               {libraryPack.entries.map((entry, index) => {
@@ -7430,7 +7383,7 @@ function PackDetailModal({
             <div className="field">
               <span>{interruptionPack.name}</span>
               <p className="pack-editor-copy">{interruptionPack.description}</p>
-              <p className="pack-meta">{interruptionPack.cards.length} cards · launcherContext: {interruptionPack.targetApp}</p>
+              <p className="pack-meta">{interruptionPack.cards.length} {interruptionPack.cards.length === 1 ? "message" : "messages"}</p>
             </div>
             <button type="button" className="pack-button" onClick={startNewInterruptionCard}>
               Add card
@@ -7762,6 +7715,7 @@ function SettingsPanel({
   actionCards,
   onRestoreActionCards,
   interruptionPacks,
+  onOpenInterruptionPack,
   launcherContext,
   onLogLauncherEvent,
   morningSummaryDebug,
@@ -7958,8 +7912,8 @@ function SettingsPanel({
       </div>
       <div className="settings-card">
         <div className="settings-version-heading">
-          <p>Home Screen Shortcuts</p>
-          <span>Install separate home-screen shortcuts for supported apps. Each shortcut shares your MyBishBash cards and settings.</span>
+          <p>Protected Apps</p>
+          <span>Apps where MyBishBash is applied. Install a home-screen shortcut for each app you want protected, then choose how it behaves below.</span>
         </div>
         <div className="shortcut-context-grid">
           <div>
@@ -8088,9 +8042,15 @@ function SettingsPanel({
                     : "You’ll see normal MyBishBash cards instead."}
                 </p>
                 {pack ? (
-                  <p className="tiny-note" style={{ margin: 0 }}>
-                    Linked pack: {pack.name}
-                  </p>
+                  <button
+                    type="button"
+                    className="pack-button secondary"
+                    style={{ marginTop: "12px" }}
+                    data-testid={`settings-interruption-messages-${version.id}`}
+                    onClick={() => onOpenInterruptionPack({ type: "interruption", id: pack.id, targetApp: version.id })}
+                  >
+                    Edit interruption messages
+                  </button>
                 ) : null}
               </div>
             ) : null}

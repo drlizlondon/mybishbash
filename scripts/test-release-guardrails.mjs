@@ -4,6 +4,7 @@ import { selectEligibleCard } from "../src/lib/cardSelection.js";
 import { buildLibrarySections } from "../src/lib/librarySections.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
@@ -67,19 +68,29 @@ assertMatch("canonical card completed and ignored events are logged", appSource,
 assertMatch("Library renders Personal Cards section", appSource, /title="Personal Cards"[\s\S]{0,160}Cards you have written for yourself\./);
 assertMatch("Library renders Commitment Cards section", appSource, /title="Commitment Cards"[\s\S]{0,160}Promises you've made to yourself\./);
 assertMatch("Library renders Active Packs section", appSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
-assertMatch("Library default open states match product shape", appSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*\}\)/);
+assertMatch("Library renders Do Instead Cards section", appSource, /title="Do Instead Cards"[\s\S]{0,160}Things to do instead of opening an app\./);
+assertMatch("Library default open states match product shape", appSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*doInstead: false,\s*\}\)/);
 assertMatch("Library uses compact list rows", appSource, /function LibraryListRow[\s\S]{0,1500}className=\{`library-list-row/);
 // "View all" footer is intentional — part of ExpandableCollection (shows when items > maxPreview)
 assertMatch("Library View all footer is gated on hasMore", appSource, /hasMore[\s\S]{0,160}collection-view-all/);
 assertMatch("Personal Library plus opens personal composer", appSource, /onCreatePersonal=\{\(\) => openCardComposerFromCurrentRoute\("personal"\)\}/);
 assertMatch("Commitment Library plus opens commitment composer", appSource, /onCreateCommitment=\{\(\) => openCardComposerFromCurrentRoute\("commitment"\)\}/);
-assertMatch("Active Packs Library plus opens Packs add/manage flow", appSource, /onAddPack=\{\(\) => navigateTo\("\/packs"\)\}/);
+assertMatch("Active Packs Library plus opens Explore", appSource, /onAddPack=\{\(\) => navigateTo\("\/explore"\)\}/);
 assertMatch("Composer can open in section-specific creation modes", appSource, /function Composer\(\{ initialCard, initialKind = "personal"/);
 assertMatch("Library section plus has its own click target", appSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
 assertMatch("Library section toggle remains separate from plus", appSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
-assertMatch("Packs tab still renders Interruption Packs", appSource, /<h2>Interruption Packs<\/h2>/);
-assertMatch("Packs tab still renders Active Actions", appSource, /<h2>Active Actions<\/h2>/);
-assertMatch("Packs tab still renders Library Packs", appSource, /<h2>Library Packs<\/h2>/);
+// Explore replaced the Packs tab (docs/explore-architecture.md): discovery in
+// ExplorePanel, interruption editing in Settings → Protected Apps, action
+// cards in Library → Do Instead Cards.
+assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
+assertMatch("Explore tab renders ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<ExplorePanel/);
+assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
+assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
+assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
+assertMatch("Settings keeps interruption message editing", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
+assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
+assertMatch("Explore premium CTA is Coming Soon, not a payment flow", exploreSource, /Premium — Coming Soon/);
+assertMatch("Premium install fails closed in activatePack", appSource, /pack\.isPremium === true && !canUsePremiumContent\) return;/);
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);
 assertNoMatch("interruption must not be disabled by old weighted activation state", appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption/);
 assertNoMatch("interruption on with no layer-one card uses caught-up instead of direct continue", appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
