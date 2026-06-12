@@ -3411,9 +3411,18 @@ function App() {
         const handled = captureNavigation(href, { versionId, source, reason });
         if (handled) return true;
       }
-      if (allowDefaultNavigation) return false;
       const fallbackHref = getBrowserSafeDestinationHref(resolution.fallbackHref);
-      if (shouldUseTimedWebFallback(href) && fallbackHref && fallbackHref !== href) {
+      const needsTimedFallback = shouldUseTimedWebFallback(href) && fallbackHref && fallbackHref !== href;
+      if (allowDefaultNavigation) {
+        // The caller's <a href> performs the navigation (anchor default
+        // behaviour — continue-to-app cards). Still arm the silent-failure
+        // recovery: the anchor fires right after this handler returns.
+        if (needsTimedFallback) {
+          scheduleNativeSchemeFallback({ versionId, source, reason, href, fallbackHref });
+        }
+        return false;
+      }
+      if (needsTimedFallback) {
         scheduleNativeSchemeFallback({ versionId, source, reason, href, fallbackHref });
       }
       window.location.assign(href);
