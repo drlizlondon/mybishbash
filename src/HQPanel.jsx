@@ -29,7 +29,10 @@ import {
   saveAdminGlobalPack,
   saveAdminLauncherConfig,
   uploadLauncherIcon,
+  uploadPackCover,
 } from "./lib/mybishbashSync";
+import { PACK_GOALS, PACK_CONTENT_TYPES } from "./lib/packGoals";
+import { parseImportedCards, formatImportedCard } from "./lib/packImport";
 import {
   fetchAdminTesterReports,
   updateTesterReportStatus,
@@ -58,6 +61,18 @@ const EMPTY_PACK_FORM = {
   theme: "Minimal",
   published: false,
   importText: "",
+  sourceKey: null,
+  // Explore cover metadata (docs/explore-architecture.md)
+  goal: "",
+  whyText: "",
+  coverImageUrl: "",
+  sourceLabel: "MyBishBash",
+  contentType: "cards",
+  isPremium: false,
+  isFeatured: false,
+  isExperimental: false,
+  sortOrder: 0,
+  publishedAt: null,
 };
 
 const NAV_ITEMS = [
@@ -457,6 +472,17 @@ const HQContent = memo(function HQContent({
           description: packForm.description.trim(),
           theme: packForm.theme,
           published: packForm.published,
+          sourceKey: packForm.sourceKey ?? null,
+          goal: packForm.goal,
+          whyText: packForm.whyText,
+          coverImageUrl: packForm.coverImageUrl,
+          sourceLabel: packForm.sourceLabel,
+          contentType: packForm.contentType,
+          isPremium: packForm.isPremium,
+          isFeatured: packForm.isFeatured,
+          isExperimental: packForm.isExperimental,
+          sortOrder: packForm.sortOrder,
+          publishedAt: packForm.publishedAt,
           entries,
         },
         session?.user?.id,
@@ -514,6 +540,17 @@ const HQContent = memo(function HQContent({
       description: pack.description ?? "",
       theme: pack.theme ?? "Minimal",
       published: Boolean(pack.published),
+      sourceKey: pack.sourceKey ?? null,
+      goal: pack.goal ?? "",
+      whyText: pack.whyText ?? "",
+      coverImageUrl: pack.coverImageUrl ?? "",
+      sourceLabel: pack.sourceLabel ?? "MyBishBash",
+      contentType: pack.contentType ?? "cards",
+      isPremium: Boolean(pack.isPremium),
+      isFeatured: Boolean(pack.isFeatured),
+      isExperimental: Boolean(pack.isExperimental),
+      sortOrder: pack.sortOrder ?? 0,
+      publishedAt: pack.publishedAt ?? null,
       importText: pack.entries?.map(formatImportedCard).join("\n") ?? "",
     });
     onNavigate("packs");
@@ -1446,7 +1483,7 @@ const PacksPage = memo(function PacksPage({
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
       <GlassPanel title={packForm.id ? "Edit Pack Deployment" : "Create Pack Deployment"} subtitle="Database-managed content object">
-        <PackEditor form={packForm} setForm={setPackForm} onSubmit={handleSavePack} loading={loading} />
+        <PackEditor form={packForm} setForm={setPackForm} onSubmit={handleSavePack} loading={loading} onError={setStatus} />
       </GlassPanel>
       <div className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-3">
@@ -2250,9 +2287,16 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Pack object</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">{pack.goal || "No goal"}</p>
           <h3 className="mt-1 text-lg font-semibold text-slate-950">{pack.title}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-500">{pack.description || "No description"}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {pack.isFeatured ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Start Here</span> : null}
+            {pack.isPremium ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Premium</span> : null}
+            {pack.isExperimental ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Experimental</span> : null}
+            {pack.contentType && pack.contentType !== "cards" ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{pack.contentType}</span> : null}
+            {!pack.coverImageUrl ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">No cover</span> : null}
+          </div>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pack.published ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
           {pack.published ? "Live" : "Draft"}
@@ -2283,45 +2327,127 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
   );
 });
 
-const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading }) {
+const PACK_EDITOR_INPUT_CLASS = "h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+const PACK_EDITOR_AREA_CLASS = "rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+
+function PackCoverField({ value, onChange, onError }) {
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      onChange(await uploadPackCover(file));
+    } catch (error) {
+      onError?.(error?.message ?? "Could not upload cover image.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-3">
+        {value ? (
+          <img src={value} alt="Pack cover" className="h-14 w-21 rounded-lg border border-blue-100 object-cover" style={{ aspectRatio: "3 / 2" }} />
+        ) : (
+          <div className="flex h-14 w-21 items-center justify-center rounded-lg border border-dashed border-blue-200 text-[10px] text-slate-400" style={{ aspectRatio: "3 / 2" }}>
+            3:2 cover
+          </div>
+        )}
+        <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+          {uploading ? "Uploading…" : "Upload cover"}
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
+        </label>
+      </div>
+      <input
+        className={PACK_EDITOR_INPUT_CLASS}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Cover image URL (https) — or upload above"
+      />
+    </div>
+  );
+}
+
+const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading, onError }) {
   useRenderDiagnostics("PackEditor");
+  const field = (key) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setForm((current) => ({ ...current, [key]: value }));
+  };
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
       <input
-        className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        className={PACK_EDITOR_INPUT_CLASS}
         value={form.title}
-        onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+        onChange={field("title")}
         placeholder="Pack title"
       />
       <textarea
-        className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        className={PACK_EDITOR_AREA_CLASS}
         value={form.description}
-        onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+        onChange={field("description")}
         placeholder="Short description"
         rows={2}
       />
-      <select
-        className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-        value={form.theme}
-        onChange={(event) => setForm((current) => ({ ...current, theme: event.target.value }))}
-      >
-        {THEMES.map((theme) => <option key={theme} value={theme}>{theme}</option>)}
-      </select>
+      <input
+        className={PACK_EDITOR_INPUT_CLASS}
+        value={form.whyText}
+        onChange={field("whyText")}
+        placeholder="Why this exists — one sentence, shown on the pack cover"
+        maxLength={120}
+      />
+      <PackCoverField
+        value={form.coverImageUrl}
+        onChange={(url) => setForm((current) => ({ ...current, coverImageUrl: url }))}
+        onError={onError}
+      />
+      <div className="grid gap-3 md:grid-cols-3">
+        <select className={PACK_EDITOR_INPUT_CLASS} value={form.goal} onChange={field("goal")}>
+          <option value="">No goal (hidden from goal sections)</option>
+          {PACK_GOALS.map((goal) => <option key={goal} value={goal}>{goal}</option>)}
+        </select>
+        <select className={PACK_EDITOR_INPUT_CLASS} value={form.contentType} onChange={field("contentType")}>
+          {PACK_CONTENT_TYPES.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
+        </select>
+        <select className={PACK_EDITOR_INPUT_CLASS} value={form.theme} onChange={field("theme")}>
+          {THEMES.map((theme) => <option key={theme} value={theme}>{theme}</option>)}
+        </select>
+      </div>
+      <input
+        className={PACK_EDITOR_INPUT_CLASS}
+        value={form.sourceLabel}
+        onChange={field("sourceLabel")}
+        placeholder="Source label (shown as “by …” on the cover)"
+      />
       <textarea
         className="rounded-xl border border-blue-100 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
         value={form.importText}
-        onChange={(event) => setForm((current) => ({ ...current, importText: event.target.value }))}
-        placeholder={"Card text | attribution | source title | source URL"}
+        onChange={field("importText")}
+        placeholder={"Card text | attribution | source title | source URL\nStart a line with * to mark it as a cover preview card (max 3 shown)."}
         rows={10}
       />
-      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-        <input
-          type="checkbox"
-          checked={form.published}
-          onChange={(event) => setForm((current) => ({ ...current, published: event.target.checked }))}
-        />
-        Live deployment
-      </label>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.published} onChange={field("published")} />
+          Live deployment
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.isFeatured} onChange={field("isFeatured")} />
+          Start Here hero
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.isPremium} onChange={field("isPremium")} />
+          Premium
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.isExperimental} onChange={field("isExperimental")} />
+          Experimental (testers only)
+        </label>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50" type="submit" disabled={loading}>
           {form.id ? "Save deployment" : "Deploy Pack"}
@@ -2981,29 +3107,7 @@ function formatDateTime(timestamp) {
   }).format(new Date(timestamp));
 }
 
-function parseImportedCards(rawText) {
-  return rawText
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [promptText, attribution = "", sourceTitle = "", sourceUrl = ""] = line.split("|");
-      return {
-        promptText: promptText.trim(),
-        attribution: attribution.trim(),
-        sourceTitle: sourceTitle.trim(),
-        sourceUrl: sourceUrl.trim(),
-        frequency: "once_daily",
-        timingWindows: ["morning", "day", "evening"],
-      };
-    })
-    .filter((entry) => entry.promptText);
-}
-
-function formatImportedCard(entry) {
-  const parts = [entry.promptText, entry.attribution, entry.sourceTitle, entry.sourceUrl].filter(Boolean);
-  return parts.join(" | ");
-}
+// parseImportedCards / formatImportedCard → moved to src/lib/packImport.js
 
 function formatDate(timestamp) {
   if (!timestamp) return "unknown";
