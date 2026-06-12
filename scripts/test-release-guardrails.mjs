@@ -96,14 +96,16 @@ assertMatch("Composer can open in section-specific creation modes", appSource, /
 assertMatch("Library section plus has its own click target", appSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
 assertMatch("Library section toggle remains separate from plus", appSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
 // Explore replaced the Packs tab (docs/explore-architecture.md): discovery in
-// ExplorePanel, interruption editing in Settings → Protected Apps, action
-// cards in Library → Do Instead Cards.
+// ExplorePanel, protected app management in Apps, action cards in Library →
+// Do Instead Cards.
 assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
 assertMatch("Explore tab renders ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<ExplorePanel/);
 assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
 assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
-assertMatch("Settings keeps interruption message editing", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
+assertNoMatch("Settings no longer owns protected app management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
+assertMatch("Apps owns protected app management", appSource, /data-testid="protected-apps-list"/);
+assertMatch("Apps exposes app interruption toggles", appSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
 // Generated covers are the standard cover system; uploads are an optional
 // override and a missing upload is never treated as an incomplete pack.
