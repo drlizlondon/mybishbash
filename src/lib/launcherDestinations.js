@@ -141,3 +141,15 @@ export function resolveLauncherDestination(version, { preferFastDestination = fa
 export function getVersionOpenHref(version, { preferFastDestination = false } = {}) {
   return resolveLauncherDestination(version, { preferFastDestination }).href;
 }
+
+// Custom-scheme launches (instagram://, youtube://, x-safari-…) fail silently
+// when the native app is missing: location.assign() does nothing visible and
+// the launcher button appears dead. Those launches need a timed web fallback.
+// http(s) destinations always navigate, and intent:// URLs carry their own
+// S.browser_fallback_url handled by Android — neither needs the timer.
+export function shouldUseTimedWebFallback(href) {
+  if (typeof href !== "string" || !href.trim()) return false;
+  if (/^https?:\/\//i.test(href)) return false;
+  if (/^intent:\/\//i.test(href)) return false;
+  return true;
+}

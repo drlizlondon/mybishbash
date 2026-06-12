@@ -3,6 +3,7 @@ import {
   getAndroidIntentBrowserFallback,
   getVersionOpenHref,
   resolveLauncherDestination,
+  shouldUseTimedWebFallback,
 } from "../src/lib/launcherDestinations.js";
 import { FAKE_APP_LAUNCHERS } from "../src/lib/launcherRegistry.js";
 
@@ -85,5 +86,35 @@ assert.equal(missingAndroid.strategy, "default_fallback");
 // ── Back-compat wrapper ──────────────────────────────────────────────────────
 
 assert.equal(getVersionOpenHref(byId.instagram), resolveLauncherDestination(byId.instagram).href);
+
+// ── Timed web fallback for silent custom-scheme failures ────────────────────
+// Custom schemes fail silently when the native app is missing; http(s) always
+// navigates and intent:// embeds its own Android fallback.
+
+assert.equal(shouldUseTimedWebFallback("instagram://app"), true, "native scheme needs timed fallback");
+assert.equal(shouldUseTimedWebFallback("youtube://"), true, "native scheme needs timed fallback");
+assert.equal(shouldUseTimedWebFallback("x-safari-https://www.google.com"), true, "x-safari needs timed fallback (iOS <17)");
+assert.equal(shouldUseTimedWebFallback("googlechromes://www.google.com"), true);
+assert.equal(shouldUseTimedWebFallback("https://www.instagram.com"), false, "https never needs the timer");
+assert.equal(shouldUseTimedWebFallback("http://example.com"), false);
+assert.equal(
+  shouldUseTimedWebFallback("intent://www.youtube.com/#Intent;scheme=https;S.browser_fallback_url=https%3A%2F%2Fwww.youtube.com;end"),
+  false,
+  "intent URLs carry their own fallback",
+);
+assert.equal(shouldUseTimedWebFallback(""), false);
+assert.equal(shouldUseTimedWebFallback(null), false);
+
+// Every static launcher whose iOS pick is a custom scheme must also resolve a
+// usable web fallback, otherwise the timed recovery has nowhere to go.
+for (const launcher of FAKE_APP_LAUNCHERS) {
+  const resolution = resolveLauncherDestination(launcher, { platform: "ios" });
+  if (shouldUseTimedWebFallback(resolution.href)) {
+    assert.ok(
+      /^https:\/\//.test(resolution.fallbackHref) || /^https:\/\//.test(resolution.href.replace(/^x-safari-/, "")),
+      `${launcher.id}: iOS custom-scheme destination has no https fallback (href=${resolution.href}, fallback=${resolution.fallbackHref})`,
+    );
+  }
+}
 
 console.log("Destination resolver checks passed");

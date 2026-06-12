@@ -115,6 +115,7 @@ import {
   getVersionOpenHref,
   resolveLauncherDestination,
 } from "./lib/launcherState";
+import { shouldUseTimedWebFallback } from "./lib/launcherDestinations";
 import { buildCustomLauncher, getAllLauncherIds, getLauncherConfig, isKnownLauncher, mergeLauncherConfig, resolveLauncherIconSrc } from "./lib/launcherRegistry";
 import { cacheAndRegisterDynamicLaunchers } from "./lib/dynamicLauncherCache";
 import {
@@ -184,6 +185,10 @@ const LEGACY_BASE_PATHS = ["/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
+// How long a custom-scheme launch gets to background the page before the web
+// fallback fires. Long enough for the OS app switch on slow devices, short
+// enough that a dead button visibly recovers.
+const NATIVE_SCHEME_FALLBACK_MS = 1400;
 const INSTALLED_LAUNCHER_SHELL_KEY = "mybishbash.installed-launcher-shell.v1";
 const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalone-launcher-recovery.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
@@ -3407,10 +3412,48 @@ function App() {
         if (handled) return true;
       }
       if (allowDefaultNavigation) return false;
+      const fallbackHref = getBrowserSafeDestinationHref(resolution.fallbackHref);
+      if (shouldUseTimedWebFallback(href) && fallbackHref && fallbackHref !== href) {
+        scheduleNativeSchemeFallback({ versionId, source, reason, href, fallbackHref });
+      }
       window.location.assign(href);
       return true;
     }
     return true;
+  }
+
+  // A custom-scheme launch that the OS cannot handle (native app not
+  // installed, or x-safari- on iOS <17) fails silently and leaves the user on
+  // a dead screen. If the page is still visible shortly after the attempt,
+  // open the web fallback instead. Any signal that the launch worked —
+  // pagehide, blur (OS app-open sheet), or the tab going hidden — cancels the
+  // timer so we never double-navigate.
+  function scheduleNativeSchemeFallback({ versionId, source, reason, href, fallbackHref }) {
+    let timerId = 0;
+    const cancel = () => {
+      window.clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", cancel);
+      window.removeEventListener("blur", cancel);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") cancel();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", cancel);
+    window.addEventListener("blur", cancel);
+    timerId = window.setTimeout(() => {
+      cancel();
+      if (document.visibilityState === "hidden") return;
+      console.warn("[LAUNCHER] Native scheme did not open — using web fallback", { versionId, href, fallbackHref });
+      void logLauncherEvent("fake_launcher_destination_fallback_used", versionId, {
+        launched_from: source,
+        reason,
+        attempted_href: href,
+        fallback_href: fallbackHref,
+      });
+      window.location.assign(fallbackHref);
+    }, NATIVE_SCHEME_FALLBACK_MS);
   }
 
   function isSafeExternalUrl(url) {
