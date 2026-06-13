@@ -9210,18 +9210,11 @@ function Overlay({
   if (overlay.type === "action-success") {
     return (
       <ActionSuccessOverlay
-        overlay={overlay}
-        version={version}
         onClose={onClose}
-        onContinueToApp={onContinueToApp}
-        allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
-        launcherAppId={launcherAppId}
-        launcherAppName={launcherAppName}
-        onManageApp={onManageApp}
       />
     );
   }
@@ -10122,7 +10115,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, cardOverlayKey = "", className = "", launcherAppId = null, launcherAppName = null, onManageApp = null }) {
+function ActionSuccessOverlay({ onClose, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
   const actions = [
     { label: "Back home", variant: "primary", onClick: onClose },
   ];
@@ -10139,9 +10132,6 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, car
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
-      launcherAppId={launcherAppId}
-      launcherAppName={launcherAppName}
-      onManageApp={onManageApp}
     />
   );
 }
