@@ -107,7 +107,7 @@ if (!/window\.location\.assign\(href\)/.test(appSource)) {
   pass("openDestinationApp still calls window.location.assign(href)");
 }
 
-if (!/const preferFastDestination = reason === "fake_launcher_icon_clicked";[\s\S]{0,160}resolveLauncherDestination\(version,\s*\{\s*preferFastDestination\s*\}\)/.test(appSource)) {
+if (!/const preferFastDestination = reason === "fake_launcher_icon_clicked";[\s\S]{0,220}resolveLauncherDestination\(version,\s*\{[\s\S]{0,80}preferFastDestination[\s\S]{0,120}\}\)/.test(appSource)) {
   fail("fake launcher icon clicks must prefer fast app-capable destinations before slow native deep links");
 } else {
   pass("fake launcher icon clicks prefer fast app-capable destinations before slow native deep links");

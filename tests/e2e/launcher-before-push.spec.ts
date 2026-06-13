@@ -11,8 +11,8 @@ declare global {
 const now = '2026-06-01T12:00:00.000Z';
 const destinationByLauncher = {
   safari: /^https:\/\/www\.google\.com$/,
-  youtube: /^https:\/\/www\.youtube\.com/,
-  instagram: /^https:\/\/www\.instagram\.com/,
+  youtube: /^youtube:\/\//,
+  instagram: /^instagram:\/\/app$/,
 };
 
 type LauncherId = keyof typeof destinationByLauncher;

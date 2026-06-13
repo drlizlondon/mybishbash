@@ -57,7 +57,7 @@ export function getAndroidIntentBrowserFallback(intentUrl) {
 // Returns where "Continue to app" should go and how that destination was
 // chosen, so callers can log the strategy and react to a missing destination
 // instead of silently doing nothing.
-export function resolveLauncherDestination(version, { preferFastDestination = false, platform } = {}) {
+export function resolveLauncherDestination(version, { preferFastDestination = false, preferDirectAppDestination = false, platform } = {}) {
   const resolvedPlatform = platform ?? getLauncherPlatform();
   const empty = {
     href: "",
@@ -74,6 +74,10 @@ export function resolveLauncherDestination(version, { preferFastDestination = fa
 
   let picked = null;
   let fallbackHref = "";
+
+  if (preferDirectAppDestination) {
+    picked = pickDestination(merged, ["appUrl", "manualUrl"]);
+  }
 
   if (preferFastDestination) {
     if (merged.id === "safari" && resolvedPlatform === "ios") {
@@ -133,13 +137,14 @@ export function resolveLauncherDestination(version, { preferFastDestination = fa
     strategy: resolution.strategy,
     sourceField: resolution.sourceField,
     preferFastDestination,
+    preferDirectAppDestination,
   });
 
   return resolution;
 }
 
-export function getVersionOpenHref(version, { preferFastDestination = false } = {}) {
-  return resolveLauncherDestination(version, { preferFastDestination }).href;
+export function getVersionOpenHref(version, { preferFastDestination = false, preferDirectAppDestination = false } = {}) {
+  return resolveLauncherDestination(version, { preferFastDestination, preferDirectAppDestination }).href;
 }
 
 // Custom-scheme launches (instagram://, youtube://, x-safari-…) fail silently

@@ -13,8 +13,8 @@ const layerOneModes = ['personal', 'pack', 'caught-up', 'interruption-direct'] a
 const terminals = ['continue', 'home', 'action-exit', 'launcher-safari', 'launcher-youtube', 'launcher-instagram', 'manual-open', 'repeat-continue'] as const;
 const destination = {
   safari: /^https:\/\/www\.google\.com$/,
-  youtube: /^https:\/\/www\.youtube\.com/,
-  instagram: /^https:\/\/www\.instagram\.com/,
+  youtube: /^youtube:\/\//,
+  instagram: /^instagram:\/\/app$/,
 };
 
 type LauncherId = (typeof launchers)[number];

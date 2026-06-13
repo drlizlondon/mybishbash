@@ -3312,7 +3312,7 @@ function App() {
     return nextOverlay;
   }
 
-  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false } = {}) {
+  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false } = {}) {
     // Only supported launcher IDs may ever be launched.
     if (!isKnownLauncher(versionId)) {
       console.warn("[LAUNCHER] Blocking unsupported launcher destination", { versionId, source, reason });
@@ -3346,7 +3346,7 @@ function App() {
       launcherBehaviorSettings[versionId],
     );
     const preferFastDestination = reason === "fake_launcher_icon_clicked";
-    const resolution = resolveLauncherDestination(version, { preferFastDestination });
+    const resolution = resolveLauncherDestination(version, { preferFastDestination, preferDirectAppDestination });
     const href = getBrowserSafeDestinationHref(resolution.href);
     const destinationMetadata = {
       destination_strategy: resolution.strategy,
@@ -8574,6 +8574,23 @@ function Overlay({
     ? "launcher-interception-card"
     : "";
   const cardOverlayKey = getCardOverlayRenderKey(overlay, card?.id);
+  const directLauncherVersions = useMemo(
+    () =>
+      (fakeLauncherVersions ?? []).map((launcherVersion) => ({
+        ...launcherVersion,
+        href: getBrowserSafeDestinationHref(getVersionOpenHref(launcherVersion, { preferDirectAppDestination: true })),
+      })),
+    [fakeLauncherVersions],
+  );
+  const handleDirectLauncherLaunch = (versionId, event) => {
+    const handled = onContinueToApp?.(versionId, {
+      source: "in_card_app_button",
+      reason: "user_pressed_real_app_button",
+      allowDefaultNavigation: true,
+      preferDirectAppDestination: true,
+    });
+    if (handled !== false) event?.preventDefault?.();
+  };
 
   useEffect(() => {
     if (overlay.type !== "launcher-preparing") {
@@ -8641,13 +8658,14 @@ function Overlay({
   }
 
   if (overlay.type === "continue-to-app") {
-    const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version));
+    const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true }));
     const canGoBackHome = normalizeLaunchSession(launchSession).allowBackHome;
     const handleContinue = (event) => {
       const handled = onContinueToApp?.(version?.id, {
         source: "continue_card",
         reason: "user_pressed_continue",
         allowDefaultNavigation: Boolean(continueHref),
+        preferDirectAppDestination: true,
       });
       if (handled !== false) event?.preventDefault?.();
     };
@@ -8702,7 +8720,7 @@ function Overlay({
         },
       ];
       if (isIntercept && interceptVersion) {
-        const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion));
+        const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion, { preferDirectAppDestination: true }));
         offlineActions.push({
           label: `Open ${appName} anyway`,
           variant: "secondary",
@@ -8712,6 +8730,7 @@ function Overlay({
               source: "offline_empty_card",
               reason: "user_pressed_open_anyway_offline",
               allowDefaultNavigation: Boolean(continueHref),
+              preferDirectAppDestination: true,
             });
             if (handled !== false) event?.preventDefault?.();
           },
@@ -8744,7 +8763,7 @@ function Overlay({
 
     const actions = [];
     if (isIntercept && interceptVersion) {
-      const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion));
+      const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(interceptVersion, { preferDirectAppDestination: true }));
       actions.push({
         label: `Continue to ${appName}`,
               testId: "card-action-continue-to-app",
@@ -8755,6 +8774,7 @@ function Overlay({
             source: "empty_card",
             reason: "user_pressed_continue_after_no_eligible_cards",
             allowDefaultNavigation: Boolean(continueHref),
+            preferDirectAppDestination: true,
           });
           if (handled !== false) event?.preventDefault?.();
         }
@@ -8780,8 +8800,8 @@ function Overlay({
         headline={isIntercept ? "You're all caught up." : "You're all caught up for now."}
         subtitle={isIntercept ? "See you later." : ""}
       actions={actions}
-      launcherVersions={isIntercept ? [] : fakeLauncherVersions}
-      onLauncherLaunch={onFakeLauncherLaunch}
+      launcherVersions={isIntercept ? [] : directLauncherVersions}
+      onLauncherLaunch={handleDirectLauncherLaunch}
       onDashboard={onDashboard}
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
@@ -8826,8 +8846,8 @@ function Overlay({
         onAccept={onAcceptActionCard}
         onClose={onClose}
         onLogEvent={onLogEvent}
-        fakeLauncherVersions={fakeLauncherVersions}
-        onFakeLauncherLaunch={onFakeLauncherLaunch}
+        fakeLauncherVersions={directLauncherVersions}
+        onFakeLauncherLaunch={handleDirectLauncherLaunch}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
@@ -8846,8 +8866,8 @@ function Overlay({
         onLogEvent={onLogEvent}
         onCreateActionCard={onCreateActionCard}
         onContinueToApp={onContinueToApp}
-        fakeLauncherVersions={fakeLauncherVersions}
-        onFakeLauncherLaunch={onFakeLauncherLaunch}
+        fakeLauncherVersions={directLauncherVersions}
+        onFakeLauncherLaunch={handleDirectLauncherLaunch}
         allowBackHome={normalizeLaunchSession(launchSession).allowBackHome}
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
@@ -8897,8 +8917,8 @@ function Overlay({
       <CommitmentMotivationOverlay
         card={card}
         onCommitmentAction={onCommitmentAction}
-        launcherVersions={fakeLauncherVersions}
-        onLauncherLaunch={onFakeLauncherLaunch}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
@@ -8916,8 +8936,8 @@ function Overlay({
       <CommitmentCheckInOverlay
         card={card}
         onCheckInAction={onCommitmentCheckInAction}
-        launcherVersions={fakeLauncherVersions}
-        onLauncherLaunch={onFakeLauncherLaunch}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
@@ -8936,8 +8956,8 @@ function Overlay({
         card={card}
         timezone={timezone}
         onCommitmentAction={onCommitmentAction}
-        launcherVersions={fakeLauncherVersions}
-        onLauncherLaunch={onFakeLauncherLaunch}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
         onDashboard={onDashboard}
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
@@ -8973,8 +8993,8 @@ function Overlay({
           : "A gentle nudge from the version of you that cares."
       }
       actions={resolvedActions}
-      launcherVersions={fakeLauncherVersions}
-      onLauncherLaunch={onFakeLauncherLaunch}
+      launcherVersions={directLauncherVersions}
+      onLauncherLaunch={handleDirectLauncherLaunch}
       onDashboard={onDashboard}
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
@@ -9704,7 +9724,9 @@ function ActionCardOverlay({
 }
 
 function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
-  function handleContinueToApp() {
+  const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true })) : "";
+
+  function handleContinueToApp(event) {
     if (!version) return;
 
     void onLogEvent({
@@ -9716,7 +9738,13 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
       launcher_context: version.id,
       action_taken: "continued_to_app",
     });
-    onContinueToApp?.(version.id, { source: "action_card_empty", reason: "user_pressed_continue" });
+    const handled = onContinueToApp?.(version.id, {
+      source: "action_card_empty",
+      reason: "user_pressed_continue",
+      allowDefaultNavigation: Boolean(continueHref),
+      preferDirectAppDestination: true,
+    });
+    if (handled !== false) event?.preventDefault?.();
   }
 
   return (
@@ -9729,7 +9757,7 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         subtitle="Make one for yourself."
         actions={[
           ...(allowBackHome ? [{ label: "Back home", variant: "secondary", onClick: onClose }] : []),
-          ...(version ? [{ label: `Continue to ${version.name}`, variant: "secondary", onClick: handleContinueToApp }] : []),
+          ...(version ? [{ label: `Continue to ${version.name}`, variant: "secondary", href: continueHref, onClick: handleContinueToApp }] : []),
           { label: "Create action card", variant: "primary", onClick: onCreateActionCard },
         ]}
         launcherVersions={fakeLauncherVersions}
@@ -9765,7 +9793,7 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, car
 }
 
 function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, onChooseElse, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
-  const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version)) : "";
+  const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true })) : "";
   const actionLabel = overlay.actionLabel || "Continue";
   const actions = version
     ? [
@@ -9778,6 +9806,7 @@ function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, o
               source: "flow_confirmation",
               reason: "user_pressed_continue_after_confirmation",
               allowDefaultNavigation: Boolean(continueHref),
+              preferDirectAppDestination: true,
             });
             if (handled !== false) event?.preventDefault?.();
           },
@@ -9942,7 +9971,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
     });
   }
 
-  const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version));
+  const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true }));
 
   function handleContinueToApp(event) {
     if (!version) return;
@@ -9950,6 +9979,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
       source: "interruption_card",
       reason: "user_pressed_continue",
       allowDefaultNavigation: Boolean(continueHref),
+      preferDirectAppDestination: true,
     });
     if (handled !== false) event?.preventDefault?.();
   }

@@ -5,6 +5,7 @@ declare global {
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
     __MYBISHBASH_LAUNCH_SESSION?: { entrySurface?: string; launcherId?: string | null };
+    __MYBISHBASH_CARD_OVERLAY_MOUNTS?: Array<Record<string, unknown>>;
   }
 }
 
@@ -19,6 +20,7 @@ type SeedOptions = {
   actionCards?: Array<Record<string, unknown>>;
   dislikedPackCardIds?: string[];
   launcherBehaviorSettings?: Record<string, Record<string, unknown>>;
+  homeScreenVersions?: Record<string, Record<string, unknown>>;
   setupComplete?: boolean;
   testerMode?: boolean;
 };
@@ -117,18 +119,20 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
     actionCards = [],
     cards = [],
     dislikedPackCardIds = [],
+    homeScreenVersions = {},
     launcherBehaviorSettings = launcherSettings(false),
     setupComplete = true,
     testerMode = false,
   } = options;
   await page.addInitScript(
-    ({ seededActionCards, seededCards, seededDislikedPackCardIds, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
+    ({ seededActionCards, seededCards, seededDislikedPackCardIds, seededHomeScreenVersions, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', String(seededTesterMode));
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
       window.localStorage.setItem('mybishbash.setup-complete.v1', String(seededSetupComplete));
       window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'E2E', timezone: 'Europe/London' }));
       window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(seededCards));
+      window.localStorage.setItem('mybishbash.home-screen-versions.v1', JSON.stringify(seededHomeScreenVersions));
       window.localStorage.setItem('mybishbash.event-log.v1', '[]');
       window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
       window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', JSON.stringify(seededDislikedPackCardIds));
@@ -144,6 +148,7 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
       seededActionCards: actionCards,
       seededCards: cards,
       seededDislikedPackCardIds: dislikedPackCardIds,
+      seededHomeScreenVersions: homeScreenVersions,
       seededLauncherBehaviorSettings: launcherBehaviorSettings,
       seededSetupComplete: setupComplete,
       seededTesterMode: testerMode,
@@ -303,6 +308,55 @@ test('intercept route shows interruption flow and does not auto-open destination
   await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.launcherId ?? null)).toBe('safari');
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
   await expectNoConsoleErrors(consoleErrors);
+});
+
+test.describe('in-card app button bypasses interruption flow', () => {
+  const cases = [
+    { launcherId: 'safari', label: 'Safari', expected: safariDestination },
+    { launcherId: 'instagram', label: 'Instagram', expected: /^instagram:\/\/app$/ },
+    { launcherId: 'youtube', label: 'YouTube', expected: /^youtube:\/\// },
+    { launcherId: 'whatsapp', label: 'WhatsApp', expected: /^https:\/\/api\.whatsapp\.com\/send$/ },
+  ];
+
+  for (const { launcherId, label, expected } of cases) {
+    test(`${label} button opens the real destination from an active card`, async ({ page }) => {
+      const consoleErrors = await installConsoleErrorGuard(page);
+      await seedE2EState(page, {
+        cards: [smokeCard(`${launcherId}-direct-card`, `E2E ${label} direct card`)],
+        homeScreenVersions: {
+          [launcherId]: {
+            availabilityStatus: 'public',
+            enabled: true,
+          },
+        },
+        testerMode: true,
+      });
+
+      await gotoApp(page, `/intercept/${launcherId}`);
+
+      const overlay = page.getByTestId('card-overlay-personal');
+      await expect(overlay).toBeVisible();
+      await expect(overlay.getByRole('heading', { name: `E2E ${label} direct card` })).toBeVisible();
+      await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(1);
+
+      await overlay.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true }).click();
+
+      await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+      const [attempt] = await getNavigationAttempts(page);
+      expect(attempt.href).toMatch(expected);
+      expect(attempt.href).not.toContain('/intercept/');
+      expect(attempt.href).not.toContain('/launch/');
+      expect(attempt.metadata).toMatchObject({
+        versionId: launcherId,
+        source: 'in_card_app_button',
+        reason: 'user_pressed_real_app_button',
+      });
+      await expect(page).toHaveURL(new RegExp(`/mybishbash/intercept/${launcherId}$`));
+      await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(1);
+      await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+      await expectNoConsoleErrors(consoleErrors);
+    });
+  }
 });
 
 test('continue-to-app opens the destination from no-card intercept state', async ({ page }) => {
