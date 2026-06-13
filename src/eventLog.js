@@ -39,7 +39,10 @@ async function insertEventWithFallback(event) {
   let lastError = null;
 
   for (const tableName of [SUPABASE_EVENTS_TABLE, LEGACY_SUPABASE_EVENTS_TABLE]) {
-    const { error } = await supabase.from(tableName).insert([event]);
+    const { error } = await supabase.from(tableName).upsert([event], {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    });
     if (!error || error.code === "23505") return { error: null };
     if (isMissingTableError(error)) {
       lastError = error;
