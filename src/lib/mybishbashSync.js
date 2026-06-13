@@ -351,7 +351,7 @@ export async function markNotificationOpened(deliveryId) {
 export async function saveLauncherEvent(payload) {
   if (isDemoMode()) return;
   const client = requireSupabase();
-  const { error } = await client.from("launcher_events").insert({
+  const row = {
     user_id: payload.user_id,
     anonymous_device_id: payload.anonymous_device_id,
     session_id: payload.session_id,
@@ -365,9 +365,20 @@ export async function saveLauncherEvent(payload) {
     app_display_mode: payload.app_display_mode,
     platform: payload.platform,
     metadata: payload.metadata ?? {},
-  });
+  };
 
-  if (error) console.error("[INTERCEPT] Error saving launcher event:", error);
+  let error = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await client.from("launcher_events").insert(row);
+    error = result.error;
+    if (!error || !isTransientFetchError(error)) break;
+    await wait(250 * (attempt + 1));
+  }
+
+  if (error) {
+    const logger = isTransientFetchError(error) ? console.warn : console.error;
+    logger("[INTERCEPT] Error saving launcher event:", error);
+  }
 }
 
 // HQ role model: owner (full control incl. hard delete), admin (add/edit/
