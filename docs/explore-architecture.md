@@ -380,11 +380,11 @@ Three PRs; content work runs in parallel from day one.
 
 ## K. Generated covers (decided after PR2)
 
-**Default workflow: Create Pack → Publish.** Custom cover upload becomes an optional enhancement; every pack without `cover_image_url` renders a production-quality generated cover from its own metadata. Decision drivers: no designer dependency, supports 50+ packs, zero pipeline.
+**Default workflow: Create Pack → Publish.** Every pack without `cover_image_url` renders a production-quality generated cover from its own metadata. Decision drivers: no designer dependency, no category or theme classification, supports 50+ packs, zero pipeline.
 
 ### K1. Architecture: a React component, not an image pipeline
 
-Covers are **rendered live as a component** (`GeneratedPackCover`), not generated/cached as image files. Rationale: the inputs needed for the artwork (title, pack id, and optional card count) are already in the pack object ExplorePanel holds; rendering is instant, always in sync with HQ edits, retina-perfect, themable, and needs no storage, no server, no staleness handling. Image *files* only become necessary when covers must leave the app (social share cards, install pages, push) — at that point, render the same component to PNG once (satori/html-to-image) and cache to the existing `pack-covers` bucket. Not now.
+Covers are **rendered live as a component** (`GeneratedPackCover`), not generated/cached as image files. Rationale: the inputs needed for the artwork (title, pack id, optional description, and optional card count) are already in the pack object ExplorePanel holds; rendering is instant, always in sync with HQ edits, retina-perfect, themable, and needs no storage, no server, no staleness handling. Image *files* only become necessary when covers must leave the app (social share cards, install pages, push) — at that point, render the same component to PNG once (satori/html-to-image) and cache to the existing `pack-covers` bucket. Not now.
 
 Resolution order (everywhere a cover appears — grid, hero, detail, Library thumbnails, HQ):
 `coverImageUrl` present → `<img>` · otherwise → `<GeneratedPackCover>`. No flags, no third state.
@@ -392,17 +392,17 @@ Resolution order (everywhere a cover appears — grid, hero, detail, Library thu
 ### K2. Visual specification
 
 - **Canvas:** 3:2, same frame/radius/shadow as uploaded covers.
-- **Composition:** typography-first deck covers, using only pack title, pack id, and optional card count. The title carries the communication; generated art supplies palette, texture, accent, and a subtle card/deck motif. Preview quotes stay outside the artwork. `why_text` stays on the detail page only — covers stay uncrowded.
-- **Deterministic system:** pack id hashing chooses a premium palette, layout, texture, accent, gradient angle, and highlight position. Future HQ packs do not need correct goal/category/theme metadata to get a good cover.
-- **System size:** 16 palettes, 8 layouts, 6 texture systems, 6 accent systems. That gives hundreds of combinations while preserving a recognisable MyBishBash design language.
-- **Variant rule:** Explore grid art is title/deck-led, with the first preview quote or description below the cover. The detail page remains title-led because preview cards appear separately in "A taste" below. Library thumbnails use a compact title-led variant.
+- **Composition:** premium mobile product cards, using only pack title, pack id, optional description, and optional card count. The title carries the communication; generated art supplies a fixed premium colour family, gradient, subtle official-logo watermark, card count badge, and at most one status badge. Preview quotes stay outside the artwork. `why_text` stays on the detail page only — covers stay uncrowded.
+- **Deterministic system:** pack id hashing chooses one of eight approved colour families (Plum, Navy, Teal, Forest, Burgundy, Copper, Charcoal, Midnight Blue), plus gradient angle and highlight position. Future HQ packs do not need correct goal/category/theme metadata to get a good cover.
+- **Typography rule:** no generated cover may truncate, ellipsise, clip, or drop title text. Long titles are rebalanced across lines and scaled down instead.
+- **Variant rule:** Explore grid art is title-led, with the first preview quote or description below the cover. The detail page uses a larger title-led cover because preview cards appear separately in "A taste" below. Library thumbnails use a compact title-led variant.
 
 ### K3. Code changes required (no schema, no sync changes)
 
 1. `src/GeneratedPackCover.jsx` — the deterministic component, `variant: grid | detail | thumb | bare`.
 2. `src/ExplorePanel.jsx` — `ExploreCoverArt` renders it when no `coverImageUrl`; grid-card copy adjusts per the variant rule.
-3. `src/styles.css` — generated-cover typography, palette variables, texture systems, and accents.
-4. `src/HQPanel.jsx` — PR1's red "No cover" warning becomes a neutral "Auto cover" badge (absence is no longer a defect), and the pack form shows the generated cover as its preview placeholder so HQ sees the default before deciding to upload.
+3. `src/styles.css` — generated-cover typography, palette variables, gradient, subtle watermark, count badge, and one-badge status styling.
+4. `src/HQPanel.jsx` — PR1's red "No cover" warning becomes a neutral "Auto cover" badge (absence is no longer a defect), and the pack form shows the generated cover as its live preview.
 5. Tests — guardrail + an explore.spec assertion that a coverless pack renders a generated cover.
 
 PR1's schema needs **zero changes** (`cover_image_url` nullable already encodes "generated"). PR2's only adjustment is the fallback-div replacement and the grid copy rule.

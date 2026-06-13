@@ -20,32 +20,24 @@ export default function GeneratedPackCover({
       className={[
         "generated-cover",
         `generated-cover-${variantClass}`,
-        `generated-cover-layout-${model.layout}`,
-        `generated-cover-texture-${model.texture}`,
-        `generated-cover-accent-${model.accent}`,
         `generated-cover-title-${model.titleScale}`,
         className,
       ].filter(Boolean).join(" ")}
       data-testid="generated-cover"
       data-cover-palette={model.palette.name}
-      data-cover-layout={model.layout}
-      data-cover-texture={model.texture}
-      data-cover-accent={model.accent}
       data-cover-title-scale={model.titleScale}
       style={{
         "--cover-bg": model.palette.bg,
         "--cover-bg-2": model.palette.bg2,
         "--cover-ink": model.palette.ink,
         "--cover-muted": model.palette.muted,
-        "--cover-accent": model.palette.accent,
-        "--cover-accent-2": model.palette.accent2,
         "--cover-angle": `${model.angle}deg`,
         "--cover-spot-x": `${model.spotX}%`,
         "--cover-spot-y": `${model.spotY}%`,
+        "--cover-title-size": model.titleSize,
       }}
       aria-hidden="true"
     >
-      <span className="generated-cover-accent-layer" aria-hidden="true" />
       <img
         src={LOGO_SRC}
         alt=""
@@ -61,11 +53,9 @@ export default function GeneratedPackCover({
           </span>
           {model.cardCountLabel ? <span className="generated-cover-count">{model.cardCountLabel}</span> : null}
         </span>
-        {model.statusBadges.length > 0 ? (
+        {model.statusBadge ? (
           <span className="generated-cover-status-row">
-            {model.statusBadges.map((badge) => (
-              <span key={badge} className="generated-cover-status">{badge}</span>
-            ))}
+            <span className="generated-cover-status">{model.statusBadge}</span>
           </span>
         ) : null}
         <span className="generated-cover-title" data-testid="generated-cover-title">

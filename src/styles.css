@@ -6095,7 +6095,7 @@ body {
   color: var(--ink-muted);
 }
 
-/* Generated covers: deterministic typography-first publishing covers. */
+/* Generated covers: deterministic premium mobile product cards. */
 .generated-cover {
   position: relative;
   container-type: inline-size;
@@ -6103,42 +6103,22 @@ body {
   height: 100%;
   display: grid;
   place-items: stretch;
-  padding: clamp(16px, 8%, 34px);
+  padding: clamp(14px, 7%, 30px);
   color: var(--cover-ink);
   background:
-    radial-gradient(circle at var(--cover-spot-x) var(--cover-spot-y), color-mix(in srgb, var(--cover-accent) 30%, transparent), transparent 42%),
-    radial-gradient(circle at 90% 92%, color-mix(in srgb, var(--cover-bg) 78%, transparent), transparent 46%),
+    radial-gradient(circle at var(--cover-spot-x) var(--cover-spot-y), color-mix(in srgb, var(--cover-muted) 18%, transparent), transparent 44%),
     linear-gradient(var(--cover-angle), var(--cover-bg), var(--cover-bg-2));
-  text-align: center;
+  text-align: left;
   overflow: hidden;
-}
-
-.generated-cover::before,
-.generated-cover::after,
-.generated-cover-accent-layer {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.generated-cover::before {
-  opacity: 0.42;
-}
-
-.generated-cover::after {
-  border: 1px solid color-mix(in srgb, var(--cover-ink) 14%, transparent);
-  inset: 10px;
-  opacity: 0.8;
 }
 
 .generated-cover-copy {
   position: relative;
-  z-index: 3;
+  z-index: 2;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   align-content: stretch;
-  gap: clamp(7px, 3%, 14px);
+  gap: clamp(6px, 2.5%, 12px);
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -6147,15 +6127,15 @@ body {
 .generated-cover-logo-watermark {
   position: absolute;
   z-index: 1;
-  right: -8%;
-  bottom: -18%;
-  width: 66%;
+  right: -12%;
+  bottom: -20%;
+  width: 72%;
   max-width: 360px;
   aspect-ratio: 1;
   object-fit: contain;
-  opacity: 0.13;
-  filter: saturate(0.5) contrast(1.05);
-  transform: rotate(-8deg);
+  opacity: 0.055;
+  filter: saturate(0.35) contrast(1.05);
+  transform: rotate(-7deg);
 }
 
 .generated-cover-topline {
@@ -6179,16 +6159,14 @@ body {
 }
 
 .generated-cover-brand img {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   border-radius: 5px;
   object-fit: cover;
-  opacity: 0.86;
+  opacity: 0.74;
 }
 
 .generated-cover-brand span {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -6206,7 +6184,7 @@ body {
   min-width: 0;
   max-width: 100%;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(24px, 11.5cqw, 50px);
+  font-size: var(--cover-title-size);
   font-weight: 800;
   line-height: 0.93;
   letter-spacing: 0;
@@ -6217,8 +6195,7 @@ body {
 .generated-cover-title span {
   display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
@@ -6239,7 +6216,6 @@ body {
 
 .generated-cover-status-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 5px;
   min-height: 0;
 }
@@ -6247,7 +6223,7 @@ body {
 .generated-cover-status {
   padding: 4px 7px;
   border-radius: 999px;
-  background: var(--cover-accent);
+  background: color-mix(in srgb, var(--cover-ink) 92%, transparent);
   color: var(--cover-bg);
   font-size: 8px;
   font-weight: 900;
@@ -6266,17 +6242,17 @@ body {
   text-wrap: balance;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   overflow: hidden;
 }
 
-.generated-cover-grid .generated-cover-title,
 .generated-cover-detail .generated-cover-title {
-  font-size: clamp(26px, 11.8cqw, 52px);
+  font-size: min(15cqw, calc(var(--cover-title-size) * 1.14));
 }
 
-.generated-cover-detail .generated-cover-title {
-  font-size: clamp(36px, 10.5cqw, 68px);
+.generated-cover-detail .generated-cover-tagline {
+  -webkit-line-clamp: 2;
+  max-width: 92%;
 }
 
 .generated-cover-thumb .generated-cover-title {
@@ -6294,139 +6270,6 @@ body {
 
 .generated-cover-bare .generated-cover-copy {
   display: none;
-}
-
-.generated-cover-title-short .generated-cover-title {
-  font-size: clamp(32px, 13cqw, 58px);
-}
-
-.generated-cover-title-medium .generated-cover-title {
-  font-size: clamp(28px, 11.2cqw, 50px);
-}
-
-.generated-cover-title-long .generated-cover-title {
-  font-size: clamp(23px, 9.5cqw, 42px);
-}
-
-.generated-cover-title-extra-long .generated-cover-title {
-  font-size: clamp(19px, 8.1cqw, 34px);
-}
-
-.generated-cover-layout-split .generated-cover-copy {
-  text-align: left;
-}
-
-.generated-cover-layout-split .generated-cover-count {
-  margin-left: auto;
-}
-
-.generated-cover-layout-centered .generated-cover-copy {
-  justify-items: center;
-  text-align: center;
-}
-
-.generated-cover-layout-centered .generated-cover-tagline {
-  text-align: center;
-}
-
-.generated-cover-layout-editorial-block .generated-cover-copy {
-  padding-left: clamp(12px, 5%, 24px);
-  border-left: 4px solid var(--cover-accent);
-  text-align: left;
-}
-
-.generated-cover-layout-minimal .generated-cover-copy {
-  text-align: left;
-}
-
-.generated-cover-layout-minimal .generated-cover-count {
-  opacity: 0.8;
-}
-
-.generated-cover-layout-masthead {
-  place-items: stretch;
-}
-
-.generated-cover-layout-masthead .generated-cover-copy {
-  text-align: left;
-}
-
-.generated-cover-layout-stacked .generated-cover-copy {
-  text-align: left;
-}
-
-.generated-cover-layout-stacked .generated-cover-title {
-  border-top: 1px solid color-mix(in srgb, var(--cover-ink) 28%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--cover-ink) 28%, transparent);
-  padding: 8px 0;
-}
-
-.generated-cover-texture-grain::before {
-  background-image:
-    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--cover-ink) 20%, transparent) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 70% 60%, color-mix(in srgb, var(--cover-bg) 25%, transparent) 0 1px, transparent 1.5px);
-  background-size: 13px 17px, 19px 23px;
-}
-
-.generated-cover-texture-paper::before {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--cover-ink) 9%, transparent) 1px, transparent 1px),
-    linear-gradient(0deg, color-mix(in srgb, var(--cover-bg) 18%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px, 37px 37px;
-}
-
-.generated-cover-texture-soft-gradient::before {
-  background:
-    radial-gradient(circle at 18% 82%, color-mix(in srgb, var(--cover-accent-2) 46%, transparent), transparent 38%),
-    radial-gradient(circle at 84% 12%, color-mix(in srgb, var(--cover-accent) 32%, transparent), transparent 34%);
-}
-
-.generated-cover-texture-line-field::before {
-  background: repeating-linear-gradient(118deg, color-mix(in srgb, var(--cover-ink) 14%, transparent) 0 1px, transparent 1px 12px);
-}
-
-.generated-cover-texture-geometry::before {
-  background:
-    linear-gradient(135deg, transparent 0 58%, color-mix(in srgb, var(--cover-accent) 18%, transparent) 58% 60%, transparent 60%),
-    linear-gradient(45deg, transparent 0 66%, color-mix(in srgb, var(--cover-ink) 12%, transparent) 66% 68%, transparent 68%);
-}
-
-.generated-cover-texture-vignette::before {
-  background: radial-gradient(circle at center, transparent 0 45%, color-mix(in srgb, var(--cover-bg) 58%, transparent) 100%);
-  opacity: 0.72;
-}
-
-.generated-cover-accent-frame::after {
-  opacity: 1;
-}
-
-.generated-cover-accent-rules .generated-cover-accent-layer {
-  background:
-    linear-gradient(90deg, transparent 0 12%, var(--cover-accent) 12% 88%, transparent 88%) 0 18% / 100% 3px no-repeat,
-    linear-gradient(90deg, transparent 0 26%, color-mix(in srgb, var(--cover-ink) 34%, transparent) 26% 74%, transparent 74%) 0 84% / 100% 1px no-repeat;
-}
-
-.generated-cover-accent-corners .generated-cover-accent-layer {
-  background:
-    linear-gradient(var(--cover-accent), var(--cover-accent)) 14px 14px / 34px 4px no-repeat,
-    linear-gradient(var(--cover-accent), var(--cover-accent)) 14px 14px / 4px 34px no-repeat,
-    linear-gradient(var(--cover-accent), var(--cover-accent)) calc(100% - 48px) calc(100% - 18px) / 34px 4px no-repeat,
-    linear-gradient(var(--cover-accent), var(--cover-accent)) calc(100% - 18px) calc(100% - 48px) / 4px 34px no-repeat;
-}
-
-.generated-cover-accent-circle .generated-cover-accent-layer {
-  background: radial-gradient(circle at 84% 22%, transparent 0 28px, color-mix(in srgb, var(--cover-accent) 72%, transparent) 29px 31px, transparent 32px);
-}
-
-.generated-cover-accent-underline .generated-cover-title {
-  text-decoration: underline;
-  text-decoration-color: var(--cover-accent);
-  text-decoration-thickness: 5px;
-  text-underline-offset: 6px;
-}
-
-.generated-cover-accent-rail .generated-cover-accent-layer {
-  background: linear-gradient(180deg, var(--cover-accent), color-mix(in srgb, var(--cover-accent-2) 70%, transparent)) 0 0 / 9px 100% no-repeat;
 }
 
 /* In the detail frame the art is sized by aspect-ratio, which an explicit

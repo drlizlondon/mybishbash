@@ -2,6 +2,7 @@ import { performance } from "node:perf_hooks";
 import { readFile } from "node:fs/promises";
 import { selectEligibleCard } from "../src/lib/cardSelection.js";
 import { buildLibrarySections } from "../src/lib/librarySections.js";
+import { getCoverModel } from "../src/lib/generatedCover.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
@@ -14,6 +15,7 @@ const serviceWorkerSource = await readFile(new URL("../public/service-worker.js"
 const eventLogSource = await readFile(new URL("../src/eventLog.js", import.meta.url), "utf8");
 const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import.meta.url), "utf8");
 const generatedCoverModelSource = await readFile(new URL("../src/lib/generatedCover.js", import.meta.url), "utf8");
+const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const launcherEventsMigrationSource = await readFile(new URL("../supabase/migrations/202606130001_allow_authenticated_anonymous_launcher_events.sql", import.meta.url), "utf8");
 
 const failures = [];
@@ -125,18 +127,49 @@ assertNoMatch("Primary app copy avoids protected-apps language", appSource, />[^
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
 assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="explore-commitments-rail"/);
 assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /Take this commitment/);
-// Generated covers are the standard cover system. HQ supplies content; the
-// renderer supplies branded artwork with no manual cover-design path.
-assertMatch("Explore always renders generated covers for packs", exploreSource, /function ExploreCoverArt[\s\S]{0,260}return <GeneratedPackCover/);
-assertNoMatch("Explore does not render uploaded pack cover images", exploreSource, /pack\.coverImageUrl[\s\S]{0,180}<img/);
-assertMatch("Generated covers use deterministic palette/layout/texture/accent sets", generatedCoverModelSource, /COVER_PALETTES[\s\S]{0,6000}COVER_LAYOUTS[\s\S]{0,1200}COVER_TEXTURES[\s\S]{0,900}COVER_ACCENTS/);
+// Generated covers are the standard cover system. Uploaded artwork remains a
+// data-level override, but the default path needs no manual cover design.
+assertMatch("Explore renders uploaded covers as an override before generated covers", exploreSource, /if \(pack\.coverImageUrl\) \{[\s\S]{0,160}return <img[\s\S]{0,220}return <GeneratedPackCover/);
+assertMatch("Generated covers use the fixed premium palette", generatedCoverModelSource, /COVER_PALETTES[\s\S]{0,1600}plum[\s\S]{0,1600}navy[\s\S]{0,1600}teal[\s\S]{0,1600}forest[\s\S]{0,1600}burgundy[\s\S]{0,1600}copper[\s\S]{0,1600}charcoal[\s\S]{0,1600}midnight-blue/);
+assertNoMatch("Generated covers do not define texture or accent systems", generatedCoverModelSource + generatedCoverSource + stylesSource, /COVER_TEXTURES|COVER_ACCENTS|generated-cover-texture|generated-cover-accent-|cover-accent/);
 assertNoMatch("Generated covers do not depend on goals, themes, or categories", generatedCoverModelSource + generatedCoverSource, /pack\.(goal|theme|category)|getGoalStyle|GOAL_STYLES/);
-assertNoMatch("Generated cover art does not typeset preview quotes", generatedCoverSource, /promptText|isPreview|getHookQuote|generated-cover-quote/);
+assertNoMatch("Generated cover art does not typeset preview quotes", generatedCoverModelSource + generatedCoverSource, /promptText|isPreview|getHookQuote|generated-cover-quote/);
 assertNoMatch("HQ never frames a missing upload as a defect", hqSource, /No cover|Missing cover|Cover required/i);
 assertNoMatch("HQ auto cover copy does not imply goal or preview quote inputs", hqSource, /Auto cover[^"]*(goal|first preview|preview card)/i);
 assertMatch("HQ labels covers as Auto cover only", hqSource, />Auto cover<\/span>/);
-assertNoMatch("HQ does not expose manual pack cover upload controls", hqSource + syncSource, /Upload custom cover|uploadPackCover|PACK_COVER_BUCKET|Custom cover/);
+assertNoMatch("HQ does not steer authors toward manual cover uploads", hqSource, /Upload custom cover|Custom cover|No cover|Missing cover|Cover required/i);
 assertMatch("HQ pack form previews the generated cover live", hqSource, /data-testid="hq-generated-cover-preview"[\s\S]{0,120}<GeneratedPackCover pack=\{previewPack\}/);
+
+const generatedCoverTitleCases = [
+  "COURAGE",
+  "APPLY PRESSURE",
+  "PUT YOURSELF OUT THERE",
+  "WHAT TO DO WHEN EVERYTHING FEELS LIKE IT IS FALLING APART",
+  "11+",
+  "A&E",
+  "5AM",
+  "GPT",
+];
+for (const [index, title] of generatedCoverTitleCases.entries()) {
+  const model = getCoverModel({
+    id: `guardrail-cover-${index}`,
+    title,
+    description: index % 2 === 0 ? "A useful one-line description for the cover card." : "",
+    entries: Array.from({ length: 30 }, (_, cardIndex) => ({ id: `card-${cardIndex}` })),
+  });
+  const rebuiltTitle = model.titleLines.join(" ");
+  if (rebuiltTitle === title && !rebuiltTitle.includes("…") && !rebuiltTitle.includes("...")) {
+    pass(`generated cover preserves full title: ${title}`);
+  } else {
+    fail(`generated cover preserves full title: ${title}`, JSON.stringify(model));
+  }
+  if (/^\d+(\.\d+)?cqw$/.test(model.titleSize) && Number.parseFloat(model.titleSize) > 0) {
+    pass(`generated cover computes responsive title size: ${title}`);
+  } else {
+    fail(`generated cover computes responsive title size: ${title}`, JSON.stringify(model));
+  }
+}
+
 assertMatch("Explore premium CTA is Coming Soon, not a payment flow", exploreSource, /Premium — Coming Soon/);
 assertMatch("Premium install fails closed in activatePack", appSource, /pack\.isPremium === true && !canUsePremiumContent\) return;/);
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);

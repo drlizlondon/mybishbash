@@ -99,9 +99,12 @@ function PremiumBadge() {
   return <span className="explore-premium-badge">Premium</span>;
 }
 
-// Generated covers are the standard pack artwork. HQ supplies content; the
-// renderer supplies the branded cover system.
+// Generated covers are the standard pack artwork; uploaded cover art remains
+// an optional override for packs that already have one.
 function ExploreCoverArt({ pack, className, variant = "grid", isActive = false, locked = false }) {
+  if (pack.coverImageUrl) {
+    return <img src={pack.coverImageUrl} alt="" className={className} loading="lazy" />;
+  }
   return <GeneratedPackCover pack={pack} variant={variant} className={className} isActive={isActive} locked={locked} />;
 }
 

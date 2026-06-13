@@ -2337,7 +2337,7 @@ function PackCoverPreview({ previewPack }) {
         <div className="grid gap-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Auto cover preview</p>
           <p className="text-[11px] text-slate-500">
-            Generated live from the pack title, description, and card text.
+            Generated live from the pack title, description, and card count.
           </p>
         </div>
       </div>

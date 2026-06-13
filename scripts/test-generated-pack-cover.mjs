@@ -25,8 +25,8 @@ const longModel = getCoverModel({
 
 assert.equal(longModel.cardCountLabel, "45 CARDS", "card count badge uses uppercase cover label");
 assert.equal(longModel.title, longTitle, "long titles are not truncated in the model");
-assert.equal(longModel.titleScale, "long", "long titles reduce font scale before wrapping");
-assert.ok(longModel.titleLines.length >= 2 && longModel.titleLines.length <= 4, "long title uses balanced natural lines");
+assert.ok(["long", "extra-long"].includes(longModel.titleScale), "long titles reduce font scale before wrapping");
+assert.ok(longModel.titleLines.length >= 2 && longModel.titleLines.length <= 5, "long title uses balanced natural lines");
 assertNoMidWordSplits(longTitle);
 
 const minimalModel = getCoverModel({
@@ -35,7 +35,7 @@ const minimalModel = getCoverModel({
 });
 
 assert.equal(minimalModel.cardCountLabel, "1 CARD", "cover generation works with only title and cards");
-assert.equal(minimalModel.tagline, "Stand up and put the kettle on.", "missing description can fall back to useful card text");
+assert.equal(minimalModel.tagline, "", "missing description does not fall back to card text inside cover artwork");
 
 const weakTagline = getCoverTagline({
   title: "Tiny",
@@ -52,6 +52,6 @@ const statusModel = getCoverModel({
   isInstalled: true,
 });
 
-assert.deepEqual(statusModel.statusBadges, ["INSTALLED", "NEW", "POPULAR"], "status badges are deterministic and relevant");
+assert.equal(statusModel.statusBadge, "INSTALLED", "only one status badge is shown with deterministic priority");
 
 console.log("Generated pack cover guardrails passed.");
