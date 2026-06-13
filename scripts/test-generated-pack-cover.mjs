@@ -23,7 +23,7 @@ const longModel = getCoverModel({
   entries: Array.from({ length: 45 }, (_, index) => ({ promptText: `Card ${index + 1}` })),
 });
 
-assert.equal(longModel.cardCountLabel, "45 CARDS", "card count badge uses uppercase cover label");
+assert.equal(longModel.cardCountLabel, "", "grid covers omit card-count labels");
 assert.equal(longModel.title, longTitle, "long titles are not truncated in the model");
 assert.ok(["long", "extra-long"].includes(longModel.titleScale), "long titles reduce font scale before wrapping");
 assert.ok(longModel.titleLines.length >= 2 && longModel.titleLines.length <= 5, "long title uses balanced natural lines");
@@ -34,8 +34,15 @@ const minimalModel = getCoverModel({
   entries: [{ promptText: "Stand up and put the kettle on." }],
 });
 
-assert.equal(minimalModel.cardCountLabel, "1 CARD", "cover generation works with only title and cards");
+assert.equal(minimalModel.cardCountLabel, "", "grid covers do not duplicate card counts shown below the cover");
 assert.equal(minimalModel.tagline, "", "missing description does not fall back to card text inside cover artwork");
+
+const detailModel = getCoverModel({
+  title: "Bare Bones Pack",
+  entries: [{ promptText: "Stand up and put the kettle on." }],
+}, { variant: "detail" });
+
+assert.equal(detailModel.cardCountLabel, "1 CARD", "detail covers may show compact card-count context");
 
 const weakTagline = getCoverTagline({
   title: "Tiny",
@@ -52,7 +59,15 @@ const statusModel = getCoverModel({
   isInstalled: true,
 });
 
-assert.equal(statusModel.statusBadge, "INSTALLED", "only one status badge is shown with deterministic priority");
+assert.equal(statusModel.statusBadge, "✓ Added", "installed state uses the compact Added badge");
+
+const addModel = getCoverModel({ title: "Fresh Pack", cardCount: 8 });
+assert.equal(addModel.statusBadge, "+ Add", "non-installed state uses the compact Add badge");
+
+const templateA = getCoverModel({ id: "template-source", title: "Template Source", entries: [] });
+const templateB = getCoverModel({ id: "template-source", title: "Template Source", entries: [] });
+assert.equal(templateA.template, templateB.template, "template choice is deterministic");
+assert.ok(templateA.template >= 0 && templateA.template <= 5, "template choice uses the approved template range");
 
 const defensiveCases = [
   { label: "undefined pack", pack: undefined, expectedTitle: "Untitled Pack" },

@@ -66,6 +66,23 @@ function actionCard(id: string, title: string, launchUrl: string) {
   };
 }
 
+function currentDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function commitmentCard(id: string, promptText: string, overrides: Record<string, unknown> = {}) {
+  return {
+    ...smokeCard(id, promptText),
+    cardKind: 'commitment',
+    dashboardTitle: 'Today’s Commitment',
+    commitmentReason: 'Because I said I would.',
+    commitmentTimingMode: 'day',
+    commitmentDecisionDate: currentDateKey(),
+    commitmentDecisionAt: now,
+    ...overrides,
+  };
+}
+
 function hiddenStarterActionCards() {
   return ['ac-1', 'ac-2', 'ac-3'].map((id) => ({
     id,
@@ -639,7 +656,7 @@ test('basic card create, open, complete flow does not immediately reappear', asy
 
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByTestId('home-dashboard-summary').getByText('E2E created card')).toBeVisible();
+  await expect(page.getByTestId('home-dashboard-summary')).toContainText('All 1 personal card complete today.');
   await expectNoConsoleErrors(consoleErrors);
 });
 
@@ -662,6 +679,57 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Home empty states use calm copy without stacked zero language', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+  const summary = page.getByTestId('home-dashboard-summary');
+  await expect(summary).toContainText('You’re all clear today');
+  await expect(summary).toContainText('Nothing needs your attention.');
+  await expect(summary).toContainText('Commitments');
+  await expect(summary).toContainText('You’re clear for now.');
+  await expect(summary).toContainText('Create commitment');
+  await expect(summary).not.toContainText('No personal cards today');
+  await expect(summary).not.toContainText('No live commitment');
+  await expect(summary).not.toContainText('0 live commitments');
+  await expect(page.locator('.home-progress-number')).toHaveText('0');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Home commitment card distinguishes active and completed commitment states', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+
+  await seedE2EState(page, {
+    cards: [
+      commitmentCard('active-commitment', 'go for a walk today', {
+        commitmentStatusToday: 'made',
+        statusToday: 'doneToday',
+      }),
+    ],
+  });
+  await gotoApp(page, '/home');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('Live commitment');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('go for a walk today');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('1 live commitment');
+
+  await seedE2EState(page, {
+    cards: [
+      commitmentCard('completed-commitment', 'not eat snacks after dinner', {
+        commitmentStatusToday: 'declined',
+        statusToday: 'doneToday',
+      }),
+    ],
+  });
+  await gotoApp(page, '/home');
+  const completedCard = page.getByTestId('home-live-commitment-card');
+  await expect(completedCard).toContainText('Commitments complete');
+  await expect(completedCard).toContainText('Nothing active right now.');
+  await expect(completedCard).not.toContainText('No active commitments');
+  await expect(completedCard).not.toContainText('0 live commitments');
   await expectNoConsoleErrors(consoleErrors);
 });
 

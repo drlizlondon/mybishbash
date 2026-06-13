@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { PACK_GOALS, MIN_PACKS_PER_GOAL_SECTION } from "./lib/packGoals";
 import { getThemeClass } from "./utils";
 import GeneratedPackCover from "./GeneratedPackCover";
 
 // Explore — the read-only discovery surface (docs/explore-architecture.md).
-// Structure: Start Here hero → goal sections (>=2 packs each) → More to
-// explore (packs without a goal section). No management or editing lives
-// here; install/remove are the only verbs, and per-card management stays
-// behind the detail view's "Manage cards" for installed packs.
+// Current launch structure: commitment invitations → generated pack covers.
+// Goal/category shelves are deliberately deferred until the catalogue earns
+// them; install/remove are the only pack verbs on this surface.
 
 const PREMIUM_INTEREST_KEY = "mybishbash.premium-interest.v1";
 
@@ -75,28 +73,16 @@ export function buildExploreSections(packs = [], { isTester = false } = {}) {
   const commitmentTemplates = buildCommitmentTemplates(visible);
   const installablePacks = visible.filter((pack) => !isCommitmentTemplatePack(pack));
 
-  const hero = installablePacks.find((pack) => pack.isFeatured) ?? null;
-
-  const byGoal = new Map();
-  installablePacks.forEach((pack) => {
-    const goal = pack.goal?.trim();
-    if (!goal) return;
-    if (!byGoal.has(goal)) byGoal.set(goal, []);
-    byGoal.get(goal).push(pack);
-  });
-
-  const goalSections = PACK_GOALS
-    .filter((goal) => (byGoal.get(goal)?.length ?? 0) >= MIN_PACKS_PER_GOAL_SECTION)
-    .map((goal) => ({ goal, packs: byGoal.get(goal) }));
-
-  const sectionedIds = new Set(goalSections.flatMap((section) => section.packs.map((pack) => pack.id)));
-  const morePacks = installablePacks.filter((pack) => !sectionedIds.has(pack.id));
-
-  return { visible, installablePacks, hero, goalSections, morePacks, commitmentTemplates };
+  return { visible, installablePacks, commitmentTemplates };
 }
 
 function PremiumBadge() {
   return <span className="explore-premium-badge">Premium</span>;
+}
+
+function getExploreCoverStateLabel({ isActive, locked }) {
+  if (locked) return "COMING SOON";
+  return isActive ? "✓ Added" : "+ Add";
 }
 
 // Generated covers are the standard pack artwork; uploaded cover art remains
@@ -106,26 +92,6 @@ export function ExploreCoverArt({ pack, className, variant = "grid", isActive = 
     return <img src={pack.coverImageUrl} alt="" className={className} loading="lazy" />;
   }
   return <GeneratedPackCover pack={pack} variant={variant} className={className} isActive={isActive} locked={locked} />;
-}
-
-function ExploreHero({ pack, isActive, locked, onOpen }) {
-  const cardCount = pack.entries?.length ?? 0;
-  return (
-    <section className="explore-section explore-hero-section">
-      <p className="explore-section-title">Start Here</p>
-      <button type="button" className="explore-hero" data-testid="explore-hero" onClick={() => onOpen(pack.id)}>
-        <ExploreCoverArt pack={pack} className="explore-hero-art" variant="bare" isActive={isActive} locked={locked} />
-        <span className="explore-hero-scrim" aria-hidden="true" />
-        <span className="explore-hero-copy">
-          {pack.isPremium ? <PremiumBadge /> : null}
-          {isActive ? <span className="explore-active-pill">Installed</span> : null}
-          <span className="explore-hero-title">{pack.title}</span>
-          {pack.description ? <span className="explore-hero-description">{pack.description}</span> : null}
-          <span className="explore-cover-meta">{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
-        </span>
-      </button>
-    </section>
-  );
 }
 
 function ExploreCoverCard({ pack, isActive, locked, onOpen }) {
@@ -140,7 +106,7 @@ function ExploreCoverCard({ pack, isActive, locked, onOpen }) {
       <span className="explore-cover-art-frame">
         <ExploreCoverArt pack={pack} className="explore-cover-art" variant="grid" isActive={isActive} locked={locked} />
         {pack.isPremium ? <PremiumBadge /> : null}
-        {isActive ? <span className="explore-active-pill">Installed</span> : null}
+        {pack.coverImageUrl ? <span className="explore-cover-state-badge">{getExploreCoverStateLabel({ isActive, locked })}</span> : null}
       </span>
       <span className="explore-cover-copy">
         <span className="explore-cover-title">{pack.title}</span>
@@ -155,7 +121,7 @@ function CommitmentTemplateCard({ template, onTake }) {
   return (
     <article className={`explore-commitment-card theme-${getThemeClass(template.theme)}`} data-testid={`explore-commitment-template-${template.id}`}>
       <div className="explore-commitment-copy">
-        <p className="explore-commitment-kicker">{template.packTitle}</p>
+        <p className="explore-commitment-kicker">COMMITMENT STARTER</p>
         <h3>I will {template.promptText}</h3>
         {template.attribution ? <p>{template.attribution}</p> : null}
       </div>
@@ -270,7 +236,7 @@ export default function ExplorePanel({
   const [selectedPackId, setSelectedPackId] = useState(null);
   const [interestPackIds, setInterestPackIds] = useState(loadPremiumInterest);
 
-  const { hero, goalSections, morePacks, visible, commitmentTemplates } = useMemo(
+  const { installablePacks, visible, commitmentTemplates } = useMemo(
     () => buildExploreSections(packs, { isTester }),
     [packs, isTester],
   );
@@ -300,18 +266,9 @@ export default function ExplorePanel({
         </div>
       </div>
 
-      {hero ? (
-        <ExploreHero
-          pack={hero}
-          isActive={isPackActive(hero.id)}
-          locked={hero.isPremium === true && !canUsePremiumContent}
-          onOpen={setSelectedPackId}
-        />
-      ) : null}
-
       {commitmentTemplates.length > 0 ? (
         <section className="explore-section" data-testid="explore-commitments-rail">
-          <p className="explore-section-title">Commitments</p>
+          <p className="explore-section-title">COMMITMENTS</p>
           <div className="explore-commitment-rail">
             {commitmentTemplates.map((template) => (
               <CommitmentTemplateCard key={template.id} template={template} onTake={onTakeCommitment} />
@@ -320,28 +277,11 @@ export default function ExplorePanel({
         </section>
       ) : null}
 
-      {goalSections.map(({ goal, packs: goalPacks }) => (
-        <section key={goal} className="explore-section" data-testid={`explore-goal-section-${goal.toLowerCase()}`}>
-          <p className="explore-section-title">{goal}</p>
-          <div className="explore-cover-grid">
-            {goalPacks.map((pack) => (
-              <ExploreCoverCard
-                key={pack.id}
-                pack={pack}
-                isActive={isPackActive(pack.id)}
-                locked={pack.isPremium === true && !canUsePremiumContent}
-                onOpen={setSelectedPackId}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
-
-      {morePacks.length > 0 ? (
+      {installablePacks.length > 0 ? (
         <section className="explore-section" data-testid="explore-more-section">
-          <p className="explore-section-title">{goalSections.length > 0 ? "More to explore" : "Packs"}</p>
+          <p className="explore-section-title">PACKS</p>
           <div className="explore-cover-grid">
-            {morePacks.map((pack) => (
+            {installablePacks.map((pack) => (
               <ExploreCoverCard
                 key={pack.id}
                 pack={pack}

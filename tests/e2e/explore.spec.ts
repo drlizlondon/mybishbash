@@ -91,7 +91,8 @@ test('Explore commitment templates create normal Commitment Cards', async ({ pag
 
   const rail = page.getByTestId('explore-commitments-rail');
   await expect(rail).toBeVisible();
-  await expect(rail).toContainText('Commitment Starters');
+  await expect(rail).toContainText('COMMITMENT STARTER');
+  await expect(rail).not.toContainText('Installed');
 
   await page.getByTestId('take-commitment-walk-today').click();
   await expect(page.getByTestId('card-composer')).toBeVisible();
@@ -135,15 +136,16 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
   await seedE2EState(page);
   await page.goto('/mybishbash/explore');
 
-  // Grid: generated cover is logo-led; sample card text stays out of the
-  // listing so the pack card reads as title, description and count.
+  // Grid: generated cover is title-led; sample card text stays out of the
+  // listing, while descriptions remain compact below the cover when present.
   const card = page.getByTestId(`explore-pack-card-${STATIC_PACK_ID}`);
   const gridCover = card.getByTestId('generated-cover');
   await expect(gridCover).toBeVisible();
   await expect(gridCover.getByTestId('generated-cover-logo')).toHaveAttribute('src', /mybishbash-cover\.png$/);
   await expect(gridCover.getByTestId('generated-cover-title').locator('span')).toHaveText(['Motivational', 'Quote']);
-  await expect(gridCover).toContainText('5 CARDS');
-  await expect(gridCover).toContainText('Soft little pushes when energy dips.');
+  await expect(gridCover).toContainText('+ Add');
+  await expect(gridCover).not.toContainText('5 CARDS');
+  await expect(gridCover).not.toContainText('Soft little pushes when energy dips.');
   await expect(gridCover).not.toContainText('Start where you are.');
   await expect(card.locator('.explore-cover-title')).toContainText('Motivational Quote');
   await expect(card.locator('.explore-cover-description')).toContainText('Soft little pushes when energy dips.');
@@ -158,12 +160,51 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
 
   // Library thumbnail after install.
   await page.getByTestId('explore-install-button').click();
-  await expect(detailCover).toContainText('INSTALLED');
+  await expect(detailCover).toContainText('✓ Added');
   await page.getByTestId('explore-detail-close').click();
-  await expect(card.locator('.explore-active-pill')).toContainText('Installed');
+  await expect(card.locator('.explore-active-pill')).toHaveCount(0);
+  await expect(card.getByTestId('generated-cover')).toContainText('✓ Added');
+  await expect(card.getByText('✓ Added')).toHaveCount(1);
   await page.getByTestId('bottom-nav-library').click();
   await page.getByTestId('library-active-packs-section-toggle').click();
   await expect(page.getByTestId('library-active-packs-section').getByTestId('generated-cover')).toBeVisible();
+});
+
+test('Explore mobile layout has no overflow or bottom-nav cover across common widths', async ({ page }) => {
+  for (const width of [360, 375, 390, 430]) {
+    await page.setViewportSize({ width, height: 780 });
+    await seedE2EState(page);
+    await page.goto('/mybishbash/explore');
+
+    await expect(page.getByTestId('explore-panel')).toBeVisible();
+    await expect(page.getByText('COMMITMENTS')).toBeVisible();
+    await expect(page.getByText('PACKS')).toBeVisible();
+
+    const metrics = await page.evaluate(() => {
+      const rail = document.querySelector<HTMLElement>('.explore-commitment-rail');
+      const grid = document.querySelector<HTMLElement>('.explore-cover-grid');
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('.explore-cover-card'));
+      const nav = document.querySelector<HTMLElement>('.bottom-nav');
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      const lastCard = cards.at(-1);
+      const lastRect = lastCard?.getBoundingClientRect();
+      const navRect = nav?.getBoundingClientRect();
+      const firstRowTops = cards.slice(0, 2).map((card) => Math.round(card.getBoundingClientRect().top));
+      return {
+        bodyOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        railScrolls: rail ? rail.scrollWidth > rail.clientWidth : false,
+        gridColumns: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
+        firstRowAligned: firstRowTops.length === 2 && firstRowTops[0] === firstRowTops[1],
+        navOverlap: Boolean(lastRect && navRect && lastRect.bottom > navRect.top),
+      };
+    });
+
+    expect(metrics.bodyOverflow).toBeLessThanOrEqual(1);
+    expect(metrics.railScrolls).toBe(true);
+    expect(metrics.gridColumns).toBe(2);
+    expect(metrics.firstRowAligned).toBe(true);
+    expect(metrics.navOverlap).toBe(false);
+  }
 });
 
 test('bottom nav no longer exposes Packs', async ({ page }) => {

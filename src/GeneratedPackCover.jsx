@@ -13,6 +13,8 @@ const FALLBACK_PALETTE = {
 };
 const FALLBACK_MODEL = {
   titleLines: ["Untitled Pack"],
+  template: 0,
+  initial: "M",
   titleScale: "medium",
   titleSize: "9.00cqw",
   tagline: "",
@@ -60,12 +62,15 @@ export default function GeneratedPackCover({
       className={[
         "generated-cover",
         `generated-cover-${variantClass}`,
+        `generated-cover-template-${model.template ?? 0}`,
         `generated-cover-title-${model.titleScale}`,
         className,
       ].filter(Boolean).join(" ")}
       data-testid="generated-cover"
       data-cover-palette={model.palette.name}
+      data-cover-template={model.template ?? 0}
       data-cover-title-scale={model.titleScale}
+      data-cover-initial={model.initial || "M"}
       style={{
         "--cover-bg": model.palette.bg,
         "--cover-bg-2": model.palette.bg2,
@@ -85,15 +90,18 @@ export default function GeneratedPackCover({
         data-testid="generated-cover-logo"
         aria-hidden="true"
       />
+      <span className="generated-cover-form generated-cover-form-one" aria-hidden="true" />
+      <span className="generated-cover-form generated-cover-form-two" aria-hidden="true" />
+      <span className="generated-cover-form generated-cover-form-three" aria-hidden="true" />
       <span className="generated-cover-copy">
         <span className="generated-cover-topline">
           <span className="generated-cover-brand">
             <img src={LOGO_SRC} alt="" aria-hidden="true" />
-            <span>MyBishBash</span>
           </span>
           {model.cardCountLabel ? <span className="generated-cover-count">{model.cardCountLabel}</span> : null}
+          {!model.cardCountLabel && model.statusBadge ? <span className="generated-cover-status">{model.statusBadge}</span> : null}
         </span>
-        {model.statusBadge ? (
+        {model.cardCountLabel && model.statusBadge ? (
           <span className="generated-cover-status-row">
             <span className="generated-cover-status">{model.statusBadge}</span>
           </span>

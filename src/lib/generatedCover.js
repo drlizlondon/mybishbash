@@ -47,10 +47,8 @@ export function getCardCount(pack) {
 
 export function getCoverStatusBadge(pack, { isActive = false, locked = false } = {}) {
   if (pack?.comingSoon || pack?.isComingSoon || locked) return "COMING SOON";
-  if (isActive || pack?.isInstalled || pack?.isActive) return "INSTALLED";
-  if (pack?.isNew || pack?.new) return "NEW";
-  if (pack?.isPopular || pack?.popular) return "POPULAR";
-  return "";
+  if (isActive || pack?.isInstalled || pack?.isActive) return "✓ Added";
+  return "+ Add";
 }
 
 function lineScore(lines) {
@@ -117,18 +115,22 @@ export function getCoverModel(pack, { variant = "grid", isActive = false, locked
   const title = cleanText(pack?.title || DEFAULT_TITLE) || DEFAULT_TITLE;
   const seed = hashSeed(pack?.id ?? title);
   const palette = COVER_PALETTES[seed % COVER_PALETTES.length] ?? DEFAULT_COVER_PALETTE;
+  const template = seed % 6;
   const cardCount = getCardCount(pack);
   const titleLines = splitTitleIntoLines(title).filter(Boolean);
   const titleMetrics = getTitleMetrics(titleLines, variant);
+  const shouldShowTagline = variant === "detail";
 
   return {
     title,
+    template,
+    initial: title.trim().charAt(0).toUpperCase() || "M",
     titleLines: titleLines.length > 0 ? titleLines : [DEFAULT_TITLE],
     titleScale: titleMetrics.scale || "medium",
     titleSize: `${Number.isFinite(titleMetrics.size) ? titleMetrics.size.toFixed(2) : "9.00"}cqw`,
-    tagline: getCoverTagline(pack),
+    tagline: shouldShowTagline ? getCoverTagline(pack) : "",
     cardCount,
-    cardCountLabel: cardCount > 0 ? `${cardCount} ${cardCount === 1 ? "CARD" : "CARDS"}` : "",
+    cardCountLabel: variant === "detail" && cardCount > 0 ? `${cardCount} ${cardCount === 1 ? "CARD" : "CARDS"}` : "",
     statusBadge: getCoverStatusBadge(pack, { isActive, locked }),
     palette,
     angle: 128 + (seed % 34),

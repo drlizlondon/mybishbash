@@ -755,6 +755,12 @@ function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions 
     )
     .sort((left, right) => new Date(right.commitmentDecisionAt ?? right.updatedAt ?? 0).getTime() - new Date(left.commitmentDecisionAt ?? left.updatedAt ?? 0).getTime());
   const activeCommitment = liveCommitments[0] ?? null;
+  const hasCompletedCommitmentToday = !activeCommitment && normalized.some((card) =>
+    isCommitmentCard(card) &&
+    !card.deletedAt &&
+    card.commitmentDecisionDate === todayKey &&
+    Boolean(card.commitmentStatusToday)
+  );
   const activeCommitmentApp = getCommitmentAppMeta(activeCommitment, homeScreenVersions);
   const checkInComplete = activeCommitment?.commitmentCheckInResponseDate === todayKey;
   const hasCheckIn = Boolean(activeCommitment?.commitmentCheckInEnabled);
@@ -765,6 +771,7 @@ function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions 
     totalPersonalCardsToday: personalCardsToday.length,
     nextIncompletePersonalCard,
     liveCommitmentCount: liveCommitments.length,
+    hasCompletedCommitmentToday,
     activeCommitment: activeCommitment
       ? {
           id: activeCommitment.id,
@@ -6598,14 +6605,21 @@ function HomePanel({
   const personalCardNoun = total === 1 ? "personal card" : "personal cards";
   const progressNumber = total > 0 ? `${completed}/${total}` : "0";
   const progressCopy = total === 0
-    ? "No personal cards today."
+    ? "You’re all clear today"
     : completed === total
       ? `All ${total} ${personalCardNoun} complete today.`
       : `${completed} of ${total} ${personalCardNoun} complete today.`;
+  const progressSubcopy = total === 0 ? "Nothing needs your attention." : "";
   const canOpenProgress = Boolean(homeState.nextIncompletePersonalCard);
   const canOpenCommitment = Boolean(homeState.activeCommitment?.id);
   const hasLiveCommitment = Boolean(homeState.activeCommitment);
   const liveCommitmentCountLabel = `${homeState.liveCommitmentCount} live commitment${homeState.liveCommitmentCount === 1 ? "" : "s"}`;
+  const commitmentLabel = hasLiveCommitment
+    ? "Live commitment"
+    : homeState.hasCompletedCommitmentToday
+      ? "Commitments complete"
+      : "Commitments";
+  const emptyCommitmentTitle = homeState.hasCompletedCommitmentToday ? "Nothing active right now." : "You’re clear for now.";
   const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-logo-mark.png`;
 
   const openProgressCard = () => {
@@ -6667,6 +6681,7 @@ function HomePanel({
               <span className="home-card-label">Today</span>
               <span className="home-progress-number">{progressNumber}</span>
               <span className="home-card-body">{progressCopy}</span>
+              {progressSubcopy ? <span className="home-card-subbody">{progressSubcopy}</span> : null}
             </span>
           </button>
 
@@ -6678,21 +6693,24 @@ function HomePanel({
             aria-label={canOpenCommitment ? "Open active commitment" : "Create commitment"}
           >
             <span className="home-commitment-header">
-              <span className="home-card-label">Live commitment</span>
-              <span className="home-commitment-count">
-                <span className="home-live-dot" aria-hidden="true" />
-                {liveCommitmentCountLabel}
+              <span className="home-card-label">{commitmentLabel}</span>
+              {hasLiveCommitment ? (
+                <span className="home-commitment-count">
+                  <span className="home-live-dot" aria-hidden="true" />
+                  {liveCommitmentCountLabel}
+                </span>
+              ) : null}
+            </span>
+            {homeState.activeCommitment ? (
+              <span className="home-commitment-title">
+                {homeState.activeCommitment.title}
               </span>
-            </span>
-            <span className="home-commitment-title">
-              {homeState.activeCommitment?.title ?? "No live commitment"}
-            </span>
-            {!homeState.activeCommitment ? (
+            ) : (
               <>
-                <span className="home-commitment-empty-body">You’re clear for now.</span>
+                <span className="home-commitment-empty-body">{emptyCommitmentTitle}</span>
                 <span className="home-commitment-empty-cta">Create commitment</span>
               </>
-            ) : null}
+            )}
             {homeState.activeCommitment?.appName ? (
               <span className="home-app-pill">
                 <HomeAppIcon src={homeState.activeCommitment.appIconUrl} />
