@@ -6095,66 +6095,300 @@ body {
   color: var(--ink-muted);
 }
 
-/* Generated covers — the standard cover system; uploads are an optional
-   override (docs/explore-architecture.md K). Background/colour come inline
-   from the goal palette + pack-id seed. */
+/* Generated covers: deterministic typography-first publishing covers. */
 .generated-cover {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
   width: 100%;
   height: 100%;
-  gap: 8px;
-  padding: 9%;
+  display: grid;
+  place-items: center;
+  padding: 10%;
+  color: var(--cover-ink);
+  background:
+    radial-gradient(circle at var(--cover-spot-x) var(--cover-spot-y), color-mix(in srgb, var(--cover-accent) 42%, transparent), transparent 42%),
+    linear-gradient(var(--cover-angle), var(--cover-bg), var(--cover-bg-2));
   text-align: center;
   overflow: hidden;
 }
 
-.generated-cover-quote {
-  font-size: clamp(13px, 1.9vw, 17px);
-  font-weight: 600;
-  line-height: 1.35;
+.generated-cover::before,
+.generated-cover::after,
+.generated-cover-accent-layer {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.generated-cover::before {
+  opacity: 0.42;
+}
+
+.generated-cover::after {
+  border: 1px solid color-mix(in srgb, var(--cover-ink) 18%, transparent);
+  inset: 8px;
+  opacity: 0;
+}
+
+.generated-cover-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 7px;
+  width: min(100%, 420px);
+}
+
+.generated-cover-kicker,
+.generated-cover-title,
+.generated-cover-count {
+  display: block;
+  overflow-wrap: anywhere;
   text-wrap: balance;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+}
+
+.generated-cover-kicker {
+  color: var(--cover-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .generated-cover-title {
-  font-size: 10px;
+  display: -webkit-box;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
   font-weight: 700;
+  line-height: 0.98;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.generated-cover-count {
+  color: var(--cover-muted);
+  font-size: 10px;
+  font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  opacity: 0.85;
 }
 
-.generated-cover-headline {
-  font-size: clamp(20px, 3vw, 30px);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.01em;
-  text-wrap: balance;
+.generated-cover-deck {
+  position: absolute;
+  z-index: 1;
+  inset: auto 9% 9% auto;
+  width: 38%;
+  aspect-ratio: 0.72;
+  opacity: 0.32;
 }
 
-.generated-cover-goal {
+.generated-cover-card {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--cover-ink) 46%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--cover-ink) 10%, transparent), transparent 48%),
+    color-mix(in srgb, var(--cover-bg-2) 42%, transparent);
+  box-shadow: 0 16px 30px color-mix(in srgb, var(--cover-bg) 42%, transparent);
+}
+
+.generated-cover-card-back {
+  transform: translate(-16%, -10%) rotate(-7deg);
+}
+
+.generated-cover-card-front {
+  display: grid;
+  place-items: center;
+  transform: rotate(5deg);
+}
+
+.generated-cover-heart {
+  color: var(--cover-accent);
+  font-size: 34px;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+}
+
+.generated-cover-grid .generated-cover-title,
+.generated-cover-detail .generated-cover-title {
+  font-size: 30px;
+}
+
+.generated-cover-detail .generated-cover-title {
+  font-size: 40px;
+}
+
+.generated-cover-thumb .generated-cover-kicker {
+  display: none;
+}
+
+.generated-cover-thumb .generated-cover-title {
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  line-height: 1.08;
+}
+
+.generated-cover-thumb .generated-cover-count,
+.generated-cover-thumb .generated-cover-deck {
+  display: none;
+}
+
+.generated-cover-bare .generated-cover-copy {
+  display: none;
+}
+
+.generated-cover-layout-deck-title .generated-cover-copy {
+  align-self: end;
+  text-align: left;
+}
+
+.generated-cover-layout-deck-title .generated-cover-title {
+  font-size: 32px;
+}
+
+.generated-cover-layout-split .generated-cover-copy {
+  align-self: stretch;
+  grid-template-rows: auto 1fr auto;
+  text-align: left;
+}
+
+.generated-cover-layout-split .generated-cover-title {
+  align-self: center;
+  max-width: 78%;
+}
+
+.generated-cover-layout-split .generated-cover-count {
+  justify-self: end;
+  max-width: 64%;
+  text-align: right;
+}
+
+.generated-cover-layout-centered .generated-cover-copy {
+  place-items: center;
+}
+
+.generated-cover-layout-editorial-block .generated-cover-copy {
+  align-self: end;
+  padding: 14px;
+  background: color-mix(in srgb, var(--cover-bg) 34%, transparent);
+  border-left: 5px solid var(--cover-accent);
+  text-align: left;
+}
+
+.generated-cover-layout-editorial-block .generated-cover-title {
+  font-size: 27px;
+}
+
+.generated-cover-layout-minimal .generated-cover-copy {
+  align-self: start;
+  text-align: left;
+}
+
+.generated-cover-layout-minimal .generated-cover-title {
+  font-size: 22px;
+}
+
+.generated-cover-layout-minimal .generated-cover-count {
   opacity: 0.8;
 }
 
-.generated-cover-detail .generated-cover-headline {
-  font-size: clamp(24px, 4vw, 34px);
+.generated-cover-layout-masthead {
+  place-items: stretch;
+}
+
+.generated-cover-layout-masthead .generated-cover-copy {
+  align-content: space-between;
+  height: 100%;
+  text-align: left;
+}
+
+.generated-cover-layout-masthead .generated-cover-title {
+  align-self: end;
+  font-size: 34px;
+}
+
+.generated-cover-layout-stacked .generated-cover-copy {
+  text-align: left;
+}
+
+.generated-cover-layout-stacked .generated-cover-title {
+  border-top: 1px solid color-mix(in srgb, var(--cover-ink) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--cover-ink) 28%, transparent);
+  padding: 8px 0;
+}
+
+.generated-cover-texture-grain::before {
+  background-image:
+    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--cover-ink) 20%, transparent) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 70% 60%, color-mix(in srgb, var(--cover-bg) 25%, transparent) 0 1px, transparent 1.5px);
+  background-size: 13px 17px, 19px 23px;
+}
+
+.generated-cover-texture-paper::before {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--cover-ink) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--cover-bg) 18%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px, 37px 37px;
+}
+
+.generated-cover-texture-soft-gradient::before {
+  background:
+    radial-gradient(circle at 18% 82%, color-mix(in srgb, var(--cover-accent-2) 46%, transparent), transparent 38%),
+    radial-gradient(circle at 84% 12%, color-mix(in srgb, var(--cover-accent) 32%, transparent), transparent 34%);
+}
+
+.generated-cover-texture-line-field::before {
+  background: repeating-linear-gradient(118deg, color-mix(in srgb, var(--cover-ink) 14%, transparent) 0 1px, transparent 1px 12px);
+}
+
+.generated-cover-texture-geometry::before {
+  background:
+    linear-gradient(135deg, transparent 0 58%, color-mix(in srgb, var(--cover-accent) 18%, transparent) 58% 60%, transparent 60%),
+    linear-gradient(45deg, transparent 0 66%, color-mix(in srgb, var(--cover-ink) 12%, transparent) 66% 68%, transparent 68%);
+}
+
+.generated-cover-texture-vignette::before {
+  background: radial-gradient(circle at center, transparent 0 45%, color-mix(in srgb, var(--cover-bg) 58%, transparent) 100%);
+  opacity: 0.72;
+}
+
+.generated-cover-accent-frame::after {
+  opacity: 1;
+}
+
+.generated-cover-accent-rules .generated-cover-accent-layer {
+  background:
+    linear-gradient(90deg, transparent 0 12%, var(--cover-accent) 12% 88%, transparent 88%) 0 18% / 100% 3px no-repeat,
+    linear-gradient(90deg, transparent 0 26%, color-mix(in srgb, var(--cover-ink) 34%, transparent) 26% 74%, transparent 74%) 0 84% / 100% 1px no-repeat;
+}
+
+.generated-cover-accent-corners .generated-cover-accent-layer {
+  background:
+    linear-gradient(var(--cover-accent), var(--cover-accent)) 14px 14px / 34px 4px no-repeat,
+    linear-gradient(var(--cover-accent), var(--cover-accent)) 14px 14px / 4px 34px no-repeat,
+    linear-gradient(var(--cover-accent), var(--cover-accent)) calc(100% - 48px) calc(100% - 18px) / 34px 4px no-repeat,
+    linear-gradient(var(--cover-accent), var(--cover-accent)) calc(100% - 18px) calc(100% - 48px) / 4px 34px no-repeat;
+}
+
+.generated-cover-accent-circle .generated-cover-accent-layer {
+  background: radial-gradient(circle at 84% 22%, transparent 0 28px, color-mix(in srgb, var(--cover-accent) 72%, transparent) 29px 31px, transparent 32px);
+}
+
+.generated-cover-accent-underline .generated-cover-title {
+  text-decoration: underline;
+  text-decoration-color: var(--cover-accent);
+  text-decoration-thickness: 5px;
+  text-underline-offset: 6px;
+}
+
+.generated-cover-accent-rail .generated-cover-accent-layer {
+  background: linear-gradient(180deg, var(--cover-accent), color-mix(in srgb, var(--cover-accent-2) 70%, transparent)) 0 0 / 9px 100% no-repeat;
 }
 
 /* In the detail frame the art is sized by aspect-ratio, which an explicit
    height would override. */
 .explore-detail-art.generated-cover {
-  display: flex;
+  display: grid;
   height: auto;
   aspect-ratio: 3 / 2;
 }
@@ -6166,6 +6400,11 @@ body {
   object-fit: cover;
   border-radius: inherit;
   overflow: hidden;
+}
+
+.library-pack-thumb.generated-cover {
+  display: grid;
+  object-fit: initial;
 }
 
 .explore-premium-badge {

@@ -5,6 +5,7 @@ import { buildLibrarySections } from "../src/lib/librarySections.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
+const generatedCoverSource = await readFile(new URL("../src/GeneratedPackCover.jsx", import.meta.url), "utf8");
 const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
@@ -126,7 +127,11 @@ assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /
 // Generated covers are the standard cover system; uploads are an optional
 // override and a missing upload is never treated as an incomplete pack.
 assertMatch("Explore renders generated covers when no upload exists", exploreSource, /pack\.coverImageUrl\) \{\s*return <img[\s\S]{0,200}<GeneratedPackCover/);
+assertMatch("Generated covers use deterministic palette/layout/texture/accent sets", generatedCoverSource, /COVER_PALETTES[\s\S]{0,6000}COVER_LAYOUTS[\s\S]{0,1200}COVER_TEXTURES[\s\S]{0,900}COVER_ACCENTS/);
+assertNoMatch("Generated covers do not depend on goals, themes, or categories", generatedCoverSource, /pack\.(goal|theme|category)|getGoalStyle|GOAL_STYLES/);
+assertNoMatch("Generated cover art does not typeset preview quotes", generatedCoverSource, /promptText|isPreview|getHookQuote|generated-cover-quote/);
 assertNoMatch("HQ never frames a missing upload as a defect", hqSource, /No cover|Missing cover|Cover required/i);
+assertNoMatch("HQ auto cover copy does not imply goal or preview quote inputs", hqSource, /Auto cover[^"]*(goal|first preview|preview card)/i);
 assertMatch("HQ labels covers as Auto/Custom", hqSource, /\{pack\.coverImageUrl \? "Custom cover" : "Auto cover"\}/);
 assertMatch("HQ pack form previews the generated cover live", hqSource, /data-testid="hq-generated-cover-preview"[\s\S]{0,120}<GeneratedPackCover pack=\{previewPack\}/);
 assertMatch("Explore premium CTA is Coming Soon, not a payment flow", exploreSource, /Premium — Coming Soon/);

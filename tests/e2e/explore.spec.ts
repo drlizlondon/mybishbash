@@ -135,14 +135,19 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
   await seedE2EState(page);
   await page.goto('/mybishbash/explore');
 
-  // Grid: generated cover carries the hook quote inside the art, and the
-  // under-card copy does not repeat it.
+  // Grid: generated cover is title/deck-led; the hook quote lives below
+  // the art where Explore copy belongs.
   const card = page.getByTestId(`explore-pack-card-${STATIC_PACK_ID}`);
   const gridCover = card.getByTestId('generated-cover');
   await expect(gridCover).toBeVisible();
-  await expect(gridCover).toContainText('Start where you are.');
+  await expect(gridCover).toHaveAttribute('data-cover-palette', 'aubergine-linen');
+  await expect(gridCover).toHaveAttribute('data-cover-layout', 'split');
+  await expect(gridCover).toHaveAttribute('data-cover-texture', 'paper');
+  await expect(gridCover).toHaveAttribute('data-cover-accent', 'underline');
   await expect(gridCover).toContainText('Motivational Quote');
-  await expect(card.locator('.explore-cover-quote')).toHaveCount(0);
+  await expect(gridCover).toContainText('5 cards');
+  await expect(gridCover).not.toContainText('Start where you are.');
+  await expect(card.locator('.explore-cover-quote')).toContainText('Start where you are.');
 
   // Detail: title-focused generated cover.
   await card.click();

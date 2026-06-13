@@ -129,9 +129,6 @@ function ExploreHero({ pack, onOpen }) {
 
 function ExploreCoverCard({ pack, onOpen }) {
   const quote = getCoverQuote(pack);
-  // Generated covers carry the quote inside the art; only uploaded covers
-  // need it repeated in the copy below.
-  const quoteInArt = !pack.coverImageUrl;
   return (
     <button
       type="button"
@@ -144,8 +141,8 @@ function ExploreCoverCard({ pack, onOpen }) {
         {pack.isPremium ? <PremiumBadge /> : null}
       </span>
       <span className="explore-cover-copy">
-        {quote && !quoteInArt ? <span className="explore-cover-quote">“{quote}”</span> : null}
         <span className="explore-cover-title">{pack.title}</span>
+        {quote ? <span className="explore-cover-quote">“{quote}”</span> : null}
         {pack.description ? <span className="explore-cover-description">{pack.description}</span> : null}
       </span>
     </button>

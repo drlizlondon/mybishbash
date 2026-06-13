@@ -2364,7 +2364,7 @@ function PackCoverField({ value, onChange, onError, previewPack }) {
             <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
           </label>
           <p className="text-[11px] text-slate-500">
-            {value ? "Custom cover override in use." : "Auto cover — generated live from title, goal and the first preview card. Uploading is optional."}
+            {value ? "Custom cover override in use." : "Auto cover — generated live from title and card count. Uploading a custom cover is optional."}
           </p>
         </div>
       </div>
@@ -2384,7 +2384,7 @@ const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading, 
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
     setForm((current) => ({ ...current, [key]: value }));
   };
-  // Live auto-cover preview: regenerates as title/goal/cards are edited.
+  // Live auto-cover preview: regenerates as title/cards are edited.
   const previewPack = useMemo(() => ({
     id: form.id ?? form.title,
     title: form.title.trim() || "Untitled pack",
