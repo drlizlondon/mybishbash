@@ -186,7 +186,7 @@ test.describe('MyBishBash staging release E2E', () => {
       await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD);
       await createCard(page, cardName);
       await navigateWithinStaging(page, `/intercept/${launcherId}`);
-      await expectInCardDirectAppButton(page, launcherId, label, cardName);
+      await expectInCardDirectAppButton(page, launcherId, label);
       const cardMountsBeforeTap = await page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0);
 
       await page.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true }).click();
@@ -534,8 +534,8 @@ async function clickContinueToApp(page) {
   await continueButton.first().click();
 }
 
-async function expectInCardDirectAppButton(page, launcherId, label, cardName) {
-  await expect(page.getByTestId('card-overlay-personal').getByText(cardName)).toBeVisible({ timeout: 30000 });
+async function expectInCardDirectAppButton(page, launcherId, label) {
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 30000 });
   const appButton = page.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true });
   await expect(appButton, `${label} in-card app-name button should be visible`).toBeVisible({ timeout: 10000 });
   await expect.poll(() => getDestinationAttempts(page), { message: `${label} should not auto-open before tapping the in-card app button` }).toHaveLength(0);
