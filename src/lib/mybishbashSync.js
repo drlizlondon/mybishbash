@@ -512,7 +512,7 @@ export async function saveAdminGlobalPack(pack, userId) {
     source_key: pack.sourceKey || null,
     published: Boolean(pack.published),
     goal: pack.goal?.trim() || null,
-    cover_image_url: pack.coverImageUrl?.trim() || null,
+    cover_image_url: null,
     why_text: pack.whyText?.trim() || null,
     is_premium: Boolean(pack.isPremium),
     is_featured: Boolean(pack.isFeatured),
@@ -797,37 +797,6 @@ export async function uploadLauncherIcon(launcherId, file) {
   }
   const { data } = client.storage.from(LAUNCHER_ICON_BUCKET).getPublicUrl(path);
   if (!data?.publicUrl) throw new Error("Could not resolve the uploaded icon URL.");
-  return data.publicUrl;
-}
-
-export const PACK_COVER_BUCKET = "pack-covers";
-const PACK_COVER_MAX_BYTES = 2 * 1024 * 1024;
-
-// Upload an Explore pack cover image and return its public URL. Same model
-// as launcher icons: public bucket, admin-only writes, manual https URL in
-// the form remains the fallback if the bucket is not provisioned.
-export async function uploadPackCover(file) {
-  const client = requireSupabase();
-  const extension = LAUNCHER_ICON_ALLOWED_TYPES[file?.type];
-  if (!extension) {
-    throw new Error("Unsupported image type. Use PNG, JPG, WebP or SVG.");
-  }
-  if (file.size > PACK_COVER_MAX_BYTES) {
-    throw new Error("Cover image must be under 2MB.");
-  }
-
-  const path = `covers/${Date.now()}.${extension}`;
-  const { error } = await client.storage
-    .from(PACK_COVER_BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: true });
-  if (error) {
-    if (/bucket not found/i.test(error.message ?? "")) {
-      throw new Error(`Cover upload storage is not provisioned yet (missing "${PACK_COVER_BUCKET}" bucket). Apply the latest SQL migration, or paste an https image URL instead.`);
-    }
-    throw error;
-  }
-  const { data } = client.storage.from(PACK_COVER_BUCKET).getPublicUrl(path);
-  if (!data?.publicUrl) throw new Error("Could not resolve the uploaded cover URL.");
   return data.publicUrl;
 }
 

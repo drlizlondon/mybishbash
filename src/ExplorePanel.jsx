@@ -99,25 +99,23 @@ function PremiumBadge() {
   return <span className="explore-premium-badge">Premium</span>;
 }
 
-// Generated covers are the standard; an uploaded cover_image_url is an
-// optional override that replaces them with no additional states.
-function ExploreCoverArt({ pack, className, variant = "grid" }) {
-  if (pack.coverImageUrl) {
-    return <img src={pack.coverImageUrl} alt="" className={className} loading="lazy" />;
-  }
-  return <GeneratedPackCover pack={pack} variant={variant} className={className} />;
+// Generated covers are the standard pack artwork. HQ supplies content; the
+// renderer supplies the branded cover system.
+function ExploreCoverArt({ pack, className, variant = "grid", isActive = false, locked = false }) {
+  return <GeneratedPackCover pack={pack} variant={variant} className={className} isActive={isActive} locked={locked} />;
 }
 
-function ExploreHero({ pack, onOpen }) {
+function ExploreHero({ pack, isActive, locked, onOpen }) {
   const quote = getCoverQuote(pack);
   return (
     <section className="explore-section explore-hero-section">
       <p className="explore-section-title">Start Here</p>
       <button type="button" className="explore-hero" data-testid="explore-hero" onClick={() => onOpen(pack.id)}>
-        <ExploreCoverArt pack={pack} className="explore-hero-art" variant="bare" />
+        <ExploreCoverArt pack={pack} className="explore-hero-art" variant="bare" isActive={isActive} locked={locked} />
         <span className="explore-hero-scrim" aria-hidden="true" />
         <span className="explore-hero-copy">
           {pack.isPremium ? <PremiumBadge /> : null}
+          {isActive ? <span className="explore-active-pill">Installed</span> : null}
           {quote ? <span className="explore-hero-quote">“{quote}”</span> : null}
           <span className="explore-hero-title">{pack.title}</span>
           {pack.description ? <span className="explore-hero-description">{pack.description}</span> : null}
@@ -127,18 +125,19 @@ function ExploreHero({ pack, onOpen }) {
   );
 }
 
-function ExploreCoverCard({ pack, onOpen }) {
+function ExploreCoverCard({ pack, isActive, locked, onOpen }) {
   const quote = getCoverQuote(pack);
   return (
     <button
       type="button"
-      className="explore-cover-card"
+      className={`explore-cover-card${isActive ? " is-active" : ""}`}
       data-testid={`explore-pack-card-${pack.id}`}
       onClick={() => onOpen(pack.id)}
     >
       <span className="explore-cover-art-frame">
-        <ExploreCoverArt pack={pack} className="explore-cover-art" variant="grid" />
+        <ExploreCoverArt pack={pack} className="explore-cover-art" variant="grid" isActive={isActive} locked={locked} />
         {pack.isPremium ? <PremiumBadge /> : null}
+        {isActive ? <span className="explore-active-pill">Installed</span> : null}
       </span>
       <span className="explore-cover-copy">
         <span className="explore-cover-title">{pack.title}</span>
@@ -187,7 +186,7 @@ function ExplorePackDetail({
             ← Explore
           </button>
         </div>
-        <ExploreCoverArt pack={pack} className="explore-detail-art" variant="detail" />
+        <ExploreCoverArt pack={pack} className="explore-detail-art" variant="detail" isActive={isActive} locked={locked} />
         <div className="explore-detail-body">
           <div className="explore-detail-heading">
             <h2>{pack.title}</h2>
@@ -298,7 +297,14 @@ export default function ExplorePanel({
         </div>
       </div>
 
-      {hero ? <ExploreHero pack={hero} onOpen={setSelectedPackId} /> : null}
+      {hero ? (
+        <ExploreHero
+          pack={hero}
+          isActive={isPackActive(hero.id)}
+          locked={hero.isPremium === true && !canUsePremiumContent}
+          onOpen={setSelectedPackId}
+        />
+      ) : null}
 
       {commitmentTemplates.length > 0 ? (
         <section className="explore-section" data-testid="explore-commitments-rail">
@@ -316,7 +322,13 @@ export default function ExplorePanel({
           <p className="explore-section-title">{goal}</p>
           <div className="explore-cover-grid">
             {goalPacks.map((pack) => (
-              <ExploreCoverCard key={pack.id} pack={pack} onOpen={setSelectedPackId} />
+              <ExploreCoverCard
+                key={pack.id}
+                pack={pack}
+                isActive={isPackActive(pack.id)}
+                locked={pack.isPremium === true && !canUsePremiumContent}
+                onOpen={setSelectedPackId}
+              />
             ))}
           </div>
         </section>
@@ -327,7 +339,13 @@ export default function ExplorePanel({
           <p className="explore-section-title">{goalSections.length > 0 ? "More to explore" : "Packs"}</p>
           <div className="explore-cover-grid">
             {morePacks.map((pack) => (
-              <ExploreCoverCard key={pack.id} pack={pack} onOpen={setSelectedPackId} />
+              <ExploreCoverCard
+                key={pack.id}
+                pack={pack}
+                isActive={isPackActive(pack.id)}
+                locked={pack.isPremium === true && !canUsePremiumContent}
+                onOpen={setSelectedPackId}
+              />
             ))}
           </div>
         </section>

@@ -29,7 +29,6 @@ import {
   saveAdminGlobalPack,
   saveAdminLauncherConfig,
   uploadLauncherIcon,
-  uploadPackCover,
 } from "./lib/mybishbashSync";
 import { PACK_GOALS, PACK_CONTENT_TYPES } from "./lib/packGoals";
 import { parseImportedCards, formatImportedCard } from "./lib/packImport";
@@ -66,7 +65,6 @@ const EMPTY_PACK_FORM = {
   // Explore cover metadata (docs/explore-architecture.md)
   goal: "",
   whyText: "",
-  coverImageUrl: "",
   sourceLabel: "MyBishBash",
   contentType: "cards",
   isPremium: false,
@@ -476,7 +474,6 @@ const HQContent = memo(function HQContent({
           sourceKey: packForm.sourceKey ?? null,
           goal: packForm.goal,
           whyText: packForm.whyText,
-          coverImageUrl: packForm.coverImageUrl,
           sourceLabel: packForm.sourceLabel,
           contentType: packForm.contentType,
           isPremium: packForm.isPremium,
@@ -544,7 +541,6 @@ const HQContent = memo(function HQContent({
       sourceKey: pack.sourceKey ?? null,
       goal: pack.goal ?? "",
       whyText: pack.whyText ?? "",
-      coverImageUrl: pack.coverImageUrl ?? "",
       sourceLabel: pack.sourceLabel ?? "MyBishBash",
       contentType: pack.contentType ?? "cards",
       isPremium: Boolean(pack.isPremium),
@@ -2296,7 +2292,7 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
             {pack.isPremium ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Premium</span> : null}
             {pack.isExperimental ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Experimental</span> : null}
             {pack.contentType && pack.contentType !== "cards" ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{pack.contentType}</span> : null}
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{pack.coverImageUrl ? "Custom cover" : "Auto cover"}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Auto cover</span>
           </div>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pack.published ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
@@ -2331,49 +2327,20 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
 const PACK_EDITOR_INPUT_CLASS = "h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 const PACK_EDITOR_AREA_CLASS = "rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 
-function PackCoverField({ value, onChange, onError, previewPack }) {
-  const [uploading, setUploading] = useState(false);
-
-  async function handleFile(event) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    try {
-      onChange(await uploadPackCover(file));
-    } catch (error) {
-      onError?.(error?.message ?? "Could not upload cover image.");
-    } finally {
-      setUploading(false);
-    }
-  }
-
+function PackCoverPreview({ previewPack }) {
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-3">
-        {value ? (
-          <img src={value} alt="Pack cover" className="h-24 w-36 rounded-lg border border-blue-100 object-cover" style={{ aspectRatio: "3 / 2" }} />
-        ) : (
-          <div className="h-24 w-36 overflow-hidden rounded-lg" style={{ aspectRatio: "3 / 2" }} data-testid="hq-generated-cover-preview">
-            <GeneratedPackCover pack={previewPack} variant="grid" />
-          </div>
-        )}
+        <div className="h-24 w-36 overflow-hidden rounded-lg" style={{ aspectRatio: "3 / 2" }} data-testid="hq-generated-cover-preview">
+          <GeneratedPackCover pack={previewPack} variant="grid" />
+        </div>
         <div className="grid gap-1">
-          <label className="cursor-pointer justify-self-start rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-            {uploading ? "Uploading…" : "Upload custom cover"}
-            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
-          </label>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Auto cover preview</p>
           <p className="text-[11px] text-slate-500">
-            {value ? "Custom cover override in use." : "Auto cover — generated live from title and card count. Uploading a custom cover is optional."}
+            Generated live from the pack title, description, and card text.
           </p>
         </div>
       </div>
-      <input
-        className={PACK_EDITOR_INPUT_CLASS}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Custom cover image URL (https) — optional override"
-      />
     </div>
   );
 }
@@ -2411,15 +2378,10 @@ const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading, 
         className={PACK_EDITOR_INPUT_CLASS}
         value={form.whyText}
         onChange={field("whyText")}
-        placeholder="Why this exists — one sentence, shown on the pack cover"
+        placeholder="Why this exists — optional detail note"
         maxLength={120}
       />
-      <PackCoverField
-        value={form.coverImageUrl}
-        onChange={(url) => setForm((current) => ({ ...current, coverImageUrl: url }))}
-        onError={onError}
-        previewPack={previewPack}
-      />
+      <PackCoverPreview previewPack={previewPack} />
       <div className="grid gap-3 md:grid-cols-3">
         <select className={PACK_EDITOR_INPUT_CLASS} value={form.goal} onChange={field("goal")}>
           <option value="">No goal (hidden from goal sections)</option>

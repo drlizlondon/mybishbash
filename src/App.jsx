@@ -7065,9 +7065,7 @@ function StandardLibraryPanel({
                   item={item}
                   icon={item.representative.icon ?? "book"}
                   art={pack ? (
-                    pack.coverImageUrl
-                      ? <img src={pack.coverImageUrl} alt="" className="library-pack-thumb" loading="lazy" />
-                      : <GeneratedPackCover pack={pack} variant="thumb" className="library-pack-thumb" />
+                    <GeneratedPackCover pack={pack} variant="thumb" className="library-pack-thumb" isActive />
                   ) : null}
                   title={item.representative.promptText}
                   secondary={getLibraryPackSecondary(item)}

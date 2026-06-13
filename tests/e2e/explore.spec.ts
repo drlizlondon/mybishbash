@@ -135,17 +135,15 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
   await seedE2EState(page);
   await page.goto('/mybishbash/explore');
 
-  // Grid: generated cover is title/deck-led; the hook quote lives below
-  // the art where Explore copy belongs.
+  // Grid: generated cover is logo-led; the hook quote lives below the art
+  // where Explore copy belongs.
   const card = page.getByTestId(`explore-pack-card-${STATIC_PACK_ID}`);
   const gridCover = card.getByTestId('generated-cover');
   await expect(gridCover).toBeVisible();
-  await expect(gridCover).toHaveAttribute('data-cover-palette', 'aubergine-linen');
-  await expect(gridCover).toHaveAttribute('data-cover-layout', 'split');
-  await expect(gridCover).toHaveAttribute('data-cover-texture', 'paper');
-  await expect(gridCover).toHaveAttribute('data-cover-accent', 'underline');
-  await expect(gridCover).toContainText('Motivational Quote');
-  await expect(gridCover).toContainText('5 cards');
+  await expect(gridCover.getByTestId('generated-cover-logo')).toHaveAttribute('src', /mybishbash-cover\.png$/);
+  await expect(gridCover.getByTestId('generated-cover-title').locator('span')).toHaveText(['Motivational', 'Quote']);
+  await expect(gridCover).toContainText('5 CARDS');
+  await expect(gridCover).toContainText('Soft little pushes when energy dips.');
   await expect(gridCover).not.toContainText('Start where you are.');
   await expect(card.locator('.explore-cover-quote')).toContainText('Start where you are.');
 
@@ -153,11 +151,13 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
   await card.click();
   const detailCover = page.getByTestId('explore-pack-detail').getByTestId('generated-cover');
   await expect(detailCover).toBeVisible();
-  await expect(detailCover).toContainText('Motivational Quote');
+  await expect(detailCover.getByTestId('generated-cover-title').locator('span')).toHaveText(['Motivational', 'Quote']);
 
   // Library thumbnail after install.
   await page.getByTestId('explore-install-button').click();
+  await expect(detailCover).toContainText('INSTALLED');
   await page.getByTestId('explore-detail-close').click();
+  await expect(card.locator('.explore-active-pill')).toContainText('Installed');
   await page.getByTestId('bottom-nav-library').click();
   await page.getByTestId('library-active-packs-section-toggle').click();
   await expect(page.getByTestId('library-active-packs-section').getByTestId('generated-cover')).toBeVisible();
