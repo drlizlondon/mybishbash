@@ -32,6 +32,17 @@ function isMissingTableError(error) {
   return error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "");
 }
 
+function isTransientFetchError(error) {
+  const message = `${error?.message ?? ""} ${error?.details ?? ""}`;
+  return /Failed to fetch|NetworkError|Load failed/i.test(message);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function selectSharedStateFromTable(client, tableName, userId) {
   const { data, error } = await client
     .from(tableName)
@@ -48,16 +59,22 @@ async function selectSharedStateFromTable(client, tableName, userId) {
 }
 
 async function upsertSharedStateIntoTable(client, tableName, userId, state) {
-  const { error } = await client
-    .from(tableName)
-    .upsert(
-      {
-        user_id: userId,
-        state_json: state,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+  let error = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await client
+      .from(tableName)
+      .upsert(
+        {
+          user_id: userId,
+          state_json: state,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+    error = result.error;
+    if (!error || !isTransientFetchError(error)) break;
+    await wait(250 * (attempt + 1));
+  }
 
   if (error) {
     if (isMissingTableError(error)) return { missingTable: true };
