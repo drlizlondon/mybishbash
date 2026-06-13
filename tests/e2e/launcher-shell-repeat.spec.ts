@@ -433,7 +433,6 @@ test('normal MyBishBash home pack browsing keeps Back to home neutral CTA', asyn
   await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
   await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toBeVisible();
   await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Continue' })).toHaveCount(0);
-  for (const launcherId of launcherIds) {
-    await expect(page.getByTestId('card-overlay-pack').getByTestId(`fake-launcher-${launcherId}`)).toBeVisible();
-  }
+  await expect(page.getByTestId('card-overlay-pack').locator('[data-testid^="fake-launcher-"]')).toHaveCount(0);
+  await expect(page.getByTestId('card-overlay-pack').getByTestId('pause-app-button')).toHaveCount(0);
 });

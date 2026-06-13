@@ -185,6 +185,8 @@ const LEGACY_BASE_PATHS = ["/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
+const ACTIVE_PROTECTED_APP_CONTEXT_KEY = "mybishbash.active-protected-app-context.v1";
+const ACTIVE_PROTECTED_APP_CONTEXT_TTL_MS = 8 * 60 * 60 * 1000;
 // How long a custom-scheme launch gets to background the page before the web
 // fallback fires. Long enough for the OS app switch on slow devices, short
 // enough that a dead button visibly recovers.
@@ -1079,6 +1081,36 @@ function persistLaunchSession(session) {
   }
 }
 
+function loadActiveProtectedAppContext() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(ACTIVE_PROTECTED_APP_CONTEXT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const launcherId = isKnownLauncher(parsed?.launcherId) ? parsed.launcherId : null;
+    const updatedAt = Number(parsed?.updatedAt ?? 0);
+    if (!launcherId || !Number.isFinite(updatedAt)) return null;
+    if (Date.now() - updatedAt > ACTIVE_PROTECTED_APP_CONTEXT_TTL_MS) {
+      window.sessionStorage.removeItem(ACTIVE_PROTECTED_APP_CONTEXT_KEY);
+      return null;
+    }
+    return { launcherId, updatedAt };
+  } catch {
+    return null;
+  }
+}
+
+function persistActiveProtectedAppContext(launcherId) {
+  if (typeof window === "undefined" || !isKnownLauncher(launcherId)) return null;
+  const nextContext = { launcherId, updatedAt: Date.now() };
+  try {
+    window.sessionStorage.setItem(ACTIVE_PROTECTED_APP_CONTEXT_KEY, JSON.stringify(nextContext));
+  } catch {
+    // Session storage can be unavailable in private or embedded contexts.
+  }
+  return nextContext;
+}
+
 function buildLaunchSessionForRoute(route) {
   if (route?.kind === "intercept" && isKnownLauncher(route.versionId)) {
     return buildLaunchSession("fake_launcher", route.versionId);
@@ -1111,6 +1143,7 @@ function isInstalledFakeLauncherEntry(source) {
 
 function getVisibleDestinationChips(launchSession, versions) {
   const normalizedSession = normalizeLaunchSession(launchSession);
+  if (normalizedSession.entrySurface !== "fake_launcher") return [];
   const byId = new Map((versions ?? []).map((version) => [version.id, version]));
   return normalizedSession.allowedDestinationIds
     .map((destinationId) => byId.get(destinationId))
@@ -1340,6 +1373,11 @@ function App() {
   const [screen, setScreen] = useState(initialRoute.kind === "intercept" ? "interception" : initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(() =>
     initialRoute.kind === "intercept" ? buildFakeLauncherPreparingOverlay(initialRoute.versionId) : null
+  );
+  const [activeProtectedAppContext, setActiveProtectedAppContext] = useState(() =>
+    initialRoute.kind === "intercept" && isKnownLauncher(initialRoute.versionId)
+      ? persistActiveProtectedAppContext(initialRoute.versionId)
+      : loadActiveProtectedAppContext()
   );
   const [launchSession, setLaunchSession] = useState(() => {
     const session = buildLaunchSessionForRoute(initialRoute);
@@ -1623,6 +1661,7 @@ function App() {
 
   useEffect(() => {
     if (route.kind === "intercept" && isKnownLauncher(route.versionId)) {
+      setActiveProtectedAppContext(persistActiveProtectedAppContext(route.versionId));
       setLaunchSession((current) => {
         if (current?.entrySurface === "fake_launcher" && current?.launcherId === route.versionId) {
           return current;
@@ -1645,6 +1684,23 @@ function App() {
       });
     }
   }, [isAppTabRoute, overlay?.launchSource, route.kind, route.versionId]);
+
+  const activeProtectedAppVersion = useMemo(() => {
+    const launcherId = activeProtectedAppContext?.launcherId;
+    if (!isKnownLauncher(launcherId)) return null;
+    const version = resolveVersionConfig(
+      homeScreenVersions[launcherId] ?? DEFAULT_HOME_SCREEN_VERSIONS[launcherId] ?? getLauncherConfig(launcherId),
+      launcherBehaviorSettings[launcherId],
+    );
+    return version?.realAppLabel ? version : null;
+  }, [activeProtectedAppContext?.launcherId, homeScreenVersions, launcherBehaviorSettings]);
+
+  const showActiveProtectedAppShortcut = Boolean(
+    activeProtectedAppVersion &&
+    !overlay &&
+    screen === "library" &&
+    ["explore", "library", "log", "apps"].includes(activeTab),
+  );
 
   function getFakeLauncherShellContextId() {
     if (testerStatus?.is_tester !== true) return null;
@@ -5667,6 +5723,19 @@ function App() {
                 />
               ) : null}
             </main>
+
+            {showActiveProtectedAppShortcut ? (
+              <ActiveProtectedAppShortcut
+                version={activeProtectedAppVersion}
+                onOpen={() =>
+                  openDestinationApp(activeProtectedAppVersion.id, {
+                    source: "active_protected_app_shortcut",
+                    reason: "user_pressed_persisted_real_app_button",
+                    preferDirectAppDestination: true,
+                  })
+                }
+              />
+            ) : null}
           </div>
 
           <nav className="bottom-nav" aria-label="Primary">
@@ -8528,6 +8597,29 @@ function RestoreActionCardsModal({ actionCards, onRestore, onClose }) {
   );
 }
 
+function ActiveProtectedAppShortcut({ version, onOpen }) {
+  if (!version?.id) return null;
+  const label = version.realAppLabel ?? version.displayName ?? version.name ?? "App";
+
+  return (
+    <button
+      type="button"
+      className="active-protected-app-shortcut"
+      data-testid="active-protected-app-bypass"
+      onClick={onOpen}
+      aria-label={`Continue to ${label}`}
+      title={`Continue to ${label}`}
+    >
+      <img
+        src={resolveLauncherIconSrc(version)}
+        alt=""
+        aria-hidden="true"
+      />
+      <span>Continue to {label}</span>
+    </button>
+  );
+}
+
 // GrowthFlower, EventDetailModal, describeLogEvent, getLogEventDisplayLabel → moved to src/components/LogPanel.jsx
 
 function Overlay({
@@ -8689,6 +8781,9 @@ function Overlay({
         onContinue={handleContinue}
         onBack={canGoBackHome ? handleBack : null}
         onDashboard={onDashboard}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseApp}
         className={launcherInterceptionClass}
       />
     );
@@ -10373,11 +10468,13 @@ function LegalPage({ title, docUrl }) {
   );
 }
 
-function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashboard, className = "" }) {
+function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashboard, launcherAppId = null, launcherAppName = null, onPauseApp = null, className = "" }) {
   const actions = [
     { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
     ...(onBack ? [{ label: "Back to MyBishBash", variant: "secondary", onClick: onBack }] : []),
   ];
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const pauseButtonRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -10395,6 +10492,23 @@ function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashb
   return (
     <div className={`premium-card-screen premium-card-personal ${className}`.trim()} data-testid="continue-to-app-card">
       <PremiumDashboardShortcut onClick={onDashboard} />
+      {launcherAppId && onPauseApp ? (
+        <PremiumPauseShortcut
+          ref={pauseButtonRef}
+          onClick={() => setShowPauseModal(true)}
+        />
+      ) : null}
+      {showPauseModal && launcherAppId && onPauseApp ? (
+        <AppPauseModal
+          appName={launcherAppName ?? appName}
+          triggerRef={pauseButtonRef}
+          onClose={() => setShowPauseModal(false)}
+          onPause={(mins) => {
+            setShowPauseModal(false);
+            onPauseApp(mins);
+          }}
+        />
+      ) : null}
       <main className="premium-card-main" aria-live="polite">
         <section className="premium-card-header" />
         <section className="premium-card-message-section" style={{ alignItems: 'center', textAlign: 'center' }}>

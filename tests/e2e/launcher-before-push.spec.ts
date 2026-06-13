@@ -322,6 +322,96 @@ test('before-push action card without launchUrl completes and returns home inste
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 });
 
+test('protected app card flow shows one dashboard, pause and real-app bypass control', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('protected-controls-personal', 'Protected controls personal')],
+    interruptionOn: false,
+  });
+
+  await openLauncher(page, 'safari');
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay).toBeVisible();
+  await expect(overlay.getByTestId('dashboard-shortcut')).toHaveCount(1);
+  await expect(overlay.getByTestId('pause-app-button')).toHaveCount(1);
+  await expect(overlay.getByTestId('fake-launcher-safari')).toHaveCount(1);
+  await expect(overlay.locator('[data-testid^="fake-launcher-"]')).toHaveCount(1);
+
+  await overlay.getByTestId('dashboard-shortcut').click();
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+});
+
+test('protected app pause opens timeout modal and bypass opens the real destination', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('protected-pause-personal', 'Protected pause personal')],
+    interruptionOn: false,
+  });
+
+  await openLauncher(page, 'safari');
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay).toBeVisible();
+
+  await overlay.getByTestId('pause-app-button').click();
+  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toBeVisible();
+  await page.getByTestId('pause-modal-close').click();
+  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toHaveCount(0);
+
+  await overlay.getByTestId('fake-launcher-safari').click();
+  await expectDestinationAttempt(page, 'safari');
+});
+
+test('protected continue card keeps one dashboard, pause and continue control', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('protected-continue-personal', 'Protected continue personal')],
+    interruptionOn: false,
+  });
+
+  await openLauncher(page, 'safari');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await completeFirstCard(page, 'personal');
+
+  const continueCard = page.getByTestId('continue-to-app-card');
+  await expect(continueCard).toBeVisible();
+  await expect(continueCard.getByTestId('dashboard-shortcut')).toHaveCount(1);
+  await expect(continueCard.getByTestId('pause-app-button')).toHaveCount(1);
+  await expect(continueCard.getByTestId('card-action-continue-to-safari')).toHaveCount(1);
+});
+
+test('normal MyBishBash card route does not show protected app pause or bypass controls', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('normal-card-personal', 'Normal MyBishBash personal')],
+    interruptionOn: false,
+  });
+
+  await page.goto('/mybishbash/card/normal-card-personal');
+  const overlay = page.getByTestId('card-overlay-personal');
+  await expect(overlay).toBeVisible();
+  await expect(overlay.getByTestId('pause-app-button')).toHaveCount(0);
+  await expect(overlay.locator('[data-testid^="fake-launcher-"]')).toHaveCount(0);
+});
+
+test('protected app source shortcut remains available across Explore Library Log and Apps', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('persisted-source-personal', 'Persisted source personal')],
+    interruptionOn: false,
+  });
+
+  await openLauncher(page, 'instagram');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await page.getByTestId('card-overlay-personal').getByTestId('dashboard-shortcut').click();
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+
+  for (const tab of ['explore', 'library', 'log', 'apps'] as const) {
+    await page.getByTestId(`bottom-nav-${tab}`).click();
+    const shortcut = page.getByTestId('active-protected-app-bypass');
+    await expect(shortcut, `Persisted Instagram shortcut should show on ${tab}`).toBeVisible();
+    await expect(shortcut).toContainText('Continue to Instagram');
+  }
+
+  await page.getByTestId('active-protected-app-bypass').click();
+  await expectDestinationAttempt(page, 'instagram');
+});
+
 test('before-push launcher state does not leak between sequential launches', async ({ page }) => {
   await seedState(page, {
     cards: [

@@ -135,8 +135,8 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
   await seedE2EState(page);
   await page.goto('/mybishbash/explore');
 
-  // Grid: generated cover is logo-led; the hook quote lives below the art
-  // where Explore copy belongs.
+  // Grid: generated cover is logo-led; sample card text stays out of the
+  // listing so the pack card reads as title, description and count.
   const card = page.getByTestId(`explore-pack-card-${STATIC_PACK_ID}`);
   const gridCover = card.getByTestId('generated-cover');
   await expect(gridCover).toBeVisible();
@@ -145,7 +145,10 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
   await expect(gridCover).toContainText('5 CARDS');
   await expect(gridCover).toContainText('Soft little pushes when energy dips.');
   await expect(gridCover).not.toContainText('Start where you are.');
-  await expect(card.locator('.explore-cover-quote')).toContainText('Start where you are.');
+  await expect(card.locator('.explore-cover-title')).toContainText('Motivational Quote');
+  await expect(card.locator('.explore-cover-description')).toContainText('Soft little pushes when energy dips.');
+  await expect(card.locator('.explore-cover-meta')).toContainText(/5 cards/i);
+  await expect(card).not.toContainText('Start where you are.');
 
   // Detail: title-focused generated cover.
   await card.click();

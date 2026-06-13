@@ -109,7 +109,7 @@ export function ExploreCoverArt({ pack, className, variant = "grid", isActive = 
 }
 
 function ExploreHero({ pack, isActive, locked, onOpen }) {
-  const quote = getCoverQuote(pack);
+  const cardCount = pack.entries?.length ?? 0;
   return (
     <section className="explore-section explore-hero-section">
       <p className="explore-section-title">Start Here</p>
@@ -119,9 +119,9 @@ function ExploreHero({ pack, isActive, locked, onOpen }) {
         <span className="explore-hero-copy">
           {pack.isPremium ? <PremiumBadge /> : null}
           {isActive ? <span className="explore-active-pill">Installed</span> : null}
-          {quote ? <span className="explore-hero-quote">“{quote}”</span> : null}
           <span className="explore-hero-title">{pack.title}</span>
           {pack.description ? <span className="explore-hero-description">{pack.description}</span> : null}
+          <span className="explore-cover-meta">{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
         </span>
       </button>
     </section>
@@ -129,7 +129,7 @@ function ExploreHero({ pack, isActive, locked, onOpen }) {
 }
 
 function ExploreCoverCard({ pack, isActive, locked, onOpen }) {
-  const quote = getCoverQuote(pack);
+  const cardCount = pack.entries?.length ?? 0;
   return (
     <button
       type="button"
@@ -144,8 +144,8 @@ function ExploreCoverCard({ pack, isActive, locked, onOpen }) {
       </span>
       <span className="explore-cover-copy">
         <span className="explore-cover-title">{pack.title}</span>
-        {quote ? <span className="explore-cover-quote">“{quote}”</span> : null}
         {pack.description ? <span className="explore-cover-description">{pack.description}</span> : null}
+        <span className="explore-cover-meta">{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
       </span>
     </button>
   );

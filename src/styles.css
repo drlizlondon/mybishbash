@@ -3776,6 +3776,45 @@ textarea {
   backdrop-filter: blur(16px);
 }
 
+.active-protected-app-shortcut {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(env(safe-area-inset-bottom) + 94px);
+  z-index: 61;
+  min-height: 42px;
+  max-width: min(260px, calc(100vw - 36px));
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 999px;
+  padding: 0 14px 0 10px;
+  background: rgba(255, 251, 248, 0.9);
+  color: var(--ink-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow:
+    0 10px 24px rgba(114, 79, 65, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(16px);
+  cursor: pointer;
+}
+
+.active-protected-app-shortcut img {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.active-protected-app-shortcut span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .continue-safari-button span {
   font-size: 0.84rem;
   font-weight: 500;
@@ -6370,8 +6409,8 @@ body {
 /* Cover grid */
 .explore-cover-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 18px 14px;
 }
 
 .explore-cover-card {
@@ -6390,7 +6429,7 @@ body {
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 4 / 5;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-soft);
@@ -6436,14 +6475,14 @@ body {
 .explore-cover-copy {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   padding: 0 2px;
 }
 
-.explore-cover-quote {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.35;
+.explore-cover-title {
+  font-size: clamp(14px, 3.6vw, 17px);
+  font-weight: 800;
+  line-height: 1.16;
   color: var(--charcoal);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -6451,21 +6490,23 @@ body {
   overflow: hidden;
 }
 
-.explore-cover-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
 .explore-cover-description {
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.35;
   color: var(--ink-muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.explore-cover-meta {
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
 .explore-commitment-rail {
