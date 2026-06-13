@@ -697,6 +697,93 @@ function getPackName(card, customPacks = []) {
     ?? card.sourcePackId;
 }
 
+function isCardDoneToday(card, todayKey) {
+  return card?.doneDate === todayKey || (!card?.doneDate && card?.statusToday === "doneToday");
+}
+
+function getUsageDays(cards = [], events = []) {
+  const dateValues = [
+    ...cards.map((card) => card.createdAt),
+    ...events.map((event) => event.created_at),
+  ]
+    .map((value) => new Date(value).getTime())
+    .filter((value) => Number.isFinite(value));
+  if (dateValues.length === 0) return 1;
+  return Math.max(1, Math.floor((Date.now() - Math.min(...dateValues)) / 86400000) + 1);
+}
+
+function getCommitmentAppMeta(card, versions = {}) {
+  const explicitName = card?.appName ?? card?.app_name ?? card?.appLabel ?? card?.app_label ?? null;
+  if (explicitName) {
+    return {
+      name: explicitName,
+      iconUrl: card?.appIconUrl ?? card?.app_icon_url ?? card?.appIcon ?? card?.app_icon ?? "",
+    };
+  }
+
+  const launcherId = card?.launcherContext ?? card?.targetApp ?? card?.appId ?? card?.app_id ?? null;
+  if (!launcherId || !isKnownLauncher(launcherId)) return null;
+  const version = versions[launcherId] ?? getLauncherConfig(launcherId);
+  if (!version) return null;
+  return {
+    name: version.realAppLabel || version.displayName || version.name || launcherId,
+    iconUrl: resolveLauncherIconSrc(version),
+  };
+}
+
+function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions = {} }) {
+  const now = new Date();
+  const todayKey = getTodayKey(now, timezone);
+  const normalized = normalizeCards(cards, now, timezone);
+  const personalCardsToday = normalized.filter((card) => {
+    if (card.sourcePackId || card.deletedAt || isCommitmentCard(card)) return false;
+    return isCardDoneToday(card, todayKey) || card.statusToday === "pending" || isEligible(card, now, timezone);
+  });
+  const completedPersonalCardsToday = Math.min(
+    personalCardsToday.filter((card) => isCardDoneToday(card, todayKey)).length,
+    personalCardsToday.length,
+  );
+  const nextIncompletePersonalCard = personalCardsToday.find((card) => !isCardDoneToday(card, todayKey)) ?? null;
+  const liveCommitments = normalized
+    .filter((card) =>
+      isCommitmentCard(card) &&
+      !card.deletedAt &&
+      !card.paused &&
+      !card.disliked &&
+      card.commitmentStatusToday === "made" &&
+      card.commitmentDecisionDate === todayKey
+    )
+    .sort((left, right) => new Date(right.commitmentDecisionAt ?? right.updatedAt ?? 0).getTime() - new Date(left.commitmentDecisionAt ?? left.updatedAt ?? 0).getTime());
+  const activeCommitment = liveCommitments[0] ?? null;
+  const activeCommitmentApp = getCommitmentAppMeta(activeCommitment, homeScreenVersions);
+  const checkInComplete = activeCommitment?.commitmentCheckInResponseDate === todayKey;
+  const hasCheckIn = Boolean(activeCommitment?.commitmentCheckInEnabled);
+
+  return {
+    usageDays: getUsageDays(normalized, events),
+    completedPersonalCardsToday,
+    totalPersonalCardsToday: personalCardsToday.length,
+    nextIncompletePersonalCard,
+    liveCommitmentCount: liveCommitments.length,
+    activeCommitment: activeCommitment
+      ? {
+          id: activeCommitment.id,
+          title: activeCommitment.promptText || activeCommitment.dashboardTitle || "Untitled commitment",
+          appName: activeCommitmentApp?.name ?? "",
+          appIconUrl: activeCommitmentApp?.iconUrl ?? "",
+          progressPercentage: hasCheckIn ? (checkInComplete ? 100 : 50) : null,
+          metadataText: hasCheckIn
+            ? checkInComplete
+              ? "Check-in complete"
+              : activeCommitment.commitmentCheckInTime
+                ? `Check-in at ${activeCommitment.commitmentCheckInTime}`
+                : "Check-in set"
+            : "",
+        }
+      : null,
+  };
+}
+
 function getLauncherEligibilityAudit(card, { date, timezone, excludedCardIds = new Set(), packCardTimeoutMs = 0, exposureByCardId = new Map() }) {
   const todayKey = getTodayKey(date, timezone);
   const currentWindow = getCurrentWindow(date, timezone);
@@ -1389,6 +1476,7 @@ function App() {
   const [composerInitialKind, setComposerInitialKind] = useState("personal");
   const [composerInitialDraft, setComposerInitialDraft] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [homeSaveConfirmation, setHomeSaveConfirmation] = useState("");
   const composerReturnPathRef = useRef("/home");
   const [editingPackId, setEditingPackId] = useState(null);
   const [editingCustomPackId, setEditingCustomPackId] = useState(null);
@@ -4227,6 +4315,7 @@ function App() {
       setEditingId(null);
       setComposerInitialDraft(null);
       setIsComposerOpen(false);
+      setHomeSaveConfirmation(commitmentText);
 
       if (isFirstCard) {
         setSetupComplete(true);
@@ -4265,6 +4354,7 @@ function App() {
 
       setEditingId(null);
       setIsComposerOpen(false);
+      setHomeSaveConfirmation(newCards[0]?.promptText ?? "");
 
       if (isFirstCard) {
         setSetupComplete(true);
@@ -4323,6 +4413,7 @@ function App() {
     setEditingId(null);
     setComposerInitialDraft(null);
     setIsComposerOpen(false);
+    setHomeSaveConfirmation(trimmedText);
 
     if (isFirstCard) {
       setSetupComplete(true);
@@ -5595,22 +5686,26 @@ function App() {
     >
       <div className="grain" />
       {screen === "library" && !hideAppShell ? (
-      <div className={`app-shell app-mood theme-${getThemeClass(mood)}`} data-testid="app-shell">
+      <div className={`app-shell app-mood theme-${getThemeClass(mood)} ${activeTab === "home" ? "home-shell" : ""}`} data-testid="app-shell">
           <div className="app-inner">
-            <Masthead
-              onCreate={openCardComposerFromCurrentRoute}
-              onOpenSettings={() => navigateTo("/settings")}
-            />
+            {activeTab === "home" ? null : (
+              <Masthead
+                onCreate={openCardComposerFromCurrentRoute}
+                onOpenSettings={() => navigateTo("/settings")}
+              />
+            )}
 
             <main className="content">
               {activeTab === "home" ? (
                 <HomePanel
-                  reminderItems={homeReminderItems}
+                  cards={cards}
+                  events={events}
                   timezone={profile.timezone}
-                  profile={profile}
-                  protectedAppStatuses={protectedAppStatuses}
-                  activePauseStatuses={activePauseStatuses}
+                  homeScreenVersions={homeScreenVersions}
+                  saveConfirmation={homeSaveConfirmation}
                   onCreate={openCardComposerFromCurrentRoute}
+                  onOpenApps={() => navigateTo("/apps")}
+                  onOpenCard={openSpecificReveal}
                 />
               ) : null}
 
@@ -6484,62 +6579,176 @@ function Masthead({ onCreate, onOpenSettings }) {
 }
 
 function HomePanel({
-  reminderItems,
+  cards = [],
+  events = [],
   timezone,
-  profile = {},
-  protectedAppStatuses = [],
-  activePauseStatuses = [],
+  homeScreenVersions = {},
+  saveConfirmation = "",
   onCreate,
+  onOpenApps,
+  onOpenCard,
 }) {
-  const today = new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: timezone,
-  }).format(new Date());
-  const protectedCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
-  const firstPrompt = reminderItems.find((item) => item?.representative?.promptText)?.representative?.promptText;
+  const homeState = useMemo(
+    () => buildHomeState({ cards, events, timezone, homeScreenVersions }),
+    [cards, events, timezone, homeScreenVersions],
+  );
+  const completed = homeState.completedPersonalCardsToday;
+  const total = homeState.totalPersonalCardsToday;
+  const progressPercent = total > 0 ? Math.min(100, Math.max(0, (completed / total) * 100)) : 0;
+  const personalCardNoun = total === 1 ? "personal card" : "personal cards";
+  const progressNumber = total > 0 ? `${completed}/${total}` : "0";
+  const progressCopy = total === 0
+    ? "No personal cards today."
+    : completed === total
+      ? `All ${total} ${personalCardNoun} complete today.`
+      : `${completed} of ${total} ${personalCardNoun} complete today.`;
+  const canOpenProgress = Boolean(homeState.nextIncompletePersonalCard);
+  const canOpenCommitment = Boolean(homeState.activeCommitment?.id);
+  const hasLiveCommitment = Boolean(homeState.activeCommitment);
+  const liveCommitmentCountLabel = `${homeState.liveCommitmentCount} live commitment${homeState.liveCommitmentCount === 1 ? "" : "s"}`;
+  const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-logo-mark.png`;
+
+  const openProgressCard = () => {
+    if (!homeState.nextIncompletePersonalCard) return;
+    onOpenCard(homeState.nextIncompletePersonalCard.id);
+  };
+
+  const openCommitmentCard = () => {
+    if (!homeState.activeCommitment?.id) return;
+    onOpenCard(homeState.activeCommitment.id);
+  };
+
+  const openCommitmentEmptyState = () => {
+    onCreate("commitment");
+  };
 
   return (
-    <section className="library home-dashboard" data-testid="home-panel">
-      <div className="section-heading solo">
-        <div>
-          <h2>{getGreeting(new Date(), timezone)}{profile?.name ? `, ${profile.name}` : ""}</h2>
-          <p>{today}</p>
-        </div>
+    <section className="home-dashboard" data-testid="home-panel">
+      <div className="home-atmosphere" aria-hidden="true" />
+      <div className="home-top-controls" aria-label="Home controls">
+        <button
+          type="button"
+          className="home-floating-button"
+          data-testid="create-card-button"
+          onClick={onCreate}
+          aria-label="Add a MyBishBash"
+        >
+          <PlusGlyph />
+        </button>
+        <button
+          type="button"
+          className="home-floating-button"
+          data-testid="home-apps-button"
+          onClick={onOpenApps}
+          aria-label="Open apps"
+        >
+          <AppsGlyph />
+        </button>
       </div>
-      <div className="card-stack" data-testid="home-dashboard-summary">
-        <article className="home-empty-card">
-          <h3>{protectedCount} app{protectedCount === 1 ? "" : "s"} set up</h3>
-          <p>
-            {activePauseStatuses.length > 0
-              ? `${activePauseStatuses.length} pause${activePauseStatuses.length === 1 ? "" : "s"} active right now.`
-              : "MyBishBash is ready when an app shortcut opens."}
+
+      <div className="home-content">
+        <header className="home-brand-hero">
+          <img className="home-brand-logo" src={logoSrc} alt="MyBishBash" />
+          <h1>Good afternoon</h1>
+          <p>Day {homeState.usageDays || 1} with MyBishBash</p>
+        </header>
+
+        <div className="home-card-stack" data-testid="home-dashboard-summary">
+          <button
+            type="button"
+            className="home-progress-card"
+            data-testid="home-progress-card"
+            onClick={openProgressCard}
+            disabled={!canOpenProgress}
+            aria-label={canOpenProgress ? "Open next incomplete personal card" : "No incomplete personal cards for today"}
+          >
+            <HomeProgressRing percent={progressPercent} />
+            <span className="home-progress-copy">
+              <span className="home-card-label">Today</span>
+              <span className="home-progress-number">{progressNumber}</span>
+              <span className="home-card-body">{progressCopy}</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={`home-commitment-card ${hasLiveCommitment ? "" : "is-empty"}`}
+            data-testid="home-live-commitment-card"
+            onClick={canOpenCommitment ? openCommitmentCard : openCommitmentEmptyState}
+            aria-label={canOpenCommitment ? "Open active commitment" : "Create commitment"}
+          >
+            <span className="home-commitment-header">
+              <span className="home-card-label">Live commitment</span>
+              <span className="home-commitment-count">
+                <span className="home-live-dot" aria-hidden="true" />
+                {liveCommitmentCountLabel}
+              </span>
+            </span>
+            <span className="home-commitment-title">
+              {homeState.activeCommitment?.title ?? "No live commitment"}
+            </span>
+            {!homeState.activeCommitment ? (
+              <>
+                <span className="home-commitment-empty-body">You’re clear for now.</span>
+                <span className="home-commitment-empty-cta">Create commitment</span>
+              </>
+            ) : null}
+            {homeState.activeCommitment?.appName ? (
+              <span className="home-app-pill">
+                <HomeAppIcon src={homeState.activeCommitment.appIconUrl} />
+                <span>{homeState.activeCommitment.appName}</span>
+              </span>
+            ) : null}
+            {homeState.activeCommitment?.metadataText ? (
+              <span className="home-commitment-meta">{homeState.activeCommitment.metadataText}</span>
+            ) : null}
+            {typeof homeState.activeCommitment?.progressPercentage === "number" ? (
+              <span className="home-commitment-track" aria-hidden="true">
+                <span style={{ width: `${homeState.activeCommitment.progressPercentage}%` }} />
+              </span>
+            ) : null}
+          </button>
+        </div>
+        {saveConfirmation ? (
+          <p className="home-save-confirmation" role="status">
+            Saved “{saveConfirmation}”.
           </p>
-        </article>
-
-        {activePauseStatuses.length > 0 ? (
-          <article className="home-empty-card" data-testid="home-active-pause-summary">
-            <h3>Active pause</h3>
-            <p>
-              {activePauseStatuses
-                .map((status) => `${status.version.name ?? status.version.displayName}: ${status.pauseRemaining}`)
-                .join(", ")}
-            </p>
-          </article>
         ) : null}
-
-        <article className="home-empty-card">
-          <h3>{firstPrompt ? "Today's prompt" : "A small nudge"}</h3>
-          <p>{firstPrompt || "Start by creating one small nudge."}</p>
-          {!firstPrompt ? (
-            <button type="button" className="pack-button" data-testid="empty-create-card-button" onClick={onCreate}>
-              Create card
-            </button>
-          ) : null}
-        </article>
       </div>
     </section>
+  );
+}
+
+function HomeAppIcon({ src }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <span className="home-app-icon-fallback" aria-hidden="true">
+        <AppsGlyph />
+      </span>
+    );
+  }
+  return <img src={src} alt="" className="home-app-icon" onError={() => setFailed(true)} />;
+}
+
+function HomeProgressRing({ percent }) {
+  const radius = 43;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.min(100, Math.max(0, percent)) / 100) * circumference;
+
+  return (
+    <svg
+      viewBox="0 0 94 94"
+      className="home-progress-ring"
+      aria-hidden="true"
+      style={{
+        "--home-ring-circumference": circumference,
+        "--home-ring-offset": offset,
+      }}
+    >
+      <circle className="home-progress-ring-track" cx="47" cy="47" r={radius} />
+      <circle className="home-progress-ring-value" cx="47" cy="47" r={radius} />
+    </svg>
   );
 }
 
