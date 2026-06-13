@@ -181,7 +181,7 @@ async function expectFakeLauncherPackCard(page: Page, launcherId: LauncherId) {
   await expect(packOverlay.getByRole('button', { name: 'Continue' })).toBeVisible();
   await expect(packOverlay.getByRole('button', { name: 'Back to home' })).toHaveCount(0);
   await expect(packOverlay.getByTestId('dashboard-shortcut')).toBeVisible();
-  await expect(packOverlay.getByLabel('Open dashboard')).toBeVisible();
+  await expect(packOverlay.getByTestId('dashboard-shortcut')).toBeVisible();
   await expect(packOverlay.locator('.premium-home-button')).toHaveCount(0);
   await expectOnlyLauncherChip(page, launcherId);
 }

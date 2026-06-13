@@ -114,7 +114,7 @@ async function arriveAtTerminal(page: Page, mode: LayerOneMode) {
 async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Terminal) {
   if (terminal === 'home') {
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
-    await expect(page.getByLabel('Open dashboard')).toBeVisible();
+    await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByLabel('Go home')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toHaveCount(0);
     return;
@@ -129,7 +129,7 @@ async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Te
     await page.getByTestId('card-action-i-ll-do-this').click();
     await expect(page.getByTestId('card-overlay-action')).toBeVisible();
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
-    await expect(page.getByLabel('Open dashboard')).toBeVisible();
+    await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByLabel('Go home')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toBeVisible();
     await expect(page.getByTestId(`card-action-continue-to-${launcherId}`).or(page.getByTestId('card-action-continue-to-app'))).toHaveCount(0);

@@ -152,8 +152,10 @@ async function expectOverlay(page: Page, kind: CardKind) {
 
 async function clickTerminal(page: Page, launcherId: LauncherId, action: TerminalAction) {
   if (action === 'dashboard') {
-    await page.getByLabel('Open dashboard').click();
-    await expect(page.getByTestId('app-shell'), 'Dashboard shortcut should return to MyBishBash').toBeVisible();
+    await page.getByTestId('dashboard-shortcut').click();
+    await expect(page.getByTestId('app-shell'), 'Dashboard shortcut should open app settings').toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/mybishbash/apps/${launcherId}$`));
+    await expect(page.getByTestId(`apps-interruptions-toggle-${launcherId}`)).toBeVisible();
     await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
     return;
   }
@@ -170,8 +172,10 @@ async function clickTerminal(page: Page, launcherId: LauncherId, action: Termina
   await page.getByTestId('card-action-do-something-else').click();
   await expect(page.getByTestId('card-overlay-action'), 'Action-card terminal should appear').toBeVisible();
   if (action === 'action-dashboard') {
-    await page.getByLabel('Open dashboard').click();
-    await expect(page.getByTestId('app-shell'), 'Action-card dashboard shortcut should return to MyBishBash').toBeVisible();
+    await page.getByTestId('dashboard-shortcut').click();
+    await expect(page.getByTestId('app-shell'), 'Action-card dashboard shortcut should open app settings').toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/mybishbash/apps/${launcherId}$`));
+    await expect(page.getByTestId(`apps-interruptions-toggle-${launcherId}`)).toBeVisible();
     await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
     return;
   }
@@ -338,7 +342,8 @@ test('protected app card flow shows one dashboard, pause and real-app bypass con
 
   await overlay.getByTestId('dashboard-shortcut').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/safari$/);
+  await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
 });
 
 test('protected app pause opens timeout modal and bypass opens the real destination', async ({ page }) => {
@@ -353,6 +358,8 @@ test('protected app pause opens timeout modal and bypass opens the real destinat
 
   await overlay.getByTestId('pause-app-button').click();
   await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
   await page.getByTestId('pause-modal-close').click();
   await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toHaveCount(0);
 
@@ -375,6 +382,10 @@ test('protected continue card keeps one dashboard, pause and continue control', 
   await expect(continueCard.getByTestId('dashboard-shortcut')).toHaveCount(1);
   await expect(continueCard.getByTestId('pause-app-button')).toHaveCount(1);
   await expect(continueCard.getByTestId('card-action-continue-to-safari')).toHaveCount(1);
+
+  await continueCard.getByTestId('card-action-continue-to-safari').click();
+  await expectDestinationAttempt(page, 'safari');
+  await expect(page).not.toHaveURL(/\/mybishbash\/apps\/safari$/);
 });
 
 test('normal MyBishBash card route does not show protected app pause or bypass controls', async ({ page }) => {
@@ -400,6 +411,8 @@ test('protected app source shortcut remains available across Explore Library Log
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await page.getByTestId('card-overlay-personal').getByTestId('dashboard-shortcut').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/instagram$/);
+  await expect(page.getByTestId('apps-interruptions-toggle-instagram')).toBeVisible();
 
   for (const tab of ['home', 'explore', 'library', 'log', 'apps'] as const) {
     await page.getByTestId(`bottom-nav-${tab}`).click();
@@ -435,20 +448,20 @@ test('before-push launcher state does not leak between sequential launches', asy
   await expect(page.getByTestId('card-overlay-interruption')).toBeVisible();
   await page.getByTestId('card-action-do-something-else').click();
   await expect(page.getByTestId('card-overlay-action')).toBeVisible();
-  await page.getByLabel('Open dashboard').click();
+  await page.getByTestId('dashboard-shortcut').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   await openLauncher(page, 'safari');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Same launcher relaunch should show a fresh eligible card').toBeVisible();
-  await page.getByLabel('Open dashboard').click();
+  await page.getByTestId('dashboard-shortcut').click();
 
   await openLauncher(page, 'youtube');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Different launcher sequence should show a valid card').toBeVisible();
-  await page.getByLabel('Open dashboard').click();
+  await page.getByTestId('dashboard-shortcut').click();
 
   await openLauncher(page, 'instagram');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Pack/personal sequence should not inherit stale overlay state').toBeVisible();
-  await page.getByLabel('Open dashboard').click();
+  await page.getByTestId('dashboard-shortcut').click();
 
   await openLauncher(page, 'youtube');
   await expect(page.getByTestId('card-overlay-personal').or(page.getByTestId('card-overlay-pack')), 'Personal/pack sequence should stay selectable').toBeVisible();
@@ -461,8 +474,10 @@ test('before-push caught-up on one launcher does not leak into another valid lau
   });
   await openLauncher(page, 'safari');
   await expectOverlay(page, 'caught-up');
-  await page.getByLabel('Open dashboard').click();
+  await page.getByTestId('dashboard-shortcut').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/safari$/);
+  await page.getByTestId('bottom-nav-home').click();
   await page.getByTestId('create-card-button').click();
   await page.getByTestId('card-prompt-input').fill('Fresh after caught up');
   await page.getByTestId('save-card-button').click();

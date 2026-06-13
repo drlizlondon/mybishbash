@@ -6088,7 +6088,10 @@ function App() {
           onPauseApp={handlePauseApp}
           onManageApp={(versionId) => {
             setOverlay(null);
-            navigateTo(`/apps/${versionId}`);
+            setShouldLaunchOverlay(false);
+            suppressNextHomeAutoLaunchRef.current = true;
+            suppressStandaloneLauncherRecoveryOnce();
+            navigateTo(`/apps/${versionId}`, { replace: true });
           }}
         />
       ) : null}
@@ -9008,6 +9011,7 @@ function Overlay({
         onContinue={handleContinue}
         onBack={canGoBackHome ? handleBack : null}
         onDashboard={onDashboard}
+        onManageApp={onManageApp}
         launcherAppId={launcherAppId}
         launcherAppName={launcherAppName}
         onPauseApp={onPauseApp}
@@ -9173,6 +9177,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -9193,6 +9200,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -9209,6 +9219,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -9225,6 +9238,9 @@ function Overlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={launcherInterceptionClass}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -9285,6 +9301,7 @@ function Overlay({
         launcherAppId={launcherAppId}
         launcherAppName={launcherAppName}
         onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
       />
     );
   }
@@ -9551,6 +9568,17 @@ function CardRevealTemplate({
   const hasActions = actions?.length > 0;
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseButtonRef = useRef(null);
+  const shouldManageLauncherApp = Boolean(launcherAppId && onManageApp);
+  const dashboardLabel = shouldManageLauncherApp ? "Open app settings" : "Open dashboard";
+  const dashboardTitle = shouldManageLauncherApp ? "App settings" : "Dashboard";
+  const handleDashboardShortcut = (event) => {
+    if (shouldManageLauncherApp) {
+      event?.preventDefault?.();
+      onManageApp(launcherAppId);
+      return;
+    }
+    onDashboard?.(event);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -9567,7 +9595,14 @@ function CardRevealTemplate({
 
   return (
     <div className={`premium-card-screen premium-card-${variant} ${className}`.trim()} data-testid={`card-overlay-${variant}`}>
-      {showDashboardShortcut ? <PremiumDashboardShortcut href={dashboardHref} onClick={onDashboard} /> : null}
+      {showDashboardShortcut ? (
+        <PremiumDashboardShortcut
+          href={shouldManageLauncherApp ? undefined : dashboardHref}
+          onClick={handleDashboardShortcut}
+          label={dashboardLabel}
+          title={dashboardTitle}
+        />
+      ) : null}
       {onCreateCard ? <PremiumCreateShortcut onClick={onCreateCard} /> : null}
       {launcherAppId && onPauseApp ? (
         <PremiumPauseShortcut
@@ -9704,7 +9739,7 @@ function PremiumCardIcon({ icon }) {
   );
 }
 
-function PremiumDashboardShortcut({ href, onClick }) {
+function PremiumDashboardShortcut({ href, onClick, label = "Open dashboard", title = "Dashboard" }) {
   const content = (
     <>
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -9713,7 +9748,7 @@ function PremiumDashboardShortcut({ href, onClick }) {
         <rect x="4.75" y="13.5" width="5.75" height="5.75" rx="1.25" />
         <rect x="13.5" y="13.5" width="5.75" height="5.75" rx="1.25" />
       </svg>
-      <span className="sr-only">Open dashboard</span>
+      <span className="sr-only">{label}</span>
     </>
   );
 
@@ -9721,14 +9756,14 @@ function PremiumDashboardShortcut({ href, onClick }) {
 
   if (href || !onClick) {
     return (
-      <a className="premium-dashboard-shortcut" href={dashboardHref} onClick={(event) => onClick?.(event)} aria-label="Open dashboard" title="Dashboard" data-testid="dashboard-shortcut">
+      <a className="premium-dashboard-shortcut" href={dashboardHref} onClick={(event) => onClick?.(event)} aria-label={label} title={title} data-testid="dashboard-shortcut">
         {content}
       </a>
     );
   }
 
   return (
-    <button type="button" className="premium-dashboard-shortcut" onClick={(event) => onClick?.(event)} aria-label="Open dashboard" title="Dashboard" data-testid="dashboard-shortcut">
+    <button type="button" className="premium-dashboard-shortcut" onClick={(event) => onClick?.(event)} aria-label={label} title={title} data-testid="dashboard-shortcut">
       {content}
     </button>
   );
@@ -9909,6 +9944,9 @@ function ActionCardOverlay({
   onCreateCard,
   cardOverlayKey = "",
   className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onManageApp = null,
 }) {
   console.log("[ACTION CARDS] Overlay rendered");
 
@@ -10025,12 +10063,15 @@ function ActionCardOverlay({
         onCreateCard={onCreateCard}
         cardOverlayKey={`${cardOverlayKey}:${currentCard.id}`}
         className={className}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onManageApp={onManageApp}
       />
     </div>
   );
 }
 
-function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
+function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreateActionCard, onContinueToApp, fakeLauncherVersions, onFakeLauncherLaunch, allowBackHome = false, onDashboard, onCreateCard, cardOverlayKey = "", className = "", launcherAppId = null, launcherAppName = null, onManageApp = null }) {
   const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true })) : "";
 
   function handleContinueToApp(event) {
@@ -10073,12 +10114,15 @@ function ActionCardEmptyOverlay({ overlay, version, onClose, onLogEvent, onCreat
         onCreateCard={onCreateCard}
         cardOverlayKey={cardOverlayKey}
         className={className}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onManageApp={onManageApp}
       />
     </div>
   );
 }
 
-function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
+function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, cardOverlayKey = "", className = "", launcherAppId = null, launcherAppName = null, onManageApp = null }) {
   const actions = [
     { label: "Back home", variant: "primary", onClick: onClose },
   ];
@@ -10095,11 +10139,14 @@ function ActionSuccessOverlay({ version, onClose, onDashboard, onCreateCard, car
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onManageApp={onManageApp}
     />
   );
 }
 
-function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, onChooseElse, onDashboard, onCreateCard, cardOverlayKey = "", className = "" }) {
+function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, onChooseElse, onDashboard, onCreateCard, cardOverlayKey = "", className = "", launcherAppId = null, launcherAppName = null, onManageApp = null }) {
   const continueHref = version ? getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true })) : "";
   const actionLabel = overlay.actionLabel || "Continue";
   const actions = version
@@ -10134,6 +10181,9 @@ function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, o
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
       className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onManageApp={onManageApp}
     />
   );
 }
@@ -10682,13 +10732,24 @@ function LegalPage({ title, docUrl }) {
   );
 }
 
-function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashboard, launcherAppId = null, launcherAppName = null, onPauseApp = null, className = "" }) {
+function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashboard, onManageApp = null, launcherAppId = null, launcherAppName = null, onPauseApp = null, className = "" }) {
   const actions = [
     { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
     ...(onBack ? [{ label: "Back to MyBishBash", variant: "secondary", onClick: onBack }] : []),
   ];
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseButtonRef = useRef(null);
+  const shouldManageLauncherApp = Boolean(launcherAppId && onManageApp);
+  const dashboardLabel = shouldManageLauncherApp ? "Open app settings" : "Open dashboard";
+  const dashboardTitle = shouldManageLauncherApp ? "App settings" : "Dashboard";
+  const handleDashboardShortcut = (event) => {
+    if (shouldManageLauncherApp) {
+      event?.preventDefault?.();
+      onManageApp(launcherAppId);
+      return;
+    }
+    onDashboard?.(event);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -10705,7 +10766,7 @@ function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashb
 
   return (
     <div className={`premium-card-screen premium-card-personal ${className}`.trim()} data-testid="continue-to-app-card">
-      <PremiumDashboardShortcut onClick={onDashboard} />
+      <PremiumDashboardShortcut onClick={handleDashboardShortcut} label={dashboardLabel} title={dashboardTitle} />
       {launcherAppId && onPauseApp ? (
         <PremiumPauseShortcut
           ref={pauseButtonRef}

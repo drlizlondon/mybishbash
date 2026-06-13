@@ -733,7 +733,7 @@ test('Home commitment card distinguishes active and completed commitment states'
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('warm launch after dashboard keeps fake launcher return target', async ({ page }) => {
+test('warm launch after app settings keeps fake launcher return target', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [
@@ -750,7 +750,8 @@ test('warm launch after dashboard keeps fake launcher return target', async ({ p
   await expect(page.getByTestId('card-action-back-to-home')).toHaveCount(0);
 
   await page.getByTestId('dashboard-shortcut').click();
-  await expect(page).toHaveURL(/\/home/);
+  await expect(page).toHaveURL(/\/apps\/safari$/);
+  await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
 
   await navigateWithinApp(page, '/intercept/safari');
 

@@ -432,7 +432,7 @@ test('apps-protected-launch-paused — active pause bypasses only that app', asy
   expect(attempts).toHaveLength(0);
 });
 
-test('fake-shell-dashboard-return keeps source app shortcut on Home', async ({ page }) => {
+test('fake-shell-dashboard shortcut opens source app settings', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps5', 'Manage this app card')] });
   await page.goto('/mybishbash/intercept/safari');
 
@@ -440,10 +440,10 @@ test('fake-shell-dashboard-return keeps source app shortcut on Home', async ({ p
   await expect(page.getByTestId('manage-app-link')).toHaveCount(0);
   await page.getByTestId('dashboard-shortcut').click();
 
-  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/safari$/);
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await expect(page.getByTestId('active-protected-app-bypass')).toBeVisible();
-  await expect(page.getByTestId('active-protected-app-bypass')).toContainText('Continue to Safari');
+  await expect(page.getByTestId('protected-app-safari')).toBeVisible();
+  await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
 });
 
 test('settings-no-app-behaviour-owner — Settings no longer owns app behaviour management', async ({ page }) => {
