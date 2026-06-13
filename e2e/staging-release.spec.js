@@ -180,11 +180,9 @@ test.describe('MyBishBash staging release E2E', () => {
       const context = await browser.newContext();
       const page = await context.newPage();
       const consoleErrors = installConsoleErrorGuard(page);
-      const cardName = `QA direct ${label} ${Date.now()}`;
 
       await installDestinationCapture(page);
       await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD);
-      await createCard(page, cardName);
       await navigateWithinStaging(page, `/intercept/${launcherId}`);
       await expectInCardDirectAppButton(page, launcherId, label);
       const cardMountsBeforeTap = await page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0);
@@ -203,7 +201,6 @@ test.describe('MyBishBash staging release E2E', () => {
       await expect.poll(() => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(cardMountsBeforeTap);
       await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
 
-      await deleteCardIfPresent(page, cardName);
       await expectNoConsoleErrors(consoleErrors);
       report.checks.push({ status: 'PASS', name: `/intercept/${launcherId} in-card ${label} direct button bypasses cards` });
 
@@ -540,12 +537,4 @@ async function expectInCardDirectAppButton(page, launcherId, label) {
   await expect(appButton, `${label} in-card app-name button should be visible`).toBeVisible({ timeout: 10000 });
   await expect.poll(() => getDestinationAttempts(page), { message: `${label} should not auto-open before tapping the in-card app button` }).toHaveLength(0);
   await page.evaluate(() => { window.__MYBISHBASH_CARD_OVERLAY_MOUNTS = window.__MYBISHBASH_CARD_OVERLAY_MOUNTS ?? []; });
-}
-
-async function deleteCardIfPresent(page, cardName) {
-  try {
-    await deleteCard(page, cardName);
-  } catch (error) {
-    console.warn(`[staging-release] Could not clean up QA card "${cardName}": ${error.message}`);
-  }
 }
