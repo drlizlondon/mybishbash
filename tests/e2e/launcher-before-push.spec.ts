@@ -401,7 +401,7 @@ test('protected app source shortcut remains available across Explore Library Log
   await page.getByTestId('card-overlay-personal').getByTestId('dashboard-shortcut').click();
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  for (const tab of ['explore', 'library', 'log', 'apps'] as const) {
+  for (const tab of ['home', 'explore', 'library', 'log', 'apps'] as const) {
     await page.getByTestId(`bottom-nav-${tab}`).click();
     const shortcut = page.getByTestId('active-protected-app-bypass');
     await expect(shortcut, `Persisted Instagram shortcut should show on ${tab}`).toBeVisible();

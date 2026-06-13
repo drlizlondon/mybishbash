@@ -1699,7 +1699,7 @@ function App() {
     activeProtectedAppVersion &&
     !overlay &&
     screen === "library" &&
-    ["explore", "library", "log", "apps"].includes(activeTab),
+    ["home", "explore", "library", "log", "apps"].includes(activeTab),
   );
 
   function getFakeLauncherShellContextId() {
@@ -9347,19 +9347,6 @@ function CardRevealTemplate({
           ref={pauseButtonRef}
           onClick={() => setShowPauseModal(true)}
         />
-      ) : null}
-      {launcherAppId && onManageApp ? (
-        <button
-          type="button"
-          className="premium-dashboard-shortcut premium-manage-app-shortcut"
-          onClick={() => onManageApp(launcherAppId)}
-          aria-label={`Manage ${launcherAppName ?? launcherAppId}`}
-          title="Manage App"
-          data-testid="manage-app-link"
-        >
-          <AppsGlyph />
-          <span className="sr-only">Manage App</span>
-        </button>
       ) : null}
       {showPauseModal && launcherAppId && onPauseApp ? (
         <AppPauseModal
