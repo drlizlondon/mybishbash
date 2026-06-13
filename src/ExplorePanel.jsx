@@ -45,16 +45,40 @@ function byExploreOrder(left, right) {
   return (left.title ?? "").localeCompare(right.title ?? "");
 }
 
+function isCommitmentTemplatePack(pack) {
+  return pack?.contentType === "commitments";
+}
+
+function buildCommitmentTemplates(packs = []) {
+  return packs
+    .filter(isCommitmentTemplatePack)
+    .flatMap((pack) =>
+      (pack.entries ?? []).map((entry, index) => ({
+        id: entry.id ?? `${pack.id}:${index}`,
+        packId: pack.id,
+        packTitle: pack.title,
+        promptText: entry.promptText,
+        attribution: entry.attribution,
+        theme: pack.theme,
+        icon: pack.icon ?? "star",
+        defaults: entry.commitmentDefaults ?? {},
+      })),
+    )
+    .filter((template) => template.promptText?.trim());
+}
+
 export function buildExploreSections(packs = [], { isTester = false } = {}) {
   const visible = packs
     .filter((pack) => !pack.comingSoon && (pack.entries?.length ?? 0) > 0)
     .filter((pack) => !pack.isExperimental || isTester)
     .sort(byExploreOrder);
+  const commitmentTemplates = buildCommitmentTemplates(visible);
+  const installablePacks = visible.filter((pack) => !isCommitmentTemplatePack(pack));
 
-  const hero = visible.find((pack) => pack.isFeatured) ?? null;
+  const hero = installablePacks.find((pack) => pack.isFeatured) ?? null;
 
   const byGoal = new Map();
-  visible.forEach((pack) => {
+  installablePacks.forEach((pack) => {
     const goal = pack.goal?.trim();
     if (!goal) return;
     if (!byGoal.has(goal)) byGoal.set(goal, []);
@@ -66,9 +90,9 @@ export function buildExploreSections(packs = [], { isTester = false } = {}) {
     .map((goal) => ({ goal, packs: byGoal.get(goal) }));
 
   const sectionedIds = new Set(goalSections.flatMap((section) => section.packs.map((pack) => pack.id)));
-  const morePacks = visible.filter((pack) => !sectionedIds.has(pack.id));
+  const morePacks = installablePacks.filter((pack) => !sectionedIds.has(pack.id));
 
-  return { visible, hero, goalSections, morePacks };
+  return { visible, installablePacks, hero, goalSections, morePacks, commitmentTemplates };
 }
 
 function PremiumBadge() {
@@ -128,6 +152,21 @@ function ExploreCoverCard({ pack, onOpen }) {
   );
 }
 
+function CommitmentTemplateCard({ template, onTake }) {
+  return (
+    <article className={`explore-commitment-card theme-${getThemeClass(template.theme)}`} data-testid={`explore-commitment-template-${template.id}`}>
+      <div className="explore-commitment-copy">
+        <p className="explore-commitment-kicker">{template.packTitle}</p>
+        <h3>I will {template.promptText}</h3>
+        {template.attribution ? <p>{template.attribution}</p> : null}
+      </div>
+      <button type="button" className="explore-commitment-button" data-testid={`take-commitment-${template.id}`} onClick={() => onTake(template)}>
+        Take this commitment
+      </button>
+    </article>
+  );
+}
+
 function ExplorePackDetail({
   pack,
   isActive,
@@ -137,6 +176,7 @@ function ExplorePackDetail({
   onRemove,
   onManageCards,
   onPremiumInterest,
+  onTakeCommitment,
   onClose,
 }) {
   const previewEntries = getPreviewEntries(pack);
@@ -186,7 +226,11 @@ function ExplorePackDetail({
       </div>
 
       <footer className="explore-detail-footer">
-        {isActive ? (
+        {pack.contentType === "commitments" ? (
+          <button type="button" className="explore-install-button" data-testid="explore-take-commitment-button" onClick={() => onTakeCommitment(getPreviewEntries(pack, 1)[0], pack)}>
+            Take this commitment
+          </button>
+        ) : isActive ? (
           <div className="explore-footer-active">
             <span className="explore-active-note" data-testid="explore-active-note">Active ✓</span>
             <button type="button" className="explore-remove-button" data-testid="explore-remove-button" onClick={() => onRemove(pack.id)}>
@@ -222,11 +266,12 @@ export default function ExplorePanel({
   isTester = false,
   canUsePremiumContent = false,
   onPremiumInterest,
+  onTakeCommitment,
 }) {
   const [selectedPackId, setSelectedPackId] = useState(null);
   const [interestPackIds, setInterestPackIds] = useState(loadPremiumInterest);
 
-  const { hero, goalSections, morePacks, visible } = useMemo(
+  const { hero, goalSections, morePacks, visible, commitmentTemplates } = useMemo(
     () => buildExploreSections(packs, { isTester }),
     [packs, isTester],
   );
@@ -257,6 +302,17 @@ export default function ExplorePanel({
       </div>
 
       {hero ? <ExploreHero pack={hero} onOpen={setSelectedPackId} /> : null}
+
+      {commitmentTemplates.length > 0 ? (
+        <section className="explore-section" data-testid="explore-commitments-rail">
+          <p className="explore-section-title">Commitments</p>
+          <div className="explore-commitment-rail">
+            {commitmentTemplates.map((template) => (
+              <CommitmentTemplateCard key={template.id} template={template} onTake={onTakeCommitment} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {goalSections.map(({ goal, packs: goalPacks }) => (
         <section key={goal} className="explore-section" data-testid={`explore-goal-section-${goal.toLowerCase()}`}>
@@ -296,6 +352,19 @@ export default function ExplorePanel({
           onRemove={(packId) => onRemovePack(packId)}
           onManageCards={onManageCards}
           onPremiumInterest={handlePremiumInterest}
+          onTakeCommitment={(entry, pack) => {
+            if (!entry) return;
+            onTakeCommitment?.({
+              id: entry.id ?? `${pack.id}:detail`,
+              packId: pack.id,
+              packTitle: pack.title,
+              promptText: entry.promptText,
+              attribution: entry.attribution,
+              theme: pack.theme,
+              icon: pack.icon ?? "star",
+              defaults: entry.commitmentDefaults ?? {},
+            });
+          }}
           onClose={() => setSelectedPackId(null)}
         />,
         document.body,

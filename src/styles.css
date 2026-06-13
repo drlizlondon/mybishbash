@@ -6295,6 +6295,78 @@ body {
   overflow: hidden;
 }
 
+.explore-commitment-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 78%);
+  gap: 14px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: 2px 2px 8px;
+}
+
+.explore-commitment-card {
+  min-height: 188px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  scroll-snap-align: start;
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 241, 236, 0.92)),
+    var(--sand);
+}
+
+.explore-commitment-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.explore-commitment-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.explore-commitment-copy h3 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.28;
+  color: var(--charcoal);
+  text-wrap: balance;
+}
+
+.explore-commitment-copy p:not(.explore-commitment-kicker) {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.explore-commitment-button {
+  width: 100%;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 14px;
+  background: var(--charcoal);
+  color: var(--cream);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .explore-empty-note {
   margin: 24px 0;
   text-align: center;

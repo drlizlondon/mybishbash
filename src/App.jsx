@@ -1349,6 +1349,7 @@ function App() {
   const [launcherContext, setLauncherContext] = useState(() => getLauncherContextFromRoute(initialRoute));
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [composerInitialKind, setComposerInitialKind] = useState("personal");
+  const [composerInitialDraft, setComposerInitialDraft] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const composerReturnPathRef = useRef("/home");
   const [editingPackId, setEditingPackId] = useState(null);
@@ -4168,6 +4169,7 @@ function App() {
       });
 
       setEditingId(null);
+      setComposerInitialDraft(null);
       setIsComposerOpen(false);
 
       if (isFirstCard) {
@@ -4263,6 +4265,7 @@ function App() {
     }
 
     setEditingId(null);
+    setComposerInitialDraft(null);
     setIsComposerOpen(false);
 
     if (isFirstCard) {
@@ -4374,6 +4377,7 @@ function App() {
   function openEditor(cardId) {
     setEditingId(cardId);
     setComposerInitialKind("personal");
+    setComposerInitialDraft(null);
     composerReturnPathRef.current = route.path;
     setIsComposerOpen(true);
     setMenuOpenId(null);
@@ -4382,7 +4386,28 @@ function App() {
   function openCardComposerFromCurrentRoute(initialKind = "personal") {
     setEditingId(null);
     setComposerInitialKind(initialKind);
+    setComposerInitialDraft(null);
     composerReturnPathRef.current = route.path;
+    setIsComposerOpen(true);
+  }
+
+  function takeCommitmentTemplate(template) {
+    if (!template?.promptText?.trim()) return;
+    setEditingId(null);
+    setComposerInitialKind("commitment");
+    setComposerInitialDraft({
+      cardKind: "commitment",
+      promptText: template.promptText,
+      commitmentReason: template.defaults?.commitmentReason ?? template.defaults?.reason ?? template.attribution ?? "",
+      commitmentTimingMode: template.defaults?.commitmentTimingMode ?? "anytime",
+      commitmentCustomStartTime: template.defaults?.commitmentCustomStartTime ?? "09:00",
+      commitmentCustomEndTime: template.defaults?.commitmentCustomEndTime ?? "17:00",
+      commitmentCheckInEnabled: Boolean(template.defaults?.commitmentCheckInEnabled),
+      commitmentCheckInTime: template.defaults?.commitmentCheckInTime ?? "20:00",
+      theme: template.defaults?.theme ?? template.theme,
+      icon: template.defaults?.icon ?? template.icon ?? "star",
+    });
+    composerReturnPathRef.current = "/library";
     setIsComposerOpen(true);
   }
 
@@ -5599,6 +5624,7 @@ function App() {
                   isTester={testerStatus?.is_tester === true}
                   canUsePremiumContent={canUsePremiumContent}
                   onPremiumInterest={handlePremiumInterest}
+                  onTakeCommitment={takeCommitmentTemplate}
                 />
               ) : null}
               {activeTab === "settings" ? (
@@ -5684,12 +5710,14 @@ function App() {
 
       {isComposerOpen ? (
         <Composer
-          key={editingId ?? `new-${composerInitialKind}`}
+          key={editingId ?? `new-${composerInitialKind}-${composerInitialDraft?.promptText ?? ""}`}
           initialCard={editingCard}
           initialKind={composerInitialKind}
+          initialDraft={composerInitialDraft}
           onClose={() => {
             setEditingId(null);
             setComposerInitialKind("personal");
+            setComposerInitialDraft(null);
             composerReturnPathRef.current = "/home";
             setIsComposerOpen(false);
           }}
@@ -5935,21 +5963,21 @@ function parseBulkCards(text) {
   return cards;
 }
 
-function Composer({ initialCard, initialKind = "personal", onClose, onSave }) {
+function Composer({ initialCard, initialKind = "personal", initialDraft = null, onClose, onSave }) {
   const commitmentInputRef = useRef(null);
   const initialCardKind = initialCard ? (isCommitmentCard(initialCard) ? "commitment" : "personal") : initialKind;
   const [cardKind, setCardKind] = useState(initialCardKind);
-  const [promptText, setPromptText] = useState(initialCard?.promptText ?? "");
-  const [commitmentReason, setCommitmentReason] = useState(initialCard?.commitmentReason ?? "");
-  const [commitmentTimingMode, setCommitmentTimingMode] = useState(getCommitmentTimingOptionId(initialCard));
-  const [commitmentCustomStartTime, setCommitmentCustomStartTime] = useState(initialCard?.commitmentCustomStartTime ?? "09:00");
-  const [commitmentCustomEndTime, setCommitmentCustomEndTime] = useState(initialCard?.commitmentCustomEndTime ?? "17:00");
-  const [commitmentCheckInEnabled, setCommitmentCheckInEnabled] = useState(Boolean(initialCard?.commitmentCheckInEnabled));
-  const [commitmentCheckInTime, setCommitmentCheckInTime] = useState(initialCard?.commitmentCheckInTime ?? "20:00");
+  const [promptText, setPromptText] = useState(initialCard?.promptText ?? initialDraft?.promptText ?? "");
+  const [commitmentReason, setCommitmentReason] = useState(initialCard?.commitmentReason ?? initialDraft?.commitmentReason ?? "");
+  const [commitmentTimingMode, setCommitmentTimingMode] = useState(initialCard ? getCommitmentTimingOptionId(initialCard) : initialDraft?.commitmentTimingMode ?? "anytime");
+  const [commitmentCustomStartTime, setCommitmentCustomStartTime] = useState(initialCard?.commitmentCustomStartTime ?? initialDraft?.commitmentCustomStartTime ?? "09:00");
+  const [commitmentCustomEndTime, setCommitmentCustomEndTime] = useState(initialCard?.commitmentCustomEndTime ?? initialDraft?.commitmentCustomEndTime ?? "17:00");
+  const [commitmentCheckInEnabled, setCommitmentCheckInEnabled] = useState(initialCard ? Boolean(initialCard.commitmentCheckInEnabled) : Boolean(initialDraft?.commitmentCheckInEnabled));
+  const [commitmentCheckInTime, setCommitmentCheckInTime] = useState(initialCard?.commitmentCheckInTime ?? initialDraft?.commitmentCheckInTime ?? "20:00");
   const [bulkText, setBulkText] = useState("");
   const [isBulkMode, setIsBulkMode] = useState(false);
-  const [theme, setTheme] = useState(resolveTheme(initialCard?.theme));
-  const [icon, setIcon] = useState(initialCard?.icon ?? "heart");
+  const [theme, setTheme] = useState(resolveTheme(initialCard?.theme ?? initialDraft?.theme));
+  const [icon, setIcon] = useState(initialCard?.icon ?? initialDraft?.icon ?? "heart");
   const [frequency, setFrequency] = useState(initialCard?.frequency ?? "once_daily");
   const [timingWindows, setTimingWindows] = useState(initialCard?.timingWindows ?? ["morning", "day", "evening"]);
   const [showValidation, setShowValidation] = useState(false);

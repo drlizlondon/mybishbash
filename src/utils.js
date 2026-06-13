@@ -70,6 +70,45 @@ export const PACKS = [
     ],
   },
   {
+    id: "commitment-starters",
+    title: "Commitment Starters",
+    description: "Simple commitment templates you can make your own.",
+    theme: "Minimal",
+    icon: "star",
+    contentType: "commitments",
+    entries: [
+      {
+        id: "walk-today",
+        promptText: "go for a walk today",
+        attribution: "A small reset for body and mind.",
+        commitmentDefaults: {
+          commitmentReason: "A small reset for body and mind.",
+          commitmentTimingMode: "day",
+        },
+      },
+      {
+        id: "no-snacks-after-dinner",
+        promptText: "not eat snacks after dinner",
+        attribution: "Evening routines feel easier when they are decided in advance.",
+        commitmentDefaults: {
+          commitmentReason: "Evening routines feel easier when they are decided in advance.",
+          commitmentTimingMode: "evening",
+          commitmentCheckInEnabled: true,
+          commitmentCheckInTime: "20:30",
+        },
+      },
+      {
+        id: "patient-with-children",
+        promptText: "be patient with the children",
+        attribution: "A cue for steadiness when the house gets loud.",
+        commitmentDefaults: {
+          commitmentReason: "A cue for steadiness when the house gets loud.",
+          commitmentTimingMode: "anytime",
+        },
+      },
+    ],
+  },
+  {
     id: "extraordinary-lives",
     title: "Extraordinary Lives",
     description: "Real lives, real sources, small moments that widen the day.",

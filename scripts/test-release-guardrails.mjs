@@ -110,10 +110,15 @@ assertMatch("Explore tab renders ExplorePanel", appSource, /activeTab === "explo
 assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
 assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
+assertMatch("Explore commitment templates open the normal commitment composer", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,360}setComposerInitialKind\("commitment"\)/);
+assertMatch("Explore commitment templates return to Library after save", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,900}composerReturnPathRef\.current = "\/library"/);
+assertNoMatch("PR3 does not introduce installed commitments", appSource + exploreSource, /installedCommitment|commitmentInstall|activateCommitment|installed commitment/i);
 assertNoMatch("Settings no longer owns protected app management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
 assertMatch("Apps owns protected app management", appSource, /data-testid="protected-apps-list"/);
 assertMatch("Apps exposes app interruption toggles", appSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
+assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="explore-commitments-rail"/);
+assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /Take this commitment/);
 // Generated covers are the standard cover system; uploads are an optional
 // override and a missing upload is never treated as an incomplete pack.
 assertMatch("Explore renders generated covers when no upload exists", exploreSource, /pack\.coverImageUrl\) \{\s*return <img[\s\S]{0,200}<GeneratedPackCover/);

@@ -85,6 +85,36 @@ test('pack cover detail installs and removes a pack', async ({ page }) => {
   await expect(page.getByTestId('explore-install-button')).toBeVisible();
 });
 
+test('Explore commitment templates create normal Commitment Cards', async ({ page }) => {
+  await seedE2EState(page);
+  await page.goto('/mybishbash/explore');
+
+  const rail = page.getByTestId('explore-commitments-rail');
+  await expect(rail).toBeVisible();
+  await expect(rail).toContainText('Commitment Starters');
+
+  await page.getByTestId('take-commitment-walk-today').click();
+  await expect(page.getByTestId('card-composer')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Commitment Card' })).toHaveClass(/selected/);
+  await expect(page.getByTestId('commitment-text-input')).toHaveValue('go for a walk today');
+  await expect(page.getByTestId('commitment-reason-input')).toHaveValue('A small reset for body and mind.');
+
+  await page.getByTestId('save-commitment-card-button').click();
+  await expect(page.getByTestId('library-commitment-section')).toBeVisible();
+  await page.getByTestId('library-commitment-section-toggle').click();
+  await expect(page.getByTestId('library-commitment-section')).toContainText('go for a walk today');
+  await expect(page.getByTestId('library-active-packs-section')).not.toContainText('Commitment Starters');
+
+  await expect.poll(async () => {
+    const cards = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'));
+    return cards.some((card: Record<string, unknown>) =>
+      card.cardKind === 'commitment' &&
+      card.promptText === 'go for a walk today' &&
+      !card.sourcePackId
+    );
+  }).toBe(true);
+});
+
 test('Library shows all four sections including Do Instead Cards', async ({ page }) => {
   await seedE2EState(page);
   await page.goto('/mybishbash/library');
