@@ -129,11 +129,14 @@ assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="e
 assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /Take this commitment/);
 // Generated covers are the standard cover system. Uploaded artwork remains a
 // data-level override, but the default path needs no manual cover design.
-assertMatch("Explore renders uploaded covers as an override before generated covers", exploreSource, /if \(pack\.coverImageUrl\) \{[\s\S]{0,160}return <img[\s\S]{0,220}return <GeneratedPackCover/);
+assertMatch("Explore renders uploaded covers as an override before generated covers", exploreSource, /if \(pack\?\.coverImageUrl\) \{[\s\S]{0,160}return <img[\s\S]{0,220}return <GeneratedPackCover/);
+assertNoMatch("Explore cover override does not assume pack is defined", exploreSource, /if \(pack\.coverImageUrl\)/);
 assertMatch("Generated covers use the fixed premium palette", generatedCoverModelSource, /COVER_PALETTES[\s\S]{0,1600}plum[\s\S]{0,1600}navy[\s\S]{0,1600}teal[\s\S]{0,1600}forest[\s\S]{0,1600}burgundy[\s\S]{0,1600}copper[\s\S]{0,1600}charcoal[\s\S]{0,1600}midnight-blue/);
 assertNoMatch("Generated covers do not define texture or accent systems", generatedCoverModelSource + generatedCoverSource + stylesSource, /COVER_TEXTURES|COVER_ACCENTS|generated-cover-texture|generated-cover-accent-|cover-accent/);
 assertNoMatch("Generated covers do not depend on goals, themes, or categories", generatedCoverModelSource + generatedCoverSource, /pack\.(goal|theme|category)|getGoalStyle|GOAL_STYLES/);
 assertNoMatch("Generated cover art does not typeset preview quotes", generatedCoverModelSource + generatedCoverSource, /promptText|isPreview|getHookQuote|generated-cover-quote/);
+assertMatch("GeneratedPackCover catches cover model failures before app render can crash", generatedCoverSource, /function getSafeCoverModel[\s\S]{0,900}try \{[\s\S]{0,900}catch \{/);
+assertMatch("GeneratedPackCover has component-level fallback palette", generatedCoverSource, /FALLBACK_PALETTE[\s\S]{0,240}charcoal/);
 assertNoMatch("HQ never frames a missing upload as a defect", hqSource, /No cover|Missing cover|Cover required/i);
 assertNoMatch("HQ auto cover copy does not imply goal or preview quote inputs", hqSource, /Auto cover[^"]*(goal|first preview|preview card)/i);
 assertMatch("HQ labels covers as Auto cover only", hqSource, />Auto cover<\/span>/);

@@ -4,6 +4,46 @@
 import { getCoverModel } from "./lib/generatedCover";
 
 const LOGO_SRC = "/mybishbash/icons/mybishbash-cover.png";
+const FALLBACK_PALETTE = {
+  name: "charcoal",
+  bg: "#211f1d",
+  bg2: "#3b3732",
+  ink: "#fff8ec",
+  muted: "#d8cab4",
+};
+const FALLBACK_MODEL = {
+  titleLines: ["Untitled Pack"],
+  titleScale: "medium",
+  titleSize: "9.00cqw",
+  tagline: "",
+  cardCountLabel: "",
+  statusBadge: "",
+  palette: FALLBACK_PALETTE,
+  angle: 145,
+  spotX: 45,
+  spotY: 36,
+};
+
+function getSafeCoverModel(pack, options) {
+  try {
+    const model = getCoverModel(pack, options) ?? {};
+    const palette = model.palette ?? FALLBACK_PALETTE;
+    const titleLines = Array.isArray(model.titleLines) && model.titleLines.length > 0
+      ? model.titleLines.map((line) => String(line || "").trim()).filter(Boolean)
+      : FALLBACK_MODEL.titleLines;
+
+    return {
+      ...FALLBACK_MODEL,
+      ...model,
+      palette: { ...FALLBACK_PALETTE, ...palette },
+      titleLines: titleLines.length > 0 ? titleLines : FALLBACK_MODEL.titleLines,
+      titleScale: model.titleScale || FALLBACK_MODEL.titleScale,
+      titleSize: model.titleSize || FALLBACK_MODEL.titleSize,
+    };
+  } catch {
+    return FALLBACK_MODEL;
+  }
+}
 
 export default function GeneratedPackCover({
   pack,
@@ -12,7 +52,7 @@ export default function GeneratedPackCover({
   isActive = false,
   locked = false,
 }) {
-  const model = getCoverModel(pack, { variant, isActive, locked });
+  const model = getSafeCoverModel(pack, { variant, isActive, locked });
   const variantClass = variant === "bare" ? "bare" : variant;
 
   return (

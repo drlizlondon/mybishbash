@@ -9,6 +9,9 @@ const COVER_PALETTES = [
   { name: "midnight-blue", bg: "#101522", bg2: "#28364f", ink: "#fff6d9", muted: "#c4cce0" },
 ];
 
+export const DEFAULT_COVER_PALETTE = COVER_PALETTES[6];
+const DEFAULT_TITLE = "Untitled Pack";
+
 export function hashSeed(value) {
   let hash = 2166136261;
   const text = String(value ?? "");
@@ -81,7 +84,7 @@ function greedyLines(words, lineCount) {
 }
 
 export function splitTitleIntoLines(title) {
-  const clean = cleanText(title || "Untitled Pack");
+  const clean = cleanText(title || DEFAULT_TITLE) || DEFAULT_TITLE;
   const words = clean.split(" ").filter(Boolean);
   if (words.length <= 1) return [clean];
 
@@ -99,8 +102,9 @@ export function splitTitleIntoLines(title) {
 }
 
 function getTitleMetrics(lines, variant) {
-  const longestLine = Math.max(...lines.map((line) => line.length), 1);
-  const lineCount = Math.max(lines.length, 1);
+  const safeLines = Array.isArray(lines) && lines.length > 0 ? lines.filter(Boolean) : [DEFAULT_TITLE];
+  const longestLine = Math.max(...safeLines.map((line) => String(line).length), 1);
+  const lineCount = Math.max(safeLines.length, 1);
   const widthLimit = 150 / longestLine;
   const heightLimit = (variant === "detail" ? 42 : 33) / lineCount;
   const baseLimit = variant === "detail" ? 13.5 : 12.5;
@@ -110,18 +114,18 @@ function getTitleMetrics(lines, variant) {
 }
 
 export function getCoverModel(pack, { variant = "grid", isActive = false, locked = false } = {}) {
-  const title = cleanText(pack?.title || "Untitled Pack");
+  const title = cleanText(pack?.title || DEFAULT_TITLE) || DEFAULT_TITLE;
   const seed = hashSeed(pack?.id ?? title);
-  const palette = COVER_PALETTES[seed % COVER_PALETTES.length];
+  const palette = COVER_PALETTES[seed % COVER_PALETTES.length] ?? DEFAULT_COVER_PALETTE;
   const cardCount = getCardCount(pack);
-  const titleLines = splitTitleIntoLines(title);
+  const titleLines = splitTitleIntoLines(title).filter(Boolean);
   const titleMetrics = getTitleMetrics(titleLines, variant);
 
   return {
     title,
-    titleLines,
-    titleScale: titleMetrics.scale,
-    titleSize: `${titleMetrics.size.toFixed(2)}cqw`,
+    titleLines: titleLines.length > 0 ? titleLines : [DEFAULT_TITLE],
+    titleScale: titleMetrics.scale || "medium",
+    titleSize: `${Number.isFinite(titleMetrics.size) ? titleMetrics.size.toFixed(2) : "9.00"}cqw`,
     tagline: getCoverTagline(pack),
     cardCount,
     cardCountLabel: cardCount > 0 ? `${cardCount} ${cardCount === 1 ? "CARD" : "CARDS"}` : "",

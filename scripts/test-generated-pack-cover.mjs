@@ -54,4 +54,19 @@ const statusModel = getCoverModel({
 
 assert.equal(statusModel.statusBadge, "INSTALLED", "only one status badge is shown with deterministic priority");
 
+const defensiveCases = [
+  { label: "undefined pack", pack: undefined, expectedTitle: "Untitled Pack" },
+  { label: "minimal pack", pack: {}, expectedTitle: "Untitled Pack" },
+  { label: "missing title", pack: { id: "missing-title", entries: [] }, expectedTitle: "Untitled Pack" },
+  { label: "empty entries and cards", pack: { id: "empty-pack", title: "Empty Pack", entries: [], cards: [] }, expectedTitle: "Empty Pack" },
+];
+
+for (const { label, pack, expectedTitle } of defensiveCases) {
+  const model = getCoverModel(pack);
+  assert.equal(model.title, expectedTitle, `${label} uses safe title`);
+  assert.ok(model.palette?.name, `${label} uses safe palette`);
+  assert.ok(Array.isArray(model.titleLines) && model.titleLines.length > 0, `${label} has title lines`);
+  assert.doesNotThrow(() => getCoverModel(pack), `${label} model generation does not throw`);
+}
+
 console.log("Generated pack cover guardrails passed.");

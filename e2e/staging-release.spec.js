@@ -66,6 +66,30 @@ test.describe('MyBishBash staging release E2E', () => {
     await context.close();
   });
 
+  test('existing account renders Explore and HQ without auth bounce', async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const consoleErrors = installConsoleErrorGuard(page);
+
+    await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD, '/explore');
+    await expect(page.getByTestId('explore-panel')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('sync-screen')).toHaveCount(0);
+    await expect(page.getByLabel(/email/i)).toHaveCount(0);
+
+    await navigateWithinStaging(page, '/hq');
+    await expect(
+      page.getByTestId('hq-generated-cover-preview')
+        .or(page.getByText(/must be an admin/i))
+        .or(page.getByTestId('app-shell')),
+    ).toBeVisible({ timeout: 30000 });
+    await expect(page.getByLabel(/email/i)).toHaveCount(0);
+    await expectNoCrashState(page);
+    await expectNoConsoleErrors(consoleErrors);
+    report.checks.push({ status: 'PASS', name: 'Authenticated Explore/HQ render without auth bounce' });
+
+    await context.close();
+  });
+
   test('brand-new account signup or login reaches a safe app state', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
