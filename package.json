@@ -21,6 +21,7 @@
     "test:release-guardrails": "node scripts/test-release-guardrails.mjs",
     "test:e2e": "playwright test",
     "test:launcher-qa": "playwright test tests/e2e/launcher-flow-trace.spec.ts",
+    "test:prelaunch-interactions": "playwright test tests/e2e/library-bottom-nav.spec.ts",
     "test:before-push": "node scripts/test-before-push.mjs",
     "test:launcher-exhaustive": "playwright test tests/e2e/launcher-terminal-exhaustive.spec.ts",
     "test:launcher-shell-repeat": "playwright test tests/e2e/launcher-shell-repeat.spec.ts",
