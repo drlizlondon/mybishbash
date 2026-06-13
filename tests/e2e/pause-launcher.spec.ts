@@ -364,8 +364,12 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
 
   await expect(page.getByTestId('apps-panel')).toBeVisible();
   await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
-  await expect(page.getByTestId('protected-apps-list')).toBeVisible();
+  await expect(page.getByTestId('apps-list')).toBeVisible();
   await expect(page.getByTestId('apps-direct-open-safari')).toHaveText('Test direct open');
+  await expect(page.getByTestId('bottom-nav-settings')).toHaveCount(0);
+  await expect(page.getByTestId('settings-gear')).toBeVisible();
+  const navLabels = await page.locator('.bottom-nav .nav-item span').allTextContents();
+  expect(navLabels).toEqual(['Home', 'Library', 'Log', 'Explore', 'Apps']);
 });
 
 test('home-no-global-fake-launchers — Home no longer shows all fake app shortcut buttons', async ({ page }) => {
@@ -440,12 +444,12 @@ test('fake-shell-manage-link — fake shell links back to Apps for the current a
   await expect(page.getByTestId('protected-app-safari')).toBeVisible();
 });
 
-test('settings-no-protected-app-owner — Settings no longer owns protected app management', async ({ page }) => {
+test('settings-no-app-behaviour-owner — Settings no longer owns app behaviour management', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps6', 'Settings ownership card')] });
   await page.goto('/mybishbash/settings');
 
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await expect(page.getByTestId('protected-apps-list')).toHaveCount(0);
+  await expect(page.getByTestId('apps-list')).toHaveCount(0);
   await expect(page.getByText('Home Screen Shortcuts')).toHaveCount(0);
 });
 

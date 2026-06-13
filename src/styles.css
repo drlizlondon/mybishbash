@@ -222,6 +222,7 @@ textarea {
 }
 
 .add-button,
+.settings-gear-button,
 .preview-button,
 .save-button,
 .action-button,
@@ -236,6 +237,7 @@ textarea {
 }
 
 .add-button:active,
+.settings-gear-button:active,
 .preview-button:active,
 .save-button:active,
 .action-button:active,
@@ -260,6 +262,27 @@ textarea {
   line-height: 1;
   box-shadow: 0 18px 38px rgba(232, 118, 97, 0.28);
   z-index: 10;
+}
+
+.settings-gear-button {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  color: #2e2a28;
+  box-shadow: 0 8px 20px rgba(46, 42, 40, 0.08);
+  z-index: 10;
+}
+
+.settings-gear-button svg {
+  width: 20px;
+  height: 20px;
 }
 
 .content {
@@ -4099,6 +4122,7 @@ textarea {
   }
 
   .add-button,
+  .settings-gear-button,
   .preview-button,
   .save-button,
   .action-button,
@@ -4697,6 +4721,7 @@ body {
 }
 
 .add-button:active,
+.settings-gear-button:active,
 .preview-button:active,
 .save-button:active,
 .action-button:active,

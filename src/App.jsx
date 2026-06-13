@@ -5543,6 +5543,7 @@ function App() {
           <div className="app-inner">
             <Masthead
               onCreate={openCardComposerFromCurrentRoute}
+              onOpenSettings={() => navigateTo("/settings")}
             />
 
             <main className="content">
@@ -5673,10 +5674,6 @@ function App() {
               <HomeGlyph />
               <span>Home</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => navigateTo("/explore")}>
-              <PacksGlyph />
-              <span>Explore</span>
-            </button>
             <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => navigateTo("/library")}>
               <BookGlyph />
               <span>Library</span>
@@ -5684,6 +5681,10 @@ function App() {
             <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} data-testid="bottom-nav-log" onClick={() => navigateTo("/log")}>
               <LogGlyph />
               <span>Log</span>
+            </button>
+            <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => navigateTo("/explore")}>
+              <PacksGlyph />
+              <span>Explore</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "apps" ? "active" : ""}`} data-testid="bottom-nav-apps" onClick={() => navigateTo("/apps")}>
               <AppsGlyph />
@@ -6382,7 +6383,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
   );
 }
 
-function Masthead({ onCreate }) {
+function Masthead({ onCreate, onOpenSettings }) {
   return (
     <header className="hero">
       <div className="hero-copy">
@@ -6390,6 +6391,16 @@ function Masthead({ onCreate }) {
           <HeartGlyph />
         </div>
       </div>
+      <button
+        type="button"
+        className="settings-gear-button"
+        data-testid="settings-gear"
+        onClick={onOpenSettings}
+        aria-label="Settings"
+        title="Settings"
+      >
+        <SettingsGlyph />
+      </button>
       <button
         type="button"
         className="add-button"
@@ -6430,11 +6441,11 @@ function HomePanel({
       </div>
       <div className="card-stack" data-testid="home-dashboard-summary">
         <article className="home-empty-card">
-          <h3>{protectedCount} protected app{protectedCount === 1 ? "" : "s"}</h3>
+          <h3>{protectedCount} app{protectedCount === 1 ? "" : "s"} set up</h3>
           <p>
             {activePauseStatuses.length > 0
               ? `${activePauseStatuses.length} pause${activePauseStatuses.length === 1 ? "" : "s"} active right now.`
-              : "MyBishBash is ready when a protected shortcut opens."}
+              : "MyBishBash is ready when an app shortcut opens."}
           </p>
         </article>
 
@@ -7797,13 +7808,13 @@ function AppsPanel({
       <div className="section-heading solo">
         <div>
           <h2>Apps</h2>
-          <p>Protected apps, pauses and shortcut setup.</p>
+          <p>My Apps, pauses and shortcut setup.</p>
         </div>
       </div>
 
       <div className="settings-card settings-compact" data-testid="apps-status-summary">
         <div className="settings-version-heading">
-          <p>{protectedCount} protected app{protectedCount === 1 ? "" : "s"}</p>
+          <p>{protectedCount} app{protectedCount === 1 ? "" : "s"} set up</p>
           <span>
             {activePauses.length > 0
               ? `${activePauses.length} active pause${activePauses.length === 1 ? "" : "s"}`
@@ -7846,13 +7857,13 @@ function AppsPanel({
         </div>
       ) : null}
 
-      <div className="settings-card" data-testid="protected-apps-list">
+      <div className="settings-card" data-testid="apps-list">
         <div className="settings-version-heading">
-          <p>Protected apps</p>
-          <span>Protected launch opens MyBishBash first. Direct test open skips cards by design.</span>
+          <p>My Apps</p>
+          <span>App shortcuts open MyBishBash first. Direct test open skips cards by design.</span>
         </div>
         {protectedAppStatuses.length === 0 ? (
-          <p className="tiny-note">No protected apps are available for this account yet.</p>
+          <p className="tiny-note">No apps are available for setup yet.</p>
         ) : (
           <>
             <label className="field" style={{ marginBottom: "16px" }}>
@@ -7907,7 +7918,7 @@ function ProtectedAppCard({
       <button
         type="button"
         className="home-screen-version-icon-link"
-        aria-label={`Protected launch ${version.name}`}
+        aria-label={`Open ${version.name} through MyBishBash`}
         data-testid={`apps-protected-launch-${version.id}`}
         onClick={() => onProtectedLaunch(version.id)}
       >
@@ -7921,7 +7932,7 @@ function ProtectedAppCard({
         <div className="home-screen-version-title">
           <strong>{version.name ?? version.displayName}</strong>
         </div>
-        <p>{description ?? `Protected shortcut for ${version.name ?? version.id}.`}</p>
+        <p>{description ?? `App setup for ${version.name ?? version.id}.`}</p>
         <p className="tiny-note" data-testid={`apps-pause-status-${version.id}`}>
           {paused ? `Paused: ${pauseRemaining || "ending soon"}` : "Not paused"}
         </p>
@@ -7951,7 +7962,7 @@ function ProtectedAppCard({
             data-testid={`apps-interruptions-toggle-${version.id}`}
             onChange={(event) => onSaveVersionBehavior(version.id, { useInterruptionPack: event.target.checked })}
           />
-          <span>{protectedOn ? "Protected on" : "Protected off"}</span>
+          <span>{protectedOn ? "MyBishBash on" : "MyBishBash off"}</span>
         </label>
         {paused ? (
           <button
@@ -9230,11 +9241,11 @@ function CardRevealTemplate({
           className="premium-dashboard-shortcut premium-manage-app-shortcut"
           onClick={() => onManageApp(launcherAppId)}
           aria-label={`Manage ${launcherAppName ?? launcherAppId}`}
-          title="Manage this app"
+          title="Manage App"
           data-testid="manage-app-link"
         >
           <AppsGlyph />
-          <span className="sr-only">Manage this app</span>
+          <span className="sr-only">Manage App</span>
         </button>
       ) : null}
       {showPauseModal && launcherAppId && onPauseApp ? (

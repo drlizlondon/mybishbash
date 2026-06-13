@@ -103,19 +103,23 @@ assertMatch("Composer can open in section-specific creation modes", appSource, /
 assertMatch("Library section plus has its own click target", appSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
 assertMatch("Library section toggle remains separate from plus", appSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
 // Explore replaced the Packs tab (docs/explore-architecture.md): discovery in
-// ExplorePanel, protected app management in Apps, action cards in Library →
+// ExplorePanel, app behaviour in Apps, action cards in Library →
 // Do Instead Cards.
 assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
 assertMatch("Explore tab renders ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<ExplorePanel/);
 assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
 assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
+assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /<nav className="bottom-nav"[\s\S]*data-testid="bottom-nav-home"[\s\S]*data-testid="bottom-nav-library"[\s\S]*data-testid="bottom-nav-log"[\s\S]*data-testid="bottom-nav-explore"[\s\S]*data-testid="bottom-nav-apps"[\s\S]*<\/nav>/);
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
+assertNoMatch("bottom nav no longer exposes Settings", appSource, /data-testid="bottom-nav-settings"/);
+assertMatch("Settings is reachable from the masthead affordance", appSource, /data-testid="settings-gear"/);
 assertMatch("Explore commitment templates open the normal commitment composer", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,360}setComposerInitialKind\("commitment"\)/);
 assertMatch("Explore commitment templates return to Library after save", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,900}composerReturnPathRef\.current = "\/library"/);
 assertNoMatch("PR3 does not introduce installed commitments", appSource + exploreSource, /installedCommitment|commitmentInstall|activateCommitment|installed commitment/i);
-assertNoMatch("Settings no longer owns protected app management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
-assertMatch("Apps owns protected app management", appSource, /data-testid="protected-apps-list"/);
+assertNoMatch("Settings no longer owns app behaviour management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
+assertMatch("Apps owns app behaviour management", appSource, /data-testid="apps-list"/);
 assertMatch("Apps exposes app interruption toggles", appSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
+assertNoMatch("Primary app copy avoids protected-apps language", appSource, />[^<]*protected app/i);
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
 assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="explore-commitments-rail"/);
 assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /Take this commitment/);

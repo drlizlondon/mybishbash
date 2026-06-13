@@ -1036,7 +1036,7 @@ const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], i
         title="Supported Launcher Performance"
         subtitle="Install views, installs, interruption opens, Do Something Else, Continue to app, and settings for supported launchers."
       />
-      <GlassPanel title="Protected Apps" subtitle={`Code-reviewed launchers (${supportedLauncherNames}) can be edited and go live; HQ-created apps stay admin-only drafts until a reviewed release ships their routes. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
+      <GlassPanel title="App Setup" subtitle={`Code-reviewed launchers (${supportedLauncherNames}) can be edited and go live; HQ-created apps stay admin-only drafts until a reviewed release ships their routes. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
         <div className="grid gap-4 xl:grid-cols-3">
           {(launchers.length ? launchers : FAKE_APP_LAUNCHERS).map((launcher) => (
             <LauncherConfigCard
