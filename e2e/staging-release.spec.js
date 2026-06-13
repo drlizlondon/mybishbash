@@ -32,6 +32,12 @@ const safariDesktopDestination = /^https:\/\/www\.google\.com$/i;
 const safariIOSDestination = /^x-safari-https:\/\/www\.google\.com$/i;
 const safariDestination = /^(https:\/\/www\.google\.com|x-safari-https:\/\/www\.google\.com)$/i;
 const safariMarketingDestination = /apple\.com\/safari/i;
+const directAppSmokeTargets = {
+  safari: { label: 'Safari', expected: safariDestination },
+  instagram: { label: 'Instagram', expected: /^instagram:\/\/app$/i },
+  youtube: { label: 'YouTube', expected: /^youtube:\/\//i },
+  whatsapp: { label: 'WhatsApp', expected: /^https:\/\/api\.whatsapp\.com\/send/i },
+};
 
 test.describe('MyBishBash staging release E2E', () => {
   test.skip(Boolean(skipReason), skipReason ?? '');
@@ -165,6 +171,66 @@ test.describe('MyBishBash staging release E2E', () => {
     expect(latest.href).not.toMatch(safariMarketingDestination);
     await expectNoConsoleErrors(consoleErrors);
     report.checks.push({ status: 'PASS', name: '/intercept/safari interruption and continue-to-app' });
+
+    await context.close();
+  });
+
+  for (const [launcherId, { label, expected }] of Object.entries(directAppSmokeTargets)) {
+    test(`/intercept/${launcherId} in-card ${label} button opens the real app destination`, async ({ browser }) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      const consoleErrors = installConsoleErrorGuard(page);
+      const cardName = `QA direct ${label} ${Date.now()}`;
+
+      await installDestinationCapture(page);
+      await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD);
+      await createCard(page, cardName);
+      await navigateWithinStaging(page, `/intercept/${launcherId}`);
+      await expectInCardDirectAppButton(page, launcherId, label, cardName);
+      const cardMountsBeforeTap = await page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0);
+
+      await page.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true }).click();
+      const latest = await waitForDestinationAttempt(page);
+      expect(latest.href, `${label} in-card app button should open the real destination`).toMatch(expected);
+      expect(latest.href).not.toContain('/intercept/');
+      expect(latest.href).not.toContain('/launch/');
+      expect(latest.metadata).toMatchObject({
+        versionId: launcherId,
+        source: 'in_card_app_button',
+        reason: 'user_pressed_real_app_button',
+      });
+      await expect(page).toHaveURL(new RegExp(`/intercept/${launcherId}$`));
+      await expect.poll(() => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(cardMountsBeforeTap);
+      await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+
+      await deleteCardIfPresent(page, cardName);
+      await expectNoConsoleErrors(consoleErrors);
+      report.checks.push({ status: 'PASS', name: `/intercept/${launcherId} in-card ${label} direct button bypasses cards` });
+
+      await context.close();
+    });
+  }
+
+  test('fake launcher entry points still trigger cards instead of direct app opens', async ({ browser }) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const consoleErrors = installConsoleErrorGuard(page);
+
+    await installDestinationCapture(page);
+    await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD, '/apps');
+    await expect(page.getByTestId('apps-panel')).toBeVisible();
+
+    for (const launcherId of ['safari', 'instagram', 'youtube']) {
+      await page.getByTestId('apps-select').selectOption(launcherId);
+      await page.getByTestId(`apps-protected-launch-${launcherId}`).click();
+      await expectSafeInterceptState(page);
+      await expect.poll(() => getDestinationAttempts(page), { message: `${launcherId} fake launcher should not directly open destination` }).toHaveLength(0);
+      await navigateWithinStaging(page, '/apps');
+      await expect(page.getByTestId('apps-panel')).toBeVisible();
+    }
+
+    await expectNoConsoleErrors(consoleErrors);
+    report.checks.push({ status: 'PASS', name: 'Fake launcher entry points still trigger cards' });
 
     await context.close();
   });
@@ -466,4 +532,20 @@ async function clickContinueToApp(page) {
     .or(page.getByRole('button', { name: /continue to safari|continue to app/i }))
     .or(page.getByRole('link', { name: /continue to safari|continue to app/i }));
   await continueButton.first().click();
+}
+
+async function expectInCardDirectAppButton(page, launcherId, label, cardName) {
+  await expect(page.getByTestId('card-overlay-personal').getByText(cardName)).toBeVisible({ timeout: 30000 });
+  const appButton = page.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true });
+  await expect(appButton, `${label} in-card app-name button should be visible`).toBeVisible({ timeout: 10000 });
+  await expect.poll(() => getDestinationAttempts(page), { message: `${label} should not auto-open before tapping the in-card app button` }).toHaveLength(0);
+  await page.evaluate(() => { window.__MYBISHBASH_CARD_OVERLAY_MOUNTS = window.__MYBISHBASH_CARD_OVERLAY_MOUNTS ?? []; });
+}
+
+async function deleteCardIfPresent(page, cardName) {
+  try {
+    await deleteCard(page, cardName);
+  } catch (error) {
+    console.warn(`[staging-release] Could not clean up QA card "${cardName}": ${error.message}`);
+  }
 }
