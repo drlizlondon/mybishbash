@@ -33,7 +33,7 @@ function smokeCard(id: string, promptText: string) {
     theme: 'Minimal',
     icon: 'heart',
     frequency: 'once_daily',
-    timingWindows: ['morning', 'day', 'evening'],
+    timingWindows: ['morning', 'day', 'evening', 'night'],
     paused: false,
     disliked: false,
     deletedAt: null,
@@ -67,7 +67,14 @@ function actionCard(id: string, title: string, launchUrl: string) {
 }
 
 function currentDateKey() {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
 function commitmentCard(id: string, promptText: string, overrides: Record<string, unknown> = {}) {
@@ -660,6 +667,23 @@ test('basic card create, open, complete flow does not immediately reappear', asy
   await expectNoConsoleErrors(consoleErrors);
 });
 
+test('newly created card is persisted locally before cloud sync', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+  await page.getByTestId('create-card-button').click();
+  await page.getByTestId('card-prompt-input').fill('E2E reload-persisted card');
+  await page.getByTestId('save-card-button').click();
+  await expect(page.getByText('Saved “E2E reload-persisted card”.')).toBeVisible();
+  const localMatchCount = await page.evaluate(() => {
+    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]');
+    return cards.filter((card: Record<string, string>) => card.promptText === 'E2E reload-persisted card').length;
+  });
+  expect(localMatchCount).toBe(1);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
 test('mobile viewport keeps bottom nav and fake launcher destination behaviour working', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -690,11 +714,13 @@ test('Home empty states use calm copy without stacked zero language', async ({ p
   const summary = page.getByTestId('home-dashboard-summary');
   await expect(summary).toContainText('You’re all clear today');
   await expect(summary).toContainText('Nothing needs your attention.');
-  await expect(summary).toContainText('Commitments');
+  await expect(summary).toContainText('No live commitment');
   await expect(summary).toContainText('You’re clear for now.');
+  await expect(summary).toContainText('Read tonight');
+  await expect(summary).toContainText('Go for a walk');
+  await expect(summary).toContainText('Drink more water');
   await expect(summary).toContainText('Create commitment');
   await expect(summary).not.toContainText('No personal cards today');
-  await expect(summary).not.toContainText('No live commitment');
   await expect(summary).not.toContainText('0 live commitments');
   await expect(page.locator('.home-progress-number')).toHaveText('0');
   await expectNoConsoleErrors(consoleErrors);
@@ -712,7 +738,7 @@ test('Home commitment card distinguishes active and completed commitment states'
     ],
   });
   await gotoApp(page, '/home');
-  await expect(page.getByTestId('home-live-commitment-card')).toContainText('Live commitment');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('Commitment');
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('go for a walk today');
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('1 live commitment');
 
@@ -727,7 +753,7 @@ test('Home commitment card distinguishes active and completed commitment states'
   await gotoApp(page, '/home');
   const completedCard = page.getByTestId('home-live-commitment-card');
   await expect(completedCard).toContainText('Commitments complete');
-  await expect(completedCard).toContainText('Nothing active right now.');
+  await expect(completedCard).toContainText('You’re clear for now.');
   await expect(completedCard).not.toContainText('No active commitments');
   await expect(completedCard).not.toContainText('0 live commitments');
   await expectNoConsoleErrors(consoleErrors);

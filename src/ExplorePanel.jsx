@@ -47,6 +47,10 @@ function isCommitmentTemplatePack(pack) {
   return pack?.contentType === "commitments";
 }
 
+function isAppPack(pack) {
+  return pack?.contentType === "app-pack";
+}
+
 function buildCommitmentTemplates(packs = []) {
   return packs
     .filter(isCommitmentTemplatePack)
@@ -71,18 +75,23 @@ export function buildExploreSections(packs = [], { isTester = false } = {}) {
     .filter((pack) => !pack.isExperimental || isTester)
     .sort(byExploreOrder);
   const commitmentTemplates = buildCommitmentTemplates(visible);
-  const installablePacks = visible.filter((pack) => !isCommitmentTemplatePack(pack));
+  const installablePacks = visible.filter((pack) => !isCommitmentTemplatePack(pack) && !isAppPack(pack));
+  const appPacks = visible.filter(isAppPack);
+  const recommended = appPacks.slice(0, 2);
+  const personalGrowth = installablePacks.filter((pack) => /growth|motivation|quote|lives|letters|courage/i.test(`${pack.title} ${pack.description}`));
+  const morePacks = installablePacks.filter((pack) => !personalGrowth.includes(pack));
 
-  return { visible, installablePacks, commitmentTemplates };
+  return { visible, installablePacks, appPacks, recommended, personalGrowth, morePacks, commitmentTemplates };
 }
 
 function PremiumBadge() {
   return <span className="explore-premium-badge">Premium</span>;
 }
 
-function getExploreCoverStateLabel({ isActive, locked }) {
+function getExploreCoverStateLabel({ isActive, locked, isUsingNow = false }) {
   if (locked) return "COMING SOON";
-  return isActive ? "✓ Added" : "+ Add";
+  if (isUsingNow) return "Using Now";
+  return isActive ? "Installed" : "+ Add";
 }
 
 // Generated covers are the standard pack artwork; uploaded cover art remains
@@ -94,24 +103,40 @@ export function ExploreCoverArt({ pack, className, variant = "grid", isActive = 
   return <GeneratedPackCover pack={pack} variant={variant} className={className} isActive={isActive} locked={locked} />;
 }
 
-function ExploreCoverCard({ pack, isActive, locked, onOpen }) {
+function PackBadges({ installed, active, usingNow }) {
+  const badges = [
+    installed ? "Installed" : null,
+    active ? "Active" : null,
+    usingNow ? "Using Now" : null,
+  ].filter(Boolean);
+  if (badges.length === 0) return null;
+  return (
+    <span className="explore-pack-badges" aria-label={badges.join(", ")}>
+      {badges.map((badge) => <span key={badge}>{badge}</span>)}
+    </span>
+  );
+}
+
+function ExploreCoverCard({ pack, isActive, isUsingNow = false, locked, onOpen }) {
   const cardCount = pack.entries?.length ?? 0;
+  const active = isActive || isUsingNow;
   return (
     <button
       type="button"
-      className={`explore-cover-card${isActive ? " is-active" : ""}`}
+      className={`explore-cover-card${active ? " is-active" : ""}`}
       data-testid={`explore-pack-card-${pack.id}`}
       onClick={() => onOpen(pack.id)}
     >
       <span className="explore-cover-art-frame">
-        <ExploreCoverArt pack={pack} className="explore-cover-art" variant="grid" isActive={isActive} locked={locked} />
+        <ExploreCoverArt pack={pack} className="explore-cover-art" variant="grid" isActive={active} locked={locked} />
         {pack.isPremium ? <PremiumBadge /> : null}
-        {pack.coverImageUrl ? <span className="explore-cover-state-badge">{getExploreCoverStateLabel({ isActive, locked })}</span> : null}
+        {pack.coverImageUrl ? <span className="explore-cover-state-badge">{getExploreCoverStateLabel({ isActive, locked, isUsingNow })}</span> : null}
       </span>
       <span className="explore-cover-copy">
+        <PackBadges installed={isActive} active={active} usingNow={isUsingNow} />
         <span className="explore-cover-title">{pack.title}</span>
         {pack.description ? <span className="explore-cover-description">{pack.description}</span> : null}
-        <span className="explore-cover-meta">{cardCount} {cardCount === 1 ? "card" : "cards"}</span>
+        <span className="explore-cover-meta">{isAppPack(pack) ? "App Pack" : `${cardCount} ${cardCount === 1 ? "card" : "cards"}`}</span>
       </span>
     </button>
   );
@@ -142,10 +167,12 @@ function ExplorePackDetail({
   onManageCards,
   onPremiumInterest,
   onTakeCommitment,
+  onUseAppPack = () => {},
   onClose,
 }) {
   const previewEntries = getPreviewEntries(pack);
   const cardCount = pack.entries?.length ?? 0;
+  const appPack = isAppPack(pack);
 
   return (
     <div className="explore-detail" data-testid="explore-pack-detail" role="dialog" aria-label={pack.title}>
@@ -162,7 +189,7 @@ function ExplorePackDetail({
             {pack.isPremium ? <PremiumBadge /> : null}
           </div>
           <p className="explore-detail-meta">
-            {cardCount} {cardCount === 1 ? "card" : "cards"} · by {pack.sourceLabel || "MyBishBash"}
+            {appPack ? "App Pack" : `${cardCount} ${cardCount === 1 ? "card" : "cards"}`} · by {pack.sourceLabel || "MyBishBash"}
           </p>
           {pack.description ? <p className="explore-detail-description">{pack.description}</p> : null}
           {pack.whyText ? (
@@ -191,7 +218,11 @@ function ExplorePackDetail({
       </div>
 
       <footer className="explore-detail-footer">
-        {pack.contentType === "commitments" ? (
+        {appPack ? (
+          <button type="button" className="explore-install-button" data-testid="explore-use-app-pack-button" onClick={() => onUseAppPack(pack)}>
+            {isActive ? "Using Now" : "Use this App Pack"}
+          </button>
+        ) : pack.contentType === "commitments" ? (
           <button type="button" className="explore-install-button" data-testid="explore-take-commitment-button" onClick={() => onTakeCommitment(getPreviewEntries(pack, 1)[0], pack)}>
             Take this commitment
           </button>
@@ -232,13 +263,18 @@ export default function ExplorePanel({
   canUsePremiumContent = false,
   onPremiumInterest,
   onTakeCommitment,
+  appPacks = [],
+  isAppPackActive = () => false,
+  isAppPackUsingNow = () => false,
+  onUseAppPack,
 }) {
   const [selectedPackId, setSelectedPackId] = useState(null);
   const [interestPackIds, setInterestPackIds] = useState(loadPremiumInterest);
 
-  const { installablePacks, visible, commitmentTemplates } = useMemo(
-    () => buildExploreSections(packs, { isTester }),
-    [packs, isTester],
+  const allPacks = useMemo(() => [...appPacks, ...packs], [appPacks, packs]);
+  const { visible, appPacks: appPackSection, recommended, personalGrowth, morePacks, commitmentTemplates } = useMemo(
+    () => buildExploreSections(allPacks, { isTester }),
+    [allPacks, isTester],
   );
 
   const selectedPack = selectedPackId ? visible.find((pack) => pack.id === selectedPackId) ?? null : null;
@@ -266,9 +302,42 @@ export default function ExplorePanel({
         </div>
       </div>
 
+      <PackGridSection
+        title="Recommended"
+        testId="explore-recommended-section"
+        packs={recommended}
+        isPackActive={isPackActive}
+        isAppPackActive={isAppPackActive}
+        isAppPackUsingNow={isAppPackUsingNow}
+        canUsePremiumContent={canUsePremiumContent}
+        onOpen={setSelectedPackId}
+      />
+
+      <PackGridSection
+        title="App Packs"
+        testId="explore-app-packs-section"
+        packs={appPackSection}
+        isPackActive={isPackActive}
+        isAppPackActive={isAppPackActive}
+        isAppPackUsingNow={isAppPackUsingNow}
+        canUsePremiumContent={canUsePremiumContent}
+        onOpen={setSelectedPackId}
+      />
+
+      <PackGridSection
+        title="Personal Growth"
+        testId="explore-personal-growth-section"
+        packs={personalGrowth}
+        isPackActive={isPackActive}
+        isAppPackActive={isAppPackActive}
+        isAppPackUsingNow={isAppPackUsingNow}
+        canUsePremiumContent={canUsePremiumContent}
+        onOpen={setSelectedPackId}
+      />
+
       {commitmentTemplates.length > 0 ? (
         <section className="explore-section" data-testid="explore-commitments-rail">
-          <p className="explore-section-title">COMMITMENTS</p>
+          <p className="explore-section-title">Commitment Packs</p>
           <div className="explore-commitment-rail">
             {commitmentTemplates.map((template) => (
               <CommitmentTemplateCard key={template.id} template={template} onTake={onTakeCommitment} />
@@ -277,22 +346,16 @@ export default function ExplorePanel({
         </section>
       ) : null}
 
-      {installablePacks.length > 0 ? (
-        <section className="explore-section" data-testid="explore-more-section">
-          <p className="explore-section-title">PACKS</p>
-          <div className="explore-cover-grid">
-            {installablePacks.map((pack) => (
-              <ExploreCoverCard
-                key={pack.id}
-                pack={pack}
-                isActive={isPackActive(pack.id)}
-                locked={pack.isPremium === true && !canUsePremiumContent}
-                onOpen={setSelectedPackId}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <PackGridSection
+        title="More Packs"
+        testId="explore-more-section"
+        packs={morePacks}
+        isPackActive={isPackActive}
+        isAppPackActive={isAppPackActive}
+        isAppPackUsingNow={isAppPackUsingNow}
+        canUsePremiumContent={canUsePremiumContent}
+        onOpen={setSelectedPackId}
+      />
 
       {visible.length === 0 ? (
         <p className="explore-empty-note">New packs are on their way. Check back soon.</p>
@@ -323,10 +386,37 @@ export default function ExplorePanel({
               defaults: entry.commitmentDefaults ?? {},
             });
           }}
+          onUseAppPack={onUseAppPack}
           onClose={() => setSelectedPackId(null)}
         />,
         document.body,
       ) : null}
+    </section>
+  );
+}
+
+function PackGridSection({ title, testId, packs, isPackActive, isAppPackActive, isAppPackUsingNow, canUsePremiumContent, onOpen }) {
+  if (!packs.length) return null;
+  return (
+    <section className="explore-section" data-testid={testId}>
+      <p className="explore-section-title">{title}</p>
+      <div className="explore-cover-grid">
+        {packs.map((pack) => {
+          const appPack = isAppPack(pack);
+          const active = appPack ? isAppPackActive(pack) : isPackActive(pack.id);
+          const usingNow = appPack ? isAppPackUsingNow(pack) : false;
+          return (
+            <ExploreCoverCard
+              key={pack.id}
+              pack={pack}
+              isActive={active}
+              isUsingNow={usingNow}
+              locked={pack.isPremium === true && !canUsePremiumContent}
+              onOpen={onOpen}
+            />
+          );
+        })}
+      </div>
     </section>
   );
 }

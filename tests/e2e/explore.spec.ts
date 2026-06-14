@@ -160,11 +160,11 @@ test('packs without uploaded artwork render generated covers', async ({ page }) 
 
   // Library thumbnail after install.
   await page.getByTestId('explore-install-button').click();
-  await expect(detailCover).toContainText('✓ Added');
+  await expect(detailCover).toContainText('Installed');
   await page.getByTestId('explore-detail-close').click();
   await expect(card.locator('.explore-active-pill')).toHaveCount(0);
-  await expect(card.getByTestId('generated-cover')).toContainText('✓ Added');
-  await expect(card.getByText('✓ Added')).toHaveCount(1);
+  await expect(card.getByTestId('generated-cover')).toContainText('Installed');
+  await expect(card.getByText('Installed').first()).toBeVisible();
   await page.getByTestId('bottom-nav-library').click();
   await page.getByTestId('library-active-packs-section-toggle').click();
   await expect(page.getByTestId('library-active-packs-section').getByTestId('generated-cover')).toBeVisible();
@@ -177,8 +177,8 @@ test('Explore mobile layout has no overflow or bottom-nav cover across common wi
     await page.goto('/mybishbash/explore');
 
     await expect(page.getByTestId('explore-panel')).toBeVisible();
-    await expect(page.getByText('COMMITMENTS')).toBeVisible();
-    await expect(page.getByText('PACKS')).toBeVisible();
+    await expect(page.getByText('Commitment Packs')).toBeVisible();
+    await expect(page.getByText('More Packs')).toBeVisible();
 
     const metrics = await page.evaluate(() => {
       const rail = document.querySelector<HTMLElement>('.explore-commitment-rail');

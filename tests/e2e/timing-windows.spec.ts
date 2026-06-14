@@ -114,12 +114,13 @@ test('default morning window — card eligible at 07:00 BST', async ({ page }) =
 });
 
 test('default windows — night-only card not eligible during business hours', async ({ page }) => {
-  // A card scoped to ['night'] (23:00–05:00) should never be eligible during
-  // normal test-run hours (09:00–18:00). No clock-mocking needed.
+  // A card scoped to ['night'] (23:00–05:00) should not be eligible during
+  // normal business hours.
   await seedState(page, {
     cards: [card('tw2', 'Night only card', ['night'])],
     timezone: 'Europe/London',
   });
+  await page.clock.setFixedTime('2026-06-01T10:00:00.000Z');
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);

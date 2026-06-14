@@ -47,7 +47,7 @@ export function getCardCount(pack) {
 
 export function getCoverStatusBadge(pack, { isActive = false, locked = false } = {}) {
   if (pack?.comingSoon || pack?.isComingSoon || locked) return "COMING SOON";
-  if (isActive || pack?.isInstalled || pack?.isActive) return "✓ Added";
+  if (isActive || pack?.isInstalled || pack?.isActive) return "Installed";
   return "+ Add";
 }
 

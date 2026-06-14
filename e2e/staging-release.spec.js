@@ -131,12 +131,16 @@ test.describe('MyBishBash staging release E2E', () => {
     const pageB = await contextB.newPage();
     const consoleErrorsA = installConsoleErrorGuard(pageA);
     const consoleErrorsB = installConsoleErrorGuard(pageB);
+    const networkA = installSyncNetworkDiagnostics(pageA, 'Device A');
+    const networkB = installSyncNetworkDiagnostics(pageB, 'Device B');
 
     await openAndLogin(pageA, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD);
     await openAndLogin(pageB, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD);
 
     await createCard(pageA, cardName);
     await waitForCardOnDevice(pageB, cardName, 'created card appears on Device B');
+    logSyncNetworkDiagnostics(networkA);
+    logSyncNetworkDiagnostics(networkB);
 
     await expectNoConsoleErrors(consoleErrorsA);
     await expectNoConsoleErrors(consoleErrorsB);
@@ -459,6 +463,8 @@ async function createCard(page, cardName) {
   await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 30000 });
   await page.waitForTimeout(2500);
   await dismissBlockingHomeOverlays(page);
+  const beforeSave = await collectCardDiagnostics(page, cardName);
+  logCardDiagnostics('before save', beforeSave);
   const emptyOverlay = page.getByTestId('card-overlay-empty').first();
   if (await emptyOverlay.count() > 0) {
     await emptyOverlay.getByRole('button', { name: /create a mybishbash/i }).click();
@@ -468,8 +474,21 @@ async function createCard(page, cardName) {
     await page.getByTestId('create-card-button').or(page.getByTestId('empty-create-card-button')).first().click();
   }
   await page.getByTestId('card-prompt-input').fill(cardName);
+  console.log(`[staging-save] entered card prompt: ${cardName}`);
   await page.getByTestId('save-card-button').click();
-  await expect(page.getByTestId('home-dashboard-summary').getByText(cardName)).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(`Saved “${cardName}”.`)).toBeVisible({ timeout: 10000 });
+  console.log(`[staging-save] toast shown for: ${cardName}`);
+  const afterToast = await collectCardDiagnostics(page, cardName);
+  logCardDiagnostics('after toast', afterToast);
+  await navigateWithinStaging(page, '/library');
+  await ensurePersonalCardsOpen(page);
+  const afterLibraryNavigation = await collectCardDiagnostics(page, cardName);
+  logCardDiagnostics('after library navigation', afterLibraryNavigation);
+  await page.reload({ waitUntil: 'load' });
+  await ensurePersonalCardsOpen(page);
+  const afterReload = await collectCardDiagnostics(page, cardName);
+  logCardDiagnostics('after reload', afterReload);
+  await expect(libraryRow(page, cardName)).toBeVisible({ timeout: 10000 });
 }
 
 async function dismissBlockingHomeOverlays(page) {
@@ -482,6 +501,7 @@ async function dismissBlockingHomeOverlays(page) {
 
 async function editCard(page, oldName, newName) {
   await navigateWithinStaging(page, '/library');
+  await ensurePersonalCardsOpen(page);
   const card = libraryRow(page, oldName);
   await expect(card).toBeVisible({ timeout: 10000 });
   await openCardMenu(card);
@@ -493,6 +513,7 @@ async function editCard(page, oldName, newName) {
 
 async function deleteCard(page, cardName) {
   await navigateWithinStaging(page, '/library');
+  await ensurePersonalCardsOpen(page);
   const card = libraryRow(page, cardName);
   await expect(card).toBeVisible({ timeout: 10000 });
   await openCardMenu(card);
@@ -501,17 +522,81 @@ async function deleteCard(page, cardName) {
 }
 
 async function waitForCardOnDevice(page, cardName, message) {
-  await navigateWithinStaging(page, '/home');
-  await expect(page.getByTestId('home-dashboard-summary').getByText(cardName), message).toBeVisible({ timeout: 150000 });
+  await navigateWithinStaging(page, '/library');
+  await ensurePersonalCardsOpen(page);
+  await expect(libraryRow(page, cardName), message).toBeVisible({ timeout: 150000 });
 }
 
 async function waitForCardAbsentOnDevice(page, cardName, message) {
-  await navigateWithinStaging(page, '/home');
-  await expect(page.getByTestId('home-dashboard-summary').getByText(cardName), message).toHaveCount(0, { timeout: 150000 });
+  await navigateWithinStaging(page, '/library');
+  await ensurePersonalCardsOpen(page);
+  await expect(libraryRow(page, cardName), message).toHaveCount(0, { timeout: 150000 });
 }
 
 function libraryRow(page, cardName) {
   return page.locator('[data-testid^="library-row-"]').filter({ hasText: cardName }).first();
+}
+
+async function ensurePersonalCardsOpen(page) {
+  const toggle = page.getByTestId('library-personal-section-toggle');
+  await expect(toggle).toBeVisible({ timeout: 10000 });
+  if (await toggle.getAttribute('aria-expanded') !== 'true') {
+    await toggle.click();
+  }
+}
+
+async function collectCardDiagnostics(page, cardName) {
+  return page.evaluate((targetCardName) => {
+    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]');
+    const matchingCards = cards.filter((card) => card?.promptText === targetCardName || card?.dashboardTitle === targetCardName);
+    const visibleRows = Array.from(document.querySelectorAll('[data-testid^="library-row-"]'));
+    const personalToggle = document.querySelector('[data-testid="library-personal-section-toggle"]');
+    const personalCountText = personalToggle?.parentElement?.innerText ?? '';
+    return {
+      localCardCount: cards.length,
+      localMatchCount: matchingCards.length,
+      localMatchIds: matchingCards.map((card) => card.id),
+      visibleRowCount: visibleRows.length,
+      visibleMatchCount: visibleRows.filter((row) => row.textContent?.includes(targetCardName)).length,
+      personalExpanded: personalToggle?.getAttribute('aria-expanded') ?? null,
+      personalCountText,
+      path: window.location.pathname,
+    };
+  }, cardName);
+}
+
+function logCardDiagnostics(label, diagnostics) {
+  console.log(`[staging-save] ${label}: ${JSON.stringify(diagnostics)}`);
+}
+
+function installSyncNetworkDiagnostics(page, label) {
+  const records = [];
+  page.on('response', (response) => {
+    const url = response.url();
+    if (!/\/rest\/v1\/(mybishbash_state|bishbash_state)|\/auth\/v1\//.test(url)) return;
+    records.push({
+      label,
+      method: response.request().method(),
+      status: response.status(),
+      url: url.replace(/\?.*$/, ''),
+    });
+  });
+  page.on('requestfailed', (request) => {
+    const url = request.url();
+    if (!/\/rest\/v1\/(mybishbash_state|bishbash_state)|\/auth\/v1\//.test(url)) return;
+    records.push({
+      label,
+      method: request.method(),
+      failed: true,
+      url: url.replace(/\?.*$/, ''),
+      errorText: request.failure()?.errorText ?? 'unknown',
+    });
+  });
+  return records;
+}
+
+function logSyncNetworkDiagnostics(records) {
+  console.log(`[staging-save] network: ${JSON.stringify(records)}`);
 }
 
 async function openCardMenu(card) {

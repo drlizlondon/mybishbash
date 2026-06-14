@@ -365,11 +365,44 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
   await expect(page.getByTestId('apps-panel')).toBeVisible();
   await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
   await expect(page.getByTestId('apps-list')).toBeVisible();
-  await expect(page.getByTestId('apps-direct-open-safari')).toHaveText('Test direct open');
+  await expect(page.getByTestId('apps-direct-open-safari')).toHaveText('Open Safari');
   await expect(page.getByTestId('bottom-nav-settings')).toHaveCount(0);
   await expect(page.getByTestId('settings-gear')).toBeVisible();
   const navLabels = await page.locator('.bottom-nav .nav-item span').allTextContents();
   expect(navLabels).toEqual(['Home', 'Library', 'Log', 'Explore', 'Apps']);
+});
+
+test('apps-pause-temporarily — Apps control centre uses the timed app pause flow', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps-pause', 'Apps pause card')] });
+  await page.goto('/mybishbash/apps/safari');
+
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Pause Temporarily' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: '30 mins' }).click();
+  await expect(page.getByText(/Paused for 30 mins/i)).toBeVisible();
+
+  await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+  const expiry = await page.evaluate(() => {
+    const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
+    return pauses['safari'] ?? null;
+  });
+  expect(expiry).toBeTruthy();
+  expect(new Date(expiry).getTime()).toBeGreaterThan(Date.now());
+});
+
+test('apps-choose-pack — opens Explore without silently activating an app pack', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps-pack', 'Apps pack card')] });
+  await page.goto('/mybishbash/apps/safari');
+
+  await page.getByRole('button', { name: 'Choose Pack' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/explore$/);
+
+  const safariBehavior = await page.evaluate(() => {
+    const behavior = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return behavior.safari;
+  });
+  expect(safariBehavior.useInterruptionPack).toBe(false);
 });
 
 test('home-no-global-fake-launchers — Home no longer shows all fake app shortcut buttons', async ({ page }) => {
@@ -391,11 +424,11 @@ test('apps-pause-status-and-end-pause — paused app is visible and can resume M
   await page.goto('/mybishbash/apps/safari');
 
   await expect(page.getByTestId('apps-pause-safari')).toBeVisible();
-  await expect(page.getByTestId('apps-pause-status-safari')).toContainText(/Paused:/);
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText(/left|soon/i);
 
   await page.getByTestId('apps-end-pause-safari').click();
   await expect(page.getByTestId('apps-pause-safari')).toHaveCount(0);
-  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Not paused');
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('None');
 
   const expiry = await page.evaluate(() => {
     const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');

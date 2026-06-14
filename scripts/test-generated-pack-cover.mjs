@@ -59,7 +59,7 @@ const statusModel = getCoverModel({
   isInstalled: true,
 });
 
-assert.equal(statusModel.statusBadge, "✓ Added", "installed state uses the compact Added badge");
+assert.equal(statusModel.statusBadge, "Installed", "installed state uses the compact Installed badge");
 
 const addModel = getCoverModel({ title: "Fresh Pack", cardCount: 8 });
 assert.equal(addModel.statusBadge, "+ Add", "non-installed state uses the compact Add badge");
