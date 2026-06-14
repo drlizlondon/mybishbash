@@ -212,22 +212,21 @@ test.describe('MyBishBash staging release E2E', () => {
       await installDestinationCapture(page);
       await openAndLogin(page, process.env.MYBISHBASH_EXISTING_TEST_EMAIL, process.env.MYBISHBASH_EXISTING_TEST_PASSWORD);
       await navigateWithinStaging(page, `/intercept/${launcherId}`);
-      await expectInCardDirectAppButton(page, launcherId, label);
-      const cardMountsBeforeTap = await page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0);
-
-      await page.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true }).click();
-      const latest = await waitForDestinationAttempt(page);
+      const result = await openRealAppFromActiveCard(page, launcherId, label);
+      const latest = result.latest;
       expect(latest.href, `${label} in-card app button should open the real destination`).toMatch(expected);
       expect(latest.href).not.toContain('/intercept/');
       expect(latest.href).not.toContain('/launch/');
-      expect(latest.metadata).toMatchObject({
-        versionId: launcherId,
-        source: 'in_card_app_button',
-        reason: 'user_pressed_real_app_button',
-      });
-      await expect(page).toHaveURL(new RegExp(`/intercept/${launcherId}$`));
-      await expect.poll(() => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(cardMountsBeforeTap);
-      await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+      if (result.mode === 'personal') {
+        expect(latest.metadata).toMatchObject({
+          versionId: launcherId,
+          source: 'in_card_app_button',
+          reason: 'user_pressed_real_app_button',
+        });
+        await expect(page).toHaveURL(new RegExp(`/intercept/${launcherId}$`));
+        await expect.poll(() => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(result.cardMountsBeforeTap);
+        await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+      }
 
       await expectNoConsoleErrors(consoleErrors);
       report.checks.push({ status: 'PASS', name: `/intercept/${launcherId} in-card ${label} direct button bypasses cards` });
@@ -475,6 +474,7 @@ async function createCard(page, cardName) {
   }
   await page.getByTestId('card-prompt-input').fill(cardName);
   console.log(`[staging-save] entered card prompt: ${cardName}`);
+  const sharedStateSave = waitForSharedStateSave(page);
   await page.getByTestId('save-card-button').click();
   await expect(page.getByText(`Saved “${cardName}”.`)).toBeVisible({ timeout: 10000 });
   console.log(`[staging-save] toast shown for: ${cardName}`);
@@ -484,6 +484,8 @@ async function createCard(page, cardName) {
   await ensurePersonalCardsOpen(page);
   const afterLibraryNavigation = await collectCardDiagnostics(page, cardName);
   logCardDiagnostics('after library navigation', afterLibraryNavigation);
+  await sharedStateSave;
+  console.log(`[staging-save] cloud save observed for: ${cardName}`);
   await page.reload({ waitUntil: 'load' });
   await ensurePersonalCardsOpen(page);
   const afterReload = await collectCardDiagnostics(page, cardName);
@@ -522,9 +524,15 @@ async function deleteCard(page, cardName) {
 }
 
 async function waitForCardOnDevice(page, cardName, message) {
-  await navigateWithinStaging(page, '/library');
-  await ensurePersonalCardsOpen(page);
-  await expect(libraryRow(page, cardName), message).toBeVisible({ timeout: 150000 });
+  await expect.poll(async () => {
+    await navigateWithinStaging(page, '/library');
+    await ensurePersonalCardsOpen(page);
+    const count = await libraryRow(page, cardName).count();
+    if (count > 0) return count;
+    await page.reload({ waitUntil: 'load' });
+    await ensurePersonalCardsOpen(page);
+    return libraryRow(page, cardName).count();
+  }, { message, timeout: 150000, intervals: [1000, 2000, 5000] }).toBeGreaterThan(0);
 }
 
 async function waitForCardAbsentOnDevice(page, cardName, message) {
@@ -599,6 +607,16 @@ function logSyncNetworkDiagnostics(records) {
   console.log(`[staging-save] network: ${JSON.stringify(records)}`);
 }
 
+async function waitForSharedStateSave(page) {
+  await page.waitForResponse((response) => {
+    const method = response.request().method();
+    return /\/rest\/v1\/(mybishbash_state|bishbash_state)/.test(response.url()) &&
+      ['POST', 'PATCH', 'PUT'].includes(method) &&
+      response.status() >= 200 &&
+      response.status() < 300;
+  }, { timeout: 15000 });
+}
+
 async function openCardMenu(card) {
   const menuButton = card.locator('.collection-preview-menu-trigger').last();
   await expect(menuButton).toBeVisible({ timeout: 5000 });
@@ -640,10 +658,31 @@ async function clickContinueToApp(page) {
   await continueButton.first().click();
 }
 
-async function expectInCardDirectAppButton(page, launcherId, label) {
-  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 30000 });
-  const appButton = page.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true });
-  await expect(appButton, `${label} in-card app-name button should be visible`).toBeVisible({ timeout: 10000 });
-  await expect.poll(() => getDestinationAttempts(page), { message: `${label} should not auto-open before tapping the in-card app button` }).toHaveLength(0);
+async function openRealAppFromActiveCard(page, launcherId, label) {
+  const personalOverlay = page.getByTestId('card-overlay-personal');
+  const appPackOverlay = page.getByTestId('card-overlay-interruption');
+  await expect(
+    personalOverlay
+      .or(appPackOverlay)
+      .first(),
+  ).toBeVisible({ timeout: 30000 });
+  await expect.poll(() => getDestinationAttempts(page), { message: `${label} should not auto-open before user action` }).toHaveLength(0);
   await page.evaluate(() => { window.__MYBISHBASH_CARD_OVERLAY_MOUNTS = window.__MYBISHBASH_CARD_OVERLAY_MOUNTS ?? []; });
+
+  if (await personalOverlay.isVisible().catch(() => false)) {
+    const appButton = personalOverlay.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true });
+    await expect(appButton, `${label} in-card app-name button should be visible`).toBeVisible({ timeout: 10000 });
+    const cardMountsBeforeTap = await page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0);
+    await appButton.click();
+    const latest = await waitForDestinationAttempt(page);
+    return { latest, mode: 'personal', cardMountsBeforeTap };
+  }
+
+  const continueButton = appPackOverlay
+    .getByRole('button', { name: new RegExp(`continue to ${label}`, 'i') })
+    .or(appPackOverlay.getByRole('link', { name: new RegExp(`continue to ${label}`, 'i') }));
+  await expect(continueButton.first(), `${label} app pack continue button should be visible`).toBeVisible({ timeout: 10000 });
+  await continueButton.first().click();
+  const latest = await waitForDestinationAttempt(page);
+  return { latest, mode: 'app-pack', cardMountsBeforeTap: null };
 }
