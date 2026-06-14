@@ -684,6 +684,29 @@ test('newly created card is persisted locally before cloud sync', async ({ page 
   await expectNoConsoleErrors(consoleErrors);
 });
 
+test('Home progress denominator uses total Personal Cards, not only currently eligible cards', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  const todayKey = currentDateKey();
+  await seedE2EState(page, {
+    cards: [
+      {
+        ...smokeCard('done-card', 'Done today card'),
+        statusToday: 'doneToday',
+        doneDate: todayKey,
+      },
+      {
+        ...smokeCard('night-only-card', 'Night-only card'),
+        timingWindows: ['night'],
+      },
+    ],
+  });
+
+  await gotoApp(page, '/home');
+  await expect(page.locator('.home-progress-number')).toHaveText('1/2');
+  await expect(page.getByTestId('home-dashboard-summary')).toContainText('1 of 2 personal cards complete today.');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
 test('mobile viewport keeps bottom nav and fake launcher destination behaviour working', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await page.setViewportSize({ width: 390, height: 844 });

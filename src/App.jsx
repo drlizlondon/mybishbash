@@ -774,13 +774,16 @@ function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions 
   const now = new Date();
   const todayKey = getTodayKey(now, timezone);
   const normalized = normalizeCards(cards, now, timezone);
-  const personalCardsToday = normalized.filter((card) => {
+  const personalCardsTotal = normalized.filter((card) =>
+    !card.sourcePackId && !card.deletedAt && !isCommitmentCard(card)
+  );
+  const personalCardsToday = personalCardsTotal.filter((card) => {
     if (card.sourcePackId || card.deletedAt || isCommitmentCard(card)) return false;
     return isCardDoneToday(card, todayKey) || card.statusToday === "pending" || isEligible(card, now, timezone);
   });
   const completedPersonalCardsToday = Math.min(
     personalCardsToday.filter((card) => isCardDoneToday(card, todayKey)).length,
-    personalCardsToday.length,
+    personalCardsTotal.length,
   );
   const nextIncompletePersonalCard = personalCardsToday.find((card) => !isCardDoneToday(card, todayKey)) ?? null;
   const liveCommitments = normalized
@@ -807,7 +810,7 @@ function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions 
   return {
     usageDays: getUsageDays(normalized, events),
     completedPersonalCardsToday,
-    totalPersonalCardsToday: personalCardsToday.length,
+    totalPersonalCardsToday: personalCardsTotal.length,
     nextIncompletePersonalCard,
     liveCommitmentCount: liveCommitments.length,
     hasCompletedCommitmentToday,
@@ -9852,6 +9855,7 @@ function CardRevealMessage({ message }) {
   const baseSize = getMessageBaseSize(message);
   const [fontSize, setFontSize] = useState(baseSize);
   const [isScrollable, setIsScrollable] = useState(false);
+  const commitmentMatch = String(message ?? "").match(/^I will\r?\n([\s\S]+)$/);
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -9898,11 +9902,16 @@ function CardRevealMessage({ message }) {
   return (
     <div className={`premium-title-box ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
       <h2
-        className="premium-headline"
+        className={`premium-headline ${commitmentMatch ? "commitment-headline" : ""}`.trim()}
         ref={headlineRef}
         style={{ "--message-font-size": `${fontSize}px` }}
       >
-        {message}
+        {commitmentMatch ? (
+          <>
+            <span className="commitment-headline-prefix">I will</span>
+            <span className="commitment-headline-text">{commitmentMatch[1]}</span>
+          </>
+        ) : message}
       </h2>
     </div>
   );

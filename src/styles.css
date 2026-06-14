@@ -5465,6 +5465,32 @@ body {
   overflow: visible;
 }
 
+.commitment-headline {
+  display: grid;
+  gap: 10px;
+  white-space: normal;
+}
+
+.commitment-headline-prefix,
+.commitment-headline-text {
+  display: block;
+}
+
+.commitment-headline-prefix {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: calc(var(--message-font-size) * 0.54);
+  font-weight: 700;
+  line-height: 1;
+  color: #17120F;
+}
+
+.commitment-headline-text {
+  font-size: calc(var(--message-font-size) * 0.78);
+  font-weight: 500;
+  line-height: 1.12;
+  color: #5F5751;
+}
+
 .premium-divider {
   display: block;
   width: clamp(90px, 26vw, 120px);
