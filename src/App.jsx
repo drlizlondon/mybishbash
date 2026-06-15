@@ -5377,7 +5377,7 @@ function App() {
     }));
   }
 
-  function completeProtectedAppOnboarding({ appId, completed }) {
+  function completeProtectedAppOnboarding({ appId, completed, useInterruptionCard = false }) {
     const supportedLauncherId = isKnownLauncher(appId) ? appId : "instagram";
     const now = new Date().toISOString();
     setProfile((current) => ({
@@ -5393,7 +5393,7 @@ function App() {
         ...current,
         [supportedLauncherId]: {
           ...(current[supportedLauncherId] || {}),
-          useInterruptionPack: true,
+          useInterruptionPack: Boolean(useInterruptionCard),
           interruptionPaused: false,
         },
       }));
@@ -6149,8 +6149,31 @@ function App() {
     [handleSaveVersionBehavior],
   );
 
+  const hasLocalCards = cards.length > 0;
+  const routeLauncherName = route.kind === "intercept"
+    ? homeScreenVersions[route.versionId]?.realAppLabel
+      ?? homeScreenVersions[route.versionId]?.displayName
+      ?? homeScreenVersions[route.versionId]?.name
+      ?? getLauncherConfig(route.versionId)?.displayName
+      ?? getLauncherConfig(route.versionId)?.name
+      ?? route.versionId
+    : "";
+
   if (!authReady && !isFakeLauncherFlow) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
+  }
+
+  if (authReady && route.kind === "intercept" && !session && !e2eMode && !hasLocalCards) {
+    return (
+      <SyncConnectionScreen
+        mode="launcher"
+        error={syncError}
+        launcherName={routeLauncherName}
+        onSignUp={handleSignUp}
+        onLogIn={handleLogIn}
+        onClearError={() => setSyncError("")}
+      />
+    );
   }
 
   if (!session && !isFakeLauncherFlow) {
@@ -6167,7 +6190,6 @@ function App() {
 
   // Skip the sync loading screen when the user is offline but already has local
   // cards — show the cached experience instead of a spinner.
-  const hasLocalCards = cards.length > 0;
   if (session && syncStatus === "loading" && !isFakeLauncherFlow && !(isOffline && hasLocalCards)) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
@@ -6412,7 +6434,7 @@ function App() {
               <span>Log</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => {
-              signalHomeSpotlightAction("packs");
+              signalHomeSpotlightAction("explore");
               navigateTo("/explore");
             }}>
               <PacksGlyph />
@@ -6443,6 +6465,13 @@ function App() {
           onCommitmentDemoComplete={completeCommitmentCardDemo}
           onUpdateShortcutSetup={updateOnboardingShortcutSetup}
           onCompleteProtectedAppSetup={completeProtectedAppOnboarding}
+          onSaveProtectedAppPreference={({ appId, useInterruptionCard }) => {
+            if (!isKnownLauncher(appId)) return;
+            handleSaveVersionBehavior(appId, {
+              useInterruptionPack: Boolean(useInterruptionCard),
+              interruptionPaused: false,
+            });
+          }}
           onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
           onGoHome={() => finishOnboarding("home")}
           availableLaunchers={getAvailableLaunchersForUser({
@@ -6450,6 +6479,51 @@ function App() {
             testerStatus,
             context: LAUNCHER_CONTEXTS.ONBOARDING,
           })}
+          renderCommitmentDemoCard={({ onCommitmentAction }) => (
+            <CommitmentCardOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_CARD}
+              onCommitmentAction={onCommitmentAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-demo"
+            />
+          )}
+          renderCommitmentMotivationDemoCard={({ onCommitmentAction }) => (
+            <CommitmentMotivationOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_CARD}
+              onCommitmentAction={onCommitmentAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-motivation-demo"
+            />
+          )}
+          renderCommitmentCheckInDemoCard={({ onCheckInAction }) => (
+            <CommitmentCheckInOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_CHECK_IN_CARD}
+              onCheckInAction={onCheckInAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-check-in-demo"
+            />
+          )}
+          renderCommitmentEncouragementDemoCard={({ onContinue }) => (
+            <CommitmentEncouragementOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_ENCOURAGEMENT_CARD}
+              onContinue={onContinue}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-encouragement-demo"
+            />
+          )}
+          renderCommitmentReviewDemoCard={({ onReviewAction }) => (
+            <CommitmentReviewOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_REVIEW_CARD}
+              onReviewAction={onReviewAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-review-demo"
+            />
+          )}
         />
       ) : null}
 
@@ -7165,52 +7239,41 @@ function Masthead({ onCreate, onOpenSettings }) {
 
 const HOME_SPOTLIGHT_STEPS = [
   {
-    id: "day",
-    selector: '[data-testid="home-progress-card"]',
-    title: "This is your day",
-    body: "See what you’ve completed and what still matters.",
+    id: "home",
+    selector: '[data-testid="home-panel"]',
+    title: "Home",
+    body: "Start here when you want to see what matters today.",
     button: "Next",
   },
   {
-    id: "progress",
+    id: "personal-cards",
     selector: '[data-testid="home-progress-ring"]',
-    title: "Track your progress",
-    body: "The circle fills as you complete Personal Cards.",
+    title: "Personal Cards",
+    body: "These are the reminders you chose for yourself.",
     button: "Next",
   },
   {
-    id: "today-cards",
-    selector: '[data-testid="home-progress-card"]',
-    title: "See today’s cards",
-    body: "Tap here to see your Personal Cards for today.",
-    button: "Tap the card",
+    id: "commitments",
+    selector: '[data-testid="home-live-commitment-card"]',
+    title: "Commitments",
+    body: "Optional promises to yourself live here when you make one.",
+    button: "Next",
+  },
+  {
+    id: "explore",
+    selector: '[data-testid="bottom-nav-explore"]',
+    title: "Explore",
+    body: "Find more ideas when you want them.",
+    button: "Tap Explore",
     advanceOnTargetClick: true,
     allowTargetDefault: true,
-  },
-  {
-    id: "personal-card",
-    selector: '[data-testid="create-card-button"]',
-    title: "Create a Personal Card",
-    body: "Add reminders for things you genuinely mean to do.",
-    button: "Tap +",
-    advanceOnTargetClick: true,
-    allowTargetDefault: false,
   },
   {
     id: "apps",
     selector: '[data-testid="bottom-nav-apps"]',
-    title: "Connect more apps",
-    body: "Choose where your Personal Cards can appear.",
+    title: "Apps",
+    body: "Manage where MyBishBash appears and how each app opens.",
     button: "Tap Apps",
-    advanceOnTargetClick: true,
-    allowTargetDefault: true,
-  },
-  {
-    id: "packs",
-    selector: '[data-testid="bottom-nav-explore"]',
-    title: "Try a Pack",
-    body: "Use ready-made reminders for a goal or season.",
-    button: "Tap Explore",
     advanceOnTargetClick: true,
     allowTargetDefault: true,
   },
@@ -7218,7 +7281,7 @@ const HOME_SPOTLIGHT_STEPS = [
     id: "ready",
     selector: '[data-testid="app-shell"]',
     title: "You’re ready",
-    body: "Make your phone work for you.",
+    body: "You can come back to Apps whenever you want to change an app.",
     button: "Done",
   },
 ];
@@ -8655,7 +8718,7 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal }) {
+function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal, launcherName = "" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -8666,6 +8729,15 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   const [agreedToLegal, setAgreedToLegal] = useState(false);
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+  const isLauncherLogin = mode === "launcher";
+  const title = isLauncherLogin
+    ? "Welcome back to MyBishBash"
+    : isLogin
+      ? "MyBishBash"
+      : "Create your MyBishBash account";
+  const loginCopy = isLauncherLogin
+    ? `Log in to continue to your ${launcherName || "app"} launcher.`
+    : "Log in to sync this shortcut with your MyBishBash profile.";
   function switchMode(nextIsLogin) {
     setIsLogin(nextIsLogin);
     setShowPassword(false);
@@ -8692,17 +8764,17 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
         <span className="sync-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h1>{isLogin ? "MyBishBash" : "Create your MyBishBash account"}</h1>
+        <h1>{title}</h1>
         {mode === "loading" ? (
           <p>Loading your shared MyBishBash...</p>
         ) : (
           <>
             <p>
               {isLogin
-                ? "Log in to sync this shortcut with your MyBishBash profile."
+                ? loginCopy
                 : "Create your account. After that, you’ll only need to log in."}
             </p>
-            {isLogin && isStandalone ? <p className="sync-note">iOS Home Screen shortcuts require you to log in once per shortcut.</p> : null}
+            {isLogin && isStandalone ? <p className="sync-note">Log in once here to reconnect this Home Screen shortcut.</p> : null}
             {error ? <p className="sync-error">{error}</p> : null}
 
             <form className="sync-form" onSubmit={submitExisting}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./landing.css";
 import { ContentEditProvider } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
@@ -61,6 +61,7 @@ const PERSONAL_CARD_OPTIONS = [
 
 const HOME_ONBOARDING_LOCATION_ID = "mybishbash_home";
 const DEFAULT_ONBOARDING_TIMING_WINDOWS = ["day"];
+const PROTECTED_APP_SETUP_PENDING_KEY = "mybishbash.onboarding-protected-app-setup-pending.v1";
 
 const FALLBACK_AVAILABLE_LAUNCHERS = [
   { id: "instagram", displayName: "Instagram", name: "Instagram", category: "social", iconSrc: "/icons/instagram-cover.jpg" },
@@ -69,21 +70,104 @@ const FALLBACK_AVAILABLE_LAUNCHERS = [
   { id: "whatsapp", displayName: "WhatsApp", name: "WhatsApp", category: "messaging", iconSrc: "/icons/whatsapp-cover.jpeg" },
   { id: "chrome", displayName: "Chrome", name: "Chrome", category: "browser" },
 ];
-const FIRST_PROTECTED_APP_IDS = ["instagram", "safari", "whatsapp"];
-const FIRST_PROTECTED_APPS = FIRST_PROTECTED_APP_IDS
-  .map((id) => FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === id))
-  .filter(Boolean);
+const FIRST_PROTECTED_APP_IDS = ["instagram", "safari", "youtube", "whatsapp", "chrome"];
+const APP_INTERRUPTION_DEMOS = {
+  instagram: {
+    title: "Why Instagram?",
+    body: "Watch your own life, not someone else’s.",
+  },
+  safari: {
+    title: "What are you here to do?",
+    body: "Open Safari with a reason, not a rabbit hole.",
+  },
+  youtube: {
+    title: "Are you choosing this?",
+    body: "Watch with intention, not by accident.",
+  },
+  whatsapp: {
+    title: "Quick check",
+    body: "Is this message important right now?",
+  },
+};
 
 function getLauncherName(launcher) {
   return launcher?.realAppLabel || launcher?.displayName || launcher?.name || launcher?.label || launcher?.id || "App";
 }
 
 function getLauncherIcon(launcher) {
-  if (!launcher) return `${import.meta.env.BASE_URL}icons/mybishbash-logo-mark.png`;
+  const basePath = getAppBasePath();
+  if (!launcher) return `${basePath}/icons/mybishbash-logo-mark.png`;
   const src = launcher.iconSrc || launcher.icon || launcher.customIconSrc || "";
-  if (src && src.startsWith("/")) return `${import.meta.env.BASE_URL}${src.replace(/^\//, "")}`;
+  if (src && (src.startsWith("/mybishbash/") || src.startsWith("/mybishbash-preview/"))) {
+    const rebasedPath = src.replace(/^\/mybishbash-preview|^\/mybishbash/, "");
+    return `${basePath}${rebasedPath}`;
+  }
+  if (src && src.startsWith("/")) return `${basePath}${src}`;
   if (src) return src;
-  return `${import.meta.env.BASE_URL}icons/mybishbash-logo-mark.png`;
+  return `${basePath}/icons/mybishbash-logo-mark.png`;
+}
+
+function hasLauncherLogo(launcher) {
+  return Boolean(launcher?.iconSrc || launcher?.icon || launcher?.customIconSrc);
+}
+
+function getFirstProtectedApps(availableLaunchers = []) {
+  const availableById = new Map(FALLBACK_AVAILABLE_LAUNCHERS.map((launcher) => [launcher.id, launcher]));
+  availableLaunchers
+    .filter((launcher) => launcher?.id)
+    .forEach((launcher) => {
+      availableById.set(launcher.id, {
+        ...(availableById.get(launcher.id) ?? {}),
+        ...launcher,
+        iconSrc: launcher.iconSrc || availableById.get(launcher.id)?.iconSrc,
+        icon: launcher.icon || availableById.get(launcher.id)?.icon,
+        customIconSrc: launcher.customIconSrc || availableById.get(launcher.id)?.customIconSrc,
+      });
+    });
+  return FIRST_PROTECTED_APP_IDS
+    .map((id) => availableById.get(id))
+    .filter((launcher) => launcher && hasLauncherLogo(launcher));
+}
+
+function getAppBasePath() {
+  if (typeof window !== "undefined") {
+    const [firstPart] = String(window.location.pathname || "").split("/").filter(Boolean);
+    if (firstPart === "mybishbash-preview") return "/mybishbash-preview";
+    if (firstPart === "mybishbash") return "/mybishbash";
+  }
+  const base = import.meta.env.BASE_URL || "/";
+  const normalized = `/${base.replace(/^\/+|\/+$/g, "")}`;
+  return normalized === "/" ? "" : normalized;
+}
+
+function getLauncherInstallUrl(launcher) {
+  const basePath = getAppBasePath() || "/mybishbash";
+  const path = launcher?.installPath ?? `${basePath}/install/${launcher?.id ?? "instagram"}/`;
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).toString();
+}
+
+function readPendingProtectedAppSetup() {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PROTECTED_APP_SETUP_PENDING_KEY) || "null");
+    return parsed?.appId ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingProtectedAppSetup(appId, useInterruptionCard = false) {
+  if (typeof window === "undefined" || !appId) return;
+  window.localStorage.setItem(
+    PROTECTED_APP_SETUP_PENDING_KEY,
+    JSON.stringify({ appId, status: "install_started", useInterruptionCard, updatedAt: new Date().toISOString() }),
+  );
+}
+
+function clearPendingProtectedAppSetup() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(PROTECTED_APP_SETUP_PENDING_KEY);
 }
 
 export default function Onboarding(props) {
@@ -100,8 +184,27 @@ export default function Onboarding(props) {
   );
 }
 
-function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCompleteProtectedAppSetup, onGoHome, onSkip }) {
-  const [stepIndex, setStepIndex] = useState(0);
+function OnboardingContent({
+  onSavePersonalSetup,
+  onCommitmentDemoComplete,
+  onCompleteProtectedAppSetup,
+  onSaveProtectedAppPreference,
+  onGoHome,
+  onSkip,
+  renderCommitmentDemoCard,
+  renderCommitmentMotivationDemoCard,
+  renderCommitmentCheckInDemoCard,
+  renderCommitmentEncouragementDemoCard,
+  renderCommitmentReviewDemoCard,
+  availableLaunchers = [],
+}) {
+  const pendingProtectedAppSetup = readPendingProtectedAppSetup();
+  const initialProtectedAppInterruptionPrefs = pendingProtectedAppSetup?.appId
+    ? { [pendingProtectedAppSetup.appId]: Boolean(pendingProtectedAppSetup.useInterruptionCard) }
+    : {};
+  const [stepIndex, setStepIndex] = useState(() => (
+    pendingProtectedAppSetup ? STEPS.indexOf("protected-setup") : 0
+  ));
   const [demoComplete, setDemoComplete] = useState(false);
   const [demoReplayKey, setDemoReplayKey] = useState(0);
   const [skipRequested, setSkipRequested] = useState(false);
@@ -110,8 +213,13 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
   const [customCardOpen, setCustomCardOpen] = useState(false);
   const [customCards, setCustomCards] = useState([]);
   const [cardSelectionMessage, setCardSelectionMessage] = useState("");
-  const [selectedProtectedAppId, setSelectedProtectedAppId] = useState(FIRST_PROTECTED_APPS[0]?.id ?? "instagram");
-  const [showProtectedAppInstructions, setShowProtectedAppInstructions] = useState(false);
+  const [commitmentDemoChoice, setCommitmentDemoChoice] = useState(null);
+  const [commitmentCheckInChoice, setCommitmentCheckInChoice] = useState(null);
+  const protectedAppOptions = getFirstProtectedApps(availableLaunchers);
+  const [selectedProtectedAppId, setSelectedProtectedAppId] = useState(pendingProtectedAppSetup?.appId ?? protectedAppOptions[0]?.id ?? "instagram");
+  const [protectedAppSetupPhase, setProtectedAppSetupPhase] = useState(pendingProtectedAppSetup?.status === "install_started" ? "install_started" : "ready");
+  const [protectedAppInterruptionPrefs, setProtectedAppInterruptionPrefs] = useState(initialProtectedAppInterruptionPrefs);
+  const protectedAppInterruptionPrefsRef = useRef(initialProtectedAppInterruptionPrefs);
 
   const selectedCards = PERSONAL_CARD_OPTIONS.filter((option) => selectedCardIds.includes(option.id));
   const selectedCardTexts = [
@@ -119,6 +227,7 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
     ...customCards.map((card) => card.text),
   ].slice(0, 5);
   const canGoBack = stepIndex > 0;
+  const currentStep = STEPS[stepIndex] ?? STEPS[0];
 
   useEffect(() => {
     if (stepIndex !== 0) return undefined;
@@ -132,6 +241,32 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
   }
 
   function goBack() {
+    const previousReviewStep = commitmentCheckInChoice === "somewhat_on_track"
+      ? "commitment-encouragement"
+      : "commitment-check-in";
+    const previousProtectedAppStep = commitmentDemoChoice === null
+      ? "commitment-intro"
+      : commitmentCheckInChoice === "closed_early"
+        ? "commitment-exit"
+        : "commitment-complete";
+    const previousStepByCurrent = {
+      "commitment-time": "commitment-demo",
+      "commitment-check-in": "commitment-demo",
+      "commitment-motivation": "commitment-demo",
+      "commitment-encouragement": "commitment-check-in",
+      "commitment-review-time": previousReviewStep,
+      "commitment-review": previousReviewStep,
+      "commitment-complete": commitmentDemoChoice === "declined" ? "commitment-motivation" : "commitment-review",
+      "commitment-exit": "commitment-check-in",
+      "protected-app": previousProtectedAppStep,
+      "protected-demo": "protected-app",
+      "protected-setup": "protected-demo",
+    };
+    const previousStep = previousStepByCurrent[currentStep];
+    if (previousStep) {
+      setStepIndex(STEPS.indexOf(previousStep));
+      return;
+    }
     setStepIndex((current) => Math.max(0, current - 1));
   }
 
@@ -210,25 +345,112 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
     setStepIndex(STEPS.indexOf("protected-app"));
   }
 
+  function startCommitmentDemo() {
+    setCommitmentDemoChoice(null);
+    setCommitmentCheckInChoice(null);
+    setStepIndex(STEPS.indexOf("commitment-demo"));
+  }
+
+  function handleCommitmentDemoAction(action) {
+    if (action === "commit" || action === "commit_after_all") {
+      setCommitmentDemoChoice("accepted");
+      setStepIndex(STEPS.indexOf("commitment-time"));
+      return;
+    }
+    if (action === "decline_after_motivation") {
+      setCommitmentDemoChoice("declined");
+      setStepIndex(STEPS.indexOf("commitment-complete"));
+      return;
+    }
+    setCommitmentDemoChoice("declined");
+    setStepIndex(STEPS.indexOf("commitment-motivation"));
+  }
+
+  function handleCommitmentCheckInAction(response) {
+    setCommitmentCheckInChoice(response);
+    if (response === "closed_early") {
+      setStepIndex(STEPS.indexOf("commitment-exit"));
+      return;
+    }
+    if (response === "somewhat_on_track") {
+      setStepIndex(STEPS.indexOf("commitment-encouragement"));
+      return;
+    }
+    setStepIndex(STEPS.indexOf("commitment-review-time"));
+  }
+
+  function handleCommitmentEncouragementContinue() {
+    setStepIndex(STEPS.indexOf("commitment-review-time"));
+  }
+
+  function handleCommitmentReviewAction() {
+    setStepIndex(STEPS.indexOf("commitment-complete"));
+  }
+
   function completeCommitmentDemo() {
     onCommitmentDemoComplete?.({ skipped: false });
     setStepIndex(STEPS.indexOf("protected-app"));
   }
 
+  function continueToProtectedAppDemo() {
+    clearPendingProtectedAppSetup();
+    setProtectedAppSetupPhase("ready");
+    setStepIndex(STEPS.indexOf("protected-demo"));
+  }
+
   function continueToProtectedAppSetup() {
-    setShowProtectedAppInstructions(false);
+    saveProtectedAppInterruptionPreference(selectedProtectedAppId, getSelectedProtectedAppInterruptionEnabled());
     setStepIndex(STEPS.indexOf("protected-setup"));
   }
 
+  function selectProtectedApp(appId) {
+    clearPendingProtectedAppSetup();
+    setSelectedProtectedAppId(appId);
+    setProtectedAppSetupPhase("ready");
+  }
+
+  function getSelectedProtectedAppInterruptionEnabled() {
+    return protectedAppInterruptionPrefsRef.current[selectedProtectedAppId] ?? false;
+  }
+
+  function saveProtectedAppInterruptionPreference(appId, enabled) {
+    if (!appId) return;
+    protectedAppInterruptionPrefsRef.current = {
+      ...protectedAppInterruptionPrefsRef.current,
+      [appId]: enabled,
+    };
+    setProtectedAppInterruptionPrefs((current) => ({ ...current, [appId]: enabled }));
+    onSaveProtectedAppPreference?.({
+      appId,
+      useInterruptionCard: enabled,
+    });
+  }
+
+  function openProtectedAppInstall() {
+    const installUrl = getLauncherInstallUrl(selectedProtectedApp);
+    writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled());
+    setProtectedAppSetupPhase("install_started");
+    const opened = window.open(installUrl, "_blank", "noopener,noreferrer");
+    if (opened) return;
+    window.location.assign(installUrl);
+  }
+
+  function confirmProtectedAppSaved() {
+    clearPendingProtectedAppSetup();
+    setProtectedAppSetupPhase("confirmed");
+  }
+
   function finishProtectedAppSetup({ completed }) {
+    clearPendingProtectedAppSetup();
     onCompleteProtectedAppSetup?.({
       appId: selectedProtectedAppId,
       completed,
+      useInterruptionCard: getSelectedProtectedAppInterruptionEnabled(),
     });
     onGoHome?.();
   }
 
-  const selectedProtectedApp = FIRST_PROTECTED_APPS.find((app) => app.id === selectedProtectedAppId) ?? FIRST_PROTECTED_APPS[0];
+  const selectedProtectedApp = protectedAppOptions.find((app) => app.id === selectedProtectedAppId) ?? protectedAppOptions[0];
   const selectedProtectedAppName = getLauncherName(selectedProtectedApp);
 
   return (
@@ -242,7 +464,7 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
         <section className="onboarding-flow-card" aria-live="polite">
           <StepIndicator currentIndex={stepIndex} total={STEPS.length} />
 
-          {stepIndex === 0 ? (
+          {currentStep === "learn" ? (
             <OnboardingStep
               title="Before your apps open..."
               body="MyBishBash helps you use your phone differently, by showing personal reminders before the apps you already open."
@@ -260,7 +482,7 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 1 ? (
+          {currentStep === "intention" ? (
             <OnboardingStep
               className="onboarding-step-card-selection"
               title="Things I genuinely mean to do, but don’t always remember."
@@ -289,87 +511,192 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 2 ? (
+          {currentStep === "commitment-intro" ? (
             <OnboardingStep
-              title="There’s another type of card."
-              body="Personal Cards remind you. Commitment Cards follow up with you."
-              primaryLabel="Show me how it works"
-              onPrimary={() => setStepIndex(STEPS.indexOf("commitment-sequence"))}
+              className="onboarding-commitment-intro-step"
+              title="Make plans. Not just reminders."
+              primaryLabel="Show me"
+              onPrimary={startCommitmentDemo}
               secondaryLabel="Skip"
               onSecondary={skipCommitmentDemo}
               canGoBack={canGoBack}
               onBack={goBack}
             >
-              <CommitmentCardDemoIntro />
+              <div className="onboarding-commitment-intro-copy">
+                <p>Personal Cards help you remember.</p>
+                <p>Commitment Cards help you follow through.</p>
+                <p>When you accept a commitment, MyBishBash checks back later and asks how it went.</p>
+              </div>
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 3 ? (
-            <OnboardingStep
-              title="Commitments check in with you later."
-              primaryLabel="Continue"
-              onPrimary={() => setStepIndex(STEPS.indexOf("commitment-no"))}
+          {currentStep === "commitment-demo" ? (
+            <OnboardingCommitmentDemoStage
               canGoBack={canGoBack}
               onBack={goBack}
+              dataTestId="commitment-card-demo"
             >
-              <CommitmentCheckInSequence />
-            </OnboardingStep>
+              {renderCommitmentDemoCard?.({ onCommitmentAction: handleCommitmentDemoAction })}
+            </OnboardingCommitmentDemoStage>
           ) : null}
 
-          {stepIndex === 4 ? (
+          {currentStep === "commitment-motivation" ? (
+            <OnboardingCommitmentDemoStage
+              canGoBack={canGoBack}
+              onBack={goBack}
+              dataTestId="commitment-motivation-demo"
+            >
+              {renderCommitmentMotivationDemoCard?.({ onCommitmentAction: handleCommitmentDemoAction })}
+            </OnboardingCommitmentDemoStage>
+          ) : null}
+
+          {currentStep === "commitment-time" ? (
+            <CommitmentTimePassage
+              label="Later..."
+              body="MyBishBash checks in while you are still trying."
+              onComplete={() => setStepIndex(STEPS.indexOf("commitment-check-in"))}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            />
+          ) : null}
+
+          {currentStep === "commitment-check-in" ? (
+            <OnboardingCommitmentDemoStage
+              canGoBack={canGoBack}
+              onBack={goBack}
+              dataTestId="commitment-check-in-demo"
+            >
+              {renderCommitmentCheckInDemoCard?.({ onCheckInAction: handleCommitmentCheckInAction })}
+            </OnboardingCommitmentDemoStage>
+          ) : null}
+
+          {currentStep === "commitment-encouragement" ? (
+            <OnboardingCommitmentDemoStage
+              canGoBack={canGoBack}
+              onBack={goBack}
+              dataTestId="commitment-encouragement-demo"
+            >
+              {renderCommitmentEncouragementDemoCard?.({ onContinue: handleCommitmentEncouragementContinue })}
+            </OnboardingCommitmentDemoStage>
+          ) : null}
+
+          {currentStep === "commitment-review-time" ? (
+            <CommitmentTimePassage
+              label="Later..."
+              body="At the end, MyBishBash helps you reflect."
+              onComplete={() => setStepIndex(STEPS.indexOf("commitment-review"))}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            />
+          ) : null}
+
+          {currentStep === "commitment-review" ? (
+            <OnboardingCommitmentDemoStage
+              canGoBack={canGoBack}
+              onBack={goBack}
+              dataTestId="commitment-review-demo"
+            >
+              {renderCommitmentReviewDemoCard?.({ onReviewAction: handleCommitmentReviewAction })}
+            </OnboardingCommitmentDemoStage>
+          ) : null}
+
+          {currentStep === "commitment-complete" ? (
             <OnboardingStep
-              title="Saying no is allowed too."
-              body="MyBishBash can help you notice what gets in the way."
-              primaryLabel="Choose my first app"
+              className="onboarding-commitment-complete-step"
+              title="You won’t make any commitments now."
+              body="You can create your own when you’re using the app."
+              primaryLabel="Continue"
+              onPrimary={completeCommitmentDemo}
+              canGoBack={canGoBack && commitmentDemoChoice !== "accepted"}
+              onBack={goBack}
+            />
+          ) : null}
+
+          {currentStep === "commitment-exit" ? (
+            <OnboardingStep
+              className="onboarding-commitment-complete-step"
+              title="That's okay."
+              body="We'll leave this for another day."
+              primaryLabel="Continue"
               onPrimary={completeCommitmentDemo}
               canGoBack={canGoBack}
               onBack={goBack}
+            />
+          ) : null}
+
+          {currentStep === "protected-app" ? (
+            <OnboardingStep
+              title="Install Your First App"
+              body="Your Personal Cards can appear before the apps you already open."
+              primaryLabel="Continue"
+              onPrimary={continueToProtectedAppDemo}
+              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
+              onSecondary={() => finishProtectedAppSetup({ completed: false })}
+              canGoBack={canGoBack}
+              onBack={goBack}
             >
-              <CommitmentDeclineSequence />
+              <ProtectedAppChoiceGrid
+                apps={protectedAppOptions}
+                selectedId={selectedProtectedAppId}
+                onSelect={selectProtectedApp}
+              />
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 5 ? (
+          {currentStep === "protected-demo" ? (
             <OnboardingStep
-              title="Choose your first app"
-              body="Your Personal Cards can appear before the apps you already open."
-              primaryLabel="Continue"
+              title={`Before ${selectedProtectedAppName} opens`}
+              body={`Would you like to enable an interruption card before ${selectedProtectedAppName} opens?`}
+              primaryLabel={`Install ${selectedProtectedAppName} Launcher`}
               onPrimary={continueToProtectedAppSetup}
               secondaryLabel="I’ll do this later"
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
             >
-              <ProtectedAppChoiceGrid
-                apps={FIRST_PROTECTED_APPS}
-                selectedId={selectedProtectedAppId}
-                onSelect={setSelectedProtectedAppId}
+              <ProtectedAppInterruptionDemo
+                app={selectedProtectedApp}
+                enabled={getSelectedProtectedAppInterruptionEnabled()}
+                onChange={(enabled) => saveProtectedAppInterruptionPreference(selectedProtectedAppId, enabled)}
               />
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 6 ? (
+          {currentStep === "protected-setup" ? (
             <OnboardingStep
-              title={`Connect ${selectedProtectedAppName}`}
-              body={`Show your Personal Cards before ${selectedProtectedAppName} opens.`}
-              primaryLabel={showProtectedAppInstructions ? "I’ve added it" : `Connect ${selectedProtectedAppName}`}
+              title={protectedAppSetupPhase === "confirmed" ? "Nice." : `Install ${selectedProtectedAppName} Launcher`}
+              body={protectedAppSetupPhase === "confirmed"
+                ? `Your ${selectedProtectedAppName} launcher is ready. When you tap ${selectedProtectedAppName} from your Home Screen, MyBishBash will show your Personal Cards first.`
+                : `See your Personal Cards before opening ${selectedProtectedAppName}.`}
+              primaryLabel={protectedAppSetupPhase === "confirmed"
+                ? "Continue"
+                : protectedAppSetupPhase === "install_started"
+                  ? "I’ve saved it"
+                  : `Add ${selectedProtectedAppName} Launcher`}
               onPrimary={() => {
-                if (!showProtectedAppInstructions) {
-                  setShowProtectedAppInstructions(true);
+                if (protectedAppSetupPhase === "confirmed") {
+                  finishProtectedAppSetup({ completed: true });
                   return;
                 }
-                finishProtectedAppSetup({ completed: true });
+                if (protectedAppSetupPhase === "install_started") {
+                  confirmProtectedAppSaved();
+                  return;
+                }
+                openProtectedAppInstall();
               }}
-              secondaryLabel="I’ll do this later"
+              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
             >
-              <ProtectedAppSetupCard app={selectedProtectedApp} showInstructions={showProtectedAppInstructions} />
+              <ProtectedAppSetupCard
+                app={selectedProtectedApp}
+                phase={protectedAppSetupPhase}
+              />
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 7 ? (
+          {currentStep === "skip" ? (
             <OnboardingStep
               title="You can set up your first card later."
               body="Personal Cards live in MyBishBash. When you are ready, create one reminder and let your phone bring you back to what matters."
@@ -387,62 +714,62 @@ function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCo
   );
 }
 
-const STEPS = ["learn", "intention", "commitment-intro", "commitment-sequence", "commitment-no", "protected-app", "protected-setup", "skip"];
+const STEPS = [
+  "learn",
+  "intention",
+  "commitment-intro",
+  "commitment-demo",
+  "commitment-motivation",
+  "commitment-time",
+  "commitment-check-in",
+  "commitment-encouragement",
+  "commitment-review-time",
+  "commitment-review",
+  "commitment-complete",
+  "commitment-exit",
+  "protected-app",
+  "protected-demo",
+  "protected-setup",
+  "skip",
+];
 
-function CommitmentCardDemoIntro() {
+function OnboardingCommitmentDemoStage({ children, canGoBack, onBack, dataTestId }) {
   return (
-    <div className="onboarding-commitment-demo-grid" data-testid="commitment-card-demo-intro">
-      <article className="onboarding-demo-card-small">
-        <span>Personal Card</span>
-        <h3>Have you taken your vitamins today?</h3>
-        <p>A simple reminder.</p>
-      </article>
-      <article className="onboarding-demo-card-small commitment">
-        <span>Commitment Card</span>
-        <h3>I will go to the gym today.</h3>
-        <div className="onboarding-demo-card-buttons">
-          <button type="button">I’ll do it</button>
-          <button type="button">Not this time</button>
+    <div className="onboarding-step onboarding-commitment-real-step" data-testid={dataTestId}>
+      <div className="onboarding-step-top">
+        {canGoBack ? (
+          <button type="button" className="onboarding-back-button" onClick={onBack} aria-label="Go back">
+            Back
+          </button>
+        ) : null}
+      </div>
+      <div className="onboarding-commitment-real-stage">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CommitmentTimePassage({ label = "Great.", body = "We'll check back later.", onComplete, canGoBack, onBack }) {
+  return (
+    <div className="onboarding-step onboarding-commitment-time-step" data-testid="commitment-time-passage">
+      <div className="onboarding-step-top">
+        {canGoBack ? (
+          <button type="button" className="onboarding-back-button" onClick={onBack} aria-label="Go back">
+            Back
+          </button>
+        ) : null}
+      </div>
+      <div className="onboarding-commitment-time">
+        <div className="onboarding-time-ring" aria-hidden="true">
+          <span />
         </div>
-        <p>A promise to yourself.</p>
-      </article>
-    </div>
-  );
-}
-
-function CommitmentCheckInSequence() {
-  const steps = [
-    { label: "Morning", text: "I will go to the gym today.", action: "I’ll do it" },
-    { label: "Later", text: "How is it going?" },
-    { label: "Evening", text: "Did you do it?" },
-  ];
-  return (
-    <div className="onboarding-commitment-sequence" data-testid="commitment-check-in-demo">
-      {steps.map((step) => (
-        <article key={step.label} className="onboarding-commitment-step-card">
-          <span>{step.label}</span>
-          <h3>{step.text}</h3>
-          {step.action ? <button type="button">{step.action}</button> : null}
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function CommitmentDeclineSequence() {
-  const steps = [
-    { label: "Choice", text: "I will go to the gym today.", action: "Not this time" },
-    { label: "Reflection", text: "What got in the way?" },
-  ];
-  return (
-    <div className="onboarding-commitment-sequence two" data-testid="commitment-decline-demo">
-      {steps.map((step) => (
-        <article key={step.label} className="onboarding-commitment-step-card">
-          <span>{step.label}</span>
-          <h3>{step.text}</h3>
-          {step.action ? <button type="button">{step.action}</button> : null}
-        </article>
-      ))}
+        <h2>{label}</h2>
+        <p>{body}</p>
+        <button type="button" className="onboarding-time-next" onClick={onComplete}>
+          Next
+        </button>
+      </div>
     </div>
   );
 }
@@ -545,27 +872,93 @@ function ProtectedAppChoiceGrid({ apps, selectedId, onSelect }) {
   );
 }
 
-function ProtectedAppSetupCard({ app, showInstructions }) {
+function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
   const appName = getLauncherName(app);
+  const demo = APP_INTERRUPTION_DEMOS[app?.id] ?? {
+    title: `Before ${appName}`,
+    body: "Open with intention.",
+  };
+  return (
+    <div className="onboarding-interruption-demo" data-testid="onboarding-interruption-demo">
+      <article className="onboarding-interruption-example-card">
+        <p className="onboarding-demo-card-greeting">MYBISHBASH</p>
+        <span className="onboarding-demo-card-heart" aria-hidden="true">
+          <HeartGlyph />
+        </span>
+        <h3>{demo.title}</h3>
+        <i aria-hidden="true" />
+        <p>{demo.body}</p>
+        <div className="onboarding-real-card-actions">
+          <button type="button">Continue to {appName}</button>
+          <button type="button">Not now</button>
+        </div>
+      </article>
+      <p className="onboarding-interruption-demo-note">This is an example of an interruption card.</p>
+      <div className="onboarding-interruption-toggle" data-testid="onboarding-interruption-toggle">
+        <span>Interruption card</span>
+        <div role="group" aria-label="Interruption card">
+          <button
+            type="button"
+            className={enabled ? "selected" : ""}
+            aria-pressed={enabled}
+            onClick={() => onChange(true)}
+          >
+            On
+          </button>
+          <button
+            type="button"
+            className={!enabled ? "selected" : ""}
+            aria-pressed={!enabled}
+            onClick={() => onChange(false)}
+          >
+            Off
+          </button>
+        </div>
+        <p>You can change this later.</p>
+      </div>
+    </div>
+  );
+}
+
+function ProtectedAppSetupCard({ app, phase = "ready" }) {
+  const appName = getLauncherName(app);
+  const isConfirmed = phase === "confirmed";
+  const steps = [
+    `Tap Add ${appName} Launcher.`,
+    "Tap Share.",
+    "Tap Add to Home Screen.",
+    "Keep the suggested name.",
+    "Return to MyBishBash to continue.",
+  ];
   return (
     <article className="onboarding-protected-setup-card" data-testid="onboarding-protected-app-setup">
       <div className="onboarding-protected-setup-heading">
         <OnboardingAppIcon launcher={app} />
         <div>
-          <p>Protected App</p>
+          <p>{isConfirmed ? "Marked as saved" : "Home Screen launcher"}</p>
           <h3>{appName}</h3>
         </div>
       </div>
-      {showInstructions ? (
-        <ol className="onboarding-install-steps">
-          <li>Open the {appName} setup page from Apps.</li>
-          <li>Tap Share.</li>
-          <li>Tap Add to Home Screen.</li>
-          <li>Keep the suggested name.</li>
-          <li>Tap Add, then return to MyBishBash.</li>
-        </ol>
+      {isConfirmed ? (
+        <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
+          <strong>{appName} launcher</strong>
+          <p>Marked as saved.</p>
+        </div>
       ) : (
-        <p>Choose this app now. You can finish the Home Screen step from Apps whenever you are ready.</p>
+        <>
+          <p>Add the {appName} launcher to your Home Screen.</p>
+          <ol className="onboarding-install-steps">
+            {steps.map((step, index) => (
+              <li key={step}>
+                <span className="onboarding-install-step-marker" aria-hidden="true">{index + 1}</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="onboarding-install-return-note">
+            Once it is saved, return to MyBishBash to continue.
+          </p>
+        </>
       )}
     </article>
   );
@@ -776,7 +1169,7 @@ function OnboardingStep({
       </div>
       <div className="onboarding-step-copy">
         <h2>{title}</h2>
-        <p>{body}</p>
+        {body ? <p>{body}</p> : null}
       </div>
       {children ? <div className="onboarding-step-body">{children}</div> : null}
       <div className="onboarding-actions">
