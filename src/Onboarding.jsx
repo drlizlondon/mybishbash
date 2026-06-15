@@ -100,7 +100,7 @@ export default function Onboarding(props) {
   );
 }
 
-function OnboardingContent({ onSavePersonalSetup, onCompleteProtectedAppSetup, onGoHome, onSkip }) {
+function OnboardingContent({ onSavePersonalSetup, onCommitmentDemoComplete, onCompleteProtectedAppSetup, onGoHome, onSkip }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [demoComplete, setDemoComplete] = useState(false);
   const [demoReplayKey, setDemoReplayKey] = useState(0);
@@ -202,6 +202,16 @@ function OnboardingContent({ onSavePersonalSetup, onCompleteProtectedAppSetup, o
 
   function saveAndContinue() {
     savePersonalCard();
+    setStepIndex(STEPS.indexOf("commitment-intro"));
+  }
+
+  function skipCommitmentDemo() {
+    onCommitmentDemoComplete?.({ skipped: true });
+    setStepIndex(STEPS.indexOf("protected-app"));
+  }
+
+  function completeCommitmentDemo() {
+    onCommitmentDemoComplete?.({ skipped: false });
     setStepIndex(STEPS.indexOf("protected-app"));
   }
 
@@ -281,6 +291,46 @@ function OnboardingContent({ onSavePersonalSetup, onCompleteProtectedAppSetup, o
 
           {stepIndex === 2 ? (
             <OnboardingStep
+              title="There’s another type of card."
+              body="Personal Cards remind you. Commitment Cards follow up with you."
+              primaryLabel="Show me how it works"
+              onPrimary={() => setStepIndex(STEPS.indexOf("commitment-sequence"))}
+              secondaryLabel="Skip"
+              onSecondary={skipCommitmentDemo}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            >
+              <CommitmentCardDemoIntro />
+            </OnboardingStep>
+          ) : null}
+
+          {stepIndex === 3 ? (
+            <OnboardingStep
+              title="Commitments check in with you later."
+              primaryLabel="Continue"
+              onPrimary={() => setStepIndex(STEPS.indexOf("commitment-no"))}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            >
+              <CommitmentCheckInSequence />
+            </OnboardingStep>
+          ) : null}
+
+          {stepIndex === 4 ? (
+            <OnboardingStep
+              title="Saying no is allowed too."
+              body="MyBishBash can help you notice what gets in the way."
+              primaryLabel="Choose my first app"
+              onPrimary={completeCommitmentDemo}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            >
+              <CommitmentDeclineSequence />
+            </OnboardingStep>
+          ) : null}
+
+          {stepIndex === 5 ? (
+            <OnboardingStep
               title="Choose your first app"
               body="Your Personal Cards can appear before the apps you already open."
               primaryLabel="Continue"
@@ -298,7 +348,7 @@ function OnboardingContent({ onSavePersonalSetup, onCompleteProtectedAppSetup, o
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 3 ? (
+          {stepIndex === 6 ? (
             <OnboardingStep
               title={`Connect ${selectedProtectedAppName}`}
               body={`Show your Personal Cards before ${selectedProtectedAppName} opens.`}
@@ -319,7 +369,7 @@ function OnboardingContent({ onSavePersonalSetup, onCompleteProtectedAppSetup, o
             </OnboardingStep>
           ) : null}
 
-          {stepIndex === 4 ? (
+          {stepIndex === 7 ? (
             <OnboardingStep
               title="You can set up your first card later."
               body="Personal Cards live in MyBishBash. When you are ready, create one reminder and let your phone bring you back to what matters."
@@ -337,7 +387,65 @@ function OnboardingContent({ onSavePersonalSetup, onCompleteProtectedAppSetup, o
   );
 }
 
-const STEPS = ["learn", "intention", "protected-app", "protected-setup", "skip"];
+const STEPS = ["learn", "intention", "commitment-intro", "commitment-sequence", "commitment-no", "protected-app", "protected-setup", "skip"];
+
+function CommitmentCardDemoIntro() {
+  return (
+    <div className="onboarding-commitment-demo-grid" data-testid="commitment-card-demo-intro">
+      <article className="onboarding-demo-card-small">
+        <span>Personal Card</span>
+        <h3>Have you taken your vitamins today?</h3>
+        <p>A simple reminder.</p>
+      </article>
+      <article className="onboarding-demo-card-small commitment">
+        <span>Commitment Card</span>
+        <h3>I will go to the gym today.</h3>
+        <div className="onboarding-demo-card-buttons">
+          <button type="button">I’ll do it</button>
+          <button type="button">Not this time</button>
+        </div>
+        <p>A promise to yourself.</p>
+      </article>
+    </div>
+  );
+}
+
+function CommitmentCheckInSequence() {
+  const steps = [
+    { label: "Morning", text: "I will go to the gym today.", action: "I’ll do it" },
+    { label: "Later", text: "How is it going?" },
+    { label: "Evening", text: "Did you do it?" },
+  ];
+  return (
+    <div className="onboarding-commitment-sequence" data-testid="commitment-check-in-demo">
+      {steps.map((step) => (
+        <article key={step.label} className="onboarding-commitment-step-card">
+          <span>{step.label}</span>
+          <h3>{step.text}</h3>
+          {step.action ? <button type="button">{step.action}</button> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CommitmentDeclineSequence() {
+  const steps = [
+    { label: "Choice", text: "I will go to the gym today.", action: "Not this time" },
+    { label: "Reflection", text: "What got in the way?" },
+  ];
+  return (
+    <div className="onboarding-commitment-sequence two" data-testid="commitment-decline-demo">
+      {steps.map((step) => (
+        <article key={step.label} className="onboarding-commitment-step-card">
+          <span>{step.label}</span>
+          <h3>{step.text}</h3>
+          {step.action ? <button type="button">{step.action}</button> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
 
 function ReminderIdeaGrid({
   options,

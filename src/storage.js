@@ -182,6 +182,8 @@ export function loadProfile() {
       name: stored?.name ?? "",
       timezone: stored?.timezone ?? "Europe/London",
       plan: stored?.plan ?? "free",
+      hasSeenCommitmentCardDemo: stored?.hasSeenCommitmentCardDemo ?? false,
+      hasSkippedCommitmentCardDemo: stored?.hasSkippedCommitmentCardDemo ?? false,
       hasCompletedHomeSpotlightTour: stored?.hasCompletedHomeSpotlightTour ?? false,
     };
   } catch {
@@ -189,6 +191,8 @@ export function loadProfile() {
       name: "",
       timezone: "Europe/London",
       plan: "free",
+      hasSeenCommitmentCardDemo: false,
+      hasSkippedCommitmentCardDemo: false,
       hasCompletedHomeSpotlightTour: false,
     };
   }

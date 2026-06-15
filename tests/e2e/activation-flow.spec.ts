@@ -83,3 +83,59 @@ test('Home shows only incomplete activation checklist items', async ({ page }) =
   await expect(page.getByText('Create your first Personal Card')).toBeVisible();
   await expect(page.getByText('Add your first protected app')).toBeVisible();
 });
+
+test('Home hides activation checklist when setup is complete', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
+    window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+    window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+    window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
+      name: 'Complete Tester',
+      timezone: 'Europe/London',
+      plan: 'free',
+      hasSkippedHomeScreenInstallPrompt: false,
+      hasCompletedHomeScreenInstall: true,
+      hasCompletedPersonalCardSetup: true,
+      hasCompletedProtectedAppSetup: true,
+      selectedProtectedApp: 'instagram',
+      hasCompletedHomeSpotlightTour: true,
+    }));
+    window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify([
+      {
+        id: 'personal-card-1',
+        cardKind: 'personal',
+        promptText: 'Drink some water.',
+        theme: 'Soft Bloom',
+        icon: 'water',
+        statusToday: 'pending',
+        createdAt: '2026-06-14T10:00:00.000Z',
+        updatedAt: '2026-06-14T10:00:00.000Z',
+        lastShownAt: null,
+        notYetUntil: null,
+        doneDate: null,
+        frequency: 'once_daily',
+        timingWindows: ['day'],
+        paused: false,
+        deletedAt: null,
+      },
+    ]));
+    window.localStorage.setItem('mybishbash.card-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+    window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+    window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+    window.localStorage.setItem('mybishbash.hidden-library-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify({
+      mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      safari: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      whatsapp: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+    }));
+  });
+
+  await page.goto('/mybishbash/home');
+
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('home-activation-checklist')).toHaveCount(0);
+  await expect(page.getByText('Finish setting up MyBishBash')).toHaveCount(0);
+});

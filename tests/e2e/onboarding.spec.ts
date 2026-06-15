@@ -77,6 +77,13 @@ async function completePersonalCardOnboarding(page: Page) {
   await page.getByRole('button', { name: /Take five minutes outside./ }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
+  await expect(page.getByRole('heading', { name: 'There’s another type of card.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show me how it works' }).click();
+  await expect(page.getByRole('heading', { name: 'Commitments check in with you later.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'Saying no is allowed too.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Choose my first app' }).click();
+
   await expect(page.getByRole('heading', { name: 'Choose your first app' })).toBeVisible();
   await expect(page.getByText('Your Personal Cards can appear before the apps you already open.')).toBeVisible();
   await page.getByRole('radio', { name: 'Instagram' }).click();
@@ -209,6 +216,7 @@ test('Write my own opens input, validates, adds selected custom card, and persis
   await expect(page.getByRole('button', { name: 'Write my own' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
   await page.getByRole('button', { name: 'I’ll do this later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
@@ -245,6 +253,7 @@ test('Continue with zero selected Personal Cards completes without creating card
   await page.getByRole('button', { name: 'Make your own' }).click();
   await expect(page.getByText('0 of 5 selected')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
   await page.getByRole('button', { name: 'I’ll do this later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
@@ -288,6 +297,8 @@ test('user can complete Personal Card onboarding and reach Home', async ({ page 
   expect(state.profile.onboardingLauncherId).toBe('mybishbash_home');
   expect(state.profile.onboardingLauncherId).not.toBe('safari');
   expect(state.profile.hasCompletedPersonalCardSetup).toBe(true);
+  expect(state.profile.hasSeenCommitmentCardDemo).toBe(true);
+  expect(state.profile.hasSkippedCommitmentCardDemo).toBe(false);
   expect(state.profile.selectedProtectedApp).toBe('instagram');
   expect(state.profile.hasCompletedProtectedAppSetup).toBe(true);
   expect(state.profile.hasCompletedHomeSpotlightTour).toBe(false);
@@ -324,7 +335,59 @@ test('Personal Card onboarding copy renders without emoji or old future-you copy
   expect(onboardingText).not.toContain('Live Preview');
   expect(onboardingText).not.toContain('Choose the moment.');
   expect(onboardingText).not.toContain('Choose where it belongs.');
+  await expect(page.getByRole('heading', { name: 'There’s another type of card.' })).toBeVisible();
+});
+
+test('Commitment Cards demo appears after Personal Cards, can complete, and persists no commitment', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.goto('/mybishbash/onboarding');
+
+  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Take five minutes outside.' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'There’s another type of card.' })).toBeVisible();
+  const demoIntro = page.getByTestId('commitment-card-demo-intro');
+  await expect(demoIntro.getByText('Personal Card')).toBeVisible();
+  await expect(demoIntro.getByText('Commitment Card')).toBeVisible();
+  await expect(page.getByText('I will go to the gym today.')).toBeVisible();
+  await page.getByRole('button', { name: 'Show me how it works' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Commitments check in with you later.' })).toBeVisible();
+  const checkInDemo = page.getByTestId('commitment-check-in-demo');
+  await expect(checkInDemo.getByText('Morning')).toBeVisible();
+  await expect(checkInDemo.getByText('Later')).toBeVisible();
+  await expect(checkInDemo.getByText('Evening')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Saying no is allowed too.' })).toBeVisible();
+  await expect(page.getByText('What got in the way?')).toBeVisible();
+  await page.getByRole('button', { name: 'Choose my first app' }).click();
   await expect(page.getByRole('heading', { name: 'Choose your first app' })).toBeVisible();
+
+  const state = await page.evaluate(() => ({
+    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
+    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
+  }));
+  expect(state.cards).toHaveLength(1);
+  expect(state.cards.some((card: Record<string, unknown>) => card.cardKind === 'commitment' || String(card.promptText).includes('gym'))).toBe(false);
+  expect(state.profile.hasSeenCommitmentCardDemo).toBe(true);
+  expect(state.profile.hasSkippedCommitmentCardDemo).toBe(false);
+});
+
+test('Commitment Cards demo can be skipped and continues to first app selection', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.goto('/mybishbash/onboarding');
+
+  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'There’s another type of card.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose your first app' })).toBeVisible();
+
+  const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
+  expect(profile.hasSeenCommitmentCardDemo).toBe(false);
+  expect(profile.hasSkippedCommitmentCardDemo).toBe(true);
 });
 
 test('first app screen shows three apps in order with consistent icon sizing and single selection', async ({ page }) => {
@@ -333,6 +396,7 @@ test('first app screen shows three apps in order with consistent icon sizing and
 
   await page.getByRole('button', { name: 'Make your own' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
 
   const appNames = await page.locator('.onboarding-protected-app-card strong').allTextContents();
   expect(appNames).toEqual(['Instagram', 'Safari', 'WhatsApp']);
@@ -366,6 +430,7 @@ test('app setup can be skipped directly to Home and uses Connect language', asyn
 
   await page.getByRole('button', { name: 'Make your own' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
   await page.getByRole('radio', { name: 'Safari' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -384,6 +449,37 @@ test('app setup can be skipped directly to Home and uses Connect language', asyn
   expect(profile.hasCompletedProtectedAppSetup).toBe(false);
 });
 
+test('Today card opens a filtered Library view and shows the correct zero-card empty state', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
+    window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+    window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+    window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
+      name: 'No Cards',
+      timezone: 'Europe/London',
+      plan: 'free',
+      hasCompletedHomeSpotlightTour: true,
+      hasCompletedPersonalCardSetup: false,
+      hasCompletedProtectedAppSetup: false,
+    }));
+    window.localStorage.setItem('mybishbash.cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.card-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+    window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+    window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+    window.localStorage.setItem('mybishbash.hidden-library-packs.v1', '[]');
+  });
+
+  await page.goto('/mybishbash/home');
+  await page.getByTestId('home-progress-card').click();
+  await expect(page).toHaveURL(/\/mybishbash\/library$/);
+  await expect(page.getByTestId('today-personal-library')).toBeVisible();
+  await expect(page.getByTestId('today-personal-empty')).toContainText('No Personal Cards yet.');
+  await expect(page.getByRole('button', { name: 'Create Personal Card' })).toBeVisible();
+  await expect(page.getByText('You’re all clear today.')).toHaveCount(0);
+});
+
 test('Home spotlight tour can be skipped and does not reappear', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
@@ -392,6 +488,7 @@ test('Home spotlight tour can be skipped and does not reappear', async ({ page }
   const tour = page.getByTestId('home-spotlight-tour');
   await expect(tour).toBeVisible();
   await expect(page.getByRole('heading', { name: 'This is your day' })).toBeVisible();
+  await expect(tour).not.toContainText(/1 of \d/);
   await tour.getByRole('button', { name: 'Skip' }).click();
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
 
@@ -411,21 +508,59 @@ test('Home spotlight tour can be completed and does not reappear', async ({ page
   const tour = page.getByTestId('home-spotlight-tour');
   await expect(tour).toBeVisible();
 
-  for (const title of [
-    'This is your day',
-    'Create a Personal Card',
-    'Connect more apps',
-    'Try a Pack',
-    'You’re ready',
-  ]) {
-    await expect(page.getByRole('heading', { name: title })).toBeVisible();
-    await tour.getByRole('button', { name: title === 'You’re ready' ? 'Done' : 'Next' }).click();
-  }
+  await expect(page.getByRole('heading', { name: 'This is your day' })).toBeVisible();
+  await tour.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('heading', { name: 'Track your progress' })).toBeVisible();
+  await tour.getByRole('button', { name: 'Next' }).click();
+
+  await expect(page.getByRole('heading', { name: 'See today’s cards' })).toBeVisible();
+  await page.getByTestId('home-progress-card').click();
+  await expect(page).toHaveURL(/\/mybishbash\/library$/);
+  await expect(page.getByTestId('today-personal-library')).toBeVisible();
+
+  await expect(page.getByRole('heading', { name: 'Create a Personal Card' })).toBeVisible();
+  await page.getByTestId('create-card-button').click();
+  await expect(page.getByRole('heading', { name: 'Connect more apps' })).toBeVisible();
+
+  await page.getByTestId('bottom-nav-apps').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByRole('heading', { name: 'Try a Pack' })).toBeVisible();
+
+  await page.getByTestId('bottom-nav-explore').click();
+  await expect(page).toHaveURL(/\/mybishbash\/explore$/);
+  await expect(page.getByRole('heading', { name: 'You’re ready' })).toBeVisible();
+  await tour.getByRole('button', { name: 'Done' }).click();
 
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
-  await page.reload();
+  await page.goto('/mybishbash/home');
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
+});
+
+test('onboarding visible copy avoids technical setup terms', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.goto('/mybishbash/onboarding');
+
+  const assertNoTechnicalTerms = async () => {
+    const text = await page.locator('body').innerText();
+    expect(text).not.toMatch(/\bPWA\b/i);
+    expect(text).not.toMatch(/\bshell\b/i);
+    expect(text).not.toMatch(/\blauncher\b/i);
+    expect(text).not.toMatch(/\bintercept\b/i);
+    expect(text).not.toMatch(/\bfake app\b/i);
+  };
+
+  await assertNoTechnicalTerms();
+  await page.getByRole('button', { name: 'Make your own' }).click();
+  await assertNoTechnicalTerms();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await assertNoTechnicalTerms();
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await assertNoTechnicalTerms();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await assertNoTechnicalTerms();
+  await page.getByRole('button', { name: 'Connect Instagram' }).click();
+  await assertNoTechnicalTerms();
 });
 
 test('onboarding headlines fit mobile without mid-word splitting', async ({ page }) => {
@@ -436,7 +571,10 @@ test('onboarding headlines fit mobile without mid-word splitting', async ({ page
   const checks: Array<{ action?: () => Promise<void>; heading: string }> = [
     { heading: 'Before your apps open...' },
     { action: () => page.getByRole('button', { name: 'Make your own' }).click(), heading: 'Things I genuinely mean to do, but don’t always remember.' },
-    { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Choose your first app' },
+    { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'There’s another type of card.' },
+    { action: async () => { await page.getByRole('button', { name: 'Show me how it works' }).click(); }, heading: 'Commitments check in with you later.' },
+    { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Saying no is allowed too.' },
+    { action: async () => { await page.getByRole('button', { name: 'Choose my first app' }).click(); }, heading: 'Choose your first app' },
     { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Connect Instagram' },
   ];
 

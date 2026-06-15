@@ -3380,7 +3380,7 @@ textarea {
   position: fixed;
   inset: 0;
   z-index: 10050;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .home-spotlight-dim {
@@ -3424,6 +3424,7 @@ textarea {
   background: rgba(255, 252, 248, 0.96);
   box-shadow: 0 24px 64px rgba(24, 20, 18, 0.18);
   animation: home-spotlight-card-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: auto;
 }
 
 .home-spotlight-card.below {
@@ -3431,12 +3432,22 @@ textarea {
   bottom: auto;
 }
 
-.home-spotlight-count {
-  color: #d3654b;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.home-spotlight-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.home-spotlight-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(120, 87, 65, 0.22);
+}
+
+.home-spotlight-dots span.active {
+  width: 18px;
+  background: #d3654b;
 }
 
 .home-spotlight-card h2 {
@@ -3484,6 +3495,18 @@ textarea {
   box-shadow: 0 12px 26px rgba(201, 96, 70, 0.2);
 }
 
+.home-spotlight-tap-hint {
+  min-height: 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: rgba(217, 108, 82, 0.12);
+  color: #9a5145;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
 @keyframes home-spotlight-fade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -3498,6 +3521,87 @@ textarea {
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+.home-spotlight-target-active {
+  animation: home-spotlight-target-pulse 1500ms ease-in-out infinite;
+}
+
+@keyframes home-spotlight-target-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 rgba(217, 108, 82, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(217, 108, 82, 0.34));
+  }
+}
+
+.today-personal-library {
+  display: grid;
+  gap: 18px;
+}
+
+.today-personal-empty,
+.today-personal-section {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(112, 88, 68, 0.10);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 18px 44px rgba(84, 58, 38, 0.08);
+}
+
+.today-personal-empty h3,
+.today-personal-section h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.3rem;
+  line-height: 1.12;
+  font-weight: 500;
+  color: #191817;
+}
+
+.today-personal-empty p {
+  margin: 0;
+  color: rgba(79, 71, 67, 0.72);
+  font-size: 0.94rem;
+  line-height: 1.36;
+}
+
+.today-personal-list {
+  display: grid;
+  gap: 9px;
+}
+
+.today-personal-card-row {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(120, 87, 65, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 252, 249, 0.74);
+  color: #191817;
+  text-align: left;
+  font: inherit;
+}
+
+.today-personal-card-row strong {
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+
+.today-personal-status {
+  color: #9a5145;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.today-personal-status.completed {
+  color: rgba(79, 111, 88, 0.9);
 }
 
 .onboarding-prompt-card {
@@ -8883,6 +8987,76 @@ body {
 .onboarding-custom-card button:disabled {
   opacity: 0.42;
   cursor: not-allowed;
+}
+
+.onboarding-commitment-demo-grid,
+.onboarding-commitment-sequence {
+  display: grid;
+  gap: 12px;
+}
+
+.onboarding-commitment-sequence.two {
+  grid-template-columns: 1fr;
+}
+
+.onboarding-demo-card-small,
+.onboarding-commitment-step-card {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid rgba(120, 87, 65, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 252, 249, 0.74);
+  box-shadow: 0 8px 20px rgba(47, 42, 40, 0.035);
+}
+
+.onboarding-demo-card-small.commitment,
+.onboarding-commitment-step-card {
+  background: rgba(255, 247, 242, 0.76);
+}
+
+.onboarding-demo-card-small span,
+.onboarding-commitment-step-card span {
+  color: #9a5145;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.onboarding-demo-card-small h3,
+.onboarding-commitment-step-card h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(1.15rem, 5vw, 1.45rem);
+  line-height: 1.12;
+  font-weight: 500;
+  color: rgba(21, 21, 21, 0.92);
+}
+
+.onboarding-demo-card-small p {
+  margin: 0;
+  color: rgba(91, 82, 75, 0.74);
+  font-size: 0.86rem;
+  line-height: 1.32;
+}
+
+.onboarding-demo-card-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.onboarding-demo-card-buttons button,
+.onboarding-commitment-step-card button {
+  min-height: 36px;
+  border: 1px solid rgba(217, 108, 82, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #9a5145;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 780;
 }
 
 .onboarding-protected-app-grid {

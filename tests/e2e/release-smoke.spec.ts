@@ -735,16 +735,18 @@ test('Home empty states use calm copy without stacked zero language', async ({ p
 
   await gotoApp(page, '/home');
   const summary = page.getByTestId('home-dashboard-summary');
-  await expect(summary).toContainText('You’re all clear today');
-  await expect(summary).toContainText('Nothing needs your attention.');
-  await expect(summary).toContainText('No live commitment');
-  await expect(summary).toContainText('You’re clear for now.');
-  await expect(summary).toContainText('Read tonight');
-  await expect(summary).toContainText('Go for a walk');
-  await expect(summary).toContainText('Drink more water');
-  await expect(summary).toContainText('Create commitment');
+  await expect(summary).toContainText('No Personal Cards yet.');
+  await expect(summary).toContainText('Create one when you are ready.');
+  await expect(summary).toContainText('Finish setting up MyBishBash');
+  await expect(summary).toContainText('Create your first Personal Card');
+  await expect(summary).toContainText('Add your first protected app');
+  await expect(summary).not.toContainText('You’re all clear today');
+  await expect(summary).not.toContainText('Nothing needs your attention.');
+  await expect(summary).not.toContainText('No live commitment');
+  await expect(summary).not.toContainText('Create commitment');
   await expect(summary).not.toContainText('No personal cards today');
   await expect(summary).not.toContainText('0 live commitments');
+  await expect(page.getByTestId('home-live-commitment-card')).toHaveCount(0);
   await expect(page.locator('.home-progress-number')).toHaveText('0');
   await expectNoConsoleErrors(consoleErrors);
 });
@@ -761,7 +763,7 @@ test('Home commitment card distinguishes active and completed commitment states'
     ],
   });
   await gotoApp(page, '/home');
-  await expect(page.getByTestId('home-live-commitment-card')).toContainText('Commitment');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('Live Commitment');
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('go for a walk today');
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('1 live commitment');
 
@@ -774,11 +776,11 @@ test('Home commitment card distinguishes active and completed commitment states'
     ],
   });
   await gotoApp(page, '/home');
-  const completedCard = page.getByTestId('home-live-commitment-card');
-  await expect(completedCard).toContainText('Commitments complete');
-  await expect(completedCard).toContainText('You’re clear for now.');
-  await expect(completedCard).not.toContainText('No active commitments');
-  await expect(completedCard).not.toContainText('0 live commitments');
+  const summary = page.getByTestId('home-dashboard-summary');
+  await expect(page.getByTestId('home-live-commitment-card')).toHaveCount(0);
+  await expect(summary).not.toContainText('Commitments complete');
+  await expect(summary).not.toContainText('No active commitments');
+  await expect(summary).not.toContainText('0 live commitments');
   await expectNoConsoleErrors(consoleErrors);
 });
 

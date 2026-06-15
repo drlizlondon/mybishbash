@@ -1481,6 +1481,8 @@ function App() {
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
+  const [libraryFocusMode, setLibraryFocusMode] = useState(null);
+  const [homeSpotlightActionSignal, setHomeSpotlightActionSignal] = useState(null);
   const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
   const [notificationStatus, setNotificationStatus] = useState(() => getNotificationPermission());
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
@@ -1713,7 +1715,12 @@ function App() {
   }, [homeScreenVersions, profile.onboardingShortcutSetup]);
   const activationChecklistItems = useMemo(() => {
     const items = [];
-    if (!profile.hasCompletedHomeScreenInstall || profile.hasSkippedHomeScreenInstallPrompt) {
+    const displayMode = getAppDisplayMode();
+    const isInstalledAppRoute = ["standalone", "fullscreen", "minimal-ui"].includes(displayMode);
+    const shouldShowHomeScreenInstall =
+      profile.hasSkippedHomeScreenInstallPrompt === true ||
+      (profile.hasCompletedHomeScreenInstall === false && !isInstalledAppRoute);
+    if (shouldShowHomeScreenInstall) {
       items.push({
         id: "home-screen",
         label: "Add MyBishBash to your Home Screen",
@@ -1753,10 +1760,13 @@ function App() {
       return next;
     });
   }, []);
+
+  const signalHomeSpotlightAction = useCallback((id) => {
+    setHomeSpotlightActionSignal({ id, sequence: Date.now() });
+  }, []);
   const shouldShowHomeSpotlightTour =
     setupComplete &&
     screen === "library" &&
-    activeTab === "home" &&
     profile.onboardingRoute === "personal_card_play_by_play" &&
     profile.hasCompletedHomeSpotlightTour !== true;
   const effectiveLaunchSession = useMemo(
@@ -5146,6 +5156,15 @@ function App() {
     }
   }
 
+  function completeCommitmentCardDemo({ skipped = false } = {}) {
+    setProfile((current) => ({
+      ...current,
+      plan: current.plan ?? "free",
+      hasSeenCommitmentCardDemo: !skipped,
+      hasSkippedCommitmentCardDemo: Boolean(skipped),
+    }));
+  }
+
   function finishOnboarding(destination = "home", launcherId = profile.onboardingLauncherId ?? "instagram") {
     const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
     saveSetupComplete(true);
@@ -5774,6 +5793,20 @@ function App() {
     () => buildLibrarySections({ cards, libraryPacks: visibleLibraryPacks }),
     [cards, visibleLibraryPacks],
   );
+  const todayPersonalLibrary = useMemo(() => {
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const personalCards = normalizeCards(cards, now, profile.timezone)
+      .filter((card) => !card.sourcePackId && !card.deletedAt && !isCommitmentCard(card));
+    const todayCards = personalCards.filter((card) =>
+      isCardDoneToday(card, todayKey) || card.statusToday === "pending" || isEligible(card, now, profile.timezone)
+    );
+    return {
+      totalCount: personalCards.length,
+      completed: todayCards.filter((card) => isCardDoneToday(card, todayKey)),
+      outstanding: todayCards.filter((card) => !isCardDoneToday(card, todayKey)),
+    };
+  }, [cards, profile.timezone]);
   const completionEvents = useMemo(
     () => events.filter(isCompletionEvent).slice(0, 3),
     [events],
@@ -5945,7 +5978,11 @@ function App() {
           <div className="app-inner">
             {activeTab === "home" ? null : (
               <Masthead
-                onCreate={openCardComposerFromCurrentRoute}
+                onCreate={() => {
+                  signalHomeSpotlightAction("personal-card");
+                  if (shouldShowHomeSpotlightTour) return;
+                  openCardComposerFromCurrentRoute();
+                }}
                 onOpenSettings={() => navigateTo("/settings")}
               />
             )}
@@ -5965,6 +6002,11 @@ function App() {
                     window.location.href = `${BASE_PATH}/download`;
                   }}
                   onOpenApps={() => navigateTo("/apps")}
+                  onOpenTodayCards={() => {
+                    signalHomeSpotlightAction("today-cards");
+                    setLibraryFocusMode("today-personal");
+                    navigateTo("/library");
+                  }}
                   onOpenCard={openSpecificReveal}
                 />
               ) : null}
@@ -5992,30 +6034,39 @@ function App() {
               ) : null}
 
               {activeTab === "library" ? (
-                <StandardLibraryPanel
-                  personalItems={librarySections.personal}
-                  commitmentItems={librarySections.commitments}
-                  activePackItems={librarySections.activePacks}
-                  libraryPacks={visibleLibraryPacks}
-                  timezone={profile.timezone}
-                  menuOpenId={menuOpenId}
-                  setMenuOpenId={setMenuOpenId}
-                  openEditor={openEditor}
-                  handleResetItem={handleResetItem}
-                  handleTogglePause={handleTogglePause}
-                  handleDeleteCard={handleDeleteCard}
-                  handleDuplicateCard={handleDuplicateCard}
-                  openSpecificReveal={openSpecificReveal}
-                  openPackReveal={openPackReveal}
-                  deactivatePack={deactivatePack}
-                  onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
-                  onCreateCommitment={() => openCardComposerFromCurrentRoute("commitment")}
-                  onAddPack={() => navigateTo("/explore")}
-                  doInsteadItems={libraryDoInsteadItems}
-                  onToggleActionCardHidden={handleToggleActionCardHidden}
-                  onDeleteActionCard={handleDeleteActionCard}
-                  onCreateActionCard={() => setIsActionCardEditorOpen(true)}
-                />
+                libraryFocusMode === "today-personal" ? (
+                  <TodayPersonalCardsPanel
+                    todayPersonalLibrary={todayPersonalLibrary}
+                    onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
+                    onBackToLibrary={() => setLibraryFocusMode(null)}
+                    onOpenCard={openSpecificReveal}
+                  />
+                ) : (
+                  <StandardLibraryPanel
+                    personalItems={librarySections.personal}
+                    commitmentItems={librarySections.commitments}
+                    activePackItems={librarySections.activePacks}
+                    libraryPacks={visibleLibraryPacks}
+                    timezone={profile.timezone}
+                    menuOpenId={menuOpenId}
+                    setMenuOpenId={setMenuOpenId}
+                    openEditor={openEditor}
+                    handleResetItem={handleResetItem}
+                    handleTogglePause={handleTogglePause}
+                    handleDeleteCard={handleDeleteCard}
+                    handleDuplicateCard={handleDuplicateCard}
+                    openSpecificReveal={openSpecificReveal}
+                    openPackReveal={openPackReveal}
+                    deactivatePack={deactivatePack}
+                    onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
+                    onCreateCommitment={() => openCardComposerFromCurrentRoute("commitment")}
+                    onAddPack={() => navigateTo("/explore")}
+                    doInsteadItems={libraryDoInsteadItems}
+                    onToggleActionCardHidden={handleToggleActionCardHidden}
+                    onDeleteActionCard={handleDeleteActionCard}
+                    onCreateActionCard={() => setIsActionCardEditorOpen(true)}
+                  />
+                )
               ) : null}
 
               {activeTab === "log" ? (
@@ -6105,7 +6156,10 @@ function App() {
               <HomeGlyph />
               <span>Home</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => navigateTo("/library")}>
+            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => {
+              setLibraryFocusMode(null);
+              navigateTo("/library");
+            }}>
               <BookGlyph />
               <span>Library</span>
             </button>
@@ -6113,17 +6167,24 @@ function App() {
               <LogGlyph />
               <span>Log</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => navigateTo("/explore")}>
+            <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => {
+              signalHomeSpotlightAction("packs");
+              navigateTo("/explore");
+            }}>
               <PacksGlyph />
               <span>Explore</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "apps" ? "active" : ""}`} data-testid="bottom-nav-apps" onClick={() => navigateTo("/apps")}>
+            <button type="button" className={`nav-item ${activeTab === "apps" ? "active" : ""}`} data-testid="bottom-nav-apps" onClick={() => {
+              signalHomeSpotlightAction("apps");
+              navigateTo("/apps");
+            }}>
               <AppsGlyph />
               <span>Apps</span>
             </button>
           </nav>
           {shouldShowHomeSpotlightTour ? (
             <HomeSpotlightTour
+              actionSignal={homeSpotlightActionSignal}
               onComplete={completeHomeSpotlightTour}
             />
           ) : null}
@@ -6135,6 +6196,7 @@ function App() {
           onSkip={skipInstagramOnboarding}
           onSaveSetup={saveOnboardingSetup}
           onSavePersonalSetup={savePersonalOnboardingSetup}
+          onCommitmentDemoComplete={completeCommitmentCardDemo}
           onUpdateShortcutSetup={updateOnboardingShortcutSetup}
           onCompleteProtectedAppSetup={completeProtectedAppOnboarding}
           onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
@@ -6864,36 +6926,58 @@ const HOME_SPOTLIGHT_STEPS = [
     button: "Next",
   },
   {
+    id: "progress",
+    selector: '[data-testid="home-progress-ring"]',
+    title: "Track your progress",
+    body: "The circle fills as you complete Personal Cards.",
+    button: "Next",
+  },
+  {
+    id: "today-cards",
+    selector: '[data-testid="home-progress-card"]',
+    title: "See today’s cards",
+    body: "Tap here to see your Personal Cards for today.",
+    button: "Tap the card",
+    advanceOnTargetClick: true,
+    allowTargetDefault: true,
+  },
+  {
     id: "personal-card",
     selector: '[data-testid="create-card-button"]',
     title: "Create a Personal Card",
     body: "Add reminders for things you genuinely mean to do.",
-    button: "Next",
+    button: "Tap +",
+    advanceOnTargetClick: true,
+    allowTargetDefault: false,
   },
   {
     id: "apps",
     selector: '[data-testid="bottom-nav-apps"]',
     title: "Connect more apps",
     body: "Choose where your Personal Cards can appear.",
-    button: "Next",
+    button: "Tap Apps",
+    advanceOnTargetClick: true,
+    allowTargetDefault: true,
   },
   {
     id: "packs",
     selector: '[data-testid="bottom-nav-explore"]',
     title: "Try a Pack",
     body: "Use ready-made reminders for a goal or season.",
-    button: "Next",
+    button: "Tap Explore",
+    advanceOnTargetClick: true,
+    allowTargetDefault: true,
   },
   {
     id: "ready",
-    selector: '[data-testid="home-panel"]',
+    selector: '[data-testid="app-shell"]',
     title: "You’re ready",
     body: "Make your phone work for you.",
     button: "Done",
   },
 ];
 
-function HomeSpotlightTour({ onComplete }) {
+function HomeSpotlightTour({ actionSignal, onComplete }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState(null);
   const visibleSteps = HOME_SPOTLIGHT_STEPS;
@@ -6902,7 +6986,11 @@ function HomeSpotlightTour({ onComplete }) {
 
   useLayoutEffect(() => {
     if (!step) return undefined;
-    const target = document.querySelector(step.selector);
+    const targets = Array.from(document.querySelectorAll(step.selector)).filter((node) => {
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    const target = targets[0];
     if (!target) return undefined;
 
     const updateRect = () => {
@@ -6915,16 +7003,23 @@ function HomeSpotlightTour({ onComplete }) {
       });
     };
 
-    target.classList.add("home-spotlight-target-active");
+    targets.forEach((item) => item.classList.add("home-spotlight-target-active"));
     updateRect();
     window.addEventListener("resize", updateRect);
     window.addEventListener("scroll", updateRect, true);
     return () => {
-      target.classList.remove("home-spotlight-target-active");
+      targets.forEach((item) => {
+        item.classList.remove("home-spotlight-target-active");
+      });
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
     };
-  }, [step]);
+  }, [step, visibleSteps.length]);
+
+  useEffect(() => {
+    if (!actionSignal || !step?.advanceOnTargetClick || actionSignal.id !== step.id) return;
+    setStepIndex((current) => Math.min(current + 1, visibleSteps.length - 1));
+  }, [actionSignal, step, visibleSteps.length]);
 
   if (!step) return null;
 
@@ -6940,7 +7035,7 @@ function HomeSpotlightTour({ onComplete }) {
     setStepIndex((current) => current + 1);
   }
 
-  const cardPlacement = targetRect && targetRect.top < window.innerHeight / 2 ? "below" : "above";
+  const cardPlacement = targetRect && targetRect.top > 140 && targetRect.top < window.innerHeight / 2 ? "below" : "above";
 
   return (
     <div className="home-spotlight-tour" data-testid="home-spotlight-tour" role="dialog" aria-modal="true" aria-labelledby="home-spotlight-title">
@@ -6958,16 +7053,24 @@ function HomeSpotlightTour({ onComplete }) {
         />
       ) : null}
       <article className={`home-spotlight-card ${cardPlacement}`}>
-        <span className="home-spotlight-count">{stepIndex + 1} of {visibleSteps.length}</span>
+        <div className="home-spotlight-dots" aria-label={`Step ${stepIndex + 1} of ${visibleSteps.length}`}>
+          {visibleSteps.map((item, index) => (
+            <span key={item.id} className={index === stepIndex ? "active" : ""} />
+          ))}
+        </div>
         <h2 id="home-spotlight-title">{step.title}</h2>
         <p>{step.body}</p>
         <div className="home-spotlight-actions">
           <button type="button" className="home-spotlight-skip" onClick={finish}>
             Skip
           </button>
-          <button type="button" className="home-spotlight-next" onClick={next}>
-            {isFinalStep ? "Done" : step.button}
-          </button>
+          {step.advanceOnTargetClick && !isFinalStep ? (
+            <span className="home-spotlight-tap-hint">{step.button}</span>
+          ) : (
+            <button type="button" className="home-spotlight-next" onClick={next}>
+              {isFinalStep ? "Done" : step.button}
+            </button>
+          )}
         </div>
       </article>
     </div>
@@ -6985,6 +7088,7 @@ function HomePanel({
   onCreate,
   onOpenDownload,
   onOpenApps,
+  onOpenTodayCards,
   onOpenCard,
 }) {
   const homeState = useMemo(
@@ -6997,17 +7101,16 @@ function HomePanel({
   const personalCardNoun = total === 1 ? "personal card" : "personal cards";
   const progressNumber = total > 0 ? `${completed}/${total}` : "0";
   const progressCopy = total === 0
-    ? "You’re all clear today"
+    ? "No Personal Cards yet."
     : completed === total
       ? `All ${total} ${personalCardNoun} complete today.`
       : `${completed} of ${total} ${personalCardNoun} complete today.`;
-  const progressSubcopy = total === 0 ? "Nothing needs your attention." : "";
-  const canOpenProgress = Boolean(homeState.nextIncompletePersonalCard);
+  const progressSubcopy = total === 0 ? "Create one when you are ready." : "";
   const canOpenCommitment = Boolean(homeState.activeCommitment?.id);
   const hasLiveCommitment = Boolean(homeState.activeCommitment);
   const liveCommitmentCountLabel = `${homeState.liveCommitmentCount} live commitment${homeState.liveCommitmentCount === 1 ? "" : "s"}`;
   const commitmentLabel = hasLiveCommitment
-    ? "Commitment"
+    ? "Live Commitment"
     : homeState.hasCompletedCommitmentToday
       ? "Commitments complete"
       : "No live commitment";
@@ -7015,8 +7118,7 @@ function HomePanel({
   const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-logo-mark.png`;
 
   const openProgressCard = () => {
-    if (!homeState.nextIncompletePersonalCard) return;
-    onOpenCard(homeState.nextIncompletePersonalCard.id);
+    onOpenTodayCards?.();
   };
 
   const openCommitmentCard = () => {
@@ -7111,8 +7213,7 @@ function HomePanel({
             className="home-progress-card"
             data-testid="home-progress-card"
             onClick={openProgressCard}
-            disabled={!canOpenProgress}
-            aria-label={canOpenProgress ? "Open next incomplete personal card" : "No incomplete personal cards for today"}
+            aria-label="Open today’s Personal Cards"
           >
             <HomeProgressRing percent={progressPercent} />
             <span className="home-progress-copy">
@@ -7123,37 +7224,24 @@ function HomePanel({
             </span>
           </button>
 
-          <button
-            type="button"
-            className={`home-commitment-card ${hasLiveCommitment ? "" : "is-empty"}`}
-            data-testid="home-live-commitment-card"
-            onClick={canOpenCommitment ? openCommitmentCard : openCommitmentEmptyState}
-            aria-label={canOpenCommitment ? "Open active commitment" : "Create commitment"}
-          >
+          {hasLiveCommitment ? (
+            <button
+              type="button"
+              className="home-commitment-card"
+              data-testid="home-live-commitment-card"
+              onClick={openCommitmentCard}
+              aria-label="Open active commitment"
+            >
             <span className="home-commitment-header">
               <span className="home-card-label">{commitmentLabel}</span>
-              {hasLiveCommitment ? (
-                <span className="home-commitment-count">
-                  <span className="home-live-dot" aria-hidden="true" />
-                  {liveCommitmentCountLabel}
-                </span>
-              ) : null}
-            </span>
-            {homeState.activeCommitment ? (
-              <span className="home-commitment-title">
-                {homeState.activeCommitment.title}
+              <span className="home-commitment-count">
+                <span className="home-live-dot" aria-hidden="true" />
+                {liveCommitmentCountLabel}
               </span>
-            ) : (
-              <>
-                <span className="home-commitment-empty-body">{emptyCommitmentTitle}</span>
-                <span className="home-commitment-suggestions">
-                  <span>Read tonight</span>
-                  <span>Go for a walk</span>
-                  <span>Drink more water</span>
-                </span>
-                <span className="home-commitment-empty-cta">Create commitment</span>
-              </>
-            )}
+            </span>
+            <span className="home-commitment-title">
+              {homeState.activeCommitment.title}
+            </span>
             {homeState.activeCommitment?.appName ? (
               <span className="home-app-pill">
                 <HomeAppIcon src={homeState.activeCommitment.appIconUrl} />
@@ -7168,7 +7256,8 @@ function HomePanel({
                 <span style={{ width: `${homeState.activeCommitment.progressPercentage}%` }} />
               </span>
             ) : null}
-          </button>
+            </button>
+          ) : null}
         </div>
         {saveConfirmation ? (
           <p className="home-save-confirmation" role="status">
@@ -7201,6 +7290,7 @@ function HomeProgressRing({ percent }) {
     <svg
       viewBox="0 0 94 94"
       className="home-progress-ring"
+      data-testid="home-progress-ring"
       aria-hidden="true"
       style={{
         "--home-ring-circumference": circumference,
@@ -7649,6 +7739,76 @@ function getLibraryCommitmentSecondary(card) {
 function getLibraryPackSecondary(item) {
   const count = item.count ?? 0;
   return `${count} ${count === 1 ? "card" : "cards"}`;
+}
+
+function TodayPersonalCardsPanel({ todayPersonalLibrary, onCreatePersonal, onBackToLibrary, onOpenCard }) {
+  const completed = todayPersonalLibrary.completed ?? [];
+  const outstanding = todayPersonalLibrary.outstanding ?? [];
+  const hasAnyPersonalCards = todayPersonalLibrary.totalCount > 0;
+  const hasTodayCards = completed.length > 0 || outstanding.length > 0;
+
+  function renderTodayCard(card, status) {
+    return (
+      <button
+        key={card.id}
+        type="button"
+        className="today-personal-card-row"
+        data-testid={`today-personal-card-${card.id}`}
+        onClick={() => onOpenCard(card.id)}
+      >
+        <span className={`today-personal-status ${status}`}>{status === "completed" ? "Completed" : "Outstanding"}</span>
+        <strong>{card.promptText}</strong>
+      </button>
+    );
+  }
+
+  return (
+    <section className="library today-personal-library" data-testid="today-personal-library">
+      <div className="section-heading solo">
+        <div>
+          <h2>Today’s Personal Cards</h2>
+          <p>Completed today at the top. Outstanding cards below.</p>
+        </div>
+        <button type="button" className="text-button" onClick={onBackToLibrary}>
+          All Library
+        </button>
+      </div>
+
+      {!hasAnyPersonalCards ? (
+        <div className="today-personal-empty" data-testid="today-personal-empty">
+          <h3>No Personal Cards yet.</h3>
+          <button type="button" className="save-button" onClick={onCreatePersonal}>
+            Create Personal Card
+          </button>
+        </div>
+      ) : null}
+
+      {hasAnyPersonalCards && !hasTodayCards ? (
+        <div className="today-personal-empty" data-testid="today-personal-clear">
+          <h3>You’re all clear today.</h3>
+          <p>Nothing needs your attention right now.</p>
+        </div>
+      ) : null}
+
+      {completed.length > 0 ? (
+        <section className="today-personal-section" aria-labelledby="today-personal-completed">
+          <h3 id="today-personal-completed">Completed today</h3>
+          <div className="today-personal-list">
+            {completed.map((card) => renderTodayCard(card, "completed"))}
+          </div>
+        </section>
+      ) : null}
+
+      {outstanding.length > 0 ? (
+        <section className="today-personal-section" aria-labelledby="today-personal-outstanding">
+          <h3 id="today-personal-outstanding">Outstanding today</h3>
+          <div className="today-personal-list">
+            {outstanding.map((card) => renderTodayCard(card, "outstanding"))}
+          </div>
+        </section>
+      ) : null}
+    </section>
+  );
 }
 
 function StandardLibraryPanel({
