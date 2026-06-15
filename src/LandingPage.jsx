@@ -9,7 +9,7 @@ import AnimatedFeatureSection from "./AnimatedFeatureSection";
 
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
-const APP_HOME_HREF = `${BASE}home`;
+const DOWNLOAD_HREF = `${BASE}download`;
 const ABOUT_HREF = `${BASE}about`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const LANDING_NAV_HREFS = [ABOUT_HREF, HOME_HREF, HOME_HREF, HOME_HREF, HOME_HREF];
@@ -40,7 +40,7 @@ function Header() {
             </a>
           ))}
         </nav>
-        <a className="header-cta" href={APP_HOME_HREF} onClick={stopEditNavigation}>
+        <a className="header-cta" href={DOWNLOAD_HREF} onClick={stopEditNavigation}>
           <EditableText path="ctas.primary" />
         </a>
       </div>
@@ -132,7 +132,7 @@ function Hero() {
               ))}
             </div>
             <div className="hero-actions reveal-up delay-2">
-              <a className="button primary" href={APP_HOME_HREF} onClick={stopEditNavigation}>
+              <a className="button primary" href={DOWNLOAD_HREF} onClick={stopEditNavigation}>
                 <EditableText path="ctas.primary" />
                 <span aria-hidden="true">→</span>
               </a>

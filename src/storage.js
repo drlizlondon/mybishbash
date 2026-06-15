@@ -181,11 +181,15 @@ export function loadProfile() {
       ...stored,
       name: stored?.name ?? "",
       timezone: stored?.timezone ?? "Europe/London",
+      plan: stored?.plan ?? "free",
+      hasCompletedHomeSpotlightTour: stored?.hasCompletedHomeSpotlightTour ?? false,
     };
   } catch {
     return {
       name: "",
       timezone: "Europe/London",
+      plan: "free",
+      hasCompletedHomeSpotlightTour: false,
     };
   }
 }

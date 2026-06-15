@@ -253,23 +253,14 @@ export function onAuthStateChange(callback) {
   return client.auth.onAuthStateChange(callback);
 }
 
-export async function signUp(email, password, accessCode) {
+export async function signUp(email, password) {
   const client = requireSupabase();
-  const normalizedAccessCode = normalizeAccessCode(accessCode);
-  const hasValidAccessCode = await validateAccessCode(normalizedAccessCode);
-
-  if (!hasValidAccessCode) {
-    const error = new Error(INVITE_ONLY_ACCESS_ERROR);
-    error.code = "MYBISHBASH_INVALID_ACCESS_CODE";
-    throw error;
-  }
-
   const { data, error } = await client.auth.signUp({
     email,
     password,
     options: {
       data: {
-        mybishbash_access_code: normalizedAccessCode,
+        mybishbash_plan: "free",
       },
     },
   });
@@ -277,7 +268,6 @@ export async function signUp(email, password, accessCode) {
     logSupabaseAccessError("auth.signUp", error);
     throw error;
   }
-  if (data.session?.user) await claimAccessCode(normalizedAccessCode);
   return data.session;
 }
 

@@ -5,6 +5,8 @@ import { buildLibrarySections } from "../src/lib/librarySections.js";
 import { getCoverModel } from "../src/lib/generatedCover.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const onboardingSource = await readFile(new URL("../src/Onboarding.jsx", import.meta.url), "utf8");
+const downloadSource = await readFile(new URL("../src/DownloadPage.jsx", import.meta.url), "utf8");
 const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
 const generatedCoverSource = await readFile(new URL("../src/GeneratedPackCover.jsx", import.meta.url), "utf8");
 const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8");
@@ -123,7 +125,7 @@ assertNoMatch("PR3 does not introduce installed commitments", appSource + explor
 assertNoMatch("Settings no longer owns app behaviour management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
 assertMatch("Apps owns app behaviour management", appSource, /data-testid="apps-list"/);
 assertMatch("Apps exposes app interruption toggles", appSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
-assertNoMatch("Primary app copy avoids protected-apps language", appSource, />[^<]*protected app/i);
+assertNoMatch("Activation copy avoids legacy fake-launcher language", onboardingSource + downloadSource, />[^<]*(fake launcher|interruption pack|library pack)/i);
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
 assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="explore-commitments-rail"/);
 assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /Take this commitment/);

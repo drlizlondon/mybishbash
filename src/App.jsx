@@ -49,7 +49,6 @@ import {
 } from "./eventLog";
 import {
   getSyncErrorMessage,
-  INVITE_ONLY_ACCESS_ERROR,
   loadSharedState,
   saveSharedState,
   getSession,
@@ -57,7 +56,6 @@ import {
   signUp,
   logIn,
   logOut,
-  hasAccessEntitlement,
   markNotificationOpened,
   saveLauncherEvent,
   saveNotificationPreferences,
@@ -165,6 +163,7 @@ import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { EditableLandingPage } from "./LandingPage";
 import EarlyAccessPage from "./EarlyAccessPage";
 import AboutPage from "./AboutPage";
+import DownloadPage from "./DownloadPage";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
 
 const HQPanel = lazy(() => import("./HQPanel"));
@@ -1411,6 +1410,10 @@ function App() {
       return <EarlyAccessPage />;
     }
 
+    if (normalizedPath === "/download") {
+      return <DownloadPage />;
+    }
+
     if (normalizedPath === "/about") {
       return <AboutPage />;
     }
@@ -1695,6 +1698,67 @@ function App() {
     () => protectedAppStatuses.filter((status) => status.paused),
     [protectedAppStatuses],
   );
+  const pendingOnboardingShortcuts = useMemo(() => {
+    const apps = Array.isArray(profile.onboardingShortcutSetup?.apps) ? profile.onboardingShortcutSetup.apps : [];
+    return apps
+      .filter((app) => !["marked_added", "tested"].includes(app.status))
+      .map((app) => {
+        const version = homeScreenVersions[app.id] ?? DEFAULT_HOME_SCREEN_VERSIONS[app.id] ?? getLauncherConfig(app.id);
+        return {
+          ...app,
+          label: app.label ?? version?.realAppLabel ?? version?.name ?? version?.displayName ?? app.id,
+          iconSrc: app.iconSrc ?? (version ? resolveLauncherIconSrc(version) : ""),
+        };
+      });
+  }, [homeScreenVersions, profile.onboardingShortcutSetup]);
+  const activationChecklistItems = useMemo(() => {
+    const items = [];
+    if (!profile.hasCompletedHomeScreenInstall || profile.hasSkippedHomeScreenInstallPrompt) {
+      items.push({
+        id: "home-screen",
+        label: "Add MyBishBash to your Home Screen",
+        action: "download",
+      });
+    }
+    const hasPersonalCards = cards.some((card) => !card.deletedAt && !card.sourcePackId && (card.cardKind ?? "personal") === "personal");
+    if (!hasPersonalCards) {
+      items.push({
+        id: "personal-card",
+        label: "Create your first Personal Card",
+        action: "create-card",
+      });
+    }
+    if (!profile.hasCompletedProtectedAppSetup || !profile.selectedProtectedApp) {
+      items.push({
+        id: "protected-app",
+        label: "Add your first protected app",
+        action: "apps",
+      });
+    }
+    return items;
+  }, [
+    cards,
+    profile.hasCompletedHomeScreenInstall,
+    profile.hasCompletedProtectedAppSetup,
+    profile.selectedProtectedApp,
+    profile.hasSkippedHomeScreenInstallPrompt,
+  ]);
+  const completeHomeSpotlightTour = useCallback(() => {
+    setProfile((current) => {
+      const next = {
+        ...current,
+        hasCompletedHomeSpotlightTour: true,
+      };
+      saveProfile(next);
+      return next;
+    });
+  }, []);
+  const shouldShowHomeSpotlightTour =
+    setupComplete &&
+    screen === "library" &&
+    activeTab === "home" &&
+    profile.onboardingRoute === "personal_card_play_by_play" &&
+    profile.hasCompletedHomeSpotlightTour !== true;
   const effectiveLaunchSession = useMemo(
     () => getLaunchSessionForOverlay(launchSession, overlay),
     [launchSession, overlay],
@@ -2305,14 +2369,7 @@ function App() {
 
     debugLaunch("[SYNC] session user", session.user.id);
 
-    hasAccessEntitlement(session.user.id)
-      .then((hasAccess) => {
-        if (!hasAccess) {
-          throw Object.assign(new Error(INVITE_ONLY_ACCESS_ERROR), { code: "MYBISHBASH_MISSING_ACCESS_ENTITLEMENT" });
-        }
-
-        return loadSharedState(session.user.id);
-      })
+    loadSharedState(session.user.id)
       .then((sharedState) => {
         if (cancelled) return;
         debugLaunch("[SYNC] loaded cloud state", sharedState);
@@ -2338,14 +2395,6 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
-        if (error?.code === "MYBISHBASH_MISSING_ACCESS_ENTITLEMENT") {
-          void logOut().catch((err) => console.warn(err));
-          setSession(null);
-          setSyncError(INVITE_ONLY_ACCESS_ERROR);
-          setSyncStatus("needs-connection");
-          return;
-        }
-
         setSyncError(getSyncErrorMessage(error, "Could not load your MyBishBash profile."));
         setSyncStatus("error");
       });
@@ -4954,23 +5003,33 @@ function App() {
   function savePersonalOnboardingSetup({
     personalCards = DEFAULT_PERSONAL_CARD_TEXTS,
     launcherId = "safari",
+    selectedLauncherIds = [],
+    shortcutSetup = null,
     appContext = { id: "safari", label: "Safari", launcherId: "safari" },
+    timingWindows = ["morning", "day", "evening"],
   }) {
+    const isHomeOnboardingLocation = launcherId === "mybishbash_home" || appContext?.place === "home";
     const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "safari";
+    const onboardingLocationId = isHomeOnboardingLocation ? "mybishbash_home" : supportedLauncherId;
+    const selectedSupportedLauncherIds = Array.from(new Set(
+      (Array.isArray(selectedLauncherIds) && selectedLauncherIds.length > 0 ? selectedLauncherIds : [supportedLauncherId])
+        .filter((id) => isKnownLauncher(id)),
+    ));
     const cleanPersonalCards = personalCards.map((text) => text.trim()).filter(Boolean);
-    const fallbackCards = cleanPersonalCards.length > 0 ? cleanPersonalCards : DEFAULT_PERSONAL_CARD_TEXTS;
+    const onboardingCardsToCreate = cleanPersonalCards;
+    const cleanTimingWindows = Array.isArray(timingWindows) && timingWindows.length > 0 ? timingWindows : ["morning", "day", "evening"];
     const now = new Date().toISOString();
 
     void logEvent({
       event_type: "onboarding_completed",
       source_type: "onboarding",
       card_source: "personal",
-      target_app: supportedLauncherId,
-      launcher_context: supportedLauncherId,
+      target_app: onboardingLocationId,
+      launcher_context: onboardingLocationId,
       action_taken: "completed",
       metadata: {
-        route: "frequent_use_reminders",
-        selected_personal_cards: fallbackCards.length,
+        route: "personal_card_play_by_play",
+        selected_personal_cards: onboardingCardsToCreate.length,
         app_context: appContext,
       },
     });
@@ -4981,7 +5040,7 @@ function App() {
           .map((card) => card.promptText?.trim().toLowerCase())
           .filter(Boolean),
       );
-      const starterCards = fallbackCards
+      const starterCards = onboardingCardsToCreate
         .filter((text) => !existingPrompts.has(text.toLowerCase()))
         .map((text) => ({
           id: createId(),
@@ -4996,7 +5055,7 @@ function App() {
           notYetUntil: null,
           doneDate: null,
           frequency: "once_daily",
-          timingWindows: ["morning", "day", "evening"],
+          timingWindows: cleanTimingWindows,
           paused: false,
           disliked: false,
           deletedAt: null,
@@ -5004,20 +5063,31 @@ function App() {
       return [...starterCards, ...current];
     });
 
-    setLauncherBehaviorSettings((current) => ({
-      ...current,
-      [supportedLauncherId]: {
-        ...(current[supportedLauncherId] || {}),
-        useInterruptionPack: false,
-        interruptionPaused: false,
-      },
-    }));
+    if (!isHomeOnboardingLocation) {
+      setLauncherBehaviorSettings((current) => ({
+        ...current,
+        ...selectedSupportedLauncherIds.reduce((acc, launcherContextId) => ({
+          ...acc,
+          [launcherContextId]: {
+            ...(current[launcherContextId] || {}),
+            useInterruptionPack: false,
+            interruptionPaused: false,
+          },
+        }), {}),
+      }));
+    }
 
     setProfile((current) => ({
       ...current,
+      plan: current.plan ?? "free",
       onboardingAppContext: appContext,
-      onboardingLauncherId: supportedLauncherId,
-      onboardingRoute: "frequent_use_reminders",
+      onboardingLauncherId: onboardingLocationId,
+      onboardingShortcutSetup: shortcutSetup,
+      onboardingRoute: "personal_card_play_by_play",
+      onboardingCompletedAt: now,
+      onboardingCompletedSection: "personal_cards",
+      onboardingSkipped: false,
+      hasCompletedPersonalCardSetup: onboardingCardsToCreate.length > 0,
     }));
 
     setOverlay(null);
@@ -5028,25 +5098,85 @@ function App() {
     setShouldLaunchOverlay(false);
   }
 
+  function updateOnboardingShortcutSetup(shortcutSetup) {
+    setProfile((current) => ({
+      ...current,
+      onboardingShortcutSetup: shortcutSetup,
+    }));
+
+    const apps = Array.isArray(shortcutSetup?.apps) ? shortcutSetup.apps : [];
+    const activatedIds = apps
+      .filter((app) => ["marked_added", "tested"].includes(app.status) && isKnownLauncher(app.id))
+      .map((app) => app.id);
+    if (activatedIds.length === 0) return;
+
+    setLauncherBehaviorSettings((current) => ({
+      ...current,
+      ...activatedIds.reduce((acc, launcherContextId) => ({
+        ...acc,
+        [launcherContextId]: {
+          ...(current[launcherContextId] || {}),
+          useInterruptionPack: true,
+          interruptionPaused: false,
+        },
+      }), {}),
+    }));
+  }
+
+  function completeProtectedAppOnboarding({ appId, completed }) {
+    const supportedLauncherId = isKnownLauncher(appId) ? appId : "instagram";
+    const now = new Date().toISOString();
+    setProfile((current) => ({
+      ...current,
+      plan: current.plan ?? "free",
+      selectedProtectedApp: supportedLauncherId,
+      hasCompletedProtectedAppSetup: Boolean(completed),
+      protectedAppSetupSkipped: !completed,
+      protectedAppSetupUpdatedAt: now,
+    }));
+    if (completed) {
+      setLauncherBehaviorSettings((current) => ({
+        ...current,
+        [supportedLauncherId]: {
+          ...(current[supportedLauncherId] || {}),
+          useInterruptionPack: true,
+          interruptionPaused: false,
+        },
+      }));
+    }
+  }
+
   function finishOnboarding(destination = "home", launcherId = profile.onboardingLauncherId ?? "instagram") {
     const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
+    saveSetupComplete(true);
     setScreen("library");
     setOverlay(null);
     setMenuOpenId(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
+    saveSetupComplete(true);
     setSetupComplete(true);
     setShouldLaunchOverlay(destination === "try");
     navigateTo(destination === "try" ? `/intercept/${supportedLauncherId}` : "/home", { replace: true });
   }
 
   function skipInstagramOnboarding() {
+    const now = new Date().toISOString();
     void logEvent({
       event_type: "onboarding_completed",
       source_type: "onboarding",
       card_source: "onboarding",
-      action_taken: "skipped_instagram_setup",
+      action_taken: "skipped_personal_card_setup",
     });
+    setProfile((current) => ({
+      ...current,
+      plan: current.plan ?? "free",
+      onboardingRoute: "personal_card_play_by_play",
+      onboardingCompletedAt: now,
+      onboardingCompletedSection: "personal_cards",
+      onboardingSkipped: true,
+      hasCompletedPersonalCardSetup: false,
+    }));
     setOverlay(null);
     setMenuOpenId(null);
     signupOnboardingPendingRef.current = false;
@@ -5192,7 +5322,7 @@ function App() {
     navigateTo("/onboarding", { replace: true });
   }
 
-  async function handleSignUp(email, password, accessCode) {
+  async function handleSignUp(email, password) {
     setSyncStatus("loading");
     setSyncError("");
     signupOnboardingPendingRef.current = true;
@@ -5204,7 +5334,7 @@ function App() {
       action_taken: "started",
     });
     try {
-      const createdSession = await signUp(email, password, accessCode);
+      const createdSession = await signUp(email, password);
       void logEvent({
         event_type: "signup_completed",
         source_type: "auth",
@@ -5224,7 +5354,7 @@ function App() {
       console.error("[SIGNUP_ERROR]", error);
       signupOnboardingPendingRef.current = false;
       setSignupOnboardingPending(false);
-      setSyncError(error?.code === "MYBISHBASH_INVALID_ACCESS_CODE" ? INVITE_ONLY_ACCESS_ERROR : getSyncErrorMessage(error, "Could not sign up."));
+      setSyncError(getSyncErrorMessage(error, "Could not sign up."));
       setSyncStatus("needs-connection");
     }
   }
@@ -5827,8 +5957,13 @@ function App() {
                   events={events}
                   timezone={profile.timezone}
                   homeScreenVersions={homeScreenVersions}
+                  pendingOnboardingShortcuts={pendingOnboardingShortcuts}
+                  activationChecklistItems={activationChecklistItems}
                   saveConfirmation={homeSaveConfirmation}
                   onCreate={openCardComposerFromCurrentRoute}
+                  onOpenDownload={() => {
+                    window.location.href = `${BASE_PATH}/download`;
+                  }}
                   onOpenApps={() => navigateTo("/apps")}
                   onOpenCard={openSpecificReveal}
                 />
@@ -5852,6 +5987,7 @@ function App() {
                   onLogLauncherEvent={logLauncherEvent}
                   selectedVersionId={route.versionId}
                   appPauseRevision={appPauseRevision}
+                  pendingOnboardingShortcuts={pendingOnboardingShortcuts}
                 />
               ) : null}
 
@@ -5986,6 +6122,11 @@ function App() {
               <span>Apps</span>
             </button>
           </nav>
+          {shouldShowHomeSpotlightTour ? (
+            <HomeSpotlightTour
+              onComplete={completeHomeSpotlightTour}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -5994,6 +6135,8 @@ function App() {
           onSkip={skipInstagramOnboarding}
           onSaveSetup={saveOnboardingSetup}
           onSavePersonalSetup={savePersonalOnboardingSetup}
+          onUpdateShortcutSetup={updateOnboardingShortcutSetup}
+          onCompleteProtectedAppSetup={completeProtectedAppOnboarding}
           onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
           onGoHome={() => finishOnboarding("home")}
           availableLaunchers={getAvailableLaunchersForUser({
@@ -6712,13 +6855,135 @@ function Masthead({ onCreate, onOpenSettings }) {
   );
 }
 
+const HOME_SPOTLIGHT_STEPS = [
+  {
+    id: "day",
+    selector: '[data-testid="home-progress-card"]',
+    title: "This is your day",
+    body: "See what you’ve completed and what still matters.",
+    button: "Next",
+  },
+  {
+    id: "personal-card",
+    selector: '[data-testid="create-card-button"]',
+    title: "Create a Personal Card",
+    body: "Add reminders for things you genuinely mean to do.",
+    button: "Next",
+  },
+  {
+    id: "apps",
+    selector: '[data-testid="bottom-nav-apps"]',
+    title: "Connect more apps",
+    body: "Choose where your Personal Cards can appear.",
+    button: "Next",
+  },
+  {
+    id: "packs",
+    selector: '[data-testid="bottom-nav-explore"]',
+    title: "Try a Pack",
+    body: "Use ready-made reminders for a goal or season.",
+    button: "Next",
+  },
+  {
+    id: "ready",
+    selector: '[data-testid="home-panel"]',
+    title: "You’re ready",
+    body: "Make your phone work for you.",
+    button: "Done",
+  },
+];
+
+function HomeSpotlightTour({ onComplete }) {
+  const [stepIndex, setStepIndex] = useState(0);
+  const [targetRect, setTargetRect] = useState(null);
+  const visibleSteps = HOME_SPOTLIGHT_STEPS;
+  const step = visibleSteps[Math.min(stepIndex, visibleSteps.length - 1)] ?? visibleSteps[0];
+  const isFinalStep = stepIndex >= visibleSteps.length - 1;
+
+  useLayoutEffect(() => {
+    if (!step) return undefined;
+    const target = document.querySelector(step.selector);
+    if (!target) return undefined;
+
+    const updateRect = () => {
+      const rect = target.getBoundingClientRect();
+      setTargetRect({
+        top: Math.max(8, rect.top - 8),
+        left: Math.max(8, rect.left - 8),
+        width: Math.min(window.innerWidth - 16, rect.width + 16),
+        height: Math.min(window.innerHeight - 16, rect.height + 16),
+      });
+    };
+
+    target.classList.add("home-spotlight-target-active");
+    updateRect();
+    window.addEventListener("resize", updateRect);
+    window.addEventListener("scroll", updateRect, true);
+    return () => {
+      target.classList.remove("home-spotlight-target-active");
+      window.removeEventListener("resize", updateRect);
+      window.removeEventListener("scroll", updateRect, true);
+    };
+  }, [step]);
+
+  if (!step) return null;
+
+  function finish() {
+    onComplete?.();
+  }
+
+  function next() {
+    if (isFinalStep) {
+      finish();
+      return;
+    }
+    setStepIndex((current) => current + 1);
+  }
+
+  const cardPlacement = targetRect && targetRect.top < window.innerHeight / 2 ? "below" : "above";
+
+  return (
+    <div className="home-spotlight-tour" data-testid="home-spotlight-tour" role="dialog" aria-modal="true" aria-labelledby="home-spotlight-title">
+      <div className="home-spotlight-dim" />
+      {targetRect ? (
+        <div
+          className="home-spotlight-ring"
+          style={{
+            top: `${targetRect.top}px`,
+            left: `${targetRect.left}px`,
+            width: `${targetRect.width}px`,
+            height: `${targetRect.height}px`,
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+      <article className={`home-spotlight-card ${cardPlacement}`}>
+        <span className="home-spotlight-count">{stepIndex + 1} of {visibleSteps.length}</span>
+        <h2 id="home-spotlight-title">{step.title}</h2>
+        <p>{step.body}</p>
+        <div className="home-spotlight-actions">
+          <button type="button" className="home-spotlight-skip" onClick={finish}>
+            Skip
+          </button>
+          <button type="button" className="home-spotlight-next" onClick={next}>
+            {isFinalStep ? "Done" : step.button}
+          </button>
+        </div>
+      </article>
+    </div>
+  );
+}
+
 function HomePanel({
   cards = [],
   events = [],
   timezone,
   homeScreenVersions = {},
+  pendingOnboardingShortcuts = [],
+  activationChecklistItems = [],
   saveConfirmation = "",
   onCreate,
+  onOpenDownload,
   onOpenApps,
   onOpenCard,
 }) {
@@ -6763,6 +7028,20 @@ function HomePanel({
     onCreate("commitment");
   };
 
+  const handleChecklistAction = (item) => {
+    if (item.action === "download") {
+      onOpenDownload?.();
+      return;
+    }
+    if (item.action === "create-card") {
+      onCreate("personal");
+      return;
+    }
+    if (item.action === "apps") {
+      onOpenApps();
+    }
+  };
+
   return (
     <section className="home-dashboard" data-testid="home-panel">
       <div className="home-atmosphere" aria-hidden="true" />
@@ -6795,6 +7074,38 @@ function HomePanel({
         </header>
 
         <div className="home-card-stack" data-testid="home-dashboard-summary">
+          {activationChecklistItems.length > 0 ? (
+            <section className="home-activation-checklist" data-testid="home-activation-checklist" aria-labelledby="home-activation-title">
+              <h2 id="home-activation-title">Finish setting up MyBishBash</h2>
+              <div className="home-activation-items">
+                {activationChecklistItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="home-activation-item"
+                    onClick={() => handleChecklistAction(item)}
+                  >
+                    <span />
+                    <strong>{item.label}</strong>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {pendingOnboardingShortcuts.length > 0 ? (
+            <button
+              type="button"
+              className="home-setup-reminder"
+              data-testid="home-shortcut-setup-reminder"
+              onClick={onOpenApps}
+            >
+              <span className="home-card-label">Shortcut setup</span>
+              <strong>{pendingOnboardingShortcuts.length} app{pendingOnboardingShortcuts.length === 1 ? "" : "s"} waiting in Apps</strong>
+              <span>Finish adding MyBishBash shortcuts when you are ready.</span>
+            </button>
+          ) : null}
+
           <button
             type="button"
             className="home-progress-card"
@@ -7941,15 +8252,14 @@ function PackDetailModal({
 function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [accessCode, setAccessCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return new URLSearchParams(window.location.search).get("signup") !== "1";
+  });
   const [agreedToLegal, setAgreedToLegal] = useState(false);
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
-  const isInviteError = error === INVITE_ONLY_ACCESS_ERROR;
-  const waitlistHref = `${import.meta.env.BASE_URL}early-access`;
-
   function switchMode(nextIsLogin) {
     setIsLogin(nextIsLogin);
     setShowPassword(false);
@@ -7958,7 +8268,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
 
   function submitExisting(event) {
     event.preventDefault();
-    if (!email.trim() || !password.trim() || (!isLogin && !accessCode.trim())) return;
+    if (!email.trim() || !password.trim()) return;
     if (!isLogin && !agreedToLegal) {
       alert("Please agree to the Terms of Use and Privacy Policy to continue.");
       return;
@@ -7966,7 +8276,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
     if (isLogin) {
       onLogIn(email, password);
     } else {
-      onSignUp(email, password, accessCode);
+      onSignUp(email, password);
     }
   }
 
@@ -7979,28 +8289,12 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
         <h1>{isLogin ? "MyBishBash" : "Create your MyBishBash account"}</h1>
         {mode === "loading" ? (
           <p>Loading your shared MyBishBash...</p>
-        ) : isInviteError ? (
-          <>
-            <p className="sync-error sync-invite-error">
-              MyBishBash is currently invite-only.
-              <br />
-              Your access code was not recognised.
-            </p>
-            <div className="sync-actions">
-              <button type="button" className="save-button" onClick={() => onClearError?.()}>
-                Try Again
-              </button>
-              <a className="text-button sync-waitlist-link" href={waitlistHref}>
-                Join Waitlist
-              </a>
-            </div>
-          </>
         ) : (
           <>
             <p>
               {isLogin
                 ? "Log in to sync this shortcut with your MyBishBash profile."
-                : "Enter your invite access code once. After that, you’ll only need to log in."}
+                : "Create your account. After that, you’ll only need to log in."}
             </p>
             {isLogin && isStandalone ? <p className="sync-note">iOS Home Screen shortcuts require you to log in once per shortcut.</p> : null}
             {error ? <p className="sync-error">{error}</p> : null}
@@ -8040,19 +8334,6 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
               </div>
               {!isLogin ? (
             <>
-              <div className="field">
-                  <label htmlFor="sync-access-code">Access code</label>
-                  <input
-                    id="sync-access-code"
-                    type="text"
-                    autoComplete="off"
-                    className="settings-input"
-                    value={accessCode}
-                    onChange={(event) => setAccessCode(event.target.value)}
-                    placeholder="Access code"
-                    required
-                  />
-                </div>
               <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>
                 <input
                   type="checkbox"
@@ -8186,6 +8467,7 @@ function validateWindowDefsGapFree(defs) {
 function AppsPanel({
   protectedAppStatuses,
   launcherBehaviorSettings,
+  pendingOnboardingShortcuts = [],
   onSaveVersionBehavior,
   onUpdateHomeScreenIcon,
   onOpenDestinationApp,
@@ -8278,6 +8560,30 @@ function AppsPanel({
                   >
                     End Pause
                   </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {pendingOnboardingShortcuts.length > 0 ? (
+        <div className="settings-card" data-testid="apps-shortcut-setup-reminder">
+          <div className="settings-version-heading">
+            <p>Shortcut setup waiting</p>
+            <span>These were selected during onboarding and can be finished any time.</span>
+          </div>
+          <div className="home-screen-version-list">
+            {pendingOnboardingShortcuts.map((app) => (
+              <article className="home-screen-version-card" key={`pending-shortcut:${app.id}`}>
+                {app.iconSrc ? (
+                  <img src={app.iconSrc} alt="" className="home-screen-version-icon" />
+                ) : (
+                  <span className="home-screen-version-icon" aria-hidden="true" />
+                )}
+                <div className="home-screen-version-copy">
+                  <strong>{app.label}</strong>
+                  <p>Marked as pending. Add the MyBishBash shortcut from this app card.</p>
                 </div>
               </article>
             ))}

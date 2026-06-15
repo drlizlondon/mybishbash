@@ -1,0 +1,308 @@
+.download-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(217, 108, 82, 0.08), transparent 34rem),
+    #f7f4ef;
+  color: #171514;
+  display: flex;
+  justify-content: center;
+  padding: max(14px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom));
+}
+
+.download-panel {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.download-hero {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  padding-top: 4px;
+}
+
+.download-hero img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 20px rgba(47, 42, 40, 0.08));
+}
+
+.download-hero h1 {
+  max-width: 13ch;
+  margin: 6px 0 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(2rem, 9vw, 2.55rem);
+  font-weight: 500;
+  line-height: 1.06;
+  letter-spacing: 0;
+  text-align: center;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
+.download-hero p,
+.download-required-note,
+.download-footer-note {
+  max-width: 320px;
+  margin: 0;
+  color: rgba(91, 82, 75, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.36;
+  text-align: center;
+}
+
+.download-install-list {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+}
+
+.download-install-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 102px;
+  gap: 12px;
+  align-items: center;
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid rgba(120, 87, 65, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 20px 45px rgba(47, 42, 40, 0.08);
+}
+
+.download-step-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  background: #d96c52;
+  color: #fffaf6;
+  font-weight: 800;
+  box-shadow: 0 10px 20px rgba(217, 108, 82, 0.22);
+}
+
+.download-install-card h2 {
+  margin: 0 0 6px;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.download-install-card p {
+  max-width: 210px;
+  margin: 0;
+  color: rgba(91, 82, 75, 0.72);
+  font-size: 0.82rem;
+  line-height: 1.32;
+}
+
+.download-phone {
+  position: relative;
+  width: 96px;
+  height: 126px;
+  border: 4px solid #171514;
+  border-radius: 22px;
+  background: #f8f4ee;
+  overflow: hidden;
+  box-shadow: 0 16px 30px rgba(47, 42, 40, 0.12);
+}
+
+.download-phone-speaker {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 34px;
+  height: 5px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(23, 21, 20, 0.82);
+  z-index: 3;
+}
+
+.download-safari-bar {
+  margin: 18px auto 8px;
+  width: 74px;
+  height: 16px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(91, 82, 75, 0.72);
+  font-size: 6px;
+  font-weight: 700;
+}
+
+.download-mini-page {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+}
+
+.download-mini-page img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.download-mini-page span {
+  width: 56px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(217, 108, 82, 0.16);
+}
+
+.download-share-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 27px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  place-items: center;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.download-share-row i,
+.download-share-row b {
+  width: 11px;
+  height: 11px;
+  border-radius: 4px;
+  background: rgba(91, 82, 75, 0.28);
+}
+
+.download-share-row .is-highlighted {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;
+  background: #d96c52;
+  box-shadow: 0 0 0 7px rgba(217, 108, 82, 0.16);
+}
+
+.download-sheet {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 9px;
+  display: grid;
+  gap: 7px;
+  padding: 12px 8px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 -12px 28px rgba(47, 42, 40, 0.08);
+}
+
+.download-sheet span,
+.download-sheet strong {
+  min-height: 15px;
+  border-radius: 8px;
+  background: rgba(91, 82, 75, 0.08);
+}
+
+.download-sheet strong {
+  display: grid;
+  place-items: center;
+  min-height: 24px;
+  background: rgba(217, 108, 82, 0.15);
+  color: #9a5145;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.download-home-grid {
+  padding: 26px 14px 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 10px;
+}
+
+.download-home-grid span,
+.download-home-grid img {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(91, 82, 75, 0.16), rgba(91, 82, 75, 0.06));
+}
+
+.download-home-grid img {
+  padding: 2px;
+  background: #fffaf6;
+  object-fit: contain;
+  box-shadow: 0 0 0 5px rgba(217, 108, 82, 0.12);
+}
+
+.download-primary {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #d96c52 0%, #cf6046 100%);
+  color: #fffaf6;
+  text-decoration: none;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.04rem;
+  font-weight: 500;
+  box-shadow: 0 18px 34px rgba(201, 96, 70, 0.24);
+}
+
+.download-skip-link {
+  color: rgba(91, 82, 75, 0.68);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.download-why-card {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(120, 87, 65, 0.1);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.download-why-card h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.18rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.download-why-card ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.download-why-card li {
+  color: rgba(47, 42, 40, 0.78);
+  font-size: 0.86rem;
+  line-height: 1.36;
+  text-align: center;
+}
+
+@media (max-width: 360px) {
+  .download-install-card {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .download-install-card p {
+    max-width: 260px;
+  }
+}
