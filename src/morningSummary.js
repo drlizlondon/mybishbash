@@ -161,11 +161,13 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
   };
 
   const checkIns = dayEvents.filter((event) => COMMITMENT_CHECKIN_COMPLETED_TYPES.has(event.event_type));
+  const reviews = dayEvents.filter((event) => event.event_type === "commitment_review");
   const commitments = {
     madeCount: dayEvents.filter((event) => event.event_type === "commitment_made").length,
     declinedCount: dayEvents.filter((event) => event.event_type === "commitment_declined").length,
     checkInGeneratedCount: dayEvents.filter((event) => COMMITMENT_CHECKIN_GENERATED_TYPES.has(event.event_type)).length,
     checkInCompletedCount: checkIns.length,
+    reviewCompletedCount: reviews.length,
     outcomes: {
       goingPerfectly: checkIns.filter((event) =>
         event.action_taken === "Going perfectly" ||
@@ -179,6 +181,21 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
         event.action_taken === "Not going well" ||
         event.metadata?.response === "Not going well"
       ).length,
+      onTrack: checkIns.filter((event) =>
+        event.action_taken === "on_track" ||
+        event.metadata?.response === "on_track"
+      ).length,
+      somewhatOnTrack: checkIns.filter((event) =>
+        event.action_taken === "somewhat_on_track" ||
+        event.metadata?.response === "somewhat_on_track"
+      ).length,
+      closedEarly: checkIns.filter((event) =>
+        event.action_taken === "closed_early" ||
+        event.metadata?.response === "closed_early"
+      ).length,
+      completed: reviews.filter((event) => event.metadata?.finalOutcome === "completed").length,
+      partiallyCompleted: reviews.filter((event) => event.metadata?.finalOutcome === "partially_completed").length,
+      notCompleted: reviews.filter((event) => event.metadata?.finalOutcome === "not_completed").length,
     },
   };
 

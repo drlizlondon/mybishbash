@@ -445,8 +445,24 @@ export function getCommitmentCheckInId(card, date = new Date(), timeZone) {
   return `checkin:${card.id}:${getTodayKey(date, timeZone)}`;
 }
 
+export function getCommitmentEncouragementId(card, date = new Date(), timeZone) {
+  return `encouragement:${card.id}:${getTodayKey(date, timeZone)}`;
+}
+
+export function getCommitmentReviewId(card, date = new Date(), timeZone) {
+  return `review:${card.id}:${getTodayKey(date, timeZone)}`;
+}
+
 export function isCommitmentCheckInCard(card) {
   return card?.cardKind === "commitment_check_in";
+}
+
+export function isCommitmentEncouragementCard(card) {
+  return card?.cardKind === "commitment_encouragement";
+}
+
+export function isCommitmentReviewCard(card) {
+  return card?.cardKind === "commitment_review";
 }
 
 const COMMITMENT_DASHBOARD_TITLE = "Today’s Commitment";
@@ -461,6 +477,15 @@ const COMMITMENT_COMPATIBILITY_FIELDS = [
   "commitmentStatusToday",
   "commitmentDecisionDate",
   "commitmentDecisionAt",
+  "commitmentLifecycleStatus",
+  "commitmentCheckInShownDate",
+  "commitmentEncouragementRequestedDate",
+  "commitmentEncouragementCompletedDate",
+  "commitmentClosedEarlyDate",
+  "commitmentReviewDueDate",
+  "commitmentReviewResponse",
+  "commitmentReviewResponseDate",
+  "commitmentFinalOutcome",
 ];
 
 export function isCommitmentLikeCard(card) {
@@ -478,7 +503,9 @@ export function isCommitmentCheckInEligible(card, date = new Date(), timeZone) {
 
   const todayKey = getTodayKey(date, timeZone);
   if (card.commitmentStatusToday !== "made" || card.commitmentDecisionDate !== todayKey) return false;
+  if (card.commitmentLifecycleStatus === "closed_early" || card.commitmentLifecycleStatus === "reviewed") return false;
   if (card.commitmentCheckInResponseDate === todayKey) return false;
+  if (card.commitmentCheckInShownDate === todayKey) return false;
 
   const checkInMinutes = parseTimeStringToMinutes(card.commitmentCheckInTime);
   if (checkInMinutes == null) return false;
@@ -509,10 +536,106 @@ export function buildCommitmentCheckInCard(card, date = new Date(), timeZone) {
   };
 }
 
+export function isCommitmentEncouragementEligible(card, date = new Date(), timeZone) {
+  if (!card || card.sourcePackId) return false;
+  if (!isCommitmentLikeCard(card)) return false;
+  if (card.paused || card.disliked || card.deletedAt) return false;
+  const todayKey = getTodayKey(date, timeZone);
+  return (
+    card.commitmentStatusToday === "made" &&
+    card.commitmentDecisionDate === todayKey &&
+    card.commitmentCheckInResponseDate === todayKey &&
+    card.commitmentCheckInResponse === "somewhat_on_track" &&
+    card.commitmentEncouragementRequestedDate === todayKey &&
+    card.commitmentEncouragementCompletedDate !== todayKey &&
+    card.commitmentLifecycleStatus !== "closed_early" &&
+    card.commitmentLifecycleStatus !== "reviewed"
+  );
+}
+
+export function buildCommitmentEncouragementCard(card, date = new Date(), timeZone) {
+  return {
+    id: getCommitmentEncouragementId(card, date, timeZone),
+    cardKind: "commitment_encouragement",
+    parentCommitmentCardId: card.id,
+    promptText: "You said you wanted to do this.",
+    dashboardTitle: "Commitment reminder",
+    commitmentText: card.promptText,
+    theme: card.theme,
+    icon: card.icon ?? "heart",
+    statusToday: "fresh",
+    createdAt: card.commitmentCheckInResponseAt ?? card.updatedAt,
+    updatedAt: card.updatedAt,
+    lastShownAt: null,
+    notYetUntil: null,
+    doneDate: null,
+    frequency: "once_daily",
+    timingWindows: ["morning", "day", "evening", "night"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+  };
+}
+
+export function isCommitmentReviewEligible(card, date = new Date(), timeZone) {
+  if (!card || card.sourcePackId) return false;
+  if (!isCommitmentLikeCard(card)) return false;
+  if (card.paused || card.disliked || card.deletedAt) return false;
+  const todayKey = getTodayKey(date, timeZone);
+  return (
+    card.commitmentStatusToday === "made" &&
+    card.commitmentDecisionDate === todayKey &&
+    card.commitmentCheckInResponseDate === todayKey &&
+    card.commitmentReviewDueDate === todayKey &&
+    card.commitmentReviewResponseDate !== todayKey &&
+    card.commitmentLifecycleStatus !== "closed_early" &&
+    card.commitmentLifecycleStatus !== "reviewed" &&
+    (!card.commitmentEncouragementRequestedDate || card.commitmentEncouragementCompletedDate === todayKey)
+  );
+}
+
+export function buildCommitmentReviewCard(card, date = new Date(), timeZone) {
+  return {
+    id: getCommitmentReviewId(card, date, timeZone),
+    cardKind: "commitment_review",
+    parentCommitmentCardId: card.id,
+    promptText: card.promptText,
+    dashboardTitle: "Commitment review",
+    theme: card.theme,
+    icon: card.icon ?? "heart",
+    statusToday: "fresh",
+    createdAt: card.commitmentDecisionAt ?? card.createdAt,
+    updatedAt: card.updatedAt,
+    lastShownAt: null,
+    notYetUntil: null,
+    doneDate: null,
+    frequency: "once_daily",
+    timingWindows: ["morning", "day", "evening", "night"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+  };
+}
+
+export function buildEligibleCommitmentLifecycleCards(cards = [], date = new Date(), timeZone) {
+  return [
+    ...cards
+      .filter((card) => isCommitmentEncouragementEligible(card, date, timeZone))
+      .map((card) => buildCommitmentEncouragementCard(card, date, timeZone)),
+    ...cards
+      .filter((card) => isCommitmentReviewEligible(card, date, timeZone))
+      .map((card) => buildCommitmentReviewCard(card, date, timeZone)),
+    ...cards
+      .filter((card) => isCommitmentCheckInEligible(card, date, timeZone))
+      .map((card) => buildCommitmentCheckInCard(card, date, timeZone)),
+  ];
+}
+
 export function buildEligibleCommitmentCheckInCards(cards = [], date = new Date(), timeZone) {
-  return cards
-    .filter((card) => isCommitmentCheckInEligible(card, date, timeZone))
-    .map((card) => buildCommitmentCheckInCard(card, date, timeZone));
+  return buildEligibleCommitmentLifecycleCards(cards, date, timeZone)
+    .filter((card) => isCommitmentCheckInCard(card));
 }
 
 function isWithinCustomTimeWindow(card, date = new Date(), timeZone) {

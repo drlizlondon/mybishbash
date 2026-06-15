@@ -79,8 +79,7 @@ import {
   setWindowDefs,
   isValidWindowDefs,
   applyCardAction,
-  buildCommitmentCheckInCard,
-  buildEligibleCommitmentCheckInCards,
+  buildEligibleCommitmentLifecycleCards,
   buildCardsFromPack,
   createId,
   getGreeting,
@@ -90,7 +89,8 @@ import {
   getCurrentWindow,
   isEligible,
   isCommitmentCheckInCard,
-  isCommitmentCheckInEligible,
+  isCommitmentEncouragementCard,
+  isCommitmentReviewCard,
   isCommitmentLikeCard,
   isPackCardAvailable,
   normalizeCards,
@@ -442,19 +442,12 @@ function isCommitmentCard(card) {
   return isCommitmentLikeCard(card);
 }
 
-function findCommitmentCheckInParent(cards, checkInCardId) {
-  const [, parentId] = String(checkInCardId ?? "").split(":");
-  return parentId ? cards.find((card) => card.id === parentId && isCommitmentCard(card)) ?? null : null;
-}
-
 function resolveRevealCard(cards, cardId, timezone) {
   if (!cardId) return null;
   const storedCard = cards.find((card) => card.id === cardId);
   if (storedCard) return storedCard;
-  const parent = findCommitmentCheckInParent(cards, cardId);
-  return parent && isCommitmentCheckInEligible(parent, new Date(), timezone)
-    ? buildCommitmentCheckInCard(parent, new Date(), timezone)
-    : null;
+  return buildEligibleCommitmentLifecycleCards(cards, new Date(), timezone)
+    .find((card) => card.id === cardId) ?? null;
 }
 
 function getCommitmentStartWindow(timingWindows = []) {
@@ -678,7 +671,7 @@ function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set(
   const normalized = normalizeCards(currentCards, now, timezone);
   const selectablePersonalCards = [
     ...normalized,
-    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+    ...buildEligibleCommitmentLifecycleCards(normalized, now, timezone),
   ];
   const activePackCards = normalized.filter((card) =>
     isPackCardAvailable(card) && !excludedCardIds.has(card.id)
@@ -702,7 +695,7 @@ function countEligibleGeneralCards(currentCards, timezone) {
   const normalized = normalizeCards(currentCards, now, timezone);
   const selectableCards = [
     ...normalized,
-    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+    ...buildEligibleCommitmentLifecycleCards(normalized, now, timezone),
   ];
   return selectableCards.filter((card) =>
     card.sourcePackId ? isPackCardAvailable(card) : isEligible(card, now, timezone) && !card.deletedAt
@@ -792,7 +785,9 @@ function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions 
       !card.paused &&
       !card.disliked &&
       card.commitmentStatusToday === "made" &&
-      card.commitmentDecisionDate === todayKey
+      card.commitmentDecisionDate === todayKey &&
+      card.commitmentLifecycleStatus !== "closed_early" &&
+      card.commitmentLifecycleStatus !== "reviewed"
     )
     .sort((left, right) => new Date(right.commitmentDecisionAt ?? right.updatedAt ?? 0).getTime() - new Date(left.commitmentDecisionAt ?? left.updatedAt ?? 0).getTime());
   const activeCommitment = liveCommitments[0] ?? null;
@@ -1392,10 +1387,57 @@ function getCommitmentAcknowledgementMessage({ committed, checkInEnabled }) {
 }
 
 function getCommitmentCheckInOutcomeMessage(response) {
-  if (response === "Going perfectly") return "Excellent.\nKeep going today.";
-  if (response === "Could be better") return "That’s okay.\nThere’s still time today.";
-  return "That’s okay.\nTomorrow is another opportunity.";
+  if (response === "on_track") return "Good.\nKeep going.";
+  if (response === "somewhat_on_track") return null;
+  return "That’s okay.\nWe’ll leave this for another day.";
 }
+
+function getCommitmentReviewOutcomeMessage(response) {
+  if (response === "did_it") return "You did it.\nHold onto that.";
+  if (response === "nearly_did_it") return "That still counts.\nYou stayed close to it.";
+  return "That’s okay.\nYou can try again another time.";
+}
+
+const ONBOARDING_COMMITMENT_DEMO_CARD = {
+  id: "onboarding-commitment-demo",
+  cardKind: "commitment",
+  promptText: "I will go to the gym today.",
+  dashboardTitle: "Today’s Commitment",
+  commitmentReason: "I feel so good after a great workout at the gym.",
+  commitmentTimingMode: "anytime",
+  commitmentStartWindow: "anytime",
+  commitmentCheckInEnabled: true,
+  commitmentCheckInTime: "20:00",
+  timingWindows: ["day"],
+  frequency: "once_daily",
+  statusToday: "fresh",
+  deletedAt: null,
+};
+
+const ONBOARDING_COMMITMENT_DEMO_CHECK_IN_CARD = {
+  ...ONBOARDING_COMMITMENT_DEMO_CARD,
+  id: "onboarding-commitment-demo-check-in",
+  cardKind: "commitment_check_in",
+  parentCommitmentCardId: ONBOARDING_COMMITMENT_DEMO_CARD.id,
+};
+
+const ONBOARDING_COMMITMENT_DEMO_ENCOURAGEMENT_CARD = {
+  ...ONBOARDING_COMMITMENT_DEMO_CARD,
+  id: "onboarding-commitment-demo-encouragement",
+  cardKind: "commitment_encouragement",
+  parentCommitmentCardId: ONBOARDING_COMMITMENT_DEMO_CARD.id,
+  promptText: "You said you wanted to do this.",
+  dashboardTitle: "Commitment reminder",
+  commitmentText: ONBOARDING_COMMITMENT_DEMO_CARD.promptText,
+};
+
+const ONBOARDING_COMMITMENT_DEMO_REVIEW_CARD = {
+  ...ONBOARDING_COMMITMENT_DEMO_CARD,
+  id: "onboarding-commitment-demo-review",
+  cardKind: "commitment_review",
+  parentCommitmentCardId: ONBOARDING_COMMITMENT_DEMO_CARD.id,
+  dashboardTitle: "Commitment review",
+};
 
 function App() {
   if (typeof window !== "undefined") {
@@ -2294,7 +2336,7 @@ function App() {
     const normalizedCards = normalizeCards(cards, routeNow, profile.timezone);
     const selectableCards = [
       ...normalizedCards,
-      ...buildEligibleCommitmentCheckInCards(normalizedCards, routeNow, profile.timezone),
+      ...buildEligibleCommitmentLifecycleCards(normalizedCards, routeNow, profile.timezone),
     ];
     const hasUsableCachedLauncherState =
       selectableCards.some((card) =>
@@ -2808,8 +2850,14 @@ function App() {
       activationKey,
       selectedPath: "personal_first_fallback",
     }, testerStatus);
+    const selectionNow = new Date();
+    const normalizedSelectionCards = normalizeCards(cards, selectionNow, profile.timezone);
+    const selectableSelectionCards = [
+      ...normalizedSelectionCards,
+      ...buildEligibleCommitmentLifecycleCards(normalizedSelectionCards, selectionNow, profile.timezone),
+    ];
     const fallbackDisplay = selectEligibleCard({
-      cards,
+      cards: selectableSelectionCards,
       timezone: profile.timezone,
       events: selectionEvents,
       excludedCardIds: launchCompletedCardIdsRef.current,
@@ -3152,7 +3200,7 @@ function App() {
       const normalizedDiagCards = normalizeCards(cards, routeNow, profile.timezone);
       const selectableDiagCards = [
         ...normalizedDiagCards,
-        ...buildEligibleCommitmentCheckInCards(normalizedDiagCards, routeNow, profile.timezone),
+        ...buildEligibleCommitmentLifecycleCards(normalizedDiagCards, routeNow, profile.timezone),
       ];
       const eligiblePersonalCount = selectableDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, routeNow, profile.timezone)).length;
       const eligiblePackCount = normalizedDiagCards.filter(isPackCardAvailable).length;
@@ -3398,8 +3446,14 @@ function App() {
       });
 
       const launchAttemptId = createLaunchAttemptId("personal", "route");
+      const homeNow = new Date();
+      const normalizedHomeCards = normalizeCards(cards, homeNow, profile.timezone);
+      const selectableHomeCards = [
+        ...normalizedHomeCards,
+        ...buildEligibleCommitmentLifecycleCards(normalizedHomeCards, homeNow, profile.timezone),
+      ];
       const homeDecision = selectEligibleCard({
-        cards,
+        cards: selectableHomeCards,
         events,
         timezone: profile.timezone,
       });
@@ -4196,12 +4250,22 @@ function App() {
       notYetUntil: null,
       updatedAt: now.toISOString(),
       commitmentStatusToday: committed ? "made" : "declined",
+      commitmentLifecycleStatus: committed ? "active" : "declined",
       commitmentDecisionDate: todayKey,
       commitmentDecisionAt: now.toISOString(),
       commitmentCheckInPendingDate: committed && activeCard.commitmentCheckInEnabled ? todayKey : null,
+      commitmentCheckInShownDate: null,
       commitmentCheckInResponse: null,
       commitmentCheckInResponseDate: null,
       commitmentCheckInResponseAt: null,
+      commitmentEncouragementRequestedDate: null,
+      commitmentEncouragementCompletedDate: null,
+      commitmentClosedEarlyDate: null,
+      commitmentReviewDueDate: null,
+      commitmentReviewResponse: null,
+      commitmentReviewResponseDate: null,
+      commitmentReviewResponseAt: null,
+      commitmentFinalOutcome: null,
     };
     const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
     setCards(cardsAfterAction);
@@ -4288,6 +4352,8 @@ function App() {
 
     const now = new Date();
     const todayKey = getTodayKey(now, profile.timezone);
+    const closesEarly = response === "closed_early";
+    const needsEncouragement = response === "somewhat_on_track";
     const updatedCard = {
       ...parentCard,
       lastShownAt: now.toISOString(),
@@ -4295,7 +4361,13 @@ function App() {
       commitmentCheckInResponse: response,
       commitmentCheckInResponseDate: todayKey,
       commitmentCheckInResponseAt: now.toISOString(),
+      commitmentCheckInShownDate: todayKey,
       commitmentCheckInPendingDate: null,
+      commitmentLifecycleStatus: closesEarly ? "closed_early" : "active",
+      commitmentEncouragementRequestedDate: needsEncouragement ? todayKey : null,
+      commitmentEncouragementCompletedDate: needsEncouragement ? null : parentCard.commitmentEncouragementCompletedDate ?? null,
+      commitmentClosedEarlyDate: closesEarly ? todayKey : null,
+      commitmentReviewDueDate: closesEarly ? null : todayKey,
     };
     const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
     setCards(cardsAfterAction);
@@ -4315,6 +4387,7 @@ function App() {
         parentCommitmentCardId: parentCard.id,
         checkInTime: parentCard.commitmentCheckInTime ?? "",
         response,
+        phase: "in_progress",
       },
     });
     void logEvent({
@@ -4333,16 +4406,147 @@ function App() {
         surface: getCardSelectionSurfaceForOverlay(overlay),
         parentCommitmentCardId: parentCard.id,
         checkInTime: parentCard.commitmentCheckInTime ?? "",
+        response,
+        phase: "in_progress",
         origin: overlay.origin ?? null,
         launchSource: overlay.launchSource ?? null,
         activationKey: overlay?.activationKey ?? null,
       },
     });
 
+    if (needsEncouragement) {
+      const encouragementCard = buildEligibleCommitmentLifecycleCards(cardsAfterAction, now, profile.timezone)
+        .find((candidate) => candidate.parentCommitmentCardId === parentCard.id && isCommitmentEncouragementCard(candidate));
+      if (encouragementCard) {
+        setOverlay({
+          ...overlay,
+          type: "reveal",
+          cardId: encouragementCard.id,
+          phase: null,
+        });
+        return;
+      }
+    }
+
     handleRevealCompletion({
       cardsOverride: cardsAfterAction,
       completedCardId: activeCard.id,
       confirmationMessage: getCommitmentCheckInOutcomeMessage(response),
+      confirmationActionLabel: "Continue",
+    });
+  }
+
+  function handleCommitmentEncouragementAction() {
+    if (!overlay || overlay.type !== "reveal") return;
+
+    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
+    if (!activeCard || !isCommitmentEncouragementCard(activeCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
+    if (!parentCard || !isCommitmentCard(parentCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const updatedCard = {
+      ...parentCard,
+      lastShownAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      commitmentEncouragementCompletedDate: todayKey,
+      commitmentLifecycleStatus: "active",
+      commitmentReviewDueDate: parentCard.commitmentReviewDueDate ?? todayKey,
+    };
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
+
+    void logEvent({
+      event_type: "commitment_encouragement_completed",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: parentCard.id,
+      bash_title: parentCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Commitment reminder",
+      card_text: activeCard.promptText,
+      action_taken: "continued",
+      metadata: {
+        cardKind: "commitment_encouragement",
+        parentCommitmentCardId: parentCard.id,
+        phase: "encouragement",
+      },
+    });
+
+    handleRevealCompletion({
+      cardsOverride: cardsAfterAction,
+      completedCardId: activeCard.id,
+      confirmationMessage: "Good.\nKeep this with you.",
+      confirmationActionLabel: "Continue",
+    });
+  }
+
+  function handleCommitmentReviewAction(response) {
+    if (!overlay || overlay.type !== "reveal") return;
+
+    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
+    if (!activeCard || !isCommitmentReviewCard(activeCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
+    if (!parentCard || !isCommitmentCard(parentCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const finalOutcome = response === "did_it"
+      ? "completed"
+      : response === "nearly_did_it"
+        ? "partially_completed"
+        : "not_completed";
+    const updatedCard = {
+      ...parentCard,
+      lastShownAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      commitmentLifecycleStatus: "reviewed",
+      commitmentReviewResponse: response,
+      commitmentReviewResponseDate: todayKey,
+      commitmentReviewResponseAt: now.toISOString(),
+      commitmentFinalOutcome: finalOutcome,
+    };
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
+
+    void logEvent({
+      event_type: "commitment_review",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: parentCard.id,
+      bash_title: parentCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Commitment review",
+      card_text: parentCard.promptText,
+      action_taken: response,
+      metadata: {
+        cardKind: "commitment_review",
+        parentCommitmentCardId: parentCard.id,
+        response,
+        finalOutcome,
+        phase: "review",
+      },
+    });
+
+    handleRevealCompletion({
+      cardsOverride: cardsAfterAction,
+      completedCardId: activeCard.id,
+      confirmationMessage: getCommitmentReviewOutcomeMessage(response),
       confirmationActionLabel: "Continue",
     });
   }
@@ -4367,9 +4571,19 @@ function App() {
         commitmentCheckInEnabled: Boolean(formData.commitmentCheckInEnabled),
         commitmentCheckInTime: formData.commitmentCheckInEnabled ? formData.commitmentCheckInTime ?? "" : "",
         commitmentCheckInPendingDate: null,
+        commitmentLifecycleStatus: null,
+        commitmentCheckInShownDate: null,
         commitmentCheckInResponse: null,
         commitmentCheckInResponseDate: null,
         commitmentCheckInResponseAt: null,
+        commitmentEncouragementRequestedDate: null,
+        commitmentEncouragementCompletedDate: null,
+        commitmentClosedEarlyDate: null,
+        commitmentReviewDueDate: null,
+        commitmentReviewResponse: null,
+        commitmentReviewResponseDate: null,
+        commitmentReviewResponseAt: null,
+        commitmentFinalOutcome: null,
         theme: formData.theme,
         icon: formData.icon,
         statusToday: "fresh",
@@ -4403,9 +4617,19 @@ function App() {
                   commitmentDecisionDate: card.commitmentDecisionDate ?? null,
                   commitmentDecisionAt: card.commitmentDecisionAt ?? null,
                   commitmentCheckInPendingDate: card.commitmentCheckInPendingDate ?? null,
+                  commitmentLifecycleStatus: card.commitmentLifecycleStatus ?? null,
+                  commitmentCheckInShownDate: card.commitmentCheckInShownDate ?? null,
                   commitmentCheckInResponse: card.commitmentCheckInResponse ?? null,
                   commitmentCheckInResponseDate: card.commitmentCheckInResponseDate ?? null,
                   commitmentCheckInResponseAt: card.commitmentCheckInResponseAt ?? null,
+                  commitmentEncouragementRequestedDate: card.commitmentEncouragementRequestedDate ?? null,
+                  commitmentEncouragementCompletedDate: card.commitmentEncouragementCompletedDate ?? null,
+                  commitmentClosedEarlyDate: card.commitmentClosedEarlyDate ?? null,
+                  commitmentReviewDueDate: card.commitmentReviewDueDate ?? null,
+                  commitmentReviewResponse: card.commitmentReviewResponse ?? null,
+                  commitmentReviewResponseDate: card.commitmentReviewResponseDate ?? null,
+                  commitmentReviewResponseAt: card.commitmentReviewResponseAt ?? null,
+                  commitmentFinalOutcome: card.commitmentFinalOutcome ?? null,
                 }
               : card,
           ),
@@ -4570,9 +4794,19 @@ function App() {
         commitmentDecisionDate: null,
         commitmentDecisionAt: null,
         commitmentCheckInPendingDate: null,
+        commitmentLifecycleStatus: null,
+        commitmentCheckInShownDate: null,
         commitmentCheckInResponse: null,
         commitmentCheckInResponseDate: null,
         commitmentCheckInResponseAt: null,
+        commitmentEncouragementRequestedDate: null,
+        commitmentEncouragementCompletedDate: null,
+        commitmentClosedEarlyDate: null,
+        commitmentReviewDueDate: null,
+        commitmentReviewResponse: null,
+        commitmentReviewResponseDate: null,
+        commitmentReviewResponseAt: null,
+        commitmentFinalOutcome: null,
         paused: false,
         deletedAt: null,
         sourcePackId: null,
@@ -4607,9 +4841,19 @@ function App() {
         return {
           ...resetCard,
           commitmentCheckInPendingDate: null,
+          commitmentLifecycleStatus: null,
+          commitmentCheckInShownDate: null,
           commitmentCheckInResponse: null,
           commitmentCheckInResponseDate: null,
           commitmentCheckInResponseAt: null,
+          commitmentEncouragementRequestedDate: null,
+          commitmentEncouragementCompletedDate: null,
+          commitmentClosedEarlyDate: null,
+          commitmentReviewDueDate: null,
+          commitmentReviewResponse: null,
+          commitmentReviewResponseDate: null,
+          commitmentReviewResponseAt: null,
+          commitmentFinalOutcome: null,
         };
       }),
     );
@@ -6317,6 +6561,8 @@ function App() {
           onAction={handleAction}
           onCommitmentAction={handleCommitmentAction}
           onCommitmentCheckInAction={handleCommitmentCheckInAction}
+          onCommitmentEncouragementAction={handleCommitmentEncouragementAction}
+          onCommitmentReviewAction={handleCommitmentReviewAction}
           onCreateCard={openCardComposerFromCurrentRoute}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
@@ -9523,6 +9769,8 @@ function Overlay({
   onAction,
   onCommitmentAction,
   onCommitmentCheckInAction,
+  onCommitmentEncouragementAction,
+  onCommitmentReviewAction,
   onCreateCard,
   onPackContinue,
   onPackLike,
@@ -9919,6 +10167,44 @@ function Overlay({
     );
   }
 
+  if (isCommitmentEncouragementCard(card)) {
+    return (
+      <CommitmentEncouragementOverlay
+        card={card}
+        onContinue={onCommitmentEncouragementAction}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
+      />
+    );
+  }
+
+  if (isCommitmentReviewCard(card)) {
+    return (
+      <CommitmentReviewOverlay
+        card={card}
+        onReviewAction={onCommitmentReviewAction}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
+      />
+    );
+  }
+
   if (isCommitmentCheckInCard(card)) {
     return (
       <CommitmentCheckInOverlay
@@ -10058,6 +10344,7 @@ function CommitmentCardOverlay({
   launcherAppName = null,
   onPauseApp = null,
   onManageApp = null,
+  showDashboardShortcut = true,
 }) {
   const shownRef = useRef(false);
   const commitmentText = stripCommitmentPrefix(card.promptText);
@@ -10106,6 +10393,7 @@ function CommitmentCardOverlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
       onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
     />
   );
 }
@@ -10123,6 +10411,7 @@ function CommitmentMotivationOverlay({
   launcherAppName = null,
   onPauseApp = null,
   onManageApp = null,
+  showDashboardShortcut = true,
 }) {
   return (
     <CardRevealTemplate
@@ -10145,6 +10434,7 @@ function CommitmentMotivationOverlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
       onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
     >
       <div className="commitment-motivation-copy">
         <p className="commitment-motivation-intro">Before you decide...</p>
@@ -10168,18 +10458,19 @@ function CommitmentCheckInOverlay({
   launcherAppName = null,
   onPauseApp = null,
   onManageApp = null,
+  showDashboardShortcut = true,
 }) {
   return (
-    <PremiumCardScreen
+      <PremiumCardScreen
       type="personal"
-      greeting="How is it going?"
+      greeting="How’s it going?"
       icon="heart"
       headline={card.promptText}
       subtitle=""
       actions={[
-        { label: "Going perfectly", variant: "primary", onClick: () => onCheckInAction("Going perfectly") },
-        { label: "Could be better", variant: "secondary", onClick: () => onCheckInAction("Could be better") },
-        { label: "Not going well", variant: "secondary", onClick: () => onCheckInAction("Not going well") },
+        { label: "I’m on track", variant: "primary", onClick: () => onCheckInAction("on_track") },
+        { label: "I’m somewhat on track", variant: "secondary", onClick: () => onCheckInAction("somewhat_on_track") },
+        { label: "Let’s leave this for another day", variant: "secondary", onClick: () => onCheckInAction("closed_early") },
       ]}
       launcherVersions={launcherVersions}
       onLauncherLaunch={onLauncherLaunch}
@@ -10191,6 +10482,90 @@ function CommitmentCheckInOverlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
       onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
+    />
+  );
+}
+
+function CommitmentEncouragementOverlay({
+  card,
+  onContinue,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
+  onManageApp = null,
+  showDashboardShortcut = true,
+}) {
+  const commitmentText = stripCommitmentPrefix(card.commitmentText ?? card.promptText ?? "");
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting="MYBISHBASH REMINDER"
+      icon="heart"
+      headline={card.promptText}
+      subtitle={commitmentText ? `I will ${commitmentText}` : "Keep going with what you said mattered."}
+      actions={[
+        { label: "Continue", variant: "primary", onClick: onContinue },
+      ]}
+      launcherVersions={launcherVersions}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
+    />
+  );
+}
+
+function CommitmentReviewOverlay({
+  card,
+  onReviewAction,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
+  onManageApp = null,
+  showDashboardShortcut = true,
+}) {
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting=""
+      icon="heart"
+      headline={card.promptText}
+      subtitle="How did it go?"
+      actions={[
+        { label: "I did it", variant: "primary", onClick: () => onReviewAction("did_it") },
+        { label: "I nearly did it", variant: "secondary", onClick: () => onReviewAction("nearly_did_it") },
+        { label: "I didn’t do it", variant: "secondary", onClick: () => onReviewAction("didnt_do_it") },
+      ]}
+      launcherVersions={launcherVersions}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
     />
   );
 }
