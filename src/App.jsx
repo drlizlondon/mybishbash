@@ -66,7 +66,7 @@ import {
   fetchOwnAccessProfile,
   touchUserProfile,
 } from "./lib/mybishbashSync";
-import { CAPABILITIES, getCapabilities } from "./lib/accessCapabilities";
+import { CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
 import ExplorePanel from "./ExplorePanel";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
@@ -1298,9 +1298,9 @@ function getLauncherCardActions({ launchSession, cardType }) {
 
   return {
     actions: [
-      { id: "not_done", label: "Not done", variant: "secondary" },
-      { id: "do_now", label: "I’ll do it now", variant: "secondary" },
       { id: "done", label: "Done", variant: "primary" },
+      { id: "do_now", label: "I’ll do it now", variant: "secondary" },
+      { id: "not_done", label: "Not done", variant: "secondary" },
     ],
   };
 }
@@ -1550,6 +1550,7 @@ function App() {
   // unknown/unavailable, which getCapabilities treats as the free tier, so
   // premium installs fail closed.
   const [accessProfile, setAccessProfile] = useState(null);
+  const [accessStatus, setAccessStatus] = useState(e2eMode ? "granted" : "unknown");
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
@@ -1780,7 +1781,7 @@ function App() {
     if (!profile.hasCompletedProtectedAppSetup || !profile.selectedProtectedApp) {
       items.push({
         id: "protected-app",
-        label: "Add your first protected app",
+        label: "Choose your first app",
         action: "apps",
       });
     }
@@ -2236,11 +2237,21 @@ function App() {
   useEffect(() => {
     if (!authReady || e2eMode || !session?.user?.id) {
       setAccessProfile(null);
+      setAccessStatus(e2eMode ? "granted" : session?.user?.id ? "unknown" : "signed-out");
       return undefined;
     }
     let cancelled = false;
+    setAccessStatus("loading");
     fetchOwnAccessProfile(session.user.id).then((profileRow) => {
-      if (!cancelled) setAccessProfile(profileRow);
+      if (!cancelled) {
+        setAccessProfile(profileRow);
+        setAccessStatus(profileRow && isAccessActive(profileRow) ? "granted" : "denied");
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setAccessProfile(null);
+        setAccessStatus("denied");
+      }
     });
     return () => {
       cancelled = true;
@@ -5248,9 +5259,6 @@ function App() {
 
     setOverlay(null);
     setMenuOpenId(null);
-    signupOnboardingPendingRef.current = false;
-    setSignupOnboardingPending(false);
-    setSetupComplete(true);
     setShouldLaunchOverlay(false);
   }
 
@@ -5348,7 +5356,6 @@ function App() {
     setMenuOpenId(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    setSetupComplete(true);
     setShouldLaunchOverlay(false);
   }
 
@@ -5585,7 +5592,7 @@ function App() {
     navigateTo("/onboarding", { replace: true });
   }
 
-  async function handleSignUp(email, password) {
+  async function handleSignUp(email, password, accessCode) {
     setSyncStatus("loading");
     setSyncError("");
     signupOnboardingPendingRef.current = true;
@@ -5597,7 +5604,7 @@ function App() {
       action_taken: "started",
     });
     try {
-      const createdSession = await signUp(email, password);
+      const createdSession = await signUp(email, password, accessCode);
       void logEvent({
         event_type: "signup_completed",
         source_type: "auth",
@@ -6188,6 +6195,22 @@ function App() {
     );
   }
 
+  if (session && !e2eMode && !isFakeLauncherFlow && (accessStatus === "loading" || accessStatus === "unknown")) {
+    return <SyncConnectionScreen mode="loading" error={syncError} />;
+  }
+
+  if (session && !e2eMode && !isFakeLauncherFlow && accessStatus === "denied") {
+    return (
+      <SyncConnectionScreen
+        mode="access-denied"
+        error={syncError || "This account does not have beta access yet."}
+        onSignUp={handleSignUp}
+        onLogIn={handleLogIn}
+        onClearError={() => setSyncError("")}
+      />
+    );
+  }
+
   // Skip the sync loading screen when the user is offline but already has local
   // cards — show the cached experience instead of a spinner.
   if (session && syncStatus === "loading" && !isFakeLauncherFlow && !(isOffline && hasLocalCards)) {
@@ -6296,6 +6319,7 @@ function App() {
                   selectedVersionId={route.versionId}
                   appPauseRevision={appPauseRevision}
                   pendingOnboardingShortcuts={pendingOnboardingShortcuts}
+                  isTester={testerStatus?.is_tester === true}
                 />
               ) : null}
 
@@ -7413,7 +7437,7 @@ function HomePanel({
     ? "No Personal Cards yet."
     : completed === total
       ? `All ${total} ${personalCardNoun} complete today.`
-      : `${completed} of ${total} ${personalCardNoun} complete today.`;
+      : `${completed} of ${total} card${total === 1 ? "" : "s"} completed today.`;
   const progressSubcopy = total === 0 ? "Create one when you are ready." : "";
   const canOpenCommitment = Boolean(homeState.activeCommitment?.id);
   const hasLiveCommitment = Boolean(homeState.activeCommitment);
@@ -7425,6 +7449,7 @@ function HomePanel({
       : "No live commitment";
   const emptyCommitmentTitle = homeState.hasCompletedCommitmentToday ? "You’re clear for now." : "You’re clear for now.";
   const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-logo-mark.png`;
+  const hasMeaningfulSetup = activationChecklistItems.length === 0 || cards.length > 0 || pendingOnboardingShortcuts.length > 0;
 
   const openProgressCard = () => {
     onOpenTodayCards?.();
@@ -7481,7 +7506,7 @@ function HomePanel({
         <header className="home-brand-hero">
           <img className="home-brand-logo" src={logoSrc} alt="MyBishBash" />
           <h1>Good afternoon</h1>
-          <p>Day {homeState.usageDays || 1} with MyBishBash</p>
+          <p>{hasMeaningfulSetup ? `Day ${homeState.usageDays || 1} with MyBishBash` : "Welcome to MyBishBash"}</p>
         </header>
 
         <div className="home-card-stack" data-testid="home-dashboard-summary">
@@ -8721,6 +8746,7 @@ function PackDetailModal({
 function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal, launcherName = "" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -8730,8 +8756,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
   const isLauncherLogin = mode === "launcher";
+  const isAccessDenied = mode === "access-denied";
   const title = isLauncherLogin
     ? "Welcome back to MyBishBash"
+    : isAccessDenied
+      ? "MyBishBash is invite-only right now."
     : isLogin
       ? "MyBishBash"
       : "Create your MyBishBash account";
@@ -8747,6 +8776,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   function submitExisting(event) {
     event.preventDefault();
     if (!email.trim() || !password.trim()) return;
+    if (!isLogin && !accessCode.trim()) {
+      onClearError?.();
+      alert("Enter your access code to create an account.");
+      return;
+    }
     if (!isLogin && !agreedToLegal) {
       alert("Please agree to the Terms of Use and Privacy Policy to continue.");
       return;
@@ -8754,7 +8788,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
     if (isLogin) {
       onLogIn(email, password);
     } else {
-      onSignUp(email, password);
+      onSignUp(email, password, accessCode);
     }
   }
 
@@ -8770,9 +8804,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
         ) : (
           <>
             <p>
-              {isLogin
+              {isAccessDenied
+                ? "Enter an access code to create a beta account, join the waitlist, or log in if you already have access."
+                : isLogin
                 ? loginCopy
-                : "Create your account. After that, you’ll only need to log in."}
+                : "MyBishBash is invite-only right now. Enter your access code to create your account."}
             </p>
             {isLogin && isStandalone ? <p className="sync-note">Log in once here to reconnect this Home Screen shortcut.</p> : null}
             {error ? <p className="sync-error">{error}</p> : null}
@@ -8811,6 +8847,21 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
                 </span>
               </div>
               {!isLogin ? (
+                <div className="field">
+                  <label htmlFor="sync-access-code">Access code</label>
+                  <input
+                    id="sync-access-code"
+                    type="text"
+                    autoComplete="one-time-code"
+                    className="settings-input"
+                    value={accessCode}
+                    onChange={(event) => setAccessCode(event.target.value)}
+                    placeholder="Enter access code"
+                    required
+                  />
+                </div>
+              ) : null}
+              {!isLogin ? (
             <>
               <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>
                 <input
@@ -8820,7 +8871,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
                   style={{ width: "auto", margin: 0 }}
                 />
                 <span style={{ lineHeight: "1.4" }}>
-                  I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
+                  I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
                 </span>
               </label>
             </>
@@ -8831,8 +8882,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
             </form>
 
             <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
-              {isLogin ? "Need an account? Sign Up" : "Already have an account? Log In"}
+              {isLogin ? "Enter access code" : "Log in"}
             </button>
+            <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}>
+              Join waitlist
+            </a>
           </>
         )}
       </section>
@@ -8956,6 +9010,7 @@ function AppsPanel({
   onLogLauncherEvent,
   selectedVersionId = null,
   appPauseRevision = 0,
+  isTester = false,
 }) {
   const [selectedAppId, setSelectedAppId] = useState(selectedVersionId ?? protectedAppStatuses[0]?.version?.id ?? "");
   const [, setClockTick] = useState(0);
@@ -9104,6 +9159,7 @@ function AppsPanel({
                 onPauseApp={onPauseApp}
                 onClearAppPause={onClearAppPause}
                 onLogLauncherEvent={onLogLauncherEvent}
+                isTester={isTester}
               />
             ) : null}
           </>
@@ -9125,6 +9181,7 @@ function ProtectedAppCard({
   onPauseApp,
   onClearAppPause,
   onLogLauncherEvent,
+  isTester = false,
 }) {
   const { version, protectedOn, paused, pauseRemaining } = status;
   const [showPauseModal, setShowPauseModal] = useState(false);
@@ -9138,8 +9195,12 @@ function ProtectedAppCard({
   const currentPack = behavior.interruptionPackId || version.defaultInterruptionPackId || DEFAULT_INTERRUPTION_PACKS[version.id]?.id
     ? appPack.title
     : "Personal reminders";
-  const shortcutInstalled = protectedOn ? "Using MyBishBash" : "Ready to set up";
-  const pauseStatus = paused ? pauseRemaining || "Ending soon" : "None";
+  const shortcutInstalled = paused
+    ? `Paused until ${pauseRemaining || "soon"}`
+    : protectedOn
+      ? "Using MyBishBash"
+      : "Shortcut needed";
+  const pauseStatus = paused ? `Paused until ${pauseRemaining || "soon"}` : "None";
 
   return (
     <article className="home-screen-version-card" data-testid={`protected-app-${version.id}`}>
@@ -9163,15 +9224,15 @@ function ProtectedAppCard({
         </div>
         <dl className="apps-current-details">
           <div>
-            <dt>Current Experience</dt>
+          <dt>WHAT YOU’LL SEE</dt>
             <dd>{protectedOn ? currentExperience ?? `Personal reminders + ${appName} prompts` : "Open normally"}</dd>
           </div>
           <div>
-            <dt>Current Pack</dt>
+            <dt>ACTIVE PACK</dt>
             <dd>{protectedOn ? currentPack : "None"}</dd>
           </div>
           <div>
-            <dt>Current Pause</dt>
+            <dt>PAUSE</dt>
             <dd data-testid={`apps-pause-status-${version.id}`}>{pauseStatus}</dd>
           </div>
         </dl>
@@ -9240,41 +9301,45 @@ function ProtectedAppCard({
             }}
           />
         ) : null}
-        <button
-          type="button"
-          className="pack-button secondary"
-          data-testid={`apps-test-shortcut-${version.id}`}
-          onClick={() => onProtectedLaunch(version.id)}
-        >
-          Test Shortcut
-        </button>
-        <button
-          type="button"
-          className="pack-button secondary"
-          data-testid={`apps-direct-open-${version.id}`}
-          onClick={() => onOpenDestinationApp(version.id)}
-        >
-          Open {appName}
-        </button>
-        <label className="icon-upload-button">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = () => {
-                if (typeof reader.result === "string") {
-                  onUpdateHomeScreenIcon(version.id, reader.result);
-                }
-              };
-              reader.readAsDataURL(file);
-              event.target.value = "";
-            }}
-          />
-          Replace icon
-        </label>
+        {isTester ? (
+          <>
+            <button
+              type="button"
+              className="pack-button secondary"
+              data-testid={`apps-test-shortcut-${version.id}`}
+              onClick={() => onProtectedLaunch(version.id)}
+            >
+              Test Shortcut
+            </button>
+            <button
+              type="button"
+              className="pack-button secondary"
+              data-testid={`apps-direct-open-${version.id}`}
+              onClick={() => onOpenDestinationApp(version.id)}
+            >
+              Open {appName}
+            </button>
+            <label className="icon-upload-button">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    if (typeof reader.result === "string") {
+                      onUpdateHomeScreenIcon(version.id, reader.result);
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                  event.target.value = "";
+                }}
+              />
+              Replace icon
+            </label>
+          </>
+        ) : null}
       </div>
     </article>
   );

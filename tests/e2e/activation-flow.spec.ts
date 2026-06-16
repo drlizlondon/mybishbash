@@ -12,10 +12,10 @@ test('download page presents Home Screen install flow and continues to signup mo
 
   await expect(page.getByTestId('download-page')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Add MyBishBash\s+to your Home Screen/ })).toBeVisible();
-  await expect(page.getByText('To show your Personal Cards before the apps you use, MyBishBash needs to be on your Home Screen.')).toBeVisible();
+  await expect(page.getByText('To show your Personal Cards before the apps you choose, MyBishBash needs to be on your Home Screen.')).toBeVisible();
   await expect(page.getByText('Tap Share')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add to Home Screen' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Open MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Open MyBishBash from your Home Screen' })).toBeVisible();
   await expect(page.getByText('This is required for reminders to appear before your apps.')).toBeVisible();
   await expect(page.locator('main')).not.toContainText('PWA');
   await expect(page.locator('main')).not.toContainText('Shell');
@@ -81,7 +81,7 @@ test('Home shows only incomplete activation checklist items', async ({ page }) =
   await expect(page.getByText('Finish setting up MyBishBash')).toBeVisible();
   await expect(page.getByText('Add MyBishBash to your Home Screen')).toBeVisible();
   await expect(page.getByText('Create your first Personal Card')).toBeVisible();
-  await expect(page.getByText('Add your first protected app')).toBeVisible();
+  await expect(page.getByText('Choose your first app')).toBeVisible();
 });
 
 test('Home hides activation checklist when setup is complete', async ({ page }) => {

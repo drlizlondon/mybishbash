@@ -231,7 +231,7 @@ function OnboardingContent({
   useEffect(() => {
     if (stepIndex !== 0) return undefined;
     setDemoComplete(false);
-    const timer = window.setTimeout(() => setDemoComplete(true), 26400);
+    const timer = window.setTimeout(() => setDemoComplete(true), 15400);
     return () => window.clearTimeout(timer);
   }, [demoReplayKey, stepIndex]);
 
@@ -261,8 +261,8 @@ function OnboardingContent({
   }
 
   function showSkipSummary() {
-    setSkipRequested(true);
-    setStepIndex(STEPS.indexOf("skip"));
+    savePersonalCard();
+    setStepIndex(STEPS.indexOf("commitment-intro"));
   }
 
   function toggleSelectedCard(cardId) {
@@ -438,12 +438,12 @@ function OnboardingContent({
 
           {currentStep === "learn" ? (
             <OnboardingStep
-              title="Before your apps open..."
-              body="MyBishBash helps you use your phone differently, by showing personal reminders before the apps you already open."
-              primaryLabel="Make your own"
+              title="Before your apps open"
+              body="MyBishBash shows a personal reminder before selected apps, so your phone can bring you back to what you meant to do."
+              primaryLabel="Create your first card"
               onPrimary={goNext}
               primaryDisabled={!demoComplete}
-              secondaryLabel="Set this up later"
+              secondaryLabel="Skip Personal Cards for now"
               onSecondary={showSkipSummary}
             >
               <TutorialDemoIntro
@@ -461,7 +461,7 @@ function OnboardingContent({
               body="Choose up to five. These will become your first Personal Cards."
               primaryLabel="Continue"
               onPrimary={saveAndContinue}
-              secondaryLabel="Set this up later"
+              secondaryLabel="Skip Personal Cards for now"
               onSecondary={showSkipSummary}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -489,7 +489,7 @@ function OnboardingContent({
               title="Make plans. Not just reminders."
               primaryLabel="Show me"
               onPrimary={startCommitmentDemo}
-              secondaryLabel="Skip"
+              secondaryLabel="Skip Commitment Cards for now"
               onSecondary={skipCommitmentDemo}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -560,7 +560,7 @@ function OnboardingContent({
               body="Choose an app you use regularly."
               primaryLabel="Continue"
               onPrimary={continueToProtectedAppDemo}
-              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
+              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "Choose an app later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -579,7 +579,7 @@ function OnboardingContent({
               body={`Would you like to enable an interruption card before ${selectedProtectedAppName} opens?`}
               primaryLabel={`Install ${selectedProtectedAppName} Launcher`}
               onPrimary={continueToProtectedAppSetup}
-              secondaryLabel="I’ll do this later"
+              secondaryLabel="Choose an app later"
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -615,7 +615,7 @@ function OnboardingContent({
                 }
                 openProtectedAppInstall();
               }}
-              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
+              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "Choose an app later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -778,7 +778,7 @@ function ReminderIdeaGrid({
 
 function ProtectedAppChoiceGrid({ apps, selectedId, onSelect }) {
   return (
-    <div className="onboarding-protected-app-grid" role="radiogroup" aria-label="Choose your first protected app">
+    <div className="onboarding-protected-app-grid" role="radiogroup" aria-label="Choose your first app">
       {apps.map((app) => {
         const selected = app.id === selectedId;
         return (
@@ -926,7 +926,6 @@ function HeartGlyph() {
 function TutorialDemoIntro({ isComplete = false, onReplay }) {
   const instagram = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "instagram");
   const whatsapp = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "whatsapp");
-  const safari = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "safari");
   return (
     <div className="onboarding-tutorial-demo" data-testid="onboarding-tutorial-demo" aria-label="MyBishBash opening demo">
       <div className="onboarding-demo-orbit" aria-hidden="true" />
@@ -939,10 +938,6 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
           <OnboardingAppIcon launcher={whatsapp} />
           <span>WhatsApp</span>
         </span>
-        <span className="onboarding-demo-phone-app onboarding-demo-phone-app-safari">
-          <OnboardingAppIcon launcher={safari} />
-          <span>Safari</span>
-        </span>
       </div>
       <div className="onboarding-demo-app onboarding-demo-app-instagram">
         <OnboardingAppIcon launcher={instagram} />
@@ -951,10 +946,6 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
       <div className="onboarding-demo-app onboarding-demo-app-whatsapp">
         <OnboardingAppIcon launcher={whatsapp} />
         <span>Opening WhatsApp</span>
-      </div>
-      <div className="onboarding-demo-app onboarding-demo-app-safari">
-        <OnboardingAppIcon launcher={safari} />
-        <span>Opening Safari</span>
       </div>
       <div className="onboarding-demo-cursor" aria-hidden="true" />
       <span className="onboarding-demo-click-ripple" aria-hidden="true" />
@@ -967,9 +958,9 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <i aria-hidden="true" />
         <p>A gentle nudge from the version of you that cares.</p>
         <div className="onboarding-real-card-actions" aria-label="Example card choices">
-          <button type="button">Not done</button>
-          <button type="button">I’ll do it now</button>
           <button type="button">Done</button>
+          <button type="button">I’ll do it now</button>
+          <button type="button">Not done</button>
         </div>
       </article>
       <article className="onboarding-demo-real-card onboarding-demo-real-card-whatsapp">
@@ -981,23 +972,9 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <i aria-hidden="true" />
         <p>A small reminder before the next thing takes over.</p>
         <div className="onboarding-real-card-actions" aria-label="Example card choices">
-          <button type="button">Not done</button>
-          <button type="button">I’ll do it now</button>
           <button type="button">Done</button>
-        </div>
-      </article>
-      <article className="onboarding-demo-real-card onboarding-demo-real-card-safari">
-        <span className="onboarding-demo-card-greeting">Good afternoon</span>
-        <span className="onboarding-demo-card-heart" aria-hidden="true">
-          <HeartGlyph />
-        </span>
-        <h3>Have you watered your plants?</h3>
-        <i aria-hidden="true" />
-        <p>A gentle nudge for the things you genuinely mean to do.</p>
-        <div className="onboarding-real-card-actions" aria-label="Example card choices">
-          <button type="button">Not done</button>
           <button type="button">I’ll do it now</button>
-          <button type="button">Done</button>
+          <button type="button">Not done</button>
         </div>
       </article>
       <article className="onboarding-demo-continue-card onboarding-demo-continue-card-instagram">
@@ -1008,10 +985,6 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <span>Ready</span>
         <strong>Continue to WhatsApp</strong>
       </article>
-      <article className="onboarding-demo-continue-card onboarding-demo-continue-card-safari">
-        <span>Ready</span>
-        <strong>Continue to Safari</strong>
-      </article>
       <div className="onboarding-demo-app-open onboarding-demo-app-open-instagram">
         <OnboardingAppIcon launcher={instagram} />
         <span>Instagram opens</span>
@@ -1019,10 +992,6 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
       <div className="onboarding-demo-app-open onboarding-demo-app-open-whatsapp">
         <OnboardingAppIcon launcher={whatsapp} />
         <span>WhatsApp opens</span>
-      </div>
-      <div className="onboarding-demo-app-open onboarding-demo-app-open-safari">
-        <OnboardingAppIcon launcher={safari} />
-        <span>Safari opens</span>
       </div>
       <p className="onboarding-demo-final-line">For the things you genuinely mean to do.</p>
       {isComplete ? (
@@ -1042,9 +1011,9 @@ function OnboardingDemoCard({ text, timing, place }) {
         <h3>{text}</h3>
         <p>A gentle interruption before the next automatic moment.</p>
         <div className="onboarding-demo-actions" aria-hidden="true">
-          <span>Not done</span>
-          <span>I’ll do it now</span>
           <span>Done</span>
+          <span>I’ll do it now</span>
+          <span>Not done</span>
         </div>
       </article>
       <div className="onboarding-demo-notes" aria-label="What this card does">

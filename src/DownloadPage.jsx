@@ -85,13 +85,19 @@ function InstallCard({ number, title, caption, variant }) {
 }
 
 export default function DownloadPage() {
+  const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const isIos = /iPad|iPhone|iPod/.test(userAgent) || (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent);
+  const shouldOpenInSafari = isIos && !isSafari;
+
   return (
     <main className="download-page" data-testid="download-page">
       <section className="download-panel" aria-labelledby="download-title">
         <header className="download-hero">
           <img src={LOGO_SRC} alt="MyBishBash" />
           <h1 id="download-title">Add MyBishBash<br />to your Home Screen</h1>
-          <p>To show your Personal Cards before the apps you use, MyBishBash needs to be on your Home Screen.</p>
+          <p>To show your Personal Cards before the apps you choose, MyBishBash needs to be on your Home Screen.</p>
+          {shouldOpenInSafari ? <p className="download-required-note">Open this page in Safari first.</p> : null}
         </header>
 
         <div className="download-install-list" aria-label="Home Screen installation steps">
@@ -105,13 +111,13 @@ export default function DownloadPage() {
             number="2"
             title="Add to Home Screen"
             variant="sheet"
-            caption="Choose Add to Home Screen."
+            caption="Tap Add to Home Screen."
           />
           <InstallCard
             number="3"
-            title="Open MyBishBash"
+            title="Open MyBishBash from your Home Screen"
             variant="home"
-            caption="Open MyBishBash from your Home Screen to continue."
+            caption="Return here from the saved Home Screen app."
           />
         </div>
 

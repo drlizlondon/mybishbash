@@ -9655,7 +9655,7 @@ body {
 }
 
 .onboarding-tutorial-demo {
-  --onboarding-demo-duration: 26000ms;
+  --onboarding-demo-duration: 15000ms;
   position: relative;
   width: min(100%, 330px);
   min-height: 332px;
@@ -9908,7 +9908,7 @@ body {
   font-size: 16px;
 }
 
-.onboarding-real-card-actions button:nth-child(3) {
+.onboarding-real-card-actions button:nth-child(1) {
   background: rgba(214, 106, 80, 0.94);
   color: #fff9f5;
   animation: onboarding-done-button-cycle var(--onboarding-demo-duration) ease forwards;
@@ -10484,11 +10484,11 @@ body {
 }
 
 @keyframes onboarding-demo-final-line-cycle {
-  0%, 98.8% {
+  0%, 73% {
     opacity: 0;
     transform: translateY(16px) scale(0.96);
   }
-  99.4%, 100% {
+  75%, 100% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }

@@ -176,7 +176,7 @@ for (const [index, title] of generatedCoverTitleCases.entries()) {
   }
 }
 
-assertMatch("Explore premium CTA is Coming Soon, not a payment flow", exploreSource, /Premium — Coming Soon/);
+assertMatch("Explore Founding Access CTA is Coming Soon, not a payment flow", exploreSource, /Founding Access — Coming Soon/);
 assertMatch("Premium install fails closed in activatePack", appSource, /pack\.isPremium === true && !canUsePremiumContent\) return;/);
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);
 assertNoMatch("interruption must not be disabled by old weighted activation state", appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption/);

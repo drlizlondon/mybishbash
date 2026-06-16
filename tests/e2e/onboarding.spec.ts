@@ -121,7 +121,7 @@ async function seedReturningUser(page: Page) {
 }
 
 async function completePersonalCardOnboarding(page: Page) {
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await expect(page.getByRole('heading', { name: 'Things I genuinely mean to do, but don’t always remember.' })).toBeVisible();
   await page.getByRole('button', { name: /Take five minutes outside./ }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -167,55 +167,49 @@ test('first-time user sees Personal Card onboarding before Home', async ({ page 
   await seedFirstRun(page);
   await page.goto('/mybishbash/home');
 
-  await expect(page.getByRole('heading', { name: 'Before your apps open...' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Before your apps open' })).toBeVisible();
   await expect(page.getByTestId('home-panel')).toHaveCount(0);
-  await expect(page.getByText('MyBishBash helps you use your phone differently')).toBeVisible();
+  await expect(page.getByText('MyBishBash shows a personal reminder before selected apps')).toBeVisible();
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Have you taken your vitamins today?');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Have you put your sunscreen on today?');
-  await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Have you watered your plants?');
+  await expect(page.getByTestId('onboarding-tutorial-demo')).not.toContainText('Safari opens');
+  const actionLabels = await page.locator('.onboarding-demo-real-card-instagram .onboarding-real-card-actions button').allTextContents();
+  expect(actionLabels).toEqual(['Done', 'I’ll do it now', 'Not done']);
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Not done');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('I’ll do it now');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Done');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Continue to Instagram');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Continue to WhatsApp');
-  await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Continue to Safari');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Instagram opens');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('WhatsApp opens');
-  await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Safari opens');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('For the things you genuinely mean to do.');
   await expect(page.getByRole('button', { name: 'Replay' })).toBeVisible({ timeout: 28000 });
   await expect(page.getByLabel('Local content editor')).toHaveCount(0);
 });
 
-test('user can defer card setup after an understanding step and reach Home without creating cards', async ({ page }) => {
+test('skipping Personal Cards continues to Commitment Cards without creating cards', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Set this up later' }).click();
-  await expect(page.getByRole('heading', { name: 'You can set up your first card later.' })).toBeVisible();
-  await expect(page.getByText('Personal Cards live in MyBishBash.')).toBeVisible();
-  await expect(page.getByLabel('Personal Card example')).toContainText('What matters most today?');
-  await page.getByRole('button', { name: 'Go to Home' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/home$/);
-  await expect(page.getByTestId('home-panel')).toBeVisible();
-  await expect(page.getByTestId('home-spotlight-tour')).toBeVisible();
+  await page.getByRole('button', { name: 'Skip Personal Cards for now' }).click();
+  await expect(page.getByRole('heading', { name: 'Make plans. Not just reminders.' })).toBeVisible();
+  await expect(page.getByTestId('home-panel')).toHaveCount(0);
 
   const state = await page.evaluate(() => ({
     setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
     cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
     profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
   }));
-  expect(state.setupComplete).toBe('true');
+  expect(state.setupComplete).not.toBe('true');
   expect(state.cards).toEqual([]);
-  expect(state.profile.onboardingSkipped).toBe(true);
-  expect(state.profile.onboardingCompletedSection).toBe('personal_cards');
+  expect(state.profile.hasCompletedPersonalCardSetup).toBe(false);
 });
 
 test('Personal Card selection renders the clean card list in order without Live Preview', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
 
   await expect(page.getByRole('heading', { name: 'Things I genuinely mean to do, but don’t always remember.' })).toBeVisible();
   await expect(page.getByText('Choose up to five. These will become your first Personal Cards.')).toBeVisible();
@@ -247,7 +241,7 @@ test('Personal Card selection renders the clean card list in order without Live 
 test('Personal Card selection updates count, deselects, and enforces five-card limit', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
 
   await page.getByRole('button', { name: 'Have you taken your vitamins today?' }).click();
   await expect(page.getByText('1 of 5 selected')).toBeVisible();
@@ -272,7 +266,7 @@ test('Personal Card selection updates count, deselects, and enforces five-card l
 test('Personal Card selection counter stays visible while the list scrolls', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
 
   await page.getByRole('button', { name: 'Have you taken your vitamins today?' }).click();
   const counter = page.locator('.onboarding-selection-count');
@@ -293,7 +287,7 @@ test('Personal Card selection counter stays visible while the list scrolls', asy
 test('Write my own opens input, validates, adds selected custom card, and persists it', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
 
   await page.getByRole('button', { name: 'Write my own' }).click();
   const customInput = page.getByPlaceholder('Write your own reminder…');
@@ -306,8 +300,8 @@ test('Write my own opens input, validates, adds selected custom card, and persis
   await expect(page.getByRole('button', { name: 'Write my own' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip' }).click();
-  await page.getByRole('button', { name: 'I’ll do this later' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
+  await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
   const cards = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'));
@@ -318,7 +312,7 @@ test('Write my own opens input, validates, adds selected custom card, and persis
 test('Write my own shows limit message when five cards are already selected', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
 
   for (const name of [
     'Have you taken your vitamins today?',
@@ -340,11 +334,11 @@ test('Continue with zero selected Personal Cards completes without creating card
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await expect(page.getByText('0 of 5 selected')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip' }).click();
-  await page.getByRole('button', { name: 'I’ll do this later' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
+  await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
   const state = await page.evaluate(() => ({
@@ -409,14 +403,14 @@ test('returning user does not see onboarding again', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByTestId('home-panel')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Before your apps open...' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Before your apps open' })).toHaveCount(0);
 });
 
 test('Personal Card onboarding copy renders without emoji or old future-you copy', async ({ page }) => {
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Text Mum back.' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -435,7 +429,7 @@ test('Commitment Cards demo appears after Personal Cards, can complete, and pers
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Take five minutes outside.' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -477,7 +471,7 @@ test('Commitment Cards demo appears after Personal Cards, can complete, and pers
   await expect(page.getByRole('heading', { name: 'Commitment Cards help you follow through on the things that matter to you.' })).toBeVisible();
   await expect(page.getByText('You won’t create any Commitment Cards during setup.')).toBeVisible();
   await expect(page.getByText('You can create them later when you’re using MyBishBash.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Set this up later' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Skip Personal Cards for now' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Skip Commitment Cards' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create commitments now' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -497,7 +491,7 @@ test('Commitment Cards demo can be declined and persists no commitment', async (
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Show me' }).click();
   await expect(page.getByTestId('commitment-card-demo')).toContainText('TODAY’S COMMITMENT');
@@ -530,7 +524,7 @@ test('Commitment Cards demo back button returns to meaningful previous screens',
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Show me' }).click();
   await expect(page.getByTestId('commitment-card-demo')).toContainText('TODAY’S COMMITMENT');
@@ -556,10 +550,10 @@ test('Commitment Cards demo can be skipped and continues to first app selection'
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Make plans. Not just reminders.' })).toBeVisible();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
   await expect(page.getByRole('heading', { name: 'Install Your First MyBishBash App' })).toBeVisible();
 
   const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
@@ -571,9 +565,9 @@ test('first app screen shows logo-backed apps in order with consistent icon sizi
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
 
   await expectLogoBackedFirstApps(page, '/mybishbash');
 
@@ -602,9 +596,9 @@ test('first app icon URLs use the preview base path when served under mybishbash
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
 
   await expectLogoBackedFirstApps(page, '/mybishbash-preview');
 });
@@ -613,9 +607,9 @@ test('app setup can be skipped directly to Home and uses launcher install langua
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
   await page.getByRole('radio', { name: 'Safari' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -629,7 +623,7 @@ test('app setup can be skipped directly to Home and uses launcher install langua
   await expect(page.getByRole('heading', { name: /Add .* shortcut/ })).toHaveCount(0);
   await expect(page.getByText('Tap Add to Home Screen.')).toBeVisible();
 
-  await page.getByRole('button', { name: 'I’ll do this later' }).click();
+  await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByTestId('home-panel')).toBeVisible();
 
@@ -670,9 +664,9 @@ for (const { appName, title, body } of appInterruptionCases) {
     await seedFirstRun(page);
     await page.goto('/mybishbash/onboarding');
 
-    await page.getByRole('button', { name: 'Make your own' }).click();
+    await page.getByRole('button', { name: 'Create your first card' }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByRole('button', { name: 'Skip' }).click();
+    await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
     await page.getByRole('radio', { name: appName }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -684,9 +678,9 @@ test('WhatsApp setup opens the real launcher install page and confirms after man
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
   await page.getByRole('radio', { name: 'WhatsApp' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -824,11 +818,11 @@ test('onboarding visible copy avoids technical setup terms', async ({ page }) =>
   };
 
   await assertNoTechnicalTerms();
-  await page.getByRole('button', { name: 'Make your own' }).click();
+  await page.getByRole('button', { name: 'Create your first card' }).click();
   await assertNoTechnicalTerms();
   await page.getByRole('button', { name: 'Continue' }).click();
   await assertNoTechnicalTerms();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click();
   await assertNoTechnicalTerms();
   await page.getByRole('button', { name: 'Continue' }).click();
   await assertNoTechnicalTerms();
@@ -840,10 +834,10 @@ test('onboarding headlines fit mobile without mid-word splitting', async ({ page
   await page.goto('/mybishbash/onboarding');
 
   const checks: Array<{ action?: () => Promise<void>; heading: string }> = [
-    { heading: 'Before your apps open...' },
-    { action: () => page.getByRole('button', { name: 'Make your own' }).click(), heading: 'Things I genuinely mean to do, but don’t always remember.' },
+    { heading: 'Before your apps open' },
+    { action: () => page.getByRole('button', { name: 'Create your first card' }).click(), heading: 'Things I genuinely mean to do, but don’t always remember.' },
     { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Make plans. Not just reminders.' },
-    { action: async () => { await page.getByRole('button', { name: 'Skip' }).click(); }, heading: 'Install Your First MyBishBash App' },
+    { action: async () => { await page.getByRole('button', { name: 'Skip Commitment Cards for now' }).click(); }, heading: 'Install Your First MyBishBash App' },
     { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Before Instagram opens' },
     { action: async () => { await page.getByRole('button', { name: 'Install Instagram Launcher' }).click(); }, heading: 'Install Instagram Launcher' },
   ];

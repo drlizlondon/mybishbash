@@ -75,16 +75,18 @@ async function seedState(
     cards = [],
     appIds = ['safari', 'youtube'],
     appPauses = {},
+    testerMode = true,
   }: {
     cards?: Array<Record<string, unknown>>;
     appIds?: string[];
     appPauses?: Record<string, string>;
+    testerMode?: boolean;
   } = {},
 ) {
   await page.addInitScript(
-    ({ seededCards, seededSettings, seededAppPauses }) => {
+    ({ seededCards, seededSettings, seededAppPauses, seededTesterMode }) => {
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
-      window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', 'true');
+      window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', seededTesterMode ? 'true' : 'false');
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
       window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
       window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'Pause Tester', timezone: 'Europe/London' }));
@@ -106,6 +108,7 @@ async function seedState(
       seededCards: cards,
       seededSettings: launcherSettings(appIds),
       seededAppPauses: appPauses,
+      seededTesterMode: testerMode,
     },
   );
 }
@@ -359,13 +362,15 @@ test('fake-launcher-warm-resume-clears-bypass — revisiting home after bypass d
 });
 
 test('apps-route-renders — /apps and Apps nav item are visible', async ({ page }) => {
-  await seedState(page, { cards: [personalCard('apps1', 'Apps route card')] });
+  await seedState(page, { cards: [personalCard('apps1', 'Apps route card')], testerMode: false });
   await page.goto('/mybishbash/apps');
 
   await expect(page.getByTestId('apps-panel')).toBeVisible();
   await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
   await expect(page.getByTestId('apps-list')).toBeVisible();
-  await expect(page.getByTestId('apps-direct-open-safari')).toHaveText('Open Safari');
+  await expect(page.getByTestId('apps-direct-open-safari')).toHaveCount(0);
+  await expect(page.getByTestId('apps-test-shortcut-safari')).toHaveCount(0);
+  await expect(page.getByText('Replace icon')).toHaveCount(0);
   await expect(page.getByTestId('bottom-nav-settings')).toHaveCount(0);
   await expect(page.getByTestId('settings-gear')).toBeVisible();
   const navLabels = await page.locator('.bottom-nav .nav-item span').allTextContents();
