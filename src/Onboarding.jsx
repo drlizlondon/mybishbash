@@ -47,7 +47,7 @@ const PERSONAL_CARD_OPTIONS = [
   },
   {
     id: "avoiding",
-    text: "Have you done the thing you’ve been avoiding?",
+    text: "Have you done something you’ve been avoiding?",
   },
   {
     id: "stretch",
@@ -214,7 +214,6 @@ function OnboardingContent({
   const [customCards, setCustomCards] = useState([]);
   const [cardSelectionMessage, setCardSelectionMessage] = useState("");
   const [commitmentDemoChoice, setCommitmentDemoChoice] = useState(null);
-  const [commitmentCheckInChoice, setCommitmentCheckInChoice] = useState(null);
   const protectedAppOptions = getFirstProtectedApps(availableLaunchers);
   const [selectedProtectedAppId, setSelectedProtectedAppId] = useState(pendingProtectedAppSetup?.appId ?? protectedAppOptions[0]?.id ?? "instagram");
   const [protectedAppSetupPhase, setProtectedAppSetupPhase] = useState(pendingProtectedAppSetup?.status === "install_started" ? "install_started" : "ready");
@@ -241,23 +240,14 @@ function OnboardingContent({
   }
 
   function goBack() {
-    const previousReviewStep = commitmentCheckInChoice === "somewhat_on_track"
-      ? "commitment-encouragement"
-      : "commitment-check-in";
     const previousProtectedAppStep = commitmentDemoChoice === null
       ? "commitment-intro"
-      : commitmentCheckInChoice === "closed_early"
-        ? "commitment-exit"
-        : "commitment-complete";
+      : "commitment-complete";
     const previousStepByCurrent = {
-      "commitment-time": "commitment-demo",
-      "commitment-check-in": "commitment-demo",
       "commitment-motivation": "commitment-demo",
-      "commitment-encouragement": "commitment-check-in",
-      "commitment-review-time": previousReviewStep,
-      "commitment-review": previousReviewStep,
+      "commitment-review-time": commitmentDemoChoice === "accepted" ? "commitment-demo" : "commitment-motivation",
+      "commitment-review": "commitment-review-time",
       "commitment-complete": commitmentDemoChoice === "declined" ? "commitment-motivation" : "commitment-review",
-      "commitment-exit": "commitment-check-in",
       "protected-app": previousProtectedAppStep,
       "protected-demo": "protected-app",
       "protected-setup": "protected-demo",
@@ -347,14 +337,13 @@ function OnboardingContent({
 
   function startCommitmentDemo() {
     setCommitmentDemoChoice(null);
-    setCommitmentCheckInChoice(null);
     setStepIndex(STEPS.indexOf("commitment-demo"));
   }
 
   function handleCommitmentDemoAction(action) {
     if (action === "commit" || action === "commit_after_all") {
       setCommitmentDemoChoice("accepted");
-      setStepIndex(STEPS.indexOf("commitment-time"));
+      setStepIndex(STEPS.indexOf("commitment-review-time"));
       return;
     }
     if (action === "decline_after_motivation") {
@@ -364,23 +353,6 @@ function OnboardingContent({
     }
     setCommitmentDemoChoice("declined");
     setStepIndex(STEPS.indexOf("commitment-motivation"));
-  }
-
-  function handleCommitmentCheckInAction(response) {
-    setCommitmentCheckInChoice(response);
-    if (response === "closed_early") {
-      setStepIndex(STEPS.indexOf("commitment-exit"));
-      return;
-    }
-    if (response === "somewhat_on_track") {
-      setStepIndex(STEPS.indexOf("commitment-encouragement"));
-      return;
-    }
-    setStepIndex(STEPS.indexOf("commitment-review-time"));
-  }
-
-  function handleCommitmentEncouragementContinue() {
-    setStepIndex(STEPS.indexOf("commitment-review-time"));
   }
 
   function handleCommitmentReviewAction() {
@@ -550,36 +522,6 @@ function OnboardingContent({
             </OnboardingCommitmentDemoStage>
           ) : null}
 
-          {currentStep === "commitment-time" ? (
-            <CommitmentTimePassage
-              label="Later..."
-              body="MyBishBash checks in while you are still trying."
-              onComplete={() => setStepIndex(STEPS.indexOf("commitment-check-in"))}
-              canGoBack={canGoBack}
-              onBack={goBack}
-            />
-          ) : null}
-
-          {currentStep === "commitment-check-in" ? (
-            <OnboardingCommitmentDemoStage
-              canGoBack={canGoBack}
-              onBack={goBack}
-              dataTestId="commitment-check-in-demo"
-            >
-              {renderCommitmentCheckInDemoCard?.({ onCheckInAction: handleCommitmentCheckInAction })}
-            </OnboardingCommitmentDemoStage>
-          ) : null}
-
-          {currentStep === "commitment-encouragement" ? (
-            <OnboardingCommitmentDemoStage
-              canGoBack={canGoBack}
-              onBack={goBack}
-              dataTestId="commitment-encouragement-demo"
-            >
-              {renderCommitmentEncouragementDemoCard?.({ onContinue: handleCommitmentEncouragementContinue })}
-            </OnboardingCommitmentDemoStage>
-          ) : null}
-
           {currentStep === "commitment-review-time" ? (
             <CommitmentTimePassage
               label="Later..."
@@ -603,8 +545,8 @@ function OnboardingContent({
           {currentStep === "commitment-complete" ? (
             <OnboardingStep
               className="onboarding-commitment-complete-step"
-              title="You won’t make any commitments now."
-              body="You can create your own when you’re using the app."
+              title="Commitment Cards help you follow through on the things that matter to you."
+              body="You won’t create any Commitment Cards during setup. You can create them later when you’re using MyBishBash."
               primaryLabel="Continue"
               onPrimary={completeCommitmentDemo}
               canGoBack={canGoBack && commitmentDemoChoice !== "accepted"}
@@ -612,22 +554,10 @@ function OnboardingContent({
             />
           ) : null}
 
-          {currentStep === "commitment-exit" ? (
-            <OnboardingStep
-              className="onboarding-commitment-complete-step"
-              title="That's okay."
-              body="We'll leave this for another day."
-              primaryLabel="Continue"
-              onPrimary={completeCommitmentDemo}
-              canGoBack={canGoBack}
-              onBack={goBack}
-            />
-          ) : null}
-
           {currentStep === "protected-app" ? (
             <OnboardingStep
-              title="Install Your First App"
-              body="Your Personal Cards can appear before the apps you already open."
+              title="Install Your First MyBishBash App"
+              body="Choose an app you use regularly."
               primaryLabel="Continue"
               onPrimary={continueToProtectedAppDemo}
               secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
@@ -664,12 +594,13 @@ function OnboardingContent({
 
           {currentStep === "protected-setup" ? (
             <OnboardingStep
-              title={protectedAppSetupPhase === "confirmed" ? "Nice." : `Install ${selectedProtectedAppName} Launcher`}
+              className="onboarding-protected-setup-step"
+              title={protectedAppSetupPhase === "confirmed" ? `${selectedProtectedAppName} Launcher Ready` : `Install ${selectedProtectedAppName} Launcher`}
               body={protectedAppSetupPhase === "confirmed"
-                ? `Your ${selectedProtectedAppName} launcher is ready. When you tap ${selectedProtectedAppName} from your Home Screen, MyBishBash will show your Personal Cards first.`
+                ? `${selectedProtectedAppName} is now ready to use with MyBishBash.`
                 : `See your Personal Cards before opening ${selectedProtectedAppName}.`}
               primaryLabel={protectedAppSetupPhase === "confirmed"
-                ? "Continue"
+                ? "Continue to Home"
                 : protectedAppSetupPhase === "install_started"
                   ? "I’ve saved it"
                   : `Add ${selectedProtectedAppName} Launcher`}
@@ -720,13 +651,9 @@ const STEPS = [
   "commitment-intro",
   "commitment-demo",
   "commitment-motivation",
-  "commitment-time",
-  "commitment-check-in",
-  "commitment-encouragement",
   "commitment-review-time",
   "commitment-review",
   "commitment-complete",
-  "commitment-exit",
   "protected-app",
   "protected-demo",
   "protected-setup",
@@ -941,20 +868,23 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
       </div>
       {isConfirmed ? (
         <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
-          <strong>{appName} launcher</strong>
-          <p>Marked as saved.</p>
+          <strong>{appName} launcher ready</strong>
+          <p>{appName} is now ready to use with MyBishBash.</p>
+          <p>Move the MyBishBash {appName} launcher to where {appName} normally sits on your Home Screen. Put the original {appName} app in a folder so you open MyBishBash first.</p>
         </div>
       ) : (
         <>
           <p>Add the {appName} launcher to your Home Screen.</p>
-          <ol className="onboarding-install-steps">
-            {steps.map((step, index) => (
-              <li key={step}>
-                <span className="onboarding-install-step-marker" aria-hidden="true">{index + 1}</span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="onboarding-install-guidance" data-testid="onboarding-install-guidance">
+            <ol className="onboarding-install-steps">
+              {steps.map((step, index) => (
+                <li key={step}>
+                  <span className="onboarding-install-step-marker" aria-hidden="true">{index + 1}</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
           <p className="onboarding-install-return-note">
             Once it is saved, return to MyBishBash to continue.
           </p>

@@ -1888,20 +1888,41 @@ textarea {
 }
 
 .commitment-motivation-copy {
-  width: min(88vw, 390px);
+  width: min(84vw, 360px);
   min-height: 0;
-  margin-top: 18px;
+  margin-top: 10px;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
+  gap: clamp(10px, 2.4svh, 16px);
   overflow: hidden;
 }
 
 .commitment-motivation-copy .premium-title-box {
   width: 100%;
-  max-height: clamp(150px, 30svh, 280px);
-  margin-top: 16px;
+  min-height: auto;
+  max-height: none;
+  margin-top: 0;
+}
+
+.commitment-motivation-copy .commitment-motivation-commitment {
+  max-width: 15ch;
+}
+
+.commitment-motivation-copy .commitment-motivation-commitment .premium-headline {
+  font-size: clamp(2.35rem, 9.2vw, 3.35rem) !important;
+  line-height: 1.04;
+}
+
+.commitment-motivation-copy .commitment-motivation-reason {
+  max-width: 17ch;
+}
+
+.commitment-motivation-copy .commitment-motivation-reason .premium-headline {
+  color: rgba(21, 21, 21, 0.88);
+  font-size: clamp(1.45rem, 6vw, 2.1rem) !important;
+  line-height: 1.12;
 }
 
 .commitment-motivation-intro,
@@ -1911,6 +1932,16 @@ textarea {
   line-height: 1.25;
   text-align: center;
   color: #6B625B;
+}
+
+.commitment-motivation-intro {
+  font-size: clamp(1.05rem, 4vw, 1.3rem);
+  font-weight: 760;
+}
+
+.commitment-motivation-subline {
+  font-size: clamp(0.86rem, 3.4vw, 0.98rem);
+  font-weight: 680;
 }
 
 .commitment-motivation-intro {
@@ -8733,8 +8764,8 @@ body {
   z-index: 3;
   display: grid;
   gap: 8px;
-  padding: 10px 0 0;
-  background: linear-gradient(180deg, rgba(246, 241, 234, 0), #f6f1ea 30%);
+  padding: 8px 0 0;
+  background: linear-gradient(180deg, rgba(246, 241, 234, 0), #f6f1ea 24%);
 }
 
 .onboarding-actions .save-button,
@@ -8829,18 +8860,33 @@ body {
 }
 
 .onboarding-reminder-picker {
+  min-height: 0;
+  height: 100%;
   display: grid;
-  gap: 12px;
-  padding-bottom: 118px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding-bottom: 8px;
 }
 
 .onboarding-selection-count {
   display: flex;
   justify-content: center;
+  padding: 0 0 2px;
   color: rgba(91, 82, 75, 0.72);
   font-size: 12px;
   font-weight: 720;
   letter-spacing: 0;
+}
+
+.onboarding-selection-count span {
+  min-height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 14px;
+  border: 1px solid rgba(120, 87, 65, 0.1);
+  border-radius: 999px;
+  background: #f6f1ea;
+  box-shadow: 0 8px 18px rgba(47, 42, 40, 0.055);
 }
 
 .onboarding-selection-message {
@@ -8853,8 +8899,14 @@ body {
 }
 
 .onboarding-idea-grid {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: grid;
+  align-content: start;
   gap: 10px;
+  padding: 2px 2px 96px;
 }
 
 .onboarding-idea-card {
@@ -8864,8 +8916,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 62px;
-  padding: 16px 17px;
+  min-height: 72px;
+  padding: 18px 18px;
   border: 1px solid rgba(120, 87, 65, 0.12);
   border-radius: 18px;
   background: rgba(255, 252, 249, 0.72);
@@ -8879,8 +8931,8 @@ body {
 
 .onboarding-idea-card strong {
   min-width: 0;
-  font-size: 0.98rem;
-  line-height: 1.26;
+  font-size: clamp(0.98rem, 4vw, 1.06rem);
+  line-height: 1.28;
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
@@ -9181,6 +9233,77 @@ body {
   box-shadow: 0 10px 24px rgba(47, 42, 40, 0.06);
 }
 
+.onboarding-protected-setup-step {
+  gap: 10px;
+}
+
+.onboarding-protected-setup-step .onboarding-step-copy {
+  gap: 7px;
+}
+
+.onboarding-protected-setup-step .onboarding-step-copy h2 {
+  max-width: 18ch;
+  font-size: clamp(1.5rem, 6.4vw, 2rem);
+  line-height: 1.06;
+}
+
+.onboarding-protected-setup-step .onboarding-step-copy p {
+  max-width: 26ch;
+  font-size: clamp(0.78rem, 3.2vw, 0.88rem);
+  line-height: 1.25;
+}
+
+.onboarding-protected-setup-step .onboarding-step-body {
+  padding-bottom: 84px;
+}
+
+.onboarding-protected-setup-step .onboarding-actions .save-button {
+  min-height: 38px;
+}
+
+.onboarding-protected-setup-step .onboarding-actions .secondary-button {
+  min-height: 32px;
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-heading img,
+.onboarding-protected-setup-step .onboarding-protected-setup-heading .onboarding-app-icon-fallback {
+  width: 56px;
+  height: 56px;
+  flex-basis: 56px;
+  border-radius: 16px;
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-card {
+  gap: 6px;
+  padding: 10px;
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-heading h3 {
+  font-size: clamp(1.02rem, 4.2vw, 1.22rem);
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-card > p,
+.onboarding-protected-setup-step .onboarding-install-return-note,
+.onboarding-protected-setup-step .onboarding-install-steps {
+  font-size: clamp(0.76rem, 3vw, 0.84rem);
+  line-height: 1.2;
+}
+
+.onboarding-protected-setup-step .onboarding-install-steps {
+  gap: 3px;
+}
+
+.onboarding-protected-setup-step .onboarding-install-steps li {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.onboarding-protected-setup-step .onboarding-install-step-marker {
+  width: 21px;
+  height: 21px;
+  font-size: 0.68rem;
+}
+
 .onboarding-interruption-demo {
   display: grid;
   gap: 16px;
@@ -9298,8 +9421,8 @@ body {
 
 .onboarding-protected-setup-card {
   display: grid;
-  gap: 14px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(120, 87, 65, 0.12);
   border-radius: 24px;
   background: rgba(255, 252, 249, 0.76);
@@ -9309,7 +9432,7 @@ body {
 .onboarding-protected-setup-heading {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .onboarding-protected-setup-heading p {
@@ -9324,7 +9447,7 @@ body {
 .onboarding-protected-setup-heading h3 {
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: 1.45rem;
+  font-size: clamp(1.26rem, 5.4vw, 1.42rem);
   font-weight: 500;
 }
 
@@ -9332,22 +9455,50 @@ body {
 .onboarding-install-return-note,
 .onboarding-install-steps {
   margin: 0;
-  color: rgba(91, 82, 75, 0.78);
-  font-size: 0.94rem;
-  line-height: 1.44;
+  color: rgba(47, 42, 40, 0.82);
+  font-size: clamp(0.88rem, 3.6vw, 0.94rem);
+  line-height: 1.36;
+}
+
+.onboarding-install-guidance {
+  min-height: 0;
 }
 
 .onboarding-install-steps {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   padding-left: 0;
   list-style: none;
 }
 
+.onboarding-install-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.onboarding-install-steps span:last-child {
+  color: rgba(47, 42, 40, 0.82);
+  font-weight: 700;
+}
+
+.onboarding-install-step-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(214, 106, 80, 0.1);
+  color: #9a5145;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
 .onboarding-protected-confirmation {
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  gap: 10px;
+  padding: 16px;
   border-radius: 18px;
   background: rgba(233, 120, 93, 0.08);
   color: rgba(47, 42, 40, 0.86);
@@ -9362,8 +9513,9 @@ body {
 
 .onboarding-protected-confirmation p {
   margin: 0;
-  font-size: 0.94rem;
-  line-height: 1.42;
+  color: rgba(47, 42, 40, 0.78);
+  font-size: clamp(0.92rem, 3.8vw, 1rem);
+  line-height: 1.38;
 }
 
 .onboarding-personal-preview {
@@ -10451,7 +10603,8 @@ body {
   }
 
   .onboarding-idea-card {
-    padding: 11px 13px;
+    min-height: 66px;
+    padding: 14px 15px;
   }
 }
 

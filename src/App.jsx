@@ -10485,6 +10485,7 @@ function CommitmentMotivationOverlay({
   onManageApp = null,
   showDashboardShortcut = true,
 }) {
+  const commitmentText = stripCommitmentPrefix(card.commitmentText ?? card.promptText ?? "");
   return (
     <CardRevealTemplate
       variant="personal"
@@ -10510,8 +10511,9 @@ function CommitmentMotivationOverlay({
     >
       <div className="commitment-motivation-copy">
         <p className="commitment-motivation-intro">Before you decide...</p>
+        {commitmentText ? <CardRevealMessage className="commitment-motivation-commitment" message={`I will ${commitmentText}`} /> : null}
         <p className="commitment-motivation-subline">You wrote this to yourself:</p>
-        <CardRevealMessage message={card.commitmentReason} />
+        <CardRevealMessage className="commitment-motivation-reason" message={card.commitmentReason} />
       </div>
     </CardRevealTemplate>
   );
@@ -10580,8 +10582,8 @@ function CommitmentEncouragementOverlay({
       type="personal"
       greeting="MYBISHBASH REMINDER"
       icon="heart"
-      headline={card.promptText}
-      subtitle={commitmentText ? `I will ${commitmentText}` : "Keep going with what you said mattered."}
+      headline={commitmentText ? `I will ${commitmentText}` : card.promptText}
+      subtitle={commitmentText ? card.promptText : "Keep going with what you said mattered."}
       actions={[
         { label: "Continue", variant: "primary", onClick: onContinue },
       ]}
@@ -10762,7 +10764,7 @@ function getMessageBaseSize(value) {
   return 34;
 }
 
-function CardRevealMessage({ message }) {
+function CardRevealMessage({ message, className = "" }) {
   const frameRef = useRef(null);
   const headlineRef = useRef(null);
   const baseSize = getMessageBaseSize(message);
@@ -10813,7 +10815,7 @@ function CardRevealMessage({ message }) {
   }, [baseSize, message]);
 
   return (
-    <div className={`premium-title-box ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
+    <div className={`premium-title-box ${className} ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
       <h2
         className={`premium-headline ${commitmentMatch ? "commitment-headline" : ""}`.trim()}
         ref={headlineRef}

@@ -467,7 +467,9 @@ test('Not this time shows motivation reminder before a final decision', async ({
   await expect(page.getByText('MESSAGE FROM YOURSELF')).toBeVisible();
   await expect(page.getByText('Before you decide...')).toBeVisible();
   await expect(page.getByText('You wrote this to yourself:')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /I will\s+go for a walk/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Fresh air helps me reset.' })).toBeVisible();
+  await expectTextOrder(page.getByTestId('card-overlay-personal'), 'go for a walk', 'Fresh air helps me reset.');
   await expect(page.getByTestId('card-action-i-ll-commit-after-all')).toBeVisible();
   await expect(page.getByTestId('card-action-not-this-time')).toBeVisible();
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && !card.commitmentStatusToday);
@@ -666,9 +668,11 @@ test('in-progress check-in somewhat on track triggers encouragement and later re
   await gotoLauncher(page, 'safari');
 
   await page.getByRole('button', { name: 'I’m somewhat on track' }).click();
-  await expect(page.getByText('MYBISHBASH REMINDER')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'You said you wanted to do this.' })).toBeVisible();
-  await expect(page.getByText('I will go for a walk')).toBeVisible();
+  const encouragementOverlay = page.getByTestId('card-overlay-personal');
+  await expect(encouragementOverlay).toContainText('MYBISHBASH REMINDER');
+  await expect(encouragementOverlay.getByRole('heading', { name: /I will\s+go for a walk/ })).toBeVisible();
+  await expect(encouragementOverlay).toContainText('You said you wanted to do this.');
+  await expectTextOrder(encouragementOverlay, 'go for a walk', 'You said you wanted to do this.');
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expectStoredCard(page, (card) =>
@@ -783,17 +787,17 @@ test('long motivation reminder fits inside an iPhone-sized viewport', async ({ p
 
   await page.getByTestId('card-action-not-this-time').click();
 
-  const titleBox = page.locator('.commitment-motivation-copy .premium-title-box');
+  const titleBoxes = page.locator('.commitment-motivation-copy .premium-title-box');
   const buttons = page.locator('.premium-card-cta');
   await expect(page.getByText('Before you decide...')).toBeVisible();
   await expect(page.getByText('You wrote this to yourself:')).toBeVisible();
-  await expect(titleBox).toBeVisible();
+  await expect(titleBoxes).toHaveCount(2);
+  await expect(titleBoxes.nth(0)).toBeVisible();
+  await expect(titleBoxes.nth(1)).toBeVisible();
   await expect(buttons).toBeVisible();
-  const boxes = await Promise.all([
-    titleBox.boundingBox(),
-    buttons.boundingBox(),
-  ]);
-  expect(boxes[0]).not.toBeNull();
-  expect(boxes[1]).not.toBeNull();
-  expect((boxes[0]?.y ?? 0) + (boxes[0]?.height ?? 0)).toBeLessThanOrEqual((boxes[1]?.y ?? 0) + 1);
+  const reasonBox = await titleBoxes.nth(1).boundingBox();
+  const buttonsBox = await buttons.boundingBox();
+  expect(reasonBox).not.toBeNull();
+  expect(buttonsBox).not.toBeNull();
+  expect((reasonBox?.y ?? 0) + (reasonBox?.height ?? 0)).toBeLessThanOrEqual((buttonsBox?.y ?? 0) + 1);
 });
