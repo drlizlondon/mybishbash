@@ -737,7 +737,7 @@ test('Home empty states use calm copy without stacked zero language', async ({ p
   const summary = page.getByTestId('home-dashboard-summary');
   await expect(summary).toContainText('No Personal Cards yet.');
   await expect(summary).toContainText('Create one when you are ready.');
-  await expect(summary).toContainText('Finish setting up MyBishBash');
+  await expect(summary).toContainText('Your next step');
   await expect(summary).toContainText('Create your first Personal Card');
   await expect(summary).toContainText('Choose your first app');
   await expect(summary).not.toContainText('You’re all clear today');

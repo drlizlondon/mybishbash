@@ -64,14 +64,15 @@ async function expectLogoBackedFirstApps(page: Page, expectedBasePath: string) {
 }
 
 async function expectInterruptionDemoForApp(page: Page, appName: string, title: string, body: string) {
-  await expect(page.getByText(`Would you like to enable an interruption card before ${appName} opens?`)).toBeVisible();
+  await expect(page.getByText(`Would you like a Pause Card before ${appName} opens?`)).toBeVisible();
   const demo = page.getByTestId('onboarding-interruption-demo');
   await expect(demo).toContainText(title);
   await expect(demo).toContainText(body);
   await expect(demo.getByRole('button', { name: `Continue to ${appName}` })).toBeVisible();
   await expect(demo.getByRole('button', { name: 'Not now' })).toBeVisible();
-  await expect(demo).toContainText('This is an example of an interruption card.');
-  await expect(demo).toContainText('Interruption card');
+  await expect(demo).toContainText('This is an example of a Pause Card.');
+  await expect(demo).toContainText('Pause Cards');
+  await expect(demo).not.toContainText(/interruption card/i);
   await expect(page.getByTestId('onboarding-interruption-toggle').getByRole('button', { name: 'On', exact: true })).toBeVisible();
   await expect(page.getByTestId('onboarding-interruption-toggle').getByRole('button', { name: 'Off', exact: true })).toBeVisible();
   await expect(demo).toContainText('You can change this later.');
@@ -172,6 +173,7 @@ test('first-time user sees Personal Card onboarding before Home', async ({ page 
   await expect(page.getByText('MyBishBash shows a personal reminder before selected apps')).toBeVisible();
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Have you taken your vitamins today?');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Have you put your sunscreen on today?');
+  await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Safari');
   await expect(page.getByTestId('onboarding-tutorial-demo')).not.toContainText('Safari opens');
   const actionLabels = await page.locator('.onboarding-demo-real-card-instagram .onboarding-real-card-actions button').allTextContents();
   expect(actionLabels).toEqual(['Done', 'I’ll do it now', 'Not done']);
@@ -226,13 +228,13 @@ test('Personal Card selection renders the clean card list in order without Live 
 
   const expectedCards = [
     'Have you taken your vitamins today?',
-    'Have you drunk enough water today?',
+    'Drink some water.',
     'Put your sunscreen on.',
     'Text Mum back.',
     'Take five minutes outside.',
-    'Have you done something you’ve been avoiding?',
-    'Stand up and stretch.',
-    'Have you eaten properly today?',
+    'Do the thing you’ve been putting off.',
+    'Stand up and stretch for two minutes.',
+    'Go to bed on time.',
     'Write my own',
   ];
   await expect(page.locator('.onboarding-idea-card strong')).toHaveText(expectedCards);
@@ -250,7 +252,7 @@ test('Personal Card selection updates count, deselects, and enforces five-card l
 
   for (const name of [
     'Have you taken your vitamins today?',
-    'Have you drunk enough water today?',
+    'Drink some water.',
     'Put your sunscreen on.',
     'Text Mum back.',
     'Take five minutes outside.',
@@ -258,7 +260,7 @@ test('Personal Card selection updates count, deselects, and enforces five-card l
     await page.getByRole('button', { name }).click();
   }
   await expect(page.getByText('5 of 5 selected')).toBeVisible();
-  await page.getByRole('button', { name: 'Have you done something you’ve been avoiding?' }).click();
+  await page.getByRole('button', { name: 'Do the thing you’ve been putting off.' }).click();
   await expect(page.getByText('You can choose up to five.')).toBeVisible();
   await expect(page.getByText('5 of 5 selected')).toBeVisible();
 });
@@ -316,7 +318,7 @@ test('Write my own shows limit message when five cards are already selected', as
 
   for (const name of [
     'Have you taken your vitamins today?',
-    'Have you drunk enough water today?',
+    'Drink some water.',
     'Put your sunscreen on.',
     'Text Mum back.',
     'Take five minutes outside.',
@@ -815,6 +817,11 @@ test('onboarding visible copy avoids technical setup terms', async ({ page }) =>
     expect(text).not.toMatch(/\bshell\b/i);
     expect(text).not.toMatch(/\bintercept\b/i);
     expect(text).not.toMatch(/\bfake app\b/i);
+    expect(text).not.toMatch(/\blauncherContext\b/i);
+    expect(text).not.toMatch(/\bshared state\b/i);
+    expect(text).not.toMatch(/\bconfig ID\b/i);
+    expect(text).not.toMatch(/\binterruption card\b/i);
+    expect(text).not.toMatch(/\bMYBISHBASH\b/);
   };
 
   await assertNoTechnicalTerms();

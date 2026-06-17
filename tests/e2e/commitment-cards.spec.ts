@@ -669,7 +669,7 @@ test('in-progress check-in somewhat on track triggers encouragement and later re
 
   await page.getByRole('button', { name: 'I’m somewhat on track' }).click();
   const encouragementOverlay = page.getByTestId('card-overlay-personal');
-  await expect(encouragementOverlay).toContainText('MYBISHBASH REMINDER');
+  await expect(encouragementOverlay).toContainText('Reminder');
   await expect(encouragementOverlay.getByRole('heading', { name: /I will\s+go for a walk/ })).toBeVisible();
   await expect(encouragementOverlay).toContainText('You said you wanted to do this.');
   await expectTextOrder(encouragementOverlay, 'go for a walk', 'You said you wanted to do this.');
@@ -777,13 +777,17 @@ for (const { label, response, finalOutcome, expected } of reviewOutcomeCases) {
 
 test('long motivation reminder fits inside an iPhone-sized viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  const longReason =
+    'When I start the morning with this, I feel steadier, less reactive, and more like the person I keep saying I want to become. Even a small faithful start changes the tone of the day.';
   await seedE2EState(page, [
     commitmentCard({
-      commitmentReason:
-        'When I start the morning with this, I feel steadier, less reactive, and more like the person I keep saying I want to become. Even a small faithful start changes the tone of the day.',
+      commitmentReason: longReason,
     }),
   ]);
   await gotoLauncher(page, 'safari');
+
+  const commitmentOverlay = page.getByTestId('card-overlay-personal');
+  await expect(commitmentOverlay).toContainText('I will go for a walk');
 
   await page.getByTestId('card-action-not-this-time').click();
 
@@ -791,6 +795,8 @@ test('long motivation reminder fits inside an iPhone-sized viewport', async ({ p
   const buttons = page.locator('.premium-card-cta');
   await expect(page.getByText('Before you decide...')).toBeVisible();
   await expect(page.getByText('You wrote this to yourself:')).toBeVisible();
+  await expect(page.getByText(longReason)).toBeVisible();
+  await expect(page.getByTestId('card-overlay-personal')).toContainText(longReason);
   await expect(titleBoxes).toHaveCount(2);
   await expect(titleBoxes.nth(0)).toBeVisible();
   await expect(titleBoxes.nth(1)).toBeVisible();

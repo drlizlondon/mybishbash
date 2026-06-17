@@ -133,7 +133,7 @@ test('Home shows only incomplete activation checklist items', async ({ page }) =
   await page.goto('/mybishbash/home');
 
   await expect(page.getByTestId('home-activation-checklist')).toBeVisible();
-  await expect(page.getByText('Finish setting up MyBishBash')).toBeVisible();
+  await expect(page.getByText('Your next step')).toBeVisible();
   await expect(page.getByText('Add MyBishBash to your Home Screen')).toBeVisible();
   await expect(page.getByText('Create your first Personal Card')).toBeVisible();
   await expect(page.getByText('Choose your first app')).toBeVisible();
@@ -192,5 +192,5 @@ test('Home hides activation checklist when setup is complete', async ({ page }) 
 
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByTestId('home-activation-checklist')).toHaveCount(0);
-  await expect(page.getByText('Finish setting up MyBishBash')).toHaveCount(0);
+  await expect(page.getByText('Your next step')).toHaveCount(0);
 });
