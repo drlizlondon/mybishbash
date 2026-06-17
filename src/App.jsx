@@ -192,6 +192,7 @@ const ACTIVE_PROTECTED_APP_CONTEXT_TTL_MS = 8 * 60 * 60 * 1000;
 const NATIVE_SCHEME_FALLBACK_MS = 1400;
 const INSTALLED_LAUNCHER_SHELL_KEY = "mybishbash.installed-launcher-shell.v1";
 const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalone-launcher-recovery.v1";
+const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -314,6 +315,15 @@ function consumeStandaloneLauncherRecoverySuppression() {
 
 function isE2EModeEnabled() {
   return typeof window !== "undefined" && window.localStorage.getItem(E2E_MODE_KEY) === "true";
+}
+
+function loadExplicitLauncherBehaviorSettings() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
 }
 
 function buildE2ESession() {
@@ -1701,6 +1711,10 @@ function App() {
       testerStatus,
     ]
   );
+  const explicitLauncherBehaviorSettings = useMemo(
+    () => loadExplicitLauncherBehaviorSettings(),
+    [launcherBehaviorSettings],
+  );
   const protectedAppStatuses = useMemo(() => {
     const candidateIds = Array.from(new Set([
       ...INTERRUPTION_LAUNCHER_CONTEXTS,
@@ -1723,11 +1737,14 @@ function App() {
     });
     return visibleVersions.map((version) => {
       const behavior = launcherBehaviorSettings[version.id] ?? {};
+      const explicitBehavior = explicitLauncherBehaviorSettings[version.id] ?? {};
+      const hasUserSetup = Object.prototype.hasOwnProperty.call(explicitBehavior, "useInterruptionPack");
       const pauseExpiry = getAppPauseExpiry(version.id);
       const paused = isAppPaused(version.id);
       return {
         version,
-        protectedOn: Boolean(behavior.useInterruptionPack ?? version.useInterruptionPack),
+        configured: hasUserSetup,
+        protectedOn: explicitBehavior.useInterruptionPack === true,
         pauseExpiry,
         paused,
         pauseRemaining: paused ? formatPauseRemaining(pauseExpiry) : "",
@@ -1735,6 +1752,7 @@ function App() {
     });
   }, [
     appPauseRevision,
+    explicitLauncherBehaviorSettings,
     homeScreenVersions,
     launcherBehaviorSettings,
     testerStatus,
