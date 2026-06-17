@@ -189,7 +189,7 @@
       "installPath": "/mybishbash/install/whatsapp/",
       "launchPath": "/intercept/whatsapp",
       "manifestPath": "/mybishbash/launchers/whatsapp/manifest.webmanifest",
-      "iconSrc": "/mybishbash/icons/mybishbash-cover.png",
+      "iconSrc": "/mybishbash/icons/whatsapp-cover.jpeg",
       "customIconSrc": "",
       "nativeAppUrl": "",
       "webFallbackUrl": "https://api.whatsapp.com/send",

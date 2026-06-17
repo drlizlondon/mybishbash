@@ -1876,7 +1876,9 @@ textarea {
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
   font-size: clamp(26px, 7vw, 34px);
   line-height: 1.12;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
   white-space: pre-wrap;
 }
 
@@ -1896,7 +1898,7 @@ textarea {
   flex-direction: column;
   align-items: center;
   gap: clamp(10px, 2.4svh, 16px);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .commitment-motivation-copy .premium-title-box {
@@ -1907,22 +1909,22 @@ textarea {
 }
 
 .commitment-motivation-copy .commitment-motivation-commitment {
-  max-width: 15ch;
+  max-width: 20ch;
 }
 
 .commitment-motivation-copy .commitment-motivation-commitment .premium-headline {
-  font-size: clamp(2.35rem, 9.2vw, 3.35rem) !important;
-  line-height: 1.04;
+  font-size: clamp(1.75rem, 7vw, 2.55rem) !important;
+  line-height: 1.08;
 }
 
 .commitment-motivation-copy .commitment-motivation-reason {
-  max-width: 17ch;
+  max-width: 24ch;
 }
 
 .commitment-motivation-copy .commitment-motivation-reason .premium-headline {
   color: rgba(21, 21, 21, 0.88);
-  font-size: clamp(1.45rem, 6vw, 2.1rem) !important;
-  line-height: 1.12;
+  font-size: clamp(1.12rem, 4.7vw, 1.55rem) !important;
+  line-height: 1.2;
 }
 
 .commitment-motivation-intro,
@@ -4417,7 +4419,8 @@ textarea {
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  object-fit: cover;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 8px 16px rgba(114, 79, 65, 0.09);
 }
 
@@ -6042,7 +6045,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   padding: 18px 0 20px;
-  overflow: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -6252,21 +6255,21 @@ body {
 .premium-title-box {
   width: min(88vw, 390px);
   min-height: 92px;
-  max-height: clamp(180px, 42svh, 360px);
+  max-height: none;
   margin-top: 10px;
   padding: 0 2px 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  overflow: hidden;
+  overflow: visible;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 
 .premium-title-box.is-scrollable {
-  align-items: flex-start;
-  overflow-y: auto;
+  align-items: center;
+  overflow: visible;
 }
 
 .premium-headline {
@@ -6283,35 +6286,35 @@ body {
   text-align: center;
   overflow-wrap: normal;
   word-break: normal;
+  hyphens: none;
   text-wrap: balance;
   white-space: pre-line;
   overflow: visible;
 }
 
 .commitment-headline {
-  display: grid;
-  gap: 10px;
+  display: inline;
   white-space: normal;
 }
 
 .commitment-headline-prefix,
 .commitment-headline-text {
-  display: block;
+  display: inline;
 }
 
 .commitment-headline-prefix {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: calc(var(--message-font-size) * 0.54);
-  font-weight: 700;
-  line-height: 1;
-  color: #17120F;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
 }
 
 .commitment-headline-text {
-  font-size: calc(var(--message-font-size) * 0.78);
-  font-weight: 500;
-  line-height: 1.12;
-  color: #5F5751;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
 }
 
 .premium-divider {
@@ -8707,7 +8710,7 @@ body {
   max-width: 18ch;
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(2rem, 9vw, 2.62rem);
+  font-size: clamp(1.55rem, 6.7vw, 2.05rem);
   font-weight: 500;
   line-height: 1.08;
   letter-spacing: 0;
@@ -8732,7 +8735,7 @@ body {
 
 .onboarding-step-card-selection .onboarding-step-copy h2 {
   max-width: 22ch;
-  font-size: clamp(1.72rem, 7.2vw, 2.18rem);
+  font-size: clamp(1.42rem, 6vw, 1.82rem);
   line-height: 1.08;
 }
 
@@ -9157,7 +9160,7 @@ body {
 .onboarding-commitment-time h2 {
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(2.2rem, 11vw, 3.2rem);
+  font-size: clamp(1.85rem, 8.5vw, 2.45rem);
   font-weight: 500;
   line-height: 1;
   color: rgba(21, 21, 21, 0.96);
@@ -9685,8 +9688,8 @@ body {
   padding: 26px 24px;
   border-radius: 38px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.9), transparent 62%),
-    rgba(255, 252, 249, 0.88);
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.96), transparent 62%),
+    #fffcf8;
   box-shadow:
     0 22px 54px rgba(47, 42, 40, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
@@ -9725,7 +9728,7 @@ body {
 }
 
 .onboarding-demo-phone-app-safari {
-  animation: onboarding-phone-app-pulse-safari var(--onboarding-demo-duration) ease forwards;
+  animation: none;
 }
 
 .onboarding-demo-app,
@@ -9805,7 +9808,7 @@ body {
   gap: 8px;
   padding: 18px 20px 20px;
   border-radius: 30px;
-  background: rgba(255, 252, 249, 0.96);
+  background: #fffcf8;
   color: rgba(21, 21, 21, 0.94);
   box-shadow:
     0 24px 58px rgba(47, 42, 40, 0.13),
@@ -9831,7 +9834,7 @@ body {
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.28em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .onboarding-demo-card-heart {
@@ -9925,7 +9928,7 @@ body {
   gap: 8px;
   padding: 18px;
   border-radius: 26px;
-  background: rgba(255, 252, 249, 0.96);
+  background: #fffcf8;
   box-shadow:
     0 24px 58px rgba(47, 42, 40, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.84);
@@ -9987,9 +9990,14 @@ body {
 .onboarding-demo-final-line {
   position: absolute;
   z-index: 4;
-  width: min(250px, 86%);
+  width: min(270px, 88%);
   margin: 0;
+  padding: 18px 20px;
+  border: 1px solid rgba(120, 87, 65, 0.12);
+  border-radius: 26px;
+  background: #fffcf8;
   color: rgba(21, 21, 21, 0.9);
+  box-shadow: 0 24px 58px rgba(47, 42, 40, 0.12);
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
   font-size: clamp(1.44rem, 6.7vw, 1.88rem);
   font-weight: 500;

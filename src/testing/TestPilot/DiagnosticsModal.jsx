@@ -12,7 +12,7 @@ export default function DiagnosticsModal() {
     ["Browser", diagnostics.device?.userAgent],
     ["Display mode", diagnostics.displayMode],
     ["Route", diagnostics.route],
-    ["Launcher context", diagnostics.launcherContext],
+    ["App context", diagnostics.launcherContext],
     ["Viewport", `${diagnostics.viewport?.width} x ${diagnostics.viewport?.height}`],
     ["App version", diagnostics.appVersion],
     ["Setup complete", diagnostics.setupComplete ? "Yes" : "No"],

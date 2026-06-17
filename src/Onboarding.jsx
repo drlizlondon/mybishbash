@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import "./landing.css";
 import { ContentEditProvider } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
+import { getGreeting } from "./utils";
 
 export const DEFAULT_INTERRUPTER_CARDS = [
   "Do I actually want to open Instagram right now?",
@@ -17,11 +18,11 @@ export const DEFAULT_ACTION_CARD_TITLES = [
 
 export const DEFAULT_PERSONAL_CARD_TEXTS = [
   "Have you taken your vitamins today?",
-  "Have you drunk enough water today?",
-  "Go outside for five minutes",
-  "Read one page",
-  "What matters most today?",
-  "What's one thing Future You would thank you for?",
+  "Drink some water.",
+  "Put your sunscreen on.",
+  "Text Mum back.",
+  "Take five minutes outside.",
+  "Do the thing you’ve been putting off.",
 ];
 
 const PERSONAL_CARD_OPTIONS = [
@@ -31,7 +32,7 @@ const PERSONAL_CARD_OPTIONS = [
   },
   {
     id: "water",
-    text: "Have you drunk enough water today?",
+    text: "Drink some water.",
   },
   {
     id: "sunscreen",
@@ -47,15 +48,15 @@ const PERSONAL_CARD_OPTIONS = [
   },
   {
     id: "avoiding",
-    text: "Have you done something you’ve been avoiding?",
+    text: "Do the thing you’ve been putting off.",
   },
   {
     id: "stretch",
-    text: "Stand up and stretch.",
+    text: "Stand up and stretch for two minutes.",
   },
   {
-    id: "eaten",
-    text: "Have you eaten properly today?",
+    id: "bedtime",
+    text: "Go to bed on time.",
   },
 ];
 
@@ -576,7 +577,7 @@ function OnboardingContent({
           {currentStep === "protected-demo" ? (
             <OnboardingStep
               title={`Before ${selectedProtectedAppName} opens`}
-              body={`Would you like to enable an interruption card before ${selectedProtectedAppName} opens?`}
+              body={`Would you like a Pause Card before ${selectedProtectedAppName} opens?`}
               primaryLabel={`Install ${selectedProtectedAppName} Launcher`}
               onPrimary={continueToProtectedAppSetup}
               secondaryLabel="Choose an app later"
@@ -808,7 +809,7 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
   return (
     <div className="onboarding-interruption-demo" data-testid="onboarding-interruption-demo">
       <article className="onboarding-interruption-example-card">
-        <p className="onboarding-demo-card-greeting">MYBISHBASH</p>
+        <p className="onboarding-demo-card-greeting">MyBishBash</p>
         <span className="onboarding-demo-card-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
@@ -820,10 +821,10 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
           <button type="button">Not now</button>
         </div>
       </article>
-      <p className="onboarding-interruption-demo-note">This is an example of an interruption card.</p>
+      <p className="onboarding-interruption-demo-note">This is an example of a Pause Card.</p>
       <div className="onboarding-interruption-toggle" data-testid="onboarding-interruption-toggle">
-        <span>Interruption card</span>
-        <div role="group" aria-label="Interruption card">
+        <span>Pause Cards</span>
+        <div role="group" aria-label="Pause Cards">
           <button
             type="button"
             className={enabled ? "selected" : ""}
@@ -926,6 +927,8 @@ function HeartGlyph() {
 function TutorialDemoIntro({ isComplete = false, onReplay }) {
   const instagram = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "instagram");
   const whatsapp = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "whatsapp");
+  const safari = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "safari");
+  const demoGreeting = getGreeting(new Date());
   return (
     <div className="onboarding-tutorial-demo" data-testid="onboarding-tutorial-demo" aria-label="MyBishBash opening demo">
       <div className="onboarding-demo-orbit" aria-hidden="true" />
@@ -937,6 +940,10 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <span className="onboarding-demo-phone-app onboarding-demo-phone-app-whatsapp">
           <OnboardingAppIcon launcher={whatsapp} />
           <span>WhatsApp</span>
+        </span>
+        <span className="onboarding-demo-phone-app onboarding-demo-phone-app-safari">
+          <OnboardingAppIcon launcher={safari} />
+          <span>Safari</span>
         </span>
       </div>
       <div className="onboarding-demo-app onboarding-demo-app-instagram">
@@ -950,7 +957,7 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
       <div className="onboarding-demo-cursor" aria-hidden="true" />
       <span className="onboarding-demo-click-ripple" aria-hidden="true" />
       <article className="onboarding-demo-real-card onboarding-demo-real-card-instagram">
-        <span className="onboarding-demo-card-greeting">Good afternoon</span>
+        <span className="onboarding-demo-card-greeting">{demoGreeting}</span>
         <span className="onboarding-demo-card-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
@@ -964,7 +971,7 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         </div>
       </article>
       <article className="onboarding-demo-real-card onboarding-demo-real-card-whatsapp">
-        <span className="onboarding-demo-card-greeting">Good afternoon</span>
+        <span className="onboarding-demo-card-greeting">{demoGreeting}</span>
         <span className="onboarding-demo-card-heart" aria-hidden="true">
           <HeartGlyph />
         </span>

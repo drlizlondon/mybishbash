@@ -7449,6 +7449,7 @@ function HomePanel({
       : "No live commitment";
   const emptyCommitmentTitle = homeState.hasCompletedCommitmentToday ? "You’re clear for now." : "You’re clear for now.";
   const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-cover.png`;
+  const greeting = getGreeting(new Date(), timezone);
   const hasMeaningfulSetup = activationChecklistItems.length === 0 || cards.length > 0 || pendingOnboardingShortcuts.length > 0;
 
   const openProgressCard = () => {
@@ -7505,14 +7506,14 @@ function HomePanel({
       <div className="home-content">
         <header className="home-brand-hero">
           <img className="home-brand-logo" src={logoSrc} alt="MyBishBash" />
-          <h1>Good afternoon</h1>
+          <h1>{greeting}</h1>
           <p>{hasMeaningfulSetup ? `Day ${homeState.usageDays || 1} with MyBishBash` : "Welcome to MyBishBash"}</p>
         </header>
 
         <div className="home-card-stack" data-testid="home-dashboard-summary">
           {activationChecklistItems.length > 0 ? (
             <section className="home-activation-checklist" data-testid="home-activation-checklist" aria-labelledby="home-activation-title">
-              <h2 id="home-activation-title">Finish setting up MyBishBash</h2>
+              <h2 id="home-activation-title">Your next step</h2>
               <div className="home-activation-items">
                 {activationChecklistItems.map((item) => (
                   <button
@@ -9033,7 +9034,13 @@ function AppsPanel({
     protectedAppStatuses[0] ??
     null;
   const activePauses = protectedAppStatuses.filter((status) => status.paused);
-  const protectedCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
+  const configuredCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
+  const appCountLabel =
+    configuredCount === 0
+      ? "No apps set up yet."
+      : configuredCount === 1
+        ? "1 app set up."
+        : `${configuredCount} apps set up.`;
   const shortcutContexts = {
     safari: "Personal reminders + Safari prompts",
     instagram: "Personal reminders + Instagram prompts",
@@ -9057,7 +9064,7 @@ function AppsPanel({
 
       <div className="settings-card settings-compact" data-testid="apps-status-summary">
         <div className="settings-version-heading">
-          <p>{protectedCount} app{protectedCount === 1 ? "" : "s"} using MyBishBash</p>
+          <p>{appCountLabel}</p>
           <span>
             {activePauses.length > 0
               ? `${activePauses.length} active pause${activePauses.length === 1 ? "" : "s"}`
@@ -9199,7 +9206,7 @@ function ProtectedAppCard({
     ? `Paused until ${pauseRemaining || "soon"}`
     : protectedOn
       ? "Using MyBishBash"
-      : "Shortcut needed";
+      : "Not set up";
   const pauseStatus = paused ? `Paused until ${pauseRemaining || "soon"}` : "None";
 
   return (
@@ -9225,7 +9232,7 @@ function ProtectedAppCard({
         <dl className="apps-current-details">
           <div>
           <dt>WHAT YOU’LL SEE</dt>
-            <dd>{protectedOn ? currentExperience ?? `Personal reminders + ${appName} prompts` : "Open normally"}</dd>
+            <dd>{protectedOn ? currentExperience ?? `Personal reminders + ${appName} prompts` : "Not set up"}</dd>
           </div>
           <div>
             <dt>ACTIVE PACK</dt>
@@ -10504,7 +10511,7 @@ function CommitmentCardOverlay({
       type="personal"
       greeting="TODAY’S COMMITMENT"
       icon="heart"
-      headline={`I will\n${commitmentText}`}
+      headline={`I will ${commitmentText}`}
       subtitle=""
       actions={[
         { label: "I will commit to this", variant: "primary", onClick: () => onCommitmentAction("commit") },
@@ -10645,7 +10652,7 @@ function CommitmentEncouragementOverlay({
   return (
     <PremiumCardScreen
       type="personal"
-      greeting="MYBISHBASH REMINDER"
+      greeting="Reminder"
       icon="heart"
       headline={commitmentText ? `I will ${commitmentText}` : card.promptText}
       subtitle={commitmentText ? card.promptText : "Keep going with what you said mattered."}
