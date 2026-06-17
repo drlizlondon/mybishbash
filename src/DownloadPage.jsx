@@ -1,9 +1,24 @@
 import "./download.css";
 import { loadProfile, saveProfile } from "./storage";
+import { useState } from "react";
 
 const BASE = import.meta.env.BASE_URL;
 const SIGNUP_HREF = `${BASE}home?signup=1`;
+const DOWNLOAD_HREF = `${BASE}download`;
+const WAITLIST_HREF = `${BASE}early-access`;
 const LOGO_SRC = `${BASE}icons/mybishbash-logo-mark.png`;
+const ROLLOUT_ACCESS_KEY = "mybishbash.rollout-download-access.v1";
+const TEMPORARY_ROLLOUT_CODE = "WELCOME";
+
+function hasRolloutAccess() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(ROLLOUT_ACCESS_KEY) === "true";
+}
+
+function saveRolloutAccess() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ROLLOUT_ACCESS_KEY, "true");
+}
 
 function updateInstallState(updates) {
   if (typeof window === "undefined") return;
@@ -84,7 +99,73 @@ function InstallCard({ number, title, caption, variant }) {
   );
 }
 
+function DownloadAccessGate() {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+
+  function submitCode(event) {
+    event.preventDefault();
+    const normalized = code.trim().toUpperCase();
+    if (normalized === TEMPORARY_ROLLOUT_CODE) {
+      saveRolloutAccess();
+      window.location.href = DOWNLOAD_HREF;
+      return;
+    }
+    setError("That code didn’t work. Please try again or join the waitlist.");
+  }
+
+  function tryAgain() {
+    setCode("");
+    setError("");
+  }
+
+  return (
+    <main className="download-page" data-testid="download-access-gate">
+      <section className="download-panel download-access-panel" aria-labelledby="download-access-title">
+        <header className="download-hero">
+          <img src={LOGO_SRC} alt="MyBishBash" />
+          <p className="download-access-eyebrow">Invite only</p>
+          <h1 id="download-access-title">Get MyBishBash</h1>
+          <p>MyBishBash is currently invite-only. If you have an access code, enter it here. If not, join the waitlist.</p>
+        </header>
+
+        <form className="download-access-card" onSubmit={submitCode}>
+          <label htmlFor="download-access-code">Access code</label>
+          <input
+            id="download-access-code"
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+              if (error) setError("");
+            }}
+            placeholder="Enter access code"
+            autoCapitalize="characters"
+            autoComplete="one-time-code"
+          />
+          {error ? <p className="download-access-error" role="alert">{error}</p> : null}
+          <button type="submit" className="download-primary">Continue</button>
+        </form>
+
+        {error ? (
+          <div className="download-access-actions">
+            <button type="button" className="download-try-again" onClick={tryAgain}>Try again</button>
+            <a className="download-skip-link" href={WAITLIST_HREF}>Join waitlist</a>
+          </div>
+        ) : (
+          <a className="download-skip-link" href={WAITLIST_HREF}>Join waitlist</a>
+        )}
+      </section>
+    </main>
+  );
+}
+
 export default function DownloadPage() {
+  const hasAccess = hasRolloutAccess();
+
+  if (!hasAccess) {
+    return <DownloadAccessGate />;
+  }
+
   const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
   const isIos = /iPad|iPhone|iPod/.test(userAgent) || (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const isSafari = /Safari/.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent);

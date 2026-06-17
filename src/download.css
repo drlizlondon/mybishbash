@@ -16,6 +16,11 @@
   justify-items: center;
 }
 
+.download-access-panel {
+  align-content: center;
+  min-height: calc(100vh - 56px);
+}
+
 .download-hero {
   display: grid;
   justify-items: center;
@@ -54,6 +59,76 @@
   font-size: 0.9rem;
   line-height: 1.36;
   text-align: center;
+}
+
+.download-access-eyebrow {
+  max-width: none;
+  color: #9a5145;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.download-access-card {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(120, 87, 65, 0.1);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 20px 45px rgba(47, 42, 40, 0.08);
+}
+
+.download-access-card label {
+  color: rgba(47, 42, 40, 0.78);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.download-access-card input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(120, 87, 65, 0.14);
+  border-radius: 16px;
+  padding: 0 14px;
+  background: rgba(255, 252, 249, 0.94);
+  color: #171514;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  outline: none;
+}
+
+.download-access-card input:focus {
+  border-color: rgba(217, 108, 82, 0.42);
+  box-shadow: 0 0 0 4px rgba(217, 108, 82, 0.12);
+}
+
+.download-access-error {
+  margin: 0;
+  color: #9a5145;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.download-access-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.download-try-again {
+  border: 0;
+  background: transparent;
+  color: rgba(91, 82, 75, 0.76);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .download-install-list {

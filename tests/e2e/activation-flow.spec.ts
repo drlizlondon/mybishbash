@@ -1,13 +1,65 @@
 import { expect, test } from '@playwright/test';
 
-test('landing Get MyBishBash routes to the download page', async ({ page }) => {
+const ROLLOUT_ACCESS_KEY = 'mybishbash.rollout-download-access.v1';
+
+test('landing Get MyBishBash opens the invite gate, not download', async ({ page }) => {
   await page.goto('/mybishbash/');
 
   const primaryCta = page.locator('.hero-actions .button.primary');
-  await expect(primaryCta).toHaveAttribute('href', '/mybishbash/download');
+  await expect(primaryCta).toHaveAttribute('href', '/mybishbash/invite');
+  await primaryCta.click();
+  await expect(page).toHaveURL(/\/mybishbash\/invite$/);
+  await expect(page.getByTestId('download-access-gate')).toBeVisible();
+  await expect(page.getByText('MyBishBash is currently invite-only.')).toBeVisible();
+});
+
+test('WELCOME unlocks the existing download page', async ({ page }) => {
+  await page.goto('/mybishbash/invite');
+
+  await page.getByLabel('Access code').fill('  welcome  ');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/download$/);
+  await expect(page.getByTestId('download-page')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Add MyBishBash\s+to your Home Screen/ })).toBeVisible();
+  await expect(page.evaluate((key) => window.localStorage.getItem(key), ROLLOUT_ACCESS_KEY)).resolves.toBe('true');
+});
+
+test('wrong rollout code shows retry and waitlist actions', async ({ page }) => {
+  await page.goto('/mybishbash/invite');
+
+  await page.getByLabel('Access code').fill('NOPE');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByText('That code didn’t work. Please try again or join the waitlist.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Join waitlist' })).toHaveAttribute('href', '/mybishbash/early-access');
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByLabel('Access code')).toHaveValue('');
+});
+
+test('direct download without rollout access is blocked by invite gate', async ({ page }) => {
+  await page.goto('/mybishbash/download');
+
+  await expect(page.getByTestId('download-access-gate')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Get MyBishBash' })).toBeVisible();
+  await expect(page.getByTestId('download-page')).toHaveCount(0);
+});
+
+test('direct download after WELCOME is allowed', async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, ROLLOUT_ACCESS_KEY);
+  await page.goto('/mybishbash/download');
+
+  await expect(page.getByTestId('download-page')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Add MyBishBash\s+to your Home Screen/ })).toBeVisible();
 });
 
 test('download page presents Home Screen install flow and continues to signup mode', async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, ROLLOUT_ACCESS_KEY);
   await page.goto('/mybishbash/download');
 
   await expect(page.getByTestId('download-page')).toBeVisible();
@@ -34,6 +86,9 @@ test('download page presents Home Screen install flow and continues to signup mo
 });
 
 test('download skip stores incomplete install state and continues to signup mode', async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, ROLLOUT_ACCESS_KEY);
   await page.goto('/mybishbash/download');
 
   await page.getByRole('link', { name: 'I can’t do this right now' }).click();

@@ -1452,7 +1452,7 @@ function App() {
       return <EarlyAccessPage />;
     }
 
-    if (normalizedPath === "/download") {
+    if (normalizedPath === "/download" || normalizedPath === "/invite") {
       return <DownloadPage />;
     }
 
