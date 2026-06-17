@@ -6,7 +6,7 @@ const BASE = import.meta.env.BASE_URL;
 const SIGNUP_HREF = `${BASE}home?signup=1`;
 const DOWNLOAD_HREF = `${BASE}download`;
 const WAITLIST_HREF = `${BASE}early-access`;
-const LOGO_SRC = `${BASE}icons/mybishbash-logo-mark.png`;
+const LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 const ROLLOUT_ACCESS_KEY = "mybishbash.rollout-download-access.v1";
 const TEMPORARY_ROLLOUT_CODE = "WELCOME";
 

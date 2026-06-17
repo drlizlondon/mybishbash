@@ -7448,7 +7448,7 @@ function HomePanel({
       ? "Commitments complete"
       : "No live commitment";
   const emptyCommitmentTitle = homeState.hasCompletedCommitmentToday ? "You’re clear for now." : "You’re clear for now.";
-  const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-logo-mark.png`;
+  const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-cover.png`;
   const hasMeaningfulSetup = activationChecklistItems.length === 0 || cards.length > 0 || pendingOnboardingShortcuts.length > 0;
 
   const openProgressCard = () => {

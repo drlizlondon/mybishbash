@@ -96,7 +96,7 @@ function getLauncherName(launcher) {
 
 function getLauncherIcon(launcher) {
   const basePath = getAppBasePath();
-  if (!launcher) return `${basePath}/icons/mybishbash-logo-mark.png`;
+  if (!launcher) return `${basePath}/icons/mybishbash-cover.png`;
   const src = launcher.iconSrc || launcher.icon || launcher.customIconSrc || "";
   if (src && (src.startsWith("/mybishbash/") || src.startsWith("/mybishbash-preview/"))) {
     const rebasedPath = src.replace(/^\/mybishbash-preview|^\/mybishbash/, "");
@@ -104,7 +104,7 @@ function getLauncherIcon(launcher) {
   }
   if (src && src.startsWith("/")) return `${basePath}${src}`;
   if (src) return src;
-  return `${basePath}/icons/mybishbash-logo-mark.png`;
+  return `${basePath}/icons/mybishbash-cover.png`;
 }
 
 function hasLauncherLogo(launcher) {
@@ -429,7 +429,7 @@ function OnboardingContent({
     <div className="overlay-screen onboarding-screen">
       <div className="onboarding-shell">
         <header className="onboarding-brand">
-          <img className="onboarding-logo" src={`${import.meta.env.BASE_URL}icons/mybishbash-logo-mark.png`} alt="MyBishBash logo" />
+          <img className="onboarding-logo" src={`${import.meta.env.BASE_URL}icons/mybishbash-cover.png`} alt="MyBishBash logo" />
           <h1>MyBishBash</h1>
         </header>
 

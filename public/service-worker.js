@@ -104,8 +104,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Tiny MyBishBash moment?", {
       body: data.body || "Something you said mattered.",
-      icon: "/mybishbash/icons/icon-192.svg",
-      badge: "/mybishbash/icons/icon-192.svg",
+      icon: "/mybishbash/icons/mybishbash-cover.png",
+      badge: "/mybishbash/icons/mybishbash-cover.png",
       data,
     }),
   );

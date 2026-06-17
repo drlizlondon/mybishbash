@@ -8,6 +8,7 @@ import { earlyAccessContent } from "./content/earlyAccessContent";
 const HOME_HREF = `${import.meta.env.BASE_URL || "/"}`
   .replace(/\/+/g, "/")
   .replace(/\/$/, "/");
+const BRAND_LOGO_SRC = `${HOME_HREF}icons/mybishbash-cover.png`;
 
 const PINNED_COUNTRIES = ["United Kingdom", "United States of America"];
 const FALLBACK_COUNTRIES = [
@@ -231,9 +232,7 @@ function getCountryList() {
 
 function BrandMark() {
   return (
-    <span className="early-brand-mark" aria-hidden="true">
-      <span />
-    </span>
+    <img className="early-brand-mark" src={BRAND_LOGO_SRC} alt="" aria-hidden="true" />
   );
 }
 

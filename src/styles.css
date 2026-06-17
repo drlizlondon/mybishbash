@@ -8058,10 +8058,12 @@ body {
 
 .home-brand-logo {
   display: block;
-  width: 64px;
-  height: auto;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   margin: 0 auto;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(47, 42, 40, 0.08);
 }
 
 .home-brand-hero h1 {
@@ -8477,8 +8479,8 @@ body {
   }
 
   .home-brand-logo {
-    width: 64px;
-    height: auto;
+    width: 68px;
+    height: 68px;
   }
 
   .home-progress-number {

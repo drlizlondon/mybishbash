@@ -13,12 +13,11 @@ const INVITE_HREF = `${BASE}invite`;
 const ABOUT_HREF = `${BASE}about`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const LANDING_NAV_HREFS = [ABOUT_HREF, HOME_HREF, HOME_HREF, HOME_HREF, HOME_HREF];
+const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
 function BrandMark({ dark = false }) {
   return (
-    <span className={`brand-mark${dark ? " is-dark" : ""}`} aria-hidden="true">
-      <span />
-    </span>
+    <img className={`brand-mark${dark ? " is-dark" : ""}`} src={BRAND_LOGO_SRC} alt="" aria-hidden="true" />
   );
 }
 
