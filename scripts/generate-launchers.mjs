@@ -58,7 +58,7 @@ function buildInstallHtml(launcher) {
         <div class="install-copy">
           <h2 data-version-name>${escapeHtml(launcher.displayName)}</h2>
           <p>Tap Share, then Add to Home Screen.</p>
-          <p class="install-note">This launcher uses launcherContext "<span data-launcher-context>${launcher.id}</span>" and the same shared MyBishBash state.</p>
+          <p class="install-note">This Home Screen shortcut opens MyBishBash before ${escapeHtml(launcher.displayName)}.</p>
         </div>
         <div class="install-steps">
           <strong>Install</strong>

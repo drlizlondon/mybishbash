@@ -6,11 +6,13 @@ import vm from "node:vm";
 const previewOrigin = normalizeOrigin(process.env.PAGES_PREVIEW_ORIGIN || "https://drlizlondon.github.io");
 const previewBasePath = normalizeBasePath(process.env.PAGES_PREVIEW_BASE_PATH || "/mybishbash-preview/");
 const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "MyBishBash Test";
+const previewShortName = process.env.PAGES_PREVIEW_SHORT_NAME || "MyBishBash Test";
 const previewRoot = `${previewOrigin}${previewBasePath.replace(/\/$/, "")}`;
 const expectedSourceSha = process.env.VITE_SOURCE_SHA || process.env.GITHUB_SHA || gitSourceSha();
 
 const appManifest = readJson("dist/manifest.webmanifest");
 assert.equal(appManifest.name, previewAppName);
+assert.equal(appManifest.short_name, previewShortName);
 assert.equal(appManifest.start_url, `${previewRoot}/home`);
 assert.equal(appManifest.scope, `${previewRoot}/`);
 
@@ -42,10 +44,12 @@ for (const launcherId of supportedLauncherIds) {
   const installHtml = readFileSync(`dist/install/${launcherId}/index.html`, "utf8");
   assert.match(installHtml, new RegExp(`href="${escapeRegExp(previewBasePath)}launchers/${escapeRegExp(launcherId)}/manifest\\.webmanifest"`));
   assert.match(installHtml, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
+  assert.doesNotMatch(installHtml, /launcherContext|shared MyBishBash state/);
 
   const legacyShell = readFileSync(`dist/${launcherId}/index.html`, "utf8");
   assert.match(legacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
-  assert.match(legacyShell, new RegExp(`launcherContext "<span data-launcher-context>${escapeRegExp(launcherId)}</span>"`));
+  assert.match(legacyShell, /This Home Screen shortcut opens MyBishBash before/);
+  assert.doesNotMatch(legacyShell, /launcherContext|shared MyBishBash state/);
 }
 
 const installScript = readFileSync("dist/install/install.js", "utf8");
