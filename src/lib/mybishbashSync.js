@@ -20,6 +20,8 @@ const SHARED_EVENTS_TABLE = "mybishbash_events";
 const LEGACY_SHARED_EVENTS_TABLE = ("bish" + "bash") + "_events";
 export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nYour access code was not recognised.";
 const PENDING_ACCESS_CODE_KEY = "MYBISHBASH_PENDING_ACCESS_CODE";
+const VALIDATED_GATE_ACCESS_CODE_KEY = "mybishbash.validated-gate-access-code.v1";
+const VALIDATED_GATE_ACCESS_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -170,6 +172,48 @@ function rememberPendingAccessCode(accessCode) {
   window.localStorage.setItem(PENDING_ACCESS_CODE_KEY, normalizedAccessCode);
 }
 
+function getAccessCodeStorage() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
+}
+
+export function rememberValidatedGateAccessCode(accessCode, now = Date.now()) {
+  const storage = getAccessCodeStorage();
+  if (!storage) return false;
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return false;
+  storage.setItem(VALIDATED_GATE_ACCESS_CODE_KEY, JSON.stringify({
+    accessCode: normalizedAccessCode,
+    validatedAt: now,
+  }));
+  return true;
+}
+
+export function clearValidatedGateAccessCode() {
+  const storage = getAccessCodeStorage();
+  storage?.removeItem(VALIDATED_GATE_ACCESS_CODE_KEY);
+}
+
+export function getValidatedGateAccessCode(now = Date.now()) {
+  const storage = getAccessCodeStorage();
+  if (!storage) return "";
+  const raw = storage.getItem(VALIDATED_GATE_ACCESS_CODE_KEY);
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    const normalizedAccessCode = normalizeAccessCode(parsed?.accessCode);
+    const validatedAt = Number(parsed?.validatedAt);
+    if (!normalizedAccessCode || !Number.isFinite(validatedAt) || now - validatedAt > VALIDATED_GATE_ACCESS_CODE_TTL_MS) {
+      clearValidatedGateAccessCode();
+      return "";
+    }
+    return normalizedAccessCode;
+  } catch {
+    clearValidatedGateAccessCode();
+    return "";
+  }
+}
+
 async function claimRememberedAccessCode() {
   if (typeof window === "undefined") return;
   const pendingAccessCode = normalizeAccessCode(window.localStorage.getItem(PENDING_ACCESS_CODE_KEY));
@@ -190,7 +234,7 @@ function isE2EAuthMockMode() {
 }
 
 async function validateAccessCode(accessCode) {
-  if (isE2EAuthMockMode()) return normalizeAccessCode(accessCode) === "BETA-VALID";
+  if (isE2EAuthMockMode()) return getE2EAccessGrant(normalizeAccessCode(accessCode)) !== null;
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
@@ -207,7 +251,7 @@ async function validateAccessCode(accessCode) {
 }
 
 async function claimAccessCode(accessCode) {
-  if (isE2EAuthMockMode()) return normalizeAccessCode(accessCode) === "BETA-VALID";
+  if (isE2EAuthMockMode()) return getE2EAccessGrant(normalizeAccessCode(accessCode)) !== null;
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
@@ -221,6 +265,34 @@ async function claimAccessCode(accessCode) {
     return false;
   }
   return data === true;
+}
+
+const E2E_ACCESS_GRANTS = {
+  "BETA-VALID": { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: null },
+  WELCOME: { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: "early_user" },
+  TESTER: { access_tier: "premium", grant_reason: "tester", cohort: "e2e", is_tester: true, tester_group: "tester" },
+  "FRIENDS-FAMILY": { access_tier: "premium", grant_reason: "friends_family", cohort: "e2e", is_tester: false, tester_group: "friends_family" },
+  MEDIA: { access_tier: "premium", grant_reason: "media", cohort: "e2e", is_tester: false, tester_group: "media" },
+  INVESTOR: { access_tier: "premium", grant_reason: "investor", cohort: "e2e", is_tester: false, tester_group: "investor" },
+};
+
+function getE2EAccessGrant(accessCode) {
+  return E2E_ACCESS_GRANTS[normalizeAccessCode(accessCode)] ?? null;
+}
+
+export async function validateAndRememberGateAccessCode(accessCode) {
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) {
+    clearValidatedGateAccessCode();
+    return false;
+  }
+  const codeIsValid = await validateAccessCode(normalizedAccessCode);
+  if (!codeIsValid) {
+    clearValidatedGateAccessCode();
+    return false;
+  }
+  rememberValidatedGateAccessCode(normalizedAccessCode);
+  return true;
 }
 
 export async function hasAccessEntitlement(userId) {
@@ -251,7 +323,16 @@ export async function hasAccessEntitlement(userId) {
 // the fail-open session gate above.
 export async function fetchOwnAccessProfile(userId) {
   if (isE2EAuthMockMode() && userId) {
-    return { has_access: true, access_tier: "founding_access", access_expires_at: null, is_tester: false };
+    const grant = getE2EAccessGrant(getValidatedGateAccessCode()) ?? E2E_ACCESS_GRANTS["BETA-VALID"];
+    return {
+      has_access: true,
+      access_tier: grant.access_tier,
+      access_expires_at: null,
+      grant_reason: grant.grant_reason,
+      cohort: grant.cohort,
+      is_tester: grant.is_tester,
+      tester_group: grant.tester_group,
+    };
   }
   if (!userId || isDemoMode()) return null;
   try {
@@ -281,16 +362,22 @@ export function onAuthStateChange(callback) {
   return client.auth.onAuthStateChange(callback);
 }
 
-export async function signUp(email, password, accessCode) {
-  const normalizedAccessCode = normalizeAccessCode(accessCode);
+export async function signUp(email, password, accessCode = null) {
+  const normalizedAccessCode = normalizeAccessCode(accessCode || getValidatedGateAccessCode());
   if (!normalizedAccessCode) {
     throw new Error(INVITE_ONLY_ACCESS_ERROR);
   }
   const codeIsValid = await validateAccessCode(normalizedAccessCode);
   if (!codeIsValid) {
+    clearValidatedGateAccessCode();
     throw new Error(INVITE_ONLY_ACCESS_ERROR);
   }
   if (isE2EAuthMockMode()) {
+    const grant = getE2EAccessGrant(normalizedAccessCode);
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", JSON.stringify({
+      accessCode: normalizedAccessCode,
+      ...grant,
+    }));
     return { user: { id: "e2e-access-user", email } };
   }
   const client = requireSupabase();
@@ -314,8 +401,10 @@ export async function signUp(email, password, accessCode) {
   }
   const claimed = await claimAccessCode(normalizedAccessCode);
   if (!claimed) {
+    clearValidatedGateAccessCode();
     throw new Error(INVITE_ONLY_ACCESS_ERROR);
   }
+  clearValidatedGateAccessCode();
   return data.session;
 }
 
