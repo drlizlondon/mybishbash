@@ -64,6 +64,7 @@ import {
   fetchGlobalPacks,
   fetchLauncherConfigs,
   fetchOwnAccessProfile,
+  getValidatedGateAccessCode,
   touchUserProfile,
 } from "./lib/mybishbashSync";
 import { CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
@@ -5610,7 +5611,7 @@ function App() {
     navigateTo("/onboarding", { replace: true });
   }
 
-  async function handleSignUp(email, password, accessCode) {
+  async function handleSignUp(email, password) {
     setSyncStatus("loading");
     setSyncError("");
     signupOnboardingPendingRef.current = true;
@@ -5622,7 +5623,7 @@ function App() {
       action_taken: "started",
     });
     try {
-      const createdSession = await signUp(email, password, accessCode);
+      const createdSession = await signUp(email, password);
       void logEvent({
         event_type: "signup_completed",
         source_type: "auth",
@@ -8765,20 +8766,23 @@ function PackDetailModal({
 function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal, launcherName = "" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [accessCode, setAccessCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
     return new URLSearchParams(window.location.search).get("signup") !== "1";
   });
   const [agreedToLegal, setAgreedToLegal] = useState(false);
+  const hasValidatedGateCode = Boolean(getValidatedGateAccessCode());
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
   const isLauncherLogin = mode === "launcher";
   const isAccessDenied = mode === "access-denied";
+  const isSignupBlocked = !isLogin && !hasValidatedGateCode;
   const title = isLauncherLogin
     ? "Welcome back to MyBishBash"
     : isAccessDenied
+      ? "MyBishBash is invite-only right now."
+    : isSignupBlocked
       ? "MyBishBash is invite-only right now."
     : isLogin
       ? "MyBishBash"
@@ -8795,11 +8799,6 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   function submitExisting(event) {
     event.preventDefault();
     if (!email.trim() || !password.trim()) return;
-    if (!isLogin && !accessCode.trim()) {
-      onClearError?.();
-      alert("Enter your access code to create an account.");
-      return;
-    }
     if (!isLogin && !agreedToLegal) {
       alert("Please agree to the Terms of Use and Privacy Policy to continue.");
       return;
@@ -8807,7 +8806,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
     if (isLogin) {
       onLogIn(email, password);
     } else {
-      onSignUp(email, password, accessCode);
+      onSignUp(email, password);
     }
   }
 
@@ -8824,85 +8823,83 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
           <>
             <p>
               {isAccessDenied
-                ? "Enter an access code to create a beta account, join the waitlist, or log in if you already have access."
+                ? "Get MyBishBash with an invite code, join the waitlist, or log in if you already have access."
+                : isSignupBlocked
+                ? "Get MyBishBash is the invite gate. Enter your access code there first, or join the waitlist."
                 : isLogin
                 ? loginCopy
-                : "MyBishBash is invite-only right now. Enter your access code to create your account."}
+                : "Create your account with the access you already unlocked."}
             </p>
             {isLogin && isStandalone ? <p className="sync-note">Log in once here to reconnect this Home Screen shortcut.</p> : null}
             {error ? <p className="sync-error">{error}</p> : null}
 
-            <form className="sync-form" onSubmit={submitExisting}>
-              <div className="field">
-                <label htmlFor="sync-email">Email</label>
-                <input
-                  id="sync-email"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  className="settings-input"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  required
-                />
+            {isSignupBlocked ? (
+              <div className="sync-form">
+                <a className="save-button" href={`${BASE_PATH}/invite`}>Get MyBishBash</a>
+                <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(true)}>
+                  Log in
+                </button>
               </div>
-              <div className="field">
-                <label htmlFor="sync-password">Password</label>
-                <span className="password-field">
-                  <input
-                    id="sync-password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete={isLogin ? "current-password" : "new-password"}
-                    className="settings-input"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Password"
-                    required
-                  />
-                  <button type="button" className="password-toggle" onClick={() => setShowPassword((current) => !current)}>
-                    {showPassword ? "Hide" : "Show"}
+            ) : (
+              <>
+                <form className="sync-form" onSubmit={submitExisting}>
+                  <div className="field">
+                    <label htmlFor="sync-email">Email</label>
+                    <input
+                      id="sync-email"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      className="settings-input"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="sync-password">Password</label>
+                    <span className="password-field">
+                      <input
+                        id="sync-password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={isLogin ? "current-password" : "new-password"}
+                        className="settings-input"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Password"
+                        required
+                      />
+                      <button type="button" className="password-toggle" onClick={() => setShowPassword((current) => !current)}>
+                        {showPassword ? "Hide" : "Show"}
+                      </button>
+                    </span>
+                  </div>
+                  {!isLogin ? (
+                    <>
+                      <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>
+                        <input
+                          type="checkbox"
+                          checked={agreedToLegal}
+                          onChange={(e) => setAgreedToLegal(e.target.checked)}
+                          style={{ width: "auto", margin: 0 }}
+                        />
+                        <span style={{ lineHeight: "1.4" }}>
+                          I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
+                        </span>
+                      </label>
+                    </>
+                  ) : null}
+                  <button type="submit" className="save-button">
+                    {isLogin ? "Log In" : "Create Account"}
                   </button>
-                </span>
-              </div>
-              {!isLogin ? (
-                <div className="field">
-                  <label htmlFor="sync-access-code">Access code</label>
-                  <input
-                    id="sync-access-code"
-                    type="text"
-                    autoComplete="one-time-code"
-                    className="settings-input"
-                    value={accessCode}
-                    onChange={(event) => setAccessCode(event.target.value)}
-                    placeholder="Enter access code"
-                    required
-                  />
-                </div>
-              ) : null}
-              {!isLogin ? (
-            <>
-              <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>
-                <input
-                  type="checkbox"
-                  checked={agreedToLegal}
-                  onChange={(e) => setAgreedToLegal(e.target.checked)}
-                  style={{ width: "auto", margin: 0 }}
-                />
-                <span style={{ lineHeight: "1.4" }}>
-                  I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
-                </span>
-              </label>
-            </>
-          ) : null}
-              <button type="submit" className="save-button">
-                {isLogin ? "Log In" : "Create Account"}
-              </button>
-            </form>
+                </form>
 
-            <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
-              {isLogin ? "Enter access code" : "Log in"}
-            </button>
+                <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
+                  {isLogin ? "Create account" : "Log in"}
+                </button>
+              </>
+            )}
             <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}>
               Join waitlist
             </a>

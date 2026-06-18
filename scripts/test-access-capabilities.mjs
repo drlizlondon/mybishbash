@@ -75,6 +75,8 @@ assert.equal(
 
 const root = resolve(import.meta.dirname, "..");
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
+const downloadSource = readFileSync(resolve(root, "src", "DownloadPage.jsx"), "utf8");
+const appSource = readFileSync(resolve(root, "src", "App.jsx"), "utf8");
 
 assert.doesNotMatch(
   syncSource,
@@ -95,6 +97,31 @@ assert.doesNotMatch(
   syncSource,
   /LOCAL_INVITATION_CODES\s*=/,
   "invite codes must not be reintroduced as a client-side hardcoded fallback",
+);
+assert.match(
+  syncSource,
+  /getValidatedGateAccessCode\(\)/,
+  "signup must read the previously validated gate access code",
+);
+assert.match(
+  syncSource,
+  /validateAccessCode\(normalizedAccessCode\)/,
+  "signup must revalidate the remembered gate code before account creation",
+);
+assert.match(
+  downloadSource,
+  /validateAndRememberGateAccessCode/,
+  "the Get MyBishBash gate must validate and remember the entered code through the shared access layer",
+);
+assert.doesNotMatch(
+  downloadSource,
+  /TEMPORARY_ROLLOUT_CODE|ROLLOUT_ACCESS_KEY|normalized\s*===/,
+  "the public gate must not use a hardcoded code or boolean rollout flag",
+);
+assert.doesNotMatch(
+  appSource,
+  /id="sync-access-code"|htmlFor="sync-access-code"|Access code/,
+  "signup must not render a second access-code field",
 );
 
 // Clients must never write access/tester columns directly: the migration
