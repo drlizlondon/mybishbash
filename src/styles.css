@@ -7072,7 +7072,35 @@ body {
 }
 
 .sync-secondary-link {
-  margin-top: 4px;
+  margin: 0;
+}
+
+.sync-auth-switch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 18px;
+  border-top: 1px solid #f0e7de;
+  color: #7f766f;
+  font-size: 0.96rem;
+}
+
+.sync-auth-switch .sync-secondary-link {
+  font-weight: 800;
+  color: #9a5145;
+}
+
+.sync-waitlist-line {
+  margin: 0;
+  color: #8a8178;
+  font-size: 0.92rem;
+}
+
+.sync-waitlist-line .sync-secondary-link {
+  font-weight: 700;
 }
 
 .sync-waitlist-link {

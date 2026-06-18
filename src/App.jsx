@@ -8836,9 +8836,12 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
             {isSignupBlocked ? (
               <div className="sync-form">
                 <a className="save-button" href={`${BASE_PATH}/invite`}>Get MyBishBash</a>
-                <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(true)}>
-                  Log in
-                </button>
+                <div className="sync-auth-switch">
+                  <span>Already have an account?</span>
+                  <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(true)}>
+                    Log in
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -8895,14 +8898,17 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
                   </button>
                 </form>
 
-                <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
-                  {isLogin ? "Create account" : "Log in"}
-                </button>
+                <div className="sync-auth-switch">
+                  <span>{isLogin ? "Need an account?" : "Already have an account?"}</span>
+                  <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
+                    {isLogin ? "Sign up" : "Log in"}
+                  </button>
+                </div>
               </>
             )}
-            <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}>
-              Join waitlist
-            </a>
+            <p className="sync-waitlist-line">
+              No invite yet? <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}>Join waitlist</a>
+            </p>
           </>
         )}
       </section>
