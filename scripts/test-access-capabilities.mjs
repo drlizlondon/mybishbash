@@ -86,6 +86,16 @@ assert.match(
   /has_access,access_tier,access_expires_at/,
   "The session gate must read tier + expiry, not just has_access",
 );
+assert.match(
+  syncSource,
+  /mybishbash_access_code:\s*normalizedAccessCode/,
+  "signup must pass the validated access code into auth metadata so the database signup trigger can grant access",
+);
+assert.doesNotMatch(
+  syncSource,
+  /LOCAL_INVITATION_CODES\s*=/,
+  "invite codes must not be reintroduced as a client-side hardcoded fallback",
+);
 
 // Clients must never write access/tester columns directly: the migration
 // revokes the broad grants and replaces them with column-level ones, and the
