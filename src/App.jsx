@@ -66,7 +66,7 @@ import {
   fetchOwnAccessProfile,
   touchUserProfile,
 } from "./lib/mybishbashSync";
-import { CAPABILITIES, getCapabilities } from "./lib/accessCapabilities";
+import { CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
 import ExplorePanel from "./ExplorePanel";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
@@ -79,8 +79,7 @@ import {
   setWindowDefs,
   isValidWindowDefs,
   applyCardAction,
-  buildCommitmentCheckInCard,
-  buildEligibleCommitmentCheckInCards,
+  buildEligibleCommitmentLifecycleCards,
   buildCardsFromPack,
   createId,
   getGreeting,
@@ -90,7 +89,8 @@ import {
   getCurrentWindow,
   isEligible,
   isCommitmentCheckInCard,
-  isCommitmentCheckInEligible,
+  isCommitmentEncouragementCard,
+  isCommitmentReviewCard,
   isCommitmentLikeCard,
   isPackCardAvailable,
   normalizeCards,
@@ -192,6 +192,7 @@ const ACTIVE_PROTECTED_APP_CONTEXT_TTL_MS = 8 * 60 * 60 * 1000;
 const NATIVE_SCHEME_FALLBACK_MS = 1400;
 const INSTALLED_LAUNCHER_SHELL_KEY = "mybishbash.installed-launcher-shell.v1";
 const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalone-launcher-recovery.v1";
+const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .split(",")
@@ -314,6 +315,15 @@ function consumeStandaloneLauncherRecoverySuppression() {
 
 function isE2EModeEnabled() {
   return typeof window !== "undefined" && window.localStorage.getItem(E2E_MODE_KEY) === "true";
+}
+
+function loadExplicitLauncherBehaviorSettings() {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
 }
 
 function buildE2ESession() {
@@ -442,19 +452,12 @@ function isCommitmentCard(card) {
   return isCommitmentLikeCard(card);
 }
 
-function findCommitmentCheckInParent(cards, checkInCardId) {
-  const [, parentId] = String(checkInCardId ?? "").split(":");
-  return parentId ? cards.find((card) => card.id === parentId && isCommitmentCard(card)) ?? null : null;
-}
-
 function resolveRevealCard(cards, cardId, timezone) {
   if (!cardId) return null;
   const storedCard = cards.find((card) => card.id === cardId);
   if (storedCard) return storedCard;
-  const parent = findCommitmentCheckInParent(cards, cardId);
-  return parent && isCommitmentCheckInEligible(parent, new Date(), timezone)
-    ? buildCommitmentCheckInCard(parent, new Date(), timezone)
-    : null;
+  return buildEligibleCommitmentLifecycleCards(cards, new Date(), timezone)
+    .find((card) => card.id === cardId) ?? null;
 }
 
 function getCommitmentStartWindow(timingWindows = []) {
@@ -678,7 +681,7 @@ function getLauncherCardStats(currentCards, timezone, excludedCardIds = new Set(
   const normalized = normalizeCards(currentCards, now, timezone);
   const selectablePersonalCards = [
     ...normalized,
-    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+    ...buildEligibleCommitmentLifecycleCards(normalized, now, timezone),
   ];
   const activePackCards = normalized.filter((card) =>
     isPackCardAvailable(card) && !excludedCardIds.has(card.id)
@@ -702,7 +705,7 @@ function countEligibleGeneralCards(currentCards, timezone) {
   const normalized = normalizeCards(currentCards, now, timezone);
   const selectableCards = [
     ...normalized,
-    ...buildEligibleCommitmentCheckInCards(normalized, now, timezone),
+    ...buildEligibleCommitmentLifecycleCards(normalized, now, timezone),
   ];
   return selectableCards.filter((card) =>
     card.sourcePackId ? isPackCardAvailable(card) : isEligible(card, now, timezone) && !card.deletedAt
@@ -792,7 +795,9 @@ function buildHomeState({ cards = [], events = [], timezone, homeScreenVersions 
       !card.paused &&
       !card.disliked &&
       card.commitmentStatusToday === "made" &&
-      card.commitmentDecisionDate === todayKey
+      card.commitmentDecisionDate === todayKey &&
+      card.commitmentLifecycleStatus !== "closed_early" &&
+      card.commitmentLifecycleStatus !== "reviewed"
     )
     .sort((left, right) => new Date(right.commitmentDecisionAt ?? right.updatedAt ?? 0).getTime() - new Date(left.commitmentDecisionAt ?? left.updatedAt ?? 0).getTime());
   const activeCommitment = liveCommitments[0] ?? null;
@@ -1303,9 +1308,9 @@ function getLauncherCardActions({ launchSession, cardType }) {
 
   return {
     actions: [
-      { id: "not_done", label: "Not done", variant: "secondary" },
-      { id: "do_now", label: "I’ll do it now", variant: "secondary" },
       { id: "done", label: "Done", variant: "primary" },
+      { id: "do_now", label: "I’ll do it now", variant: "secondary" },
+      { id: "not_done", label: "Not done", variant: "secondary" },
     ],
   };
 }
@@ -1392,10 +1397,57 @@ function getCommitmentAcknowledgementMessage({ committed, checkInEnabled }) {
 }
 
 function getCommitmentCheckInOutcomeMessage(response) {
-  if (response === "Going perfectly") return "Excellent.\nKeep going today.";
-  if (response === "Could be better") return "That’s okay.\nThere’s still time today.";
-  return "That’s okay.\nTomorrow is another opportunity.";
+  if (response === "on_track") return "Good.\nKeep going.";
+  if (response === "somewhat_on_track") return null;
+  return "That’s okay.\nWe’ll leave this for another day.";
 }
+
+function getCommitmentReviewOutcomeMessage(response) {
+  if (response === "did_it") return "You did it.\nHold onto that.";
+  if (response === "nearly_did_it") return "That still counts.\nYou stayed close to it.";
+  return "That’s okay.\nYou can try again another time.";
+}
+
+const ONBOARDING_COMMITMENT_DEMO_CARD = {
+  id: "onboarding-commitment-demo",
+  cardKind: "commitment",
+  promptText: "I will go to the gym today.",
+  dashboardTitle: "Today’s Commitment",
+  commitmentReason: "I feel so good after a great workout at the gym.",
+  commitmentTimingMode: "anytime",
+  commitmentStartWindow: "anytime",
+  commitmentCheckInEnabled: true,
+  commitmentCheckInTime: "20:00",
+  timingWindows: ["day"],
+  frequency: "once_daily",
+  statusToday: "fresh",
+  deletedAt: null,
+};
+
+const ONBOARDING_COMMITMENT_DEMO_CHECK_IN_CARD = {
+  ...ONBOARDING_COMMITMENT_DEMO_CARD,
+  id: "onboarding-commitment-demo-check-in",
+  cardKind: "commitment_check_in",
+  parentCommitmentCardId: ONBOARDING_COMMITMENT_DEMO_CARD.id,
+};
+
+const ONBOARDING_COMMITMENT_DEMO_ENCOURAGEMENT_CARD = {
+  ...ONBOARDING_COMMITMENT_DEMO_CARD,
+  id: "onboarding-commitment-demo-encouragement",
+  cardKind: "commitment_encouragement",
+  parentCommitmentCardId: ONBOARDING_COMMITMENT_DEMO_CARD.id,
+  promptText: "You said you wanted to do this.",
+  dashboardTitle: "Commitment reminder",
+  commitmentText: ONBOARDING_COMMITMENT_DEMO_CARD.promptText,
+};
+
+const ONBOARDING_COMMITMENT_DEMO_REVIEW_CARD = {
+  ...ONBOARDING_COMMITMENT_DEMO_CARD,
+  id: "onboarding-commitment-demo-review",
+  cardKind: "commitment_review",
+  parentCommitmentCardId: ONBOARDING_COMMITMENT_DEMO_CARD.id,
+  dashboardTitle: "Commitment review",
+};
 
 function App() {
   if (typeof window !== "undefined") {
@@ -1410,7 +1462,7 @@ function App() {
       return <EarlyAccessPage />;
     }
 
-    if (normalizedPath === "/download") {
+    if (normalizedPath === "/download" || normalizedPath === "/invite") {
       return <DownloadPage />;
     }
 
@@ -1508,6 +1560,7 @@ function App() {
   // unknown/unavailable, which getCapabilities treats as the free tier, so
   // premium installs fail closed.
   const [accessProfile, setAccessProfile] = useState(null);
+  const [accessStatus, setAccessStatus] = useState(e2eMode ? "granted" : "unknown");
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
@@ -1658,6 +1711,10 @@ function App() {
       testerStatus,
     ]
   );
+  const explicitLauncherBehaviorSettings = useMemo(
+    () => loadExplicitLauncherBehaviorSettings(),
+    [launcherBehaviorSettings],
+  );
   const protectedAppStatuses = useMemo(() => {
     const candidateIds = Array.from(new Set([
       ...INTERRUPTION_LAUNCHER_CONTEXTS,
@@ -1680,11 +1737,14 @@ function App() {
     });
     return visibleVersions.map((version) => {
       const behavior = launcherBehaviorSettings[version.id] ?? {};
+      const explicitBehavior = explicitLauncherBehaviorSettings[version.id] ?? {};
+      const hasUserSetup = Object.prototype.hasOwnProperty.call(explicitBehavior, "useInterruptionPack");
       const pauseExpiry = getAppPauseExpiry(version.id);
       const paused = isAppPaused(version.id);
       return {
         version,
-        protectedOn: Boolean(behavior.useInterruptionPack ?? version.useInterruptionPack),
+        configured: hasUserSetup,
+        protectedOn: explicitBehavior.useInterruptionPack === true,
         pauseExpiry,
         paused,
         pauseRemaining: paused ? formatPauseRemaining(pauseExpiry) : "",
@@ -1692,6 +1752,7 @@ function App() {
     });
   }, [
     appPauseRevision,
+    explicitLauncherBehaviorSettings,
     homeScreenVersions,
     launcherBehaviorSettings,
     testerStatus,
@@ -1738,7 +1799,7 @@ function App() {
     if (!profile.hasCompletedProtectedAppSetup || !profile.selectedProtectedApp) {
       items.push({
         id: "protected-app",
-        label: "Add your first protected app",
+        label: "Choose your first app",
         action: "apps",
       });
     }
@@ -2194,11 +2255,21 @@ function App() {
   useEffect(() => {
     if (!authReady || e2eMode || !session?.user?.id) {
       setAccessProfile(null);
+      setAccessStatus(e2eMode ? "granted" : session?.user?.id ? "unknown" : "signed-out");
       return undefined;
     }
     let cancelled = false;
+    setAccessStatus("loading");
     fetchOwnAccessProfile(session.user.id).then((profileRow) => {
-      if (!cancelled) setAccessProfile(profileRow);
+      if (!cancelled) {
+        setAccessProfile(profileRow);
+        setAccessStatus(profileRow && isAccessActive(profileRow) ? "granted" : "denied");
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setAccessProfile(null);
+        setAccessStatus("denied");
+      }
     });
     return () => {
       cancelled = true;
@@ -2294,7 +2365,7 @@ function App() {
     const normalizedCards = normalizeCards(cards, routeNow, profile.timezone);
     const selectableCards = [
       ...normalizedCards,
-      ...buildEligibleCommitmentCheckInCards(normalizedCards, routeNow, profile.timezone),
+      ...buildEligibleCommitmentLifecycleCards(normalizedCards, routeNow, profile.timezone),
     ];
     const hasUsableCachedLauncherState =
       selectableCards.some((card) =>
@@ -2808,8 +2879,14 @@ function App() {
       activationKey,
       selectedPath: "personal_first_fallback",
     }, testerStatus);
+    const selectionNow = new Date();
+    const normalizedSelectionCards = normalizeCards(cards, selectionNow, profile.timezone);
+    const selectableSelectionCards = [
+      ...normalizedSelectionCards,
+      ...buildEligibleCommitmentLifecycleCards(normalizedSelectionCards, selectionNow, profile.timezone),
+    ];
     const fallbackDisplay = selectEligibleCard({
-      cards,
+      cards: selectableSelectionCards,
       timezone: profile.timezone,
       events: selectionEvents,
       excludedCardIds: launchCompletedCardIdsRef.current,
@@ -3152,7 +3229,7 @@ function App() {
       const normalizedDiagCards = normalizeCards(cards, routeNow, profile.timezone);
       const selectableDiagCards = [
         ...normalizedDiagCards,
-        ...buildEligibleCommitmentCheckInCards(normalizedDiagCards, routeNow, profile.timezone),
+        ...buildEligibleCommitmentLifecycleCards(normalizedDiagCards, routeNow, profile.timezone),
       ];
       const eligiblePersonalCount = selectableDiagCards.filter((c) => !c.sourcePackId && !c.deletedAt && isEligible(c, routeNow, profile.timezone)).length;
       const eligiblePackCount = normalizedDiagCards.filter(isPackCardAvailable).length;
@@ -3398,8 +3475,14 @@ function App() {
       });
 
       const launchAttemptId = createLaunchAttemptId("personal", "route");
+      const homeNow = new Date();
+      const normalizedHomeCards = normalizeCards(cards, homeNow, profile.timezone);
+      const selectableHomeCards = [
+        ...normalizedHomeCards,
+        ...buildEligibleCommitmentLifecycleCards(normalizedHomeCards, homeNow, profile.timezone),
+      ];
       const homeDecision = selectEligibleCard({
-        cards,
+        cards: selectableHomeCards,
         events,
         timezone: profile.timezone,
       });
@@ -4196,12 +4279,22 @@ function App() {
       notYetUntil: null,
       updatedAt: now.toISOString(),
       commitmentStatusToday: committed ? "made" : "declined",
+      commitmentLifecycleStatus: committed ? "active" : "declined",
       commitmentDecisionDate: todayKey,
       commitmentDecisionAt: now.toISOString(),
       commitmentCheckInPendingDate: committed && activeCard.commitmentCheckInEnabled ? todayKey : null,
+      commitmentCheckInShownDate: null,
       commitmentCheckInResponse: null,
       commitmentCheckInResponseDate: null,
       commitmentCheckInResponseAt: null,
+      commitmentEncouragementRequestedDate: null,
+      commitmentEncouragementCompletedDate: null,
+      commitmentClosedEarlyDate: null,
+      commitmentReviewDueDate: null,
+      commitmentReviewResponse: null,
+      commitmentReviewResponseDate: null,
+      commitmentReviewResponseAt: null,
+      commitmentFinalOutcome: null,
     };
     const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
     setCards(cardsAfterAction);
@@ -4288,6 +4381,8 @@ function App() {
 
     const now = new Date();
     const todayKey = getTodayKey(now, profile.timezone);
+    const closesEarly = response === "closed_early";
+    const needsEncouragement = response === "somewhat_on_track";
     const updatedCard = {
       ...parentCard,
       lastShownAt: now.toISOString(),
@@ -4295,7 +4390,13 @@ function App() {
       commitmentCheckInResponse: response,
       commitmentCheckInResponseDate: todayKey,
       commitmentCheckInResponseAt: now.toISOString(),
+      commitmentCheckInShownDate: todayKey,
       commitmentCheckInPendingDate: null,
+      commitmentLifecycleStatus: closesEarly ? "closed_early" : "active",
+      commitmentEncouragementRequestedDate: needsEncouragement ? todayKey : null,
+      commitmentEncouragementCompletedDate: needsEncouragement ? null : parentCard.commitmentEncouragementCompletedDate ?? null,
+      commitmentClosedEarlyDate: closesEarly ? todayKey : null,
+      commitmentReviewDueDate: closesEarly ? null : todayKey,
     };
     const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
     setCards(cardsAfterAction);
@@ -4315,6 +4416,7 @@ function App() {
         parentCommitmentCardId: parentCard.id,
         checkInTime: parentCard.commitmentCheckInTime ?? "",
         response,
+        phase: "in_progress",
       },
     });
     void logEvent({
@@ -4333,16 +4435,147 @@ function App() {
         surface: getCardSelectionSurfaceForOverlay(overlay),
         parentCommitmentCardId: parentCard.id,
         checkInTime: parentCard.commitmentCheckInTime ?? "",
+        response,
+        phase: "in_progress",
         origin: overlay.origin ?? null,
         launchSource: overlay.launchSource ?? null,
         activationKey: overlay?.activationKey ?? null,
       },
     });
 
+    if (needsEncouragement) {
+      const encouragementCard = buildEligibleCommitmentLifecycleCards(cardsAfterAction, now, profile.timezone)
+        .find((candidate) => candidate.parentCommitmentCardId === parentCard.id && isCommitmentEncouragementCard(candidate));
+      if (encouragementCard) {
+        setOverlay({
+          ...overlay,
+          type: "reveal",
+          cardId: encouragementCard.id,
+          phase: null,
+        });
+        return;
+      }
+    }
+
     handleRevealCompletion({
       cardsOverride: cardsAfterAction,
       completedCardId: activeCard.id,
       confirmationMessage: getCommitmentCheckInOutcomeMessage(response),
+      confirmationActionLabel: "Continue",
+    });
+  }
+
+  function handleCommitmentEncouragementAction() {
+    if (!overlay || overlay.type !== "reveal") return;
+
+    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
+    if (!activeCard || !isCommitmentEncouragementCard(activeCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
+    if (!parentCard || !isCommitmentCard(parentCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const updatedCard = {
+      ...parentCard,
+      lastShownAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      commitmentEncouragementCompletedDate: todayKey,
+      commitmentLifecycleStatus: "active",
+      commitmentReviewDueDate: parentCard.commitmentReviewDueDate ?? todayKey,
+    };
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
+
+    void logEvent({
+      event_type: "commitment_encouragement_completed",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: parentCard.id,
+      bash_title: parentCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Commitment reminder",
+      card_text: activeCard.promptText,
+      action_taken: "continued",
+      metadata: {
+        cardKind: "commitment_encouragement",
+        parentCommitmentCardId: parentCard.id,
+        phase: "encouragement",
+      },
+    });
+
+    handleRevealCompletion({
+      cardsOverride: cardsAfterAction,
+      completedCardId: activeCard.id,
+      confirmationMessage: "Good.\nKeep this with you.",
+      confirmationActionLabel: "Continue",
+    });
+  }
+
+  function handleCommitmentReviewAction(response) {
+    if (!overlay || overlay.type !== "reveal") return;
+
+    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
+    if (!activeCard || !isCommitmentReviewCard(activeCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
+    if (!parentCard || !isCommitmentCard(parentCard)) {
+      setOverlay(null);
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = getTodayKey(now, profile.timezone);
+    const finalOutcome = response === "did_it"
+      ? "completed"
+      : response === "nearly_did_it"
+        ? "partially_completed"
+        : "not_completed";
+    const updatedCard = {
+      ...parentCard,
+      lastShownAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      commitmentLifecycleStatus: "reviewed",
+      commitmentReviewResponse: response,
+      commitmentReviewResponseDate: todayKey,
+      commitmentReviewResponseAt: now.toISOString(),
+      commitmentFinalOutcome: finalOutcome,
+    };
+    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+    setCards(cardsAfterAction);
+
+    void logEvent({
+      event_type: "commitment_review",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: parentCard.id,
+      bash_title: parentCard.promptText,
+      card_id: activeCard.id,
+      card_title: "Commitment review",
+      card_text: parentCard.promptText,
+      action_taken: response,
+      metadata: {
+        cardKind: "commitment_review",
+        parentCommitmentCardId: parentCard.id,
+        response,
+        finalOutcome,
+        phase: "review",
+      },
+    });
+
+    handleRevealCompletion({
+      cardsOverride: cardsAfterAction,
+      completedCardId: activeCard.id,
+      confirmationMessage: getCommitmentReviewOutcomeMessage(response),
       confirmationActionLabel: "Continue",
     });
   }
@@ -4367,9 +4600,19 @@ function App() {
         commitmentCheckInEnabled: Boolean(formData.commitmentCheckInEnabled),
         commitmentCheckInTime: formData.commitmentCheckInEnabled ? formData.commitmentCheckInTime ?? "" : "",
         commitmentCheckInPendingDate: null,
+        commitmentLifecycleStatus: null,
+        commitmentCheckInShownDate: null,
         commitmentCheckInResponse: null,
         commitmentCheckInResponseDate: null,
         commitmentCheckInResponseAt: null,
+        commitmentEncouragementRequestedDate: null,
+        commitmentEncouragementCompletedDate: null,
+        commitmentClosedEarlyDate: null,
+        commitmentReviewDueDate: null,
+        commitmentReviewResponse: null,
+        commitmentReviewResponseDate: null,
+        commitmentReviewResponseAt: null,
+        commitmentFinalOutcome: null,
         theme: formData.theme,
         icon: formData.icon,
         statusToday: "fresh",
@@ -4403,9 +4646,19 @@ function App() {
                   commitmentDecisionDate: card.commitmentDecisionDate ?? null,
                   commitmentDecisionAt: card.commitmentDecisionAt ?? null,
                   commitmentCheckInPendingDate: card.commitmentCheckInPendingDate ?? null,
+                  commitmentLifecycleStatus: card.commitmentLifecycleStatus ?? null,
+                  commitmentCheckInShownDate: card.commitmentCheckInShownDate ?? null,
                   commitmentCheckInResponse: card.commitmentCheckInResponse ?? null,
                   commitmentCheckInResponseDate: card.commitmentCheckInResponseDate ?? null,
                   commitmentCheckInResponseAt: card.commitmentCheckInResponseAt ?? null,
+                  commitmentEncouragementRequestedDate: card.commitmentEncouragementRequestedDate ?? null,
+                  commitmentEncouragementCompletedDate: card.commitmentEncouragementCompletedDate ?? null,
+                  commitmentClosedEarlyDate: card.commitmentClosedEarlyDate ?? null,
+                  commitmentReviewDueDate: card.commitmentReviewDueDate ?? null,
+                  commitmentReviewResponse: card.commitmentReviewResponse ?? null,
+                  commitmentReviewResponseDate: card.commitmentReviewResponseDate ?? null,
+                  commitmentReviewResponseAt: card.commitmentReviewResponseAt ?? null,
+                  commitmentFinalOutcome: card.commitmentFinalOutcome ?? null,
                 }
               : card,
           ),
@@ -4570,9 +4823,19 @@ function App() {
         commitmentDecisionDate: null,
         commitmentDecisionAt: null,
         commitmentCheckInPendingDate: null,
+        commitmentLifecycleStatus: null,
+        commitmentCheckInShownDate: null,
         commitmentCheckInResponse: null,
         commitmentCheckInResponseDate: null,
         commitmentCheckInResponseAt: null,
+        commitmentEncouragementRequestedDate: null,
+        commitmentEncouragementCompletedDate: null,
+        commitmentClosedEarlyDate: null,
+        commitmentReviewDueDate: null,
+        commitmentReviewResponse: null,
+        commitmentReviewResponseDate: null,
+        commitmentReviewResponseAt: null,
+        commitmentFinalOutcome: null,
         paused: false,
         deletedAt: null,
         sourcePackId: null,
@@ -4607,9 +4870,19 @@ function App() {
         return {
           ...resetCard,
           commitmentCheckInPendingDate: null,
+          commitmentLifecycleStatus: null,
+          commitmentCheckInShownDate: null,
           commitmentCheckInResponse: null,
           commitmentCheckInResponseDate: null,
           commitmentCheckInResponseAt: null,
+          commitmentEncouragementRequestedDate: null,
+          commitmentEncouragementCompletedDate: null,
+          commitmentClosedEarlyDate: null,
+          commitmentReviewDueDate: null,
+          commitmentReviewResponse: null,
+          commitmentReviewResponseDate: null,
+          commitmentReviewResponseAt: null,
+          commitmentFinalOutcome: null,
         };
       }),
     );
@@ -5004,9 +5277,6 @@ function App() {
 
     setOverlay(null);
     setMenuOpenId(null);
-    signupOnboardingPendingRef.current = false;
-    setSignupOnboardingPending(false);
-    setSetupComplete(true);
     setShouldLaunchOverlay(false);
   }
 
@@ -5104,7 +5374,6 @@ function App() {
     setMenuOpenId(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    setSetupComplete(true);
     setShouldLaunchOverlay(false);
   }
 
@@ -5133,7 +5402,7 @@ function App() {
     }));
   }
 
-  function completeProtectedAppOnboarding({ appId, completed }) {
+  function completeProtectedAppOnboarding({ appId, completed, useInterruptionCard = false }) {
     const supportedLauncherId = isKnownLauncher(appId) ? appId : "instagram";
     const now = new Date().toISOString();
     setProfile((current) => ({
@@ -5149,7 +5418,7 @@ function App() {
         ...current,
         [supportedLauncherId]: {
           ...(current[supportedLauncherId] || {}),
-          useInterruptionPack: true,
+          useInterruptionPack: Boolean(useInterruptionCard),
           interruptionPaused: false,
         },
       }));
@@ -5341,7 +5610,7 @@ function App() {
     navigateTo("/onboarding", { replace: true });
   }
 
-  async function handleSignUp(email, password) {
+  async function handleSignUp(email, password, accessCode) {
     setSyncStatus("loading");
     setSyncError("");
     signupOnboardingPendingRef.current = true;
@@ -5353,7 +5622,7 @@ function App() {
       action_taken: "started",
     });
     try {
-      const createdSession = await signUp(email, password);
+      const createdSession = await signUp(email, password, accessCode);
       void logEvent({
         event_type: "signup_completed",
         source_type: "auth",
@@ -5905,8 +6174,31 @@ function App() {
     [handleSaveVersionBehavior],
   );
 
+  const hasLocalCards = cards.length > 0;
+  const routeLauncherName = route.kind === "intercept"
+    ? homeScreenVersions[route.versionId]?.realAppLabel
+      ?? homeScreenVersions[route.versionId]?.displayName
+      ?? homeScreenVersions[route.versionId]?.name
+      ?? getLauncherConfig(route.versionId)?.displayName
+      ?? getLauncherConfig(route.versionId)?.name
+      ?? route.versionId
+    : "";
+
   if (!authReady && !isFakeLauncherFlow) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
+  }
+
+  if (authReady && route.kind === "intercept" && !session && !e2eMode && !hasLocalCards) {
+    return (
+      <SyncConnectionScreen
+        mode="launcher"
+        error={syncError}
+        launcherName={routeLauncherName}
+        onSignUp={handleSignUp}
+        onLogIn={handleLogIn}
+        onClearError={() => setSyncError("")}
+      />
+    );
   }
 
   if (!session && !isFakeLauncherFlow) {
@@ -5921,9 +6213,24 @@ function App() {
     );
   }
 
+  if (session && !e2eMode && !isFakeLauncherFlow && (accessStatus === "loading" || accessStatus === "unknown")) {
+    return <SyncConnectionScreen mode="loading" error={syncError} />;
+  }
+
+  if (session && !e2eMode && !isFakeLauncherFlow && accessStatus === "denied") {
+    return (
+      <SyncConnectionScreen
+        mode="access-denied"
+        error={syncError || "This account does not have beta access yet."}
+        onSignUp={handleSignUp}
+        onLogIn={handleLogIn}
+        onClearError={() => setSyncError("")}
+      />
+    );
+  }
+
   // Skip the sync loading screen when the user is offline but already has local
   // cards — show the cached experience instead of a spinner.
-  const hasLocalCards = cards.length > 0;
   if (session && syncStatus === "loading" && !isFakeLauncherFlow && !(isOffline && hasLocalCards)) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
@@ -6030,6 +6337,7 @@ function App() {
                   selectedVersionId={route.versionId}
                   appPauseRevision={appPauseRevision}
                   pendingOnboardingShortcuts={pendingOnboardingShortcuts}
+                  isTester={testerStatus?.is_tester === true}
                 />
               ) : null}
 
@@ -6168,7 +6476,7 @@ function App() {
               <span>Log</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => {
-              signalHomeSpotlightAction("packs");
+              signalHomeSpotlightAction("explore");
               navigateTo("/explore");
             }}>
               <PacksGlyph />
@@ -6199,6 +6507,13 @@ function App() {
           onCommitmentDemoComplete={completeCommitmentCardDemo}
           onUpdateShortcutSetup={updateOnboardingShortcutSetup}
           onCompleteProtectedAppSetup={completeProtectedAppOnboarding}
+          onSaveProtectedAppPreference={({ appId, useInterruptionCard }) => {
+            if (!isKnownLauncher(appId)) return;
+            handleSaveVersionBehavior(appId, {
+              useInterruptionPack: Boolean(useInterruptionCard),
+              interruptionPaused: false,
+            });
+          }}
           onTryLauncher={(launcherId) => finishOnboarding("try", launcherId)}
           onGoHome={() => finishOnboarding("home")}
           availableLaunchers={getAvailableLaunchersForUser({
@@ -6206,6 +6521,51 @@ function App() {
             testerStatus,
             context: LAUNCHER_CONTEXTS.ONBOARDING,
           })}
+          renderCommitmentDemoCard={({ onCommitmentAction }) => (
+            <CommitmentCardOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_CARD}
+              onCommitmentAction={onCommitmentAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-demo"
+            />
+          )}
+          renderCommitmentMotivationDemoCard={({ onCommitmentAction }) => (
+            <CommitmentMotivationOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_CARD}
+              onCommitmentAction={onCommitmentAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-motivation-demo"
+            />
+          )}
+          renderCommitmentCheckInDemoCard={({ onCheckInAction }) => (
+            <CommitmentCheckInOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_CHECK_IN_CARD}
+              onCheckInAction={onCheckInAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-check-in-demo"
+            />
+          )}
+          renderCommitmentEncouragementDemoCard={({ onContinue }) => (
+            <CommitmentEncouragementOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_ENCOURAGEMENT_CARD}
+              onContinue={onContinue}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-encouragement-demo"
+            />
+          )}
+          renderCommitmentReviewDemoCard={({ onReviewAction }) => (
+            <CommitmentReviewOverlay
+              card={ONBOARDING_COMMITMENT_DEMO_REVIEW_CARD}
+              onReviewAction={onReviewAction}
+              showDashboardShortcut={false}
+              className="onboarding-commitment-real-card"
+              cardOverlayKey="onboarding-commitment-review-demo"
+            />
+          )}
         />
       ) : null}
 
@@ -6317,6 +6677,8 @@ function App() {
           onAction={handleAction}
           onCommitmentAction={handleCommitmentAction}
           onCommitmentCheckInAction={handleCommitmentCheckInAction}
+          onCommitmentEncouragementAction={handleCommitmentEncouragementAction}
+          onCommitmentReviewAction={handleCommitmentReviewAction}
           onCreateCard={openCardComposerFromCurrentRoute}
           actionCards={actionCards}
           onAcceptActionCard={(card) => {
@@ -6919,52 +7281,41 @@ function Masthead({ onCreate, onOpenSettings }) {
 
 const HOME_SPOTLIGHT_STEPS = [
   {
-    id: "day",
-    selector: '[data-testid="home-progress-card"]',
-    title: "This is your day",
-    body: "See what you’ve completed and what still matters.",
+    id: "home",
+    selector: '[data-testid="home-panel"]',
+    title: "Home",
+    body: "Start here when you want to see what matters today.",
     button: "Next",
   },
   {
-    id: "progress",
+    id: "personal-cards",
     selector: '[data-testid="home-progress-ring"]',
-    title: "Track your progress",
-    body: "The circle fills as you complete Personal Cards.",
+    title: "Personal Cards",
+    body: "These are the reminders you chose for yourself.",
     button: "Next",
   },
   {
-    id: "today-cards",
-    selector: '[data-testid="home-progress-card"]',
-    title: "See today’s cards",
-    body: "Tap here to see your Personal Cards for today.",
-    button: "Tap the card",
+    id: "commitments",
+    selector: '[data-testid="home-live-commitment-card"]',
+    title: "Commitments",
+    body: "Optional promises to yourself live here when you make one.",
+    button: "Next",
+  },
+  {
+    id: "explore",
+    selector: '[data-testid="bottom-nav-explore"]',
+    title: "Explore",
+    body: "Find more ideas when you want them.",
+    button: "Tap Explore",
     advanceOnTargetClick: true,
     allowTargetDefault: true,
-  },
-  {
-    id: "personal-card",
-    selector: '[data-testid="create-card-button"]',
-    title: "Create a Personal Card",
-    body: "Add reminders for things you genuinely mean to do.",
-    button: "Tap +",
-    advanceOnTargetClick: true,
-    allowTargetDefault: false,
   },
   {
     id: "apps",
     selector: '[data-testid="bottom-nav-apps"]',
-    title: "Connect more apps",
-    body: "Choose where your Personal Cards can appear.",
+    title: "Apps",
+    body: "Manage where MyBishBash appears and how each app opens.",
     button: "Tap Apps",
-    advanceOnTargetClick: true,
-    allowTargetDefault: true,
-  },
-  {
-    id: "packs",
-    selector: '[data-testid="bottom-nav-explore"]',
-    title: "Try a Pack",
-    body: "Use ready-made reminders for a goal or season.",
-    button: "Tap Explore",
     advanceOnTargetClick: true,
     allowTargetDefault: true,
   },
@@ -6972,7 +7323,7 @@ const HOME_SPOTLIGHT_STEPS = [
     id: "ready",
     selector: '[data-testid="app-shell"]',
     title: "You’re ready",
-    body: "Make your phone work for you.",
+    body: "You can come back to Apps whenever you want to change an app.",
     button: "Done",
   },
 ];
@@ -7104,7 +7455,7 @@ function HomePanel({
     ? "No Personal Cards yet."
     : completed === total
       ? `All ${total} ${personalCardNoun} complete today.`
-      : `${completed} of ${total} ${personalCardNoun} complete today.`;
+      : `${completed} of ${total} card${total === 1 ? "" : "s"} completed today.`;
   const progressSubcopy = total === 0 ? "Create one when you are ready." : "";
   const canOpenCommitment = Boolean(homeState.activeCommitment?.id);
   const hasLiveCommitment = Boolean(homeState.activeCommitment);
@@ -7115,7 +7466,9 @@ function HomePanel({
       ? "Commitments complete"
       : "No live commitment";
   const emptyCommitmentTitle = homeState.hasCompletedCommitmentToday ? "You’re clear for now." : "You’re clear for now.";
-  const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-logo-mark.png`;
+  const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-cover.png`;
+  const greeting = getGreeting(new Date(), timezone);
+  const hasMeaningfulSetup = activationChecklistItems.length === 0 || cards.length > 0 || pendingOnboardingShortcuts.length > 0;
 
   const openProgressCard = () => {
     onOpenTodayCards?.();
@@ -7171,14 +7524,14 @@ function HomePanel({
       <div className="home-content">
         <header className="home-brand-hero">
           <img className="home-brand-logo" src={logoSrc} alt="MyBishBash" />
-          <h1>Good afternoon</h1>
-          <p>Day {homeState.usageDays || 1} with MyBishBash</p>
+          <h1>{greeting}</h1>
+          <p>{hasMeaningfulSetup ? `Day ${homeState.usageDays || 1} with MyBishBash` : "Welcome to MyBishBash"}</p>
         </header>
 
         <div className="home-card-stack" data-testid="home-dashboard-summary">
           {activationChecklistItems.length > 0 ? (
             <section className="home-activation-checklist" data-testid="home-activation-checklist" aria-labelledby="home-activation-title">
-              <h2 id="home-activation-title">Finish setting up MyBishBash</h2>
+              <h2 id="home-activation-title">Your next step</h2>
               <div className="home-activation-items">
                 {activationChecklistItems.map((item) => (
                   <button
@@ -8409,9 +8762,10 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal }) {
+function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal, launcherName = "" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -8420,6 +8774,18 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   const [agreedToLegal, setAgreedToLegal] = useState(false);
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+  const isLauncherLogin = mode === "launcher";
+  const isAccessDenied = mode === "access-denied";
+  const title = isLauncherLogin
+    ? "Welcome back to MyBishBash"
+    : isAccessDenied
+      ? "MyBishBash is invite-only right now."
+    : isLogin
+      ? "MyBishBash"
+      : "Create your MyBishBash account";
+  const loginCopy = isLauncherLogin
+    ? `Log in to continue to your ${launcherName || "app"} launcher.`
+    : "Log in to sync this shortcut with your MyBishBash profile.";
   function switchMode(nextIsLogin) {
     setIsLogin(nextIsLogin);
     setShowPassword(false);
@@ -8429,6 +8795,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   function submitExisting(event) {
     event.preventDefault();
     if (!email.trim() || !password.trim()) return;
+    if (!isLogin && !accessCode.trim()) {
+      onClearError?.();
+      alert("Enter your access code to create an account.");
+      return;
+    }
     if (!isLogin && !agreedToLegal) {
       alert("Please agree to the Terms of Use and Privacy Policy to continue.");
       return;
@@ -8436,7 +8807,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
     if (isLogin) {
       onLogIn(email, password);
     } else {
-      onSignUp(email, password);
+      onSignUp(email, password, accessCode);
     }
   }
 
@@ -8446,17 +8817,19 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
         <span className="sync-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h1>{isLogin ? "MyBishBash" : "Create your MyBishBash account"}</h1>
+        <h1>{title}</h1>
         {mode === "loading" ? (
           <p>Loading your shared MyBishBash...</p>
         ) : (
           <>
             <p>
-              {isLogin
-                ? "Log in to sync this shortcut with your MyBishBash profile."
-                : "Create your account. After that, you’ll only need to log in."}
+              {isAccessDenied
+                ? "Enter an access code to create a beta account, join the waitlist, or log in if you already have access."
+                : isLogin
+                ? loginCopy
+                : "MyBishBash is invite-only right now. Enter your access code to create your account."}
             </p>
-            {isLogin && isStandalone ? <p className="sync-note">iOS Home Screen shortcuts require you to log in once per shortcut.</p> : null}
+            {isLogin && isStandalone ? <p className="sync-note">Log in once here to reconnect this Home Screen shortcut.</p> : null}
             {error ? <p className="sync-error">{error}</p> : null}
 
             <form className="sync-form" onSubmit={submitExisting}>
@@ -8493,6 +8866,21 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
                 </span>
               </div>
               {!isLogin ? (
+                <div className="field">
+                  <label htmlFor="sync-access-code">Access code</label>
+                  <input
+                    id="sync-access-code"
+                    type="text"
+                    autoComplete="one-time-code"
+                    className="settings-input"
+                    value={accessCode}
+                    onChange={(event) => setAccessCode(event.target.value)}
+                    placeholder="Enter access code"
+                    required
+                  />
+                </div>
+              ) : null}
+              {!isLogin ? (
             <>
               <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>
                 <input
@@ -8502,7 +8890,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
                   style={{ width: "auto", margin: 0 }}
                 />
                 <span style={{ lineHeight: "1.4" }}>
-                  I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
+                  I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
                 </span>
               </label>
             </>
@@ -8513,8 +8901,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
             </form>
 
             <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
-              {isLogin ? "Need an account? Sign Up" : "Already have an account? Log In"}
+              {isLogin ? "Enter access code" : "Log in"}
             </button>
+            <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}>
+              Join waitlist
+            </a>
           </>
         )}
       </section>
@@ -8638,6 +9029,7 @@ function AppsPanel({
   onLogLauncherEvent,
   selectedVersionId = null,
   appPauseRevision = 0,
+  isTester = false,
 }) {
   const [selectedAppId, setSelectedAppId] = useState(selectedVersionId ?? protectedAppStatuses[0]?.version?.id ?? "");
   const [, setClockTick] = useState(0);
@@ -8660,7 +9052,13 @@ function AppsPanel({
     protectedAppStatuses[0] ??
     null;
   const activePauses = protectedAppStatuses.filter((status) => status.paused);
-  const protectedCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
+  const configuredCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
+  const appCountLabel =
+    configuredCount === 0
+      ? "No apps set up yet."
+      : configuredCount === 1
+        ? "1 app set up."
+        : `${configuredCount} apps set up.`;
   const shortcutContexts = {
     safari: "Personal reminders + Safari prompts",
     instagram: "Personal reminders + Instagram prompts",
@@ -8684,7 +9082,7 @@ function AppsPanel({
 
       <div className="settings-card settings-compact" data-testid="apps-status-summary">
         <div className="settings-version-heading">
-          <p>{protectedCount} app{protectedCount === 1 ? "" : "s"} using MyBishBash</p>
+          <p>{appCountLabel}</p>
           <span>
             {activePauses.length > 0
               ? `${activePauses.length} active pause${activePauses.length === 1 ? "" : "s"}`
@@ -8786,6 +9184,7 @@ function AppsPanel({
                 onPauseApp={onPauseApp}
                 onClearAppPause={onClearAppPause}
                 onLogLauncherEvent={onLogLauncherEvent}
+                isTester={isTester}
               />
             ) : null}
           </>
@@ -8807,6 +9206,7 @@ function ProtectedAppCard({
   onPauseApp,
   onClearAppPause,
   onLogLauncherEvent,
+  isTester = false,
 }) {
   const { version, protectedOn, paused, pauseRemaining } = status;
   const [showPauseModal, setShowPauseModal] = useState(false);
@@ -8820,8 +9220,12 @@ function ProtectedAppCard({
   const currentPack = behavior.interruptionPackId || version.defaultInterruptionPackId || DEFAULT_INTERRUPTION_PACKS[version.id]?.id
     ? appPack.title
     : "Personal reminders";
-  const shortcutInstalled = protectedOn ? "Using MyBishBash" : "Ready to set up";
-  const pauseStatus = paused ? pauseRemaining || "Ending soon" : "None";
+  const shortcutInstalled = paused
+    ? `Paused until ${pauseRemaining || "soon"}`
+    : protectedOn
+      ? "Using MyBishBash"
+      : "Not set up";
+  const pauseStatus = paused ? `Paused until ${pauseRemaining || "soon"}` : "None";
 
   return (
     <article className="home-screen-version-card" data-testid={`protected-app-${version.id}`}>
@@ -8845,15 +9249,15 @@ function ProtectedAppCard({
         </div>
         <dl className="apps-current-details">
           <div>
-            <dt>Current Experience</dt>
-            <dd>{protectedOn ? currentExperience ?? `Personal reminders + ${appName} prompts` : "Open normally"}</dd>
+          <dt>WHAT YOU’LL SEE</dt>
+            <dd>{protectedOn ? currentExperience ?? `Personal reminders + ${appName} prompts` : "Not set up"}</dd>
           </div>
           <div>
-            <dt>Current Pack</dt>
+            <dt>ACTIVE PACK</dt>
             <dd>{protectedOn ? currentPack : "None"}</dd>
           </div>
           <div>
-            <dt>Current Pause</dt>
+            <dt>PAUSE</dt>
             <dd data-testid={`apps-pause-status-${version.id}`}>{pauseStatus}</dd>
           </div>
         </dl>
@@ -8922,41 +9326,45 @@ function ProtectedAppCard({
             }}
           />
         ) : null}
-        <button
-          type="button"
-          className="pack-button secondary"
-          data-testid={`apps-test-shortcut-${version.id}`}
-          onClick={() => onProtectedLaunch(version.id)}
-        >
-          Test Shortcut
-        </button>
-        <button
-          type="button"
-          className="pack-button secondary"
-          data-testid={`apps-direct-open-${version.id}`}
-          onClick={() => onOpenDestinationApp(version.id)}
-        >
-          Open {appName}
-        </button>
-        <label className="icon-upload-button">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = () => {
-                if (typeof reader.result === "string") {
-                  onUpdateHomeScreenIcon(version.id, reader.result);
-                }
-              };
-              reader.readAsDataURL(file);
-              event.target.value = "";
-            }}
-          />
-          Replace icon
-        </label>
+        {isTester ? (
+          <>
+            <button
+              type="button"
+              className="pack-button secondary"
+              data-testid={`apps-test-shortcut-${version.id}`}
+              onClick={() => onProtectedLaunch(version.id)}
+            >
+              Test Shortcut
+            </button>
+            <button
+              type="button"
+              className="pack-button secondary"
+              data-testid={`apps-direct-open-${version.id}`}
+              onClick={() => onOpenDestinationApp(version.id)}
+            >
+              Open {appName}
+            </button>
+            <label className="icon-upload-button">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    if (typeof reader.result === "string") {
+                      onUpdateHomeScreenIcon(version.id, reader.result);
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                  event.target.value = "";
+                }}
+              />
+              Replace icon
+            </label>
+          </>
+        ) : null}
       </div>
     </article>
   );
@@ -9523,6 +9931,8 @@ function Overlay({
   onAction,
   onCommitmentAction,
   onCommitmentCheckInAction,
+  onCommitmentEncouragementAction,
+  onCommitmentReviewAction,
   onCreateCard,
   onPackContinue,
   onPackLike,
@@ -9919,6 +10329,44 @@ function Overlay({
     );
   }
 
+  if (isCommitmentEncouragementCard(card)) {
+    return (
+      <CommitmentEncouragementOverlay
+        card={card}
+        onContinue={onCommitmentEncouragementAction}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
+      />
+    );
+  }
+
+  if (isCommitmentReviewCard(card)) {
+    return (
+      <CommitmentReviewOverlay
+        card={card}
+        onReviewAction={onCommitmentReviewAction}
+        launcherVersions={directLauncherVersions}
+        onLauncherLaunch={handleDirectLauncherLaunch}
+        onDashboard={onDashboard}
+        onCreateCard={onCreateCard}
+        cardOverlayKey={cardOverlayKey}
+        className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+        launcherAppId={launcherAppId}
+        launcherAppName={launcherAppName}
+        onPauseApp={onPauseCurrentApp}
+        onManageApp={onManageApp}
+      />
+    );
+  }
+
   if (isCommitmentCheckInCard(card)) {
     return (
       <CommitmentCheckInOverlay
@@ -10058,6 +10506,7 @@ function CommitmentCardOverlay({
   launcherAppName = null,
   onPauseApp = null,
   onManageApp = null,
+  showDashboardShortcut = true,
 }) {
   const shownRef = useRef(false);
   const commitmentText = stripCommitmentPrefix(card.promptText);
@@ -10080,7 +10529,7 @@ function CommitmentCardOverlay({
       type="personal"
       greeting="TODAY’S COMMITMENT"
       icon="heart"
-      headline={`I will\n${commitmentText}`}
+      headline={`I will ${commitmentText}`}
       subtitle=""
       actions={[
         { label: "I will commit to this", variant: "primary", onClick: () => onCommitmentAction("commit") },
@@ -10106,6 +10555,7 @@ function CommitmentCardOverlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
       onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
     />
   );
 }
@@ -10123,7 +10573,9 @@ function CommitmentMotivationOverlay({
   launcherAppName = null,
   onPauseApp = null,
   onManageApp = null,
+  showDashboardShortcut = true,
 }) {
+  const commitmentText = stripCommitmentPrefix(card.commitmentText ?? card.promptText ?? "");
   return (
     <CardRevealTemplate
       variant="personal"
@@ -10145,11 +10597,13 @@ function CommitmentMotivationOverlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
       onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
     >
       <div className="commitment-motivation-copy">
         <p className="commitment-motivation-intro">Before you decide...</p>
+        {commitmentText ? <CardRevealMessage className="commitment-motivation-commitment" message={`I will ${commitmentText}`} /> : null}
         <p className="commitment-motivation-subline">You wrote this to yourself:</p>
-        <CardRevealMessage message={card.commitmentReason} />
+        <CardRevealMessage className="commitment-motivation-reason" message={card.commitmentReason} />
       </div>
     </CardRevealTemplate>
   );
@@ -10168,18 +10622,19 @@ function CommitmentCheckInOverlay({
   launcherAppName = null,
   onPauseApp = null,
   onManageApp = null,
+  showDashboardShortcut = true,
 }) {
   return (
-    <PremiumCardScreen
+      <PremiumCardScreen
       type="personal"
-      greeting="How is it going?"
+      greeting="How’s it going?"
       icon="heart"
       headline={card.promptText}
       subtitle=""
       actions={[
-        { label: "Going perfectly", variant: "primary", onClick: () => onCheckInAction("Going perfectly") },
-        { label: "Could be better", variant: "secondary", onClick: () => onCheckInAction("Could be better") },
-        { label: "Not going well", variant: "secondary", onClick: () => onCheckInAction("Not going well") },
+        { label: "I’m on track", variant: "primary", onClick: () => onCheckInAction("on_track") },
+        { label: "I’m somewhat on track", variant: "secondary", onClick: () => onCheckInAction("somewhat_on_track") },
+        { label: "Let’s leave this for another day", variant: "secondary", onClick: () => onCheckInAction("closed_early") },
       ]}
       launcherVersions={launcherVersions}
       onLauncherLaunch={onLauncherLaunch}
@@ -10191,6 +10646,90 @@ function CommitmentCheckInOverlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseApp}
       onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
+    />
+  );
+}
+
+function CommitmentEncouragementOverlay({
+  card,
+  onContinue,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
+  onManageApp = null,
+  showDashboardShortcut = true,
+}) {
+  const commitmentText = stripCommitmentPrefix(card.commitmentText ?? card.promptText ?? "");
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting="Reminder"
+      icon="heart"
+      headline={commitmentText ? `I will ${commitmentText}` : card.promptText}
+      subtitle={commitmentText ? card.promptText : "Keep going with what you said mattered."}
+      actions={[
+        { label: "Continue", variant: "primary", onClick: onContinue },
+      ]}
+      launcherVersions={launcherVersions}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
+    />
+  );
+}
+
+function CommitmentReviewOverlay({
+  card,
+  onReviewAction,
+  launcherVersions = [],
+  onLauncherLaunch,
+  onDashboard,
+  onCreateCard,
+  cardOverlayKey = "",
+  className = "",
+  launcherAppId = null,
+  launcherAppName = null,
+  onPauseApp = null,
+  onManageApp = null,
+  showDashboardShortcut = true,
+}) {
+  return (
+    <PremiumCardScreen
+      type="personal"
+      greeting=""
+      icon="heart"
+      headline={card.promptText}
+      subtitle="How did it go?"
+      actions={[
+        { label: "I did it", variant: "primary", onClick: () => onReviewAction("did_it") },
+        { label: "I nearly did it", variant: "secondary", onClick: () => onReviewAction("nearly_did_it") },
+        { label: "I didn’t do it", variant: "secondary", onClick: () => onReviewAction("didnt_do_it") },
+      ]}
+      launcherVersions={launcherVersions}
+      onLauncherLaunch={onLauncherLaunch}
+      onDashboard={onDashboard}
+      onCreateCard={onCreateCard}
+      cardOverlayKey={cardOverlayKey}
+      className={className}
+      launcherAppId={launcherAppId}
+      launcherAppName={launcherAppName}
+      onPauseApp={onPauseApp}
+      onManageApp={onManageApp}
+      showDashboardShortcut={showDashboardShortcut}
     />
   );
 }
@@ -10315,7 +10854,7 @@ function getMessageBaseSize(value) {
   return 34;
 }
 
-function CardRevealMessage({ message }) {
+function CardRevealMessage({ message, className = "" }) {
   const frameRef = useRef(null);
   const headlineRef = useRef(null);
   const baseSize = getMessageBaseSize(message);
@@ -10366,7 +10905,7 @@ function CardRevealMessage({ message }) {
   }, [baseSize, message]);
 
   return (
-    <div className={`premium-title-box ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
+    <div className={`premium-title-box ${className} ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
       <h2
         className={`premium-headline ${commitmentMatch ? "commitment-headline" : ""}`.trim()}
         ref={headlineRef}

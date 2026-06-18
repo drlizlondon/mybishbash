@@ -23,19 +23,21 @@ assert.equal(isAccessActive({ has_access: true, access_expires_at: PAST }, NOW),
 assert.equal(isAccessActive({}, NOW), true, "legacy profile without access columns keeps working");
 assert.equal(isAccessActive({ has_access: true, access_expires_at: "not-a-date" }, NOW), true, "malformed expiry does not lock users out");
 
-// ── Effective tier: expired premium degrades to free, not to no-access ──────
+// ── Effective tier: expired Founding Access degrades to Free Core ───────────
 
-assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true }, NOW), ACCESS_TIERS.PREMIUM);
-assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true, access_expires_at: FUTURE }, NOW), ACCESS_TIERS.PREMIUM);
-assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true, access_expires_at: PAST }, NOW), ACCESS_TIERS.FREE, "expired premium degrades to free");
-assert.equal(getEffectiveTier({ access_tier: "free", has_access: true }, NOW), ACCESS_TIERS.FREE);
-assert.equal(getEffectiveTier({}, NOW), ACCESS_TIERS.FREE, "missing tier defaults to free");
-assert.equal(getEffectiveTier({ access_tier: "nonsense" }, NOW), ACCESS_TIERS.FREE, "unknown tier values fail safe to free");
+assert.equal(getEffectiveTier({ access_tier: "founding_access", has_access: true }, NOW), ACCESS_TIERS.FOUNDING_ACCESS);
+assert.equal(getEffectiveTier({ access_tier: "founding_access", has_access: true, access_expires_at: FUTURE }, NOW), ACCESS_TIERS.FOUNDING_ACCESS);
+assert.equal(getEffectiveTier({ access_tier: "founding_access", has_access: true, access_expires_at: PAST }, NOW), ACCESS_TIERS.FREE_CORE, "expired Founding Access degrades to Free Core");
+assert.equal(getEffectiveTier({ access_tier: "free_core", has_access: true }, NOW), ACCESS_TIERS.FREE_CORE);
+assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true }, NOW), ACCESS_TIERS.FOUNDING_ACCESS, "legacy premium maps to Founding Access");
+assert.equal(getEffectiveTier({ access_tier: "free", has_access: true }, NOW), ACCESS_TIERS.FREE_CORE, "legacy free maps to Free Core");
+assert.equal(getEffectiveTier({}, NOW), ACCESS_TIERS.FREE_CORE, "missing tier defaults to Free Core");
+assert.equal(getEffectiveTier({ access_tier: "nonsense" }, NOW), ACCESS_TIERS.FREE_CORE, "unknown tier values fail safe to Free Core");
 
 // ── Capability sets ──────────────────────────────────────────────────────────
 
-const freeCapabilities = getCapabilities({ access_tier: "free", has_access: true }, NOW);
-const premiumCapabilities = getCapabilities({ access_tier: "premium", has_access: true }, NOW);
+const freeCapabilities = getCapabilities({ access_tier: "free_core", has_access: true }, NOW);
+const foundingAccessCapabilities = getCapabilities({ access_tier: "founding_access", has_access: true }, NOW);
 
 // The free set includes everything shipped today — nothing user-facing is
 // gated yet. If this assertion ever changes, that is a deliberate product
@@ -52,21 +54,21 @@ for (const capability of [
 }
 
 assert.equal(freeCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), false, "publishing is born premium-gated");
-assert.equal(premiumCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), true, "premium grants publishing");
+assert.equal(foundingAccessCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), true, "Founding Access grants publishing");
 
 for (const capability of freeCapabilities) {
-  assert.equal(premiumCapabilities.has(capability), true, `premium is a superset of free (${capability})`);
+  assert.equal(foundingAccessCapabilities.has(capability), true, `Founding Access is a superset of Free Core (${capability})`);
 }
 
 assert.equal(
-  hasCapability({ access_tier: "premium", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_PUBLISH_PACKS, NOW),
+  hasCapability({ access_tier: "founding_access", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_PUBLISH_PACKS, NOW),
   false,
-  "expired premium loses premium capabilities",
+  "expired Founding Access loses Founding Access capabilities",
 );
 assert.equal(
-  hasCapability({ access_tier: "premium", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_CREATE_PACKS, NOW),
+  hasCapability({ access_tier: "founding_access", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_CREATE_PACKS, NOW),
   true,
-  "expired premium keeps free capabilities",
+  "expired Founding Access keeps Free Core capabilities",
 );
 
 // ── Source-shape guardrails ──────────────────────────────────────────────────

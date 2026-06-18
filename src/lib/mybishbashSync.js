@@ -19,6 +19,7 @@ const LEGACY_SHARED_STATE_TABLE = ("bish" + "bash") + "_state";
 const SHARED_EVENTS_TABLE = "mybishbash_events";
 const LEGACY_SHARED_EVENTS_TABLE = ("bish" + "bash") + "_events";
 export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nYour access code was not recognised.";
+const PENDING_ACCESS_CODE_KEY = "MYBISHBASH_PENDING_ACCESS_CODE";
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -146,7 +147,7 @@ export async function getSession() {
   return data.session;
 }
 
-function normalizeAccessCode(accessCode) {
+export function normalizeAccessCode(accessCode) {
   return String(accessCode ?? "").trim().replace(/\s+/g, "").toUpperCase();
 }
 
@@ -162,11 +163,34 @@ function logSupabaseAccessError(operation, error) {
   });
 }
 
+function rememberPendingAccessCode(accessCode) {
+  if (typeof window === "undefined") return;
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return;
+  window.localStorage.setItem(PENDING_ACCESS_CODE_KEY, normalizedAccessCode);
+}
+
+async function claimRememberedAccessCode() {
+  if (typeof window === "undefined") return;
+  const pendingAccessCode = normalizeAccessCode(window.localStorage.getItem(PENDING_ACCESS_CODE_KEY));
+  if (!pendingAccessCode) return;
+  const claimed = await claimAccessCode(pendingAccessCode);
+  if (claimed) {
+    window.localStorage.removeItem(PENDING_ACCESS_CODE_KEY);
+  }
+}
+
 // Codes are validated and claimed server-side only. The previous hardcoded
 // LOCAL_INVITATION_CODES bypass (and the never-created access_invitation_codes
 // fallback table) are gone: a code that should work must exist in
 // mybishbash_access_codes, where HQ can manage and deactivate it.
+function isE2EAuthMockMode() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("MYBISHBASH_E2E_AUTH_MOCK") === "true";
+}
+
 async function validateAccessCode(accessCode) {
+  if (isE2EAuthMockMode()) return normalizeAccessCode(accessCode) === "BETA-VALID";
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
@@ -183,6 +207,7 @@ async function validateAccessCode(accessCode) {
 }
 
 async function claimAccessCode(accessCode) {
+  if (isE2EAuthMockMode()) return normalizeAccessCode(accessCode) === "BETA-VALID";
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
@@ -225,6 +250,9 @@ export async function hasAccessEntitlement(userId) {
 // the free tier, so premium installs fail CLOSED, the opposite default to
 // the fail-open session gate above.
 export async function fetchOwnAccessProfile(userId) {
+  if (isE2EAuthMockMode() && userId) {
+    return { has_access: true, access_tier: "founding_access", access_expires_at: null, is_tester: false };
+  }
   if (!userId || isDemoMode()) return null;
   try {
     const client = requireSupabase();
@@ -253,7 +281,18 @@ export function onAuthStateChange(callback) {
   return client.auth.onAuthStateChange(callback);
 }
 
-export async function signUp(email, password) {
+export async function signUp(email, password, accessCode) {
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) {
+    throw new Error(INVITE_ONLY_ACCESS_ERROR);
+  }
+  const codeIsValid = await validateAccessCode(normalizedAccessCode);
+  if (!codeIsValid) {
+    throw new Error(INVITE_ONLY_ACCESS_ERROR);
+  }
+  if (isE2EAuthMockMode()) {
+    return { user: { id: "e2e-access-user", email } };
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
     email,
@@ -268,16 +307,28 @@ export async function signUp(email, password) {
     logSupabaseAccessError("auth.signUp", error);
     throw error;
   }
+  if (!data.session) {
+    rememberPendingAccessCode(normalizedAccessCode);
+    return data.session;
+  }
+  const claimed = await claimAccessCode(normalizedAccessCode);
+  if (!claimed) {
+    throw new Error(INVITE_ONLY_ACCESS_ERROR);
+  }
   return data.session;
 }
 
 export async function logIn(email, password) {
+  if (isE2EAuthMockMode()) {
+    return { user: { id: "e2e-access-user", email } };
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) {
     logSupabaseAccessError("auth.signInWithPassword", error);
     throw error;
   }
+  await claimRememberedAccessCode();
   return data.session;
 }
 

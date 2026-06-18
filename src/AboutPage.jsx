@@ -7,12 +7,11 @@ const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
 const APP_HOME_HREF = `${BASE}home`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
+const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
 function BrandMark({ dark = false }) {
   return (
-    <span className={`brand-mark${dark ? " is-dark" : ""}`} aria-hidden="true">
-      <span />
-    </span>
+    <img className={`brand-mark${dark ? " is-dark" : ""}`} src={BRAND_LOGO_SRC} alt="" aria-hidden="true" />
   );
 }
 

@@ -85,7 +85,7 @@ export function buildExploreSections(packs = [], { isTester = false } = {}) {
 }
 
 function PremiumBadge() {
-  return <span className="explore-premium-badge">Premium</span>;
+  return <span className="explore-premium-badge">Founding Access</span>;
 }
 
 function getExploreCoverStateLabel({ isActive, locked, isUsingNow = false }) {
@@ -241,7 +241,7 @@ function ExplorePackDetail({
             disabled={interestRecorded}
             onClick={() => onPremiumInterest(pack)}
           >
-            {interestRecorded ? "We’ll let you know ✓" : "Premium — Coming Soon"}
+            {interestRecorded ? "We’ll let you know ✓" : "Founding Access — Coming Soon"}
           </button>
         ) : (
           <button type="button" className="explore-install-button" data-testid="explore-install-button" onClick={() => onInstall(pack.id)}>

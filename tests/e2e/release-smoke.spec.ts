@@ -703,7 +703,7 @@ test('Home progress denominator uses total Personal Cards, not only currently el
 
   await gotoApp(page, '/home');
   await expect(page.locator('.home-progress-number')).toHaveText('1/2');
-  await expect(page.getByTestId('home-dashboard-summary')).toContainText('1 of 2 personal cards complete today.');
+  await expect(page.getByTestId('home-dashboard-summary')).toContainText('1 of 2 cards completed today.');
   await expectNoConsoleErrors(consoleErrors);
 });
 
@@ -737,9 +737,9 @@ test('Home empty states use calm copy without stacked zero language', async ({ p
   const summary = page.getByTestId('home-dashboard-summary');
   await expect(summary).toContainText('No Personal Cards yet.');
   await expect(summary).toContainText('Create one when you are ready.');
-  await expect(summary).toContainText('Finish setting up MyBishBash');
+  await expect(summary).toContainText('Your next step');
   await expect(summary).toContainText('Create your first Personal Card');
-  await expect(summary).toContainText('Add your first protected app');
+  await expect(summary).toContainText('Choose your first app');
   await expect(summary).not.toContainText('You’re all clear today');
   await expect(summary).not.toContainText('Nothing needs your attention.');
   await expect(summary).not.toContainText('No live commitment');

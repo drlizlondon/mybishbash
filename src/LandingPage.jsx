@@ -9,16 +9,15 @@ import AnimatedFeatureSection from "./AnimatedFeatureSection";
 
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
-const DOWNLOAD_HREF = `${BASE}download`;
+const INVITE_HREF = `${BASE}invite`;
 const ABOUT_HREF = `${BASE}about`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const LANDING_NAV_HREFS = [ABOUT_HREF, HOME_HREF, HOME_HREF, HOME_HREF, HOME_HREF];
+const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
 function BrandMark({ dark = false }) {
   return (
-    <span className={`brand-mark${dark ? " is-dark" : ""}`} aria-hidden="true">
-      <span />
-    </span>
+    <img className={`brand-mark${dark ? " is-dark" : ""}`} src={BRAND_LOGO_SRC} alt="" aria-hidden="true" />
   );
 }
 
@@ -40,7 +39,7 @@ function Header() {
             </a>
           ))}
         </nav>
-        <a className="header-cta" href={DOWNLOAD_HREF} onClick={stopEditNavigation}>
+        <a className="header-cta" href={INVITE_HREF} onClick={stopEditNavigation}>
           <EditableText path="ctas.primary" />
         </a>
       </div>
@@ -132,7 +131,7 @@ function Hero() {
               ))}
             </div>
             <div className="hero-actions reveal-up delay-2">
-              <a className="button primary" href={DOWNLOAD_HREF} onClick={stopEditNavigation}>
+              <a className="button primary" href={INVITE_HREF} onClick={stopEditNavigation}>
                 <EditableText path="ctas.primary" />
                 <span aria-hidden="true">→</span>
               </a>

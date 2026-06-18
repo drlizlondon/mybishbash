@@ -1876,7 +1876,9 @@ textarea {
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
   font-size: clamp(26px, 7vw, 34px);
   line-height: 1.12;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
   white-space: pre-wrap;
 }
 
@@ -1888,20 +1890,41 @@ textarea {
 }
 
 .commitment-motivation-copy {
-  width: min(88vw, 390px);
+  width: min(84vw, 360px);
   min-height: 0;
-  margin-top: 18px;
+  margin-top: 10px;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
-  overflow: hidden;
+  gap: clamp(10px, 2.4svh, 16px);
+  overflow: visible;
 }
 
 .commitment-motivation-copy .premium-title-box {
   width: 100%;
-  max-height: clamp(150px, 30svh, 280px);
-  margin-top: 16px;
+  min-height: auto;
+  max-height: none;
+  margin-top: 0;
+}
+
+.commitment-motivation-copy .commitment-motivation-commitment {
+  max-width: 20ch;
+}
+
+.commitment-motivation-copy .commitment-motivation-commitment .premium-headline {
+  font-size: clamp(1.75rem, 7vw, 2.55rem) !important;
+  line-height: 1.08;
+}
+
+.commitment-motivation-copy .commitment-motivation-reason {
+  max-width: 24ch;
+}
+
+.commitment-motivation-copy .commitment-motivation-reason .premium-headline {
+  color: rgba(21, 21, 21, 0.88);
+  font-size: clamp(1.12rem, 4.7vw, 1.55rem) !important;
+  line-height: 1.2;
 }
 
 .commitment-motivation-intro,
@@ -1911,6 +1934,16 @@ textarea {
   line-height: 1.25;
   text-align: center;
   color: #6B625B;
+}
+
+.commitment-motivation-intro {
+  font-size: clamp(1.05rem, 4vw, 1.3rem);
+  font-weight: 760;
+}
+
+.commitment-motivation-subline {
+  font-size: clamp(0.86rem, 3.4vw, 0.98rem);
+  font-weight: 680;
 }
 
 .commitment-motivation-intro {
@@ -3061,6 +3094,19 @@ textarea {
   font-weight: 650;
 }
 
+.onboarding-install-step-marker {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(233, 120, 93, 0.16);
+  color: #9a5145;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .onboarding-safari-tip {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
@@ -3089,16 +3135,7 @@ textarea {
 }
 
 .onboarding-install-steps li::before {
-  content: counter(list-item);
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(233, 120, 93, 0.16);
-  color: #9a5145;
-  font-size: 0.82rem;
+  content: none;
 }
 
 .onboarding-shortcut-setup {
@@ -4382,7 +4419,8 @@ textarea {
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  object-fit: cover;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 8px 16px rgba(114, 79, 65, 0.09);
 }
 
@@ -6007,7 +6045,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   padding: 18px 0 20px;
-  overflow: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -6217,21 +6255,21 @@ body {
 .premium-title-box {
   width: min(88vw, 390px);
   min-height: 92px;
-  max-height: clamp(180px, 42svh, 360px);
+  max-height: none;
   margin-top: 10px;
   padding: 0 2px 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  overflow: hidden;
+  overflow: visible;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 
 .premium-title-box.is-scrollable {
-  align-items: flex-start;
-  overflow-y: auto;
+  align-items: center;
+  overflow: visible;
 }
 
 .premium-headline {
@@ -6248,35 +6286,35 @@ body {
   text-align: center;
   overflow-wrap: normal;
   word-break: normal;
+  hyphens: none;
   text-wrap: balance;
   white-space: pre-line;
   overflow: visible;
 }
 
 .commitment-headline {
-  display: grid;
-  gap: 10px;
+  display: inline;
   white-space: normal;
 }
 
 .commitment-headline-prefix,
 .commitment-headline-text {
-  display: block;
+  display: inline;
 }
 
 .commitment-headline-prefix {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: calc(var(--message-font-size) * 0.54);
-  font-weight: 700;
-  line-height: 1;
-  color: #17120F;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
 }
 
 .commitment-headline-text {
-  font-size: calc(var(--message-font-size) * 0.78);
-  font-weight: 500;
-  line-height: 1.12;
-  color: #5F5751;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
 }
 
 .premium-divider {
@@ -8023,10 +8061,12 @@ body {
 
 .home-brand-logo {
   display: block;
-  width: 64px;
-  height: auto;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   margin: 0 auto;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(47, 42, 40, 0.08);
 }
 
 .home-brand-hero h1 {
@@ -8442,8 +8482,8 @@ body {
   }
 
   .home-brand-logo {
-    width: 64px;
-    height: auto;
+    width: 68px;
+    height: 68px;
   }
 
   .home-progress-number {
@@ -8670,7 +8710,7 @@ body {
   max-width: 18ch;
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(2rem, 9vw, 2.62rem);
+  font-size: clamp(1.55rem, 6.7vw, 2.05rem);
   font-weight: 500;
   line-height: 1.08;
   letter-spacing: 0;
@@ -8695,7 +8735,7 @@ body {
 
 .onboarding-step-card-selection .onboarding-step-copy h2 {
   max-width: 22ch;
-  font-size: clamp(1.72rem, 7.2vw, 2.18rem);
+  font-size: clamp(1.42rem, 6vw, 1.82rem);
   line-height: 1.08;
 }
 
@@ -8729,8 +8769,8 @@ body {
   z-index: 3;
   display: grid;
   gap: 8px;
-  padding: 10px 0 0;
-  background: linear-gradient(180deg, rgba(246, 241, 234, 0), #f6f1ea 30%);
+  padding: 8px 0 0;
+  background: linear-gradient(180deg, rgba(246, 241, 234, 0), #f6f1ea 24%);
 }
 
 .onboarding-actions .save-button,
@@ -8825,18 +8865,33 @@ body {
 }
 
 .onboarding-reminder-picker {
+  min-height: 0;
+  height: 100%;
   display: grid;
-  gap: 12px;
-  padding-bottom: 118px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding-bottom: 8px;
 }
 
 .onboarding-selection-count {
   display: flex;
   justify-content: center;
+  padding: 0 0 2px;
   color: rgba(91, 82, 75, 0.72);
   font-size: 12px;
   font-weight: 720;
   letter-spacing: 0;
+}
+
+.onboarding-selection-count span {
+  min-height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 14px;
+  border: 1px solid rgba(120, 87, 65, 0.1);
+  border-radius: 999px;
+  background: #f6f1ea;
+  box-shadow: 0 8px 18px rgba(47, 42, 40, 0.055);
 }
 
 .onboarding-selection-message {
@@ -8849,8 +8904,14 @@ body {
 }
 
 .onboarding-idea-grid {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: grid;
+  align-content: start;
   gap: 10px;
+  padding: 2px 2px 96px;
 }
 
 .onboarding-idea-card {
@@ -8860,8 +8921,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 62px;
-  padding: 16px 17px;
+  min-height: 72px;
+  padding: 18px 18px;
   border: 1px solid rgba(120, 87, 65, 0.12);
   border-radius: 18px;
   background: rgba(255, 252, 249, 0.72);
@@ -8875,8 +8936,8 @@ body {
 
 .onboarding-idea-card strong {
   min-width: 0;
-  font-size: 0.98rem;
-  line-height: 1.26;
+  font-size: clamp(0.98rem, 4vw, 1.06rem);
+  line-height: 1.28;
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
@@ -8989,74 +9050,145 @@ body {
   cursor: not-allowed;
 }
 
-.onboarding-commitment-demo-grid,
-.onboarding-commitment-sequence {
+.onboarding-commitment-intro-step .onboarding-step-copy {
+  gap: 0;
+}
+
+.onboarding-commitment-intro-copy {
+  width: min(100%, 318px);
+  margin-inline: auto;
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  padding-top: clamp(24px, 8svh, 62px);
+  text-align: center;
 }
 
-.onboarding-commitment-sequence.two {
-  grid-template-columns: 1fr;
-}
-
-.onboarding-demo-card-small,
-.onboarding-commitment-step-card {
-  display: grid;
-  gap: 9px;
-  padding: 16px;
-  border: 1px solid rgba(120, 87, 65, 0.12);
-  border-radius: 20px;
-  background: rgba(255, 252, 249, 0.74);
-  box-shadow: 0 8px 20px rgba(47, 42, 40, 0.035);
-}
-
-.onboarding-demo-card-small.commitment,
-.onboarding-commitment-step-card {
-  background: rgba(255, 247, 242, 0.76);
-}
-
-.onboarding-demo-card-small span,
-.onboarding-commitment-step-card span {
-  color: #9a5145;
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.onboarding-demo-card-small h3,
-.onboarding-commitment-step-card h3 {
+.onboarding-commitment-intro-copy p {
   margin: 0;
-  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(1.15rem, 5vw, 1.45rem);
-  line-height: 1.12;
-  font-weight: 500;
-  color: rgba(21, 21, 21, 0.92);
+  color: rgba(91, 82, 75, 0.78);
+  font-size: clamp(0.98rem, 4vw, 1.08rem);
+  line-height: 1.42;
 }
 
-.onboarding-demo-card-small p {
-  margin: 0;
-  color: rgba(91, 82, 75, 0.74);
-  font-size: 0.86rem;
-  line-height: 1.32;
-}
-
-.onboarding-demo-card-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.onboarding-commitment-real-step {
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
 }
 
-.onboarding-demo-card-buttons button,
-.onboarding-commitment-step-card button {
-  min-height: 36px;
-  border: 1px solid rgba(217, 108, 82, 0.18);
+.onboarding-commitment-real-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.38), transparent 48%),
+    rgba(246, 241, 234, 0.88);
+  box-shadow:
+    0 16px 44px rgba(47, 42, 40, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.onboarding-commitment-real-stage .premium-card-screen {
+  --screen-x: 20px;
+  --content-max: 330px;
+  --message-font-size: clamp(2rem, 9vw, 2.72rem);
+  --button-width: min(100%, 304px);
+  position: relative;
+  inset: auto;
+  z-index: 1;
+  height: 100%;
+  min-height: 520px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.onboarding-commitment-real-stage .premium-card-screen::before {
+  position: absolute;
+}
+
+.onboarding-commitment-real-stage .premium-card-main {
+  height: 100%;
+  min-height: 520px;
+  padding: clamp(32px, 6svh, 46px) 0 20px;
+}
+
+.onboarding-commitment-real-stage .premium-title-box {
+  max-height: clamp(170px, 34svh, 250px);
+}
+
+.onboarding-commitment-real-stage .premium-action-button {
+  height: 50px;
+  min-height: 50px;
+  font-size: clamp(1.05rem, 4.5vw, 1.22rem);
+}
+
+.onboarding-commitment-time-step {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.onboarding-commitment-time {
+  align-self: stretch;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  padding: 32px 18px 84px;
+  text-align: center;
+}
+
+.onboarding-time-ring {
+  width: 88px;
+  height: 88px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #9a5145;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 780;
+  display: grid;
+  place-items: center;
+  background:
+    conic-gradient(from 0deg, rgba(214, 106, 80, 0.94), rgba(214, 106, 80, 0.08), rgba(214, 106, 80, 0.94));
+  animation: onboarding-time-spin 1500ms cubic-bezier(0.45, 0, 0.2, 1) forwards;
+  box-shadow: 0 18px 42px rgba(201, 96, 70, 0.14);
+}
+
+.onboarding-time-ring span {
+  width: 72px;
+  height: 72px;
+  border-radius: inherit;
+  background: #f6f1ea;
+  box-shadow: inset 0 0 0 1px rgba(120, 87, 65, 0.08);
+}
+
+.onboarding-commitment-time h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(1.85rem, 8.5vw, 2.45rem);
+  font-weight: 500;
+  line-height: 1;
+  color: rgba(21, 21, 21, 0.96);
+}
+
+.onboarding-commitment-time p {
+  margin: 0;
+  color: rgba(91, 82, 75, 0.78);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.onboarding-commitment-complete-step .onboarding-step-copy {
+  padding-top: clamp(36px, 9svh, 78px);
+}
+
+@keyframes onboarding-time-spin {
+  0% {
+    transform: rotate(0deg) scale(0.92);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(520deg) scale(1);
+    opacity: 1;
+  }
 }
 
 .onboarding-protected-app-grid {
@@ -9106,10 +9238,196 @@ body {
   box-shadow: 0 10px 24px rgba(47, 42, 40, 0.06);
 }
 
+.onboarding-protected-setup-step {
+  gap: 10px;
+}
+
+.onboarding-protected-setup-step .onboarding-step-copy {
+  gap: 7px;
+}
+
+.onboarding-protected-setup-step .onboarding-step-copy h2 {
+  max-width: 18ch;
+  font-size: clamp(1.5rem, 6.4vw, 2rem);
+  line-height: 1.06;
+}
+
+.onboarding-protected-setup-step .onboarding-step-copy p {
+  max-width: 26ch;
+  font-size: clamp(0.78rem, 3.2vw, 0.88rem);
+  line-height: 1.25;
+}
+
+.onboarding-protected-setup-step .onboarding-step-body {
+  padding-bottom: 84px;
+}
+
+.onboarding-protected-setup-step .onboarding-actions .save-button {
+  min-height: 38px;
+}
+
+.onboarding-protected-setup-step .onboarding-actions .secondary-button {
+  min-height: 32px;
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-heading img,
+.onboarding-protected-setup-step .onboarding-protected-setup-heading .onboarding-app-icon-fallback {
+  width: 56px;
+  height: 56px;
+  flex-basis: 56px;
+  border-radius: 16px;
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-card {
+  gap: 6px;
+  padding: 10px;
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-heading h3 {
+  font-size: clamp(1.02rem, 4.2vw, 1.22rem);
+}
+
+.onboarding-protected-setup-step .onboarding-protected-setup-card > p,
+.onboarding-protected-setup-step .onboarding-install-return-note,
+.onboarding-protected-setup-step .onboarding-install-steps {
+  font-size: clamp(0.76rem, 3vw, 0.84rem);
+  line-height: 1.2;
+}
+
+.onboarding-protected-setup-step .onboarding-install-steps {
+  gap: 3px;
+}
+
+.onboarding-protected-setup-step .onboarding-install-steps li {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.onboarding-protected-setup-step .onboarding-install-step-marker {
+  width: 21px;
+  height: 21px;
+  font-size: 0.68rem;
+}
+
+.onboarding-interruption-demo {
+  display: grid;
+  gap: 16px;
+}
+
+.onboarding-interruption-example-card {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 18px 20px 20px;
+  border-radius: 30px;
+  background: rgba(255, 252, 249, 0.96);
+  color: rgba(21, 21, 21, 0.94);
+  box-shadow:
+    0 24px 58px rgba(47, 42, 40, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  opacity: 1;
+  transform: none;
+}
+
+.onboarding-interruption-example-card h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(1.22rem, 5.4vw, 1.58rem);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.onboarding-interruption-example-card i {
+  display: block;
+  width: 74px;
+  height: 3px;
+  border-radius: 999px;
+  background: #d8cec4;
+}
+
+.onboarding-interruption-example-card p {
+  margin: 0;
+  color: rgba(91, 82, 75, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.28;
+  text-align: center;
+}
+
+.onboarding-interruption-example-card .onboarding-real-card-actions button:first-child {
+  background: rgba(214, 106, 80, 0.94);
+  color: #fff9f5;
+}
+
+.onboarding-interruption-example-card .onboarding-real-card-actions button:nth-child(2) {
+  background: rgba(255, 255, 255, 0.84);
+  color: rgba(47, 42, 40, 0.84);
+  animation: none;
+}
+
+.onboarding-interruption-demo-note {
+  margin: 0;
+  color: rgba(91, 82, 75, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.42;
+  text-align: center;
+}
+
+.onboarding-interruption-toggle {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(120, 87, 65, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 252, 249, 0.72);
+}
+
+.onboarding-interruption-toggle > span {
+  color: rgba(47, 42, 40, 0.88);
+  font-size: 0.94rem;
+  font-weight: 850;
+}
+
+.onboarding-interruption-toggle div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.onboarding-interruption-toggle button,
+.onboarding-time-next {
+  min-height: 42px;
+  border: 1px solid rgba(120, 87, 65, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(47, 42, 40, 0.78);
+  font: inherit;
+  font-weight: 850;
+}
+
+.onboarding-interruption-toggle button.selected,
+.onboarding-time-next {
+  border-color: rgba(214, 106, 80, 0.34);
+  background: rgba(214, 106, 80, 0.94);
+  color: #fff9f5;
+}
+
+.onboarding-interruption-toggle p {
+  margin: 0;
+  color: rgba(91, 82, 75, 0.68);
+  font-size: 0.84rem;
+}
+
 .onboarding-protected-setup-card {
   display: grid;
-  gap: 14px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(120, 87, 65, 0.12);
   border-radius: 24px;
   background: rgba(255, 252, 249, 0.76);
@@ -9119,7 +9437,7 @@ body {
 .onboarding-protected-setup-heading {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .onboarding-protected-setup-heading p {
@@ -9134,22 +9452,75 @@ body {
 .onboarding-protected-setup-heading h3 {
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: 1.45rem;
+  font-size: clamp(1.26rem, 5.4vw, 1.42rem);
   font-weight: 500;
 }
 
 .onboarding-protected-setup-card > p,
+.onboarding-install-return-note,
 .onboarding-install-steps {
   margin: 0;
-  color: rgba(91, 82, 75, 0.78);
-  font-size: 0.94rem;
-  line-height: 1.44;
+  color: rgba(47, 42, 40, 0.82);
+  font-size: clamp(0.88rem, 3.6vw, 0.94rem);
+  line-height: 1.36;
+}
+
+.onboarding-install-guidance {
+  min-height: 0;
 }
 
 .onboarding-install-steps {
   display: grid;
-  gap: 8px;
-  padding-left: 20px;
+  gap: 7px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.onboarding-install-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.onboarding-install-steps span:last-child {
+  color: rgba(47, 42, 40, 0.82);
+  font-weight: 700;
+}
+
+.onboarding-install-step-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(214, 106, 80, 0.1);
+  color: #9a5145;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.onboarding-protected-confirmation {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(233, 120, 93, 0.08);
+  color: rgba(47, 42, 40, 0.86);
+}
+
+.onboarding-protected-confirmation strong {
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.35rem;
+  font-weight: 500;
+  color: #2f2a28;
+}
+
+.onboarding-protected-confirmation p {
+  margin: 0;
+  color: rgba(47, 42, 40, 0.78);
+  font-size: clamp(0.92rem, 3.8vw, 1rem);
+  line-height: 1.38;
 }
 
 .onboarding-personal-preview {
@@ -9289,7 +9660,7 @@ body {
 }
 
 .onboarding-tutorial-demo {
-  --onboarding-demo-duration: 26000ms;
+  --onboarding-demo-duration: 15000ms;
   position: relative;
   width: min(100%, 330px);
   min-height: 332px;
@@ -9317,8 +9688,8 @@ body {
   padding: 26px 24px;
   border-radius: 38px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.9), transparent 62%),
-    rgba(255, 252, 249, 0.88);
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.96), transparent 62%),
+    #fffcf8;
   box-shadow:
     0 22px 54px rgba(47, 42, 40, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
@@ -9357,7 +9728,7 @@ body {
 }
 
 .onboarding-demo-phone-app-safari {
-  animation: onboarding-phone-app-pulse-safari var(--onboarding-demo-duration) ease forwards;
+  animation: none;
 }
 
 .onboarding-demo-app,
@@ -9437,7 +9808,7 @@ body {
   gap: 8px;
   padding: 18px 20px 20px;
   border-radius: 30px;
-  background: rgba(255, 252, 249, 0.96);
+  background: #fffcf8;
   color: rgba(21, 21, 21, 0.94);
   box-shadow:
     0 24px 58px rgba(47, 42, 40, 0.13),
@@ -9463,7 +9834,7 @@ body {
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.28em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .onboarding-demo-card-heart {
@@ -9542,7 +9913,7 @@ body {
   font-size: 16px;
 }
 
-.onboarding-real-card-actions button:nth-child(3) {
+.onboarding-real-card-actions button:nth-child(1) {
   background: rgba(214, 106, 80, 0.94);
   color: #fff9f5;
   animation: onboarding-done-button-cycle var(--onboarding-demo-duration) ease forwards;
@@ -9557,7 +9928,7 @@ body {
   gap: 8px;
   padding: 18px;
   border-radius: 26px;
-  background: rgba(255, 252, 249, 0.96);
+  background: #fffcf8;
   box-shadow:
     0 24px 58px rgba(47, 42, 40, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.84);
@@ -9619,9 +9990,14 @@ body {
 .onboarding-demo-final-line {
   position: absolute;
   z-index: 4;
-  width: min(250px, 86%);
+  width: min(270px, 88%);
   margin: 0;
+  padding: 18px 20px;
+  border: 1px solid rgba(120, 87, 65, 0.12);
+  border-radius: 26px;
+  background: #fffcf8;
   color: rgba(21, 21, 21, 0.9);
+  box-shadow: 0 24px 58px rgba(47, 42, 40, 0.12);
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
   font-size: clamp(1.44rem, 6.7vw, 1.88rem);
   font-weight: 500;
@@ -10118,11 +10494,11 @@ body {
 }
 
 @keyframes onboarding-demo-final-line-cycle {
-  0%, 98.8% {
+  0%, 73% {
     opacity: 0;
     transform: translateY(16px) scale(0.96);
   }
-  99.4%, 100% {
+  75%, 100% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
@@ -10237,7 +10613,8 @@ body {
   }
 
   .onboarding-idea-card {
-    padding: 11px 13px;
+    min-height: 66px;
+    padding: 14px 15px;
   }
 }
 

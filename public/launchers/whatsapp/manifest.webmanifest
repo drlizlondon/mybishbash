@@ -9,9 +9,9 @@
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/mybishbash/icons/mybishbash-cover.png",
+      "src": "/mybishbash/icons/whatsapp-cover.jpeg",
       "sizes": "180x180",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ]
 }

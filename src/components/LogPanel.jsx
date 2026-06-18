@@ -40,8 +40,8 @@ function getLogEventDisplayLabel(event) {
     pack_card_liked: "Really liked",
     pack_card_disliked: "Hidden card",
     pack_card_restored: "Restored card",
-    intercept_card_disliked: "Hidden interruption card",
-    intercept_card_restored: "Restored interruption card",
+    intercept_card_disliked: "Hidden Pause Card",
+    intercept_card_restored: "Restored Pause Card",
   };
   return labels[event.event_type] ?? event.event_type;
 }
