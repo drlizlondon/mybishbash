@@ -24,6 +24,50 @@ async function fillSignup(page: Page) {
   await page.getByRole('button', { name: 'Create Account' }).click();
 }
 
+async function seedSharedDeviceExistingAccount(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_AUTH_MOCK', 'true');
+    window.localStorage.setItem('mybishbash.validated-gate-access-code.v1', JSON.stringify({
+      accessCode: 'WELCOME',
+      validatedAt: Date.now(),
+    }));
+    window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+    window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
+      name: 'Previous Device User',
+      timezone: 'Europe/London',
+      onboardingCompletedAt: '2026-06-01T09:00:00.000Z',
+    }));
+    window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify([
+      {
+        id: 'previous-user-card',
+        cardKind: 'personal',
+        promptText: 'Previous user private card',
+        dashboardTitle: 'Previous user private card',
+        theme: 'Soft Bloom',
+        icon: 'heart',
+        statusToday: 'fresh',
+        createdAt: '2026-06-01T09:00:00.000Z',
+        updatedAt: '2026-06-01T09:00:00.000Z',
+        frequency: 'once_daily',
+        timingWindows: ['day'],
+        paused: false,
+        deletedAt: null,
+      },
+    ]));
+    window.localStorage.setItem('mybishbash.card-packs.v1', JSON.stringify([{ id: 'previous-pack', name: 'Previous pack', cards: [] }]));
+    window.localStorage.setItem('mybishbash.action-cards.v1', JSON.stringify([{ id: 'previous-action', title: 'Previous action', source: 'user' }]));
+    window.localStorage.setItem('mybishbash.event-log.v1', JSON.stringify([
+      {
+        id: 'previous-event',
+        event_type: 'card_completed',
+        action_taken: 'done',
+        created_at: '2026-06-01T10:00:00.000Z',
+      },
+    ]));
+    window.localStorage.setItem('mybishbash.offline-event-queue.v1', JSON.stringify([{ id: 'previous-queued-event' }]));
+  });
+}
+
 test('direct signup without validated gate code is blocked', async ({ page }) => {
   await seedAuthMock(page);
   await page.goto('/mybishbash/home?signup=1');
@@ -110,6 +154,70 @@ test('existing approved user can log in without access code', async ({ page }) =
 
   await expect(page.getByRole('heading', { name: 'Before your apps open' })).toBeVisible({ timeout: 10000 });
   await expect(page.getByLabel('Access code')).toHaveCount(0);
+});
+
+test('login screen offers password reset help and triggers the reset flow', async ({ page }) => {
+  await seedAuthMock(page);
+  await page.goto('/mybishbash/home');
+
+  await expect(page.getByRole('heading', { name: 'MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeDisabled();
+
+  await page.getByLabel('Email').fill('reset-me@example.com');
+  await page.getByRole('button', { name: 'Forgot password?' }).click();
+
+  await expect(page.getByText('Password reset email sent.')).toBeVisible();
+  const resetRequest = await page.evaluate(() => JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_LAST_PASSWORD_RESET') ?? '{}'));
+  expect(resetRequest.email).toBe('reset-me@example.com');
+  expect(resetRequest.redirectTo).toBe(page.url());
+});
+
+test('shared device logout clears prior account state before a new signup starts onboarding', async ({ page }) => {
+  await seedSharedDeviceExistingAccount(page);
+  await page.goto('/mybishbash/home');
+
+  await page.getByLabel('Email').fill('previous@example.com');
+  await page.getByLabel('Password').fill('password123');
+  await page.getByRole('button', { name: 'Log In' }).click();
+  await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10000 });
+
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/mybishbash/settings');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Log out of this MyBishBash profile?');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: 'Log out' }).click();
+
+  await expect(page.getByTestId('sync-screen')).toBeVisible();
+  await page.getByRole('button', { name: 'Sign up' }).click();
+  await page.getByLabel('Email').fill('new-shared-device-user@example.com');
+  await page.getByLabel('Password').fill('password123');
+  await page.getByLabel(/I agree to the Terms/i).check();
+  await page.getByRole('button', { name: 'Create Account' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Before your apps open' })).toBeVisible({ timeout: 10000 });
+  const state = await page.evaluate(() => ({
+    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
+    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
+    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
+    cardPacks: JSON.parse(window.localStorage.getItem('mybishbash.card-packs.v1') ?? '[]'),
+    actionCards: JSON.parse(window.localStorage.getItem('mybishbash.action-cards.v1') ?? '[]'),
+    events: JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') ?? '[]'),
+    offlineQueue: JSON.parse(window.localStorage.getItem('mybishbash.offline-event-queue.v1') ?? '[]'),
+  }));
+
+  expect(state.setupComplete).not.toBe('true');
+  expect(state.profile.name).not.toBe('Previous Device User');
+  expect(state.cards.some((card: Record<string, unknown>) => card.id === 'previous-user-card')).toBe(false);
+  expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Previous user private card')).toBe(false);
+  expect(state.cardPacks.some((pack: Record<string, unknown>) => pack.id === 'previous-pack')).toBe(false);
+  expect(state.actionCards.some((card: Record<string, unknown>) => card.id === 'previous-action')).toBe(false);
+  expect(state.events.some((event: Record<string, unknown>) => event.id === 'previous-event')).toBe(false);
+  expect(state.offlineQueue.some((event: Record<string, unknown>) => event.id === 'previous-queued-event')).toBe(false);
 });
 
 test('direct onboarding route cannot be accessed by unauthorised user', async ({ page }) => {

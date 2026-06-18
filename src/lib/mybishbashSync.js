@@ -378,7 +378,7 @@ export async function signUp(email, password, accessCode = null) {
       accessCode: normalizedAccessCode,
       ...grant,
     }));
-    return { user: { id: "e2e-access-user", email } };
+    return { user: { id: `e2e-access-user:${String(email).toLowerCase()}`, email } };
   }
   const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
@@ -410,7 +410,7 @@ export async function signUp(email, password, accessCode = null) {
 
 export async function logIn(email, password) {
   if (isE2EAuthMockMode()) {
-    return { user: { id: "e2e-access-user", email } };
+    return { user: { id: `e2e-access-user:${String(email).toLowerCase()}`, email } };
   }
   const client = requireSupabase();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
@@ -420,6 +420,21 @@ export async function logIn(email, password) {
   }
   await claimRememberedAccessCode();
   return data.session;
+}
+
+export async function resetPassword(email, redirectTo) {
+  if (isE2EAuthMockMode()) {
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_PASSWORD_RESET", JSON.stringify({ email, redirectTo }));
+    return;
+  }
+  const client = requireSupabase();
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+  if (error) {
+    logSupabaseAccessError("auth.resetPasswordForEmail", error);
+    throw error;
+  }
 }
 
 export async function logOut() {

@@ -55,6 +55,7 @@ import {
   onAuthStateChange,
   signUp,
   logIn,
+  resetPassword,
   logOut,
   markNotificationOpened,
   saveLauncherEvent,
@@ -5578,6 +5579,52 @@ function App() {
     });
   }
 
+  function resetLocalMyBishBashState({ routeToOnboarding = true, clearStorage = true } = {}) {
+    if (cloudSaveTimerRef.current) {
+      window.clearTimeout(cloudSaveTimerRef.current);
+      cloudSaveTimerRef.current = null;
+    }
+    if (cardSaveTimerRef.current) {
+      window.clearTimeout(cardSaveTimerRef.current);
+      cardSaveTimerRef.current = null;
+    }
+    lastCloudStateStrRef.current = null;
+    localDirtyRef.current = false;
+    highestKnownCloudTimeRef.current = 0;
+    isApplyingSharedStateRef.current = false;
+    if (clearStorage) {
+      clearSharedMyBishBashState();
+    }
+    const nextLaunchSession = buildLaunchSession("mybishbash_home");
+    persistLaunchSession(nextLaunchSession);
+    setCards([]);
+    setMood(resolveTheme("Minimal"));
+    setProfile({ name: "", timezone: "Europe/London", plan: "free" });
+    setHomeScreenVersions(loadHomeScreenVersions());
+    setLauncherBehaviorSettings(loadLauncherBehaviorSettings());
+    setCardPacks([]);
+    setHiddenPackCardIdsCompat([]);
+    setGlobalInterruptionMode(true);
+    setHiddenLibraryPacks([]);
+    setEvents([]);
+    setActionCards(loadActionCards());
+    setNotificationSettings(loadNotificationSettings());
+    setTimingWindowsPrefs(DEFAULT_WINDOW_DEFS);
+    setWindowDefs(DEFAULT_WINDOW_DEFS);
+    setSetupComplete(false);
+    setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
+    setActiveProtectedAppContext(null);
+    setLaunchSession(nextLaunchSession);
+    setOverlay(null);
+    setMenuOpenId(null);
+    setMorningSummary(null);
+    setShouldLaunchOverlay(false);
+    if (routeToOnboarding) {
+      setScreen("onboarding");
+      navigateTo("/onboarding", { replace: true });
+    }
+  }
+
   async function handleResetSharedState() {
     const confirmed = window.confirm("Clear all MyBishBash data from this device? This will remove your cards, packs, settings and local history. This cannot be undone. Your cloud account is not deleted.");
     if (!confirmed) return;
@@ -5591,27 +5638,13 @@ function App() {
     setSession(null);
     setSyncStatus("needs-connection");
     setSyncError("");
-    clearSharedMyBishBashState();
-    setCards([]);
-    setMood(resolveTheme("Minimal"));
-    setProfile({ name: "", timezone: "Europe/London" });
-    setHomeScreenVersions(loadHomeScreenVersions());
-    setLauncherBehaviorSettings(loadLauncherBehaviorSettings());
-    setCardPacks([]);
-    setHiddenPackCardIdsCompat([]);
-    setGlobalInterruptionMode(true);
-    setHiddenLibraryPacks([]);
-    setEvents([]);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    setSetupComplete(false);
-    setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
-    setOverlay(null);
-    setScreen("onboarding");
-    navigateTo("/onboarding", { replace: true });
+    resetLocalMyBishBashState();
   }
 
   async function handleSignUp(email, password) {
+    resetLocalMyBishBashState();
     setSyncStatus("loading");
     setSyncError("");
     signupOnboardingPendingRef.current = true;
@@ -5673,6 +5706,12 @@ function App() {
     }
   }
 
+  async function handlePasswordReset(email) {
+    setSyncError("");
+    const redirectTo = typeof window === "undefined" ? undefined : window.location.href.split("#")[0];
+    await resetPassword(email, redirectTo);
+  }
+
   async function handleLogOut() {
     const confirmed = window.confirm("Log out of this MyBishBash profile?");
     if (!confirmed) return;
@@ -5685,6 +5724,8 @@ function App() {
     setSession(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
+    clearSharedMyBishBashState();
+    resetLocalMyBishBashState({ clearStorage: false });
     setSyncStatus("needs-connection");
     setSyncError("");
   }
@@ -6197,6 +6238,7 @@ function App() {
         launcherName={routeLauncherName}
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
+        onPasswordReset={handlePasswordReset}
         onClearError={() => setSyncError("")}
       />
     );
@@ -6209,6 +6251,7 @@ function App() {
         error={syncError}
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
+        onPasswordReset={handlePasswordReset}
         onClearError={() => setSyncError("")}
       />
     );
@@ -6225,6 +6268,7 @@ function App() {
         error={syncError || "This account does not have beta access yet."}
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
+        onPasswordReset={handlePasswordReset}
         onClearError={() => setSyncError("")}
       />
     );
@@ -8763,10 +8807,13 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, onOpenLegalModal, launcherName = "" }) {
+function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset, onClearError, onOpenLegalModal, launcherName = "" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [resetStatus, setResetStatus] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetPending, setResetPending] = useState(false);
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
     return new URLSearchParams(window.location.search).get("signup") !== "1";
@@ -8793,6 +8840,8 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
   function switchMode(nextIsLogin) {
     setIsLogin(nextIsLogin);
     setShowPassword(false);
+    setResetStatus("");
+    setResetError("");
     onClearError?.();
   }
 
@@ -8807,6 +8856,23 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
       onLogIn(email, password);
     } else {
       onSignUp(email, password);
+    }
+  }
+
+  async function submitPasswordReset() {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || resetPending) return;
+    setResetPending(true);
+    setResetStatus("");
+    setResetError("");
+    onClearError?.();
+    try {
+      await onPasswordReset?.(trimmedEmail);
+      setResetStatus("Password reset email sent. Check your inbox for the link to return to MyBishBash.");
+    } catch (resetRequestError) {
+      setResetError(getSyncErrorMessage(resetRequestError, "Could not send a password reset email."));
+    } finally {
+      setResetPending(false);
     }
   }
 
@@ -8877,7 +8943,19 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onClearError, on
                         {showPassword ? "Hide" : "Show"}
                       </button>
                     </span>
+                    {isLogin ? (
+                      <button
+                        type="button"
+                        className="text-button sync-forgot-password"
+                        onClick={submitPasswordReset}
+                        disabled={!email.trim() || resetPending}
+                      >
+                        {resetPending ? "Sending..." : "Forgot password?"}
+                      </button>
+                    ) : null}
                   </div>
+                  {resetStatus ? <p className="sync-success">{resetStatus}</p> : null}
+                  {resetError ? <p className="sync-error">{resetError}</p> : null}
                   {!isLogin ? (
                     <>
                       <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "16px", cursor: "pointer", fontSize: "14px", fontWeight: "normal", opacity: 0.9 }}>

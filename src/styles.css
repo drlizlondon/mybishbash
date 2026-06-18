@@ -7020,6 +7020,10 @@ body {
   color: #9a5145;
 }
 
+.sync-success {
+  color: #3f6f5a;
+}
+
 .sync-invite-error {
   line-height: 1.45;
 }
@@ -7069,6 +7073,20 @@ body {
 .password-toggle:focus-visible {
   outline: 2px solid rgba(233, 120, 93, 0.45);
   outline-offset: 2px;
+}
+
+.sync-forgot-password {
+  display: inline-flex;
+  justify-self: start;
+  margin: 6px 0 0;
+  color: #9a5145;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.sync-forgot-password:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .sync-secondary-link {
