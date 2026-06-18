@@ -300,6 +300,7 @@ export async function signUp(email, password, accessCode) {
     options: {
       data: {
         mybishbash_plan: "free",
+        mybishbash_access_code: normalizedAccessCode,
       },
     },
   });

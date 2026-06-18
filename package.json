@@ -19,6 +19,7 @@
     "test:launchers": "node scripts/validate-launchers.mjs && node scripts/test-launcher-install-resolver.mjs && node scripts/test-whatsapp-launcher-qa.mjs && node scripts/test-launcher-availability.mjs && node scripts/test-hq-launcher-admin.mjs && node scripts/test-destination-resolver.mjs",
     "test:fake-launchers": "node scripts/test-fake-launcher-destinations.mjs",
     "test:release-guardrails": "node scripts/test-release-guardrails.mjs",
+    "test:access-contract": "node scripts/check-access-code-contract.mjs",
     "test:e2e": "playwright test",
     "test:launcher-qa": "playwright test tests/e2e/launcher-flow-trace.spec.ts",
     "test:prelaunch-interactions": "playwright test tests/e2e/library-bottom-nav.spec.ts",
