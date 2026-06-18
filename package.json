@@ -13,7 +13,7 @@
     "test:release:staging": "npm run test:release && npm run test:staging-release",
     "test:launcher-flow": "node scripts/test-launcher-flow.mjs",
     "test:testpilot": "node scripts/test-testpilot.mjs",
-    "test:access": "node scripts/test-access-capabilities.mjs",
+    "test:access": "node scripts/test-access-capabilities.mjs && node scripts/test-access-code-contract-parser.mjs",
     "test:pack-import": "node scripts/test-pack-import.mjs",
     "test:cover-generation": "node scripts/test-generated-pack-cover.mjs",
     "test:launchers": "node scripts/validate-launchers.mjs && node scripts/test-launcher-install-resolver.mjs && node scripts/test-whatsapp-launcher-qa.mjs && node scripts/test-launcher-availability.mjs && node scripts/test-hq-launcher-admin.mjs && node scripts/test-destination-resolver.mjs",
