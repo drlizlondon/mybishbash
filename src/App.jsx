@@ -1,6 +1,8 @@
 import React, { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LogPanel } from "./components/LogPanel";
 import { HeartGlyph, LogGlyph } from "./components/Glyphs";
+import { authContent } from "./content/authContent";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   DEFAULT_ACTION_CARDS,
@@ -2076,8 +2078,14 @@ function App() {
     setMood(resolveTheme(next.mood));
     setProfile((currentProfile) => {
       const nextProfile = {
-        name: next.profile?.name ?? "",
-        timezone: next.profile?.timezone ?? "Europe/London",
+        ...currentProfile,
+        ...(next.profile ?? {}),
+        name: next.profile?.name ?? currentProfile.name ?? "",
+        timezone: next.profile?.timezone ?? currentProfile.timezone ?? "Europe/London",
+        hasCompletedHomeSpotlightTour:
+          next.profile?.hasCompletedHomeSpotlightTour ??
+          currentProfile.hasCompletedHomeSpotlightTour ??
+          false,
       };
       return isSameJsonValue(currentProfile, nextProfile) ? currentProfile : nextProfile;
     });
@@ -8807,7 +8815,23 @@ function PackDetailModal({
   );
 }
 
-function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset, onClearError, onOpenLegalModal, launcherName = "" }) {
+function SyncConnectionScreen(props) {
+  return (
+    <ContentEditProvider
+      initialContent={authContent}
+      storageKey="mybishbash.authContentDraft.v1"
+      saveEndpoint="/__save-auth-content"
+      saveLabel="src/content/authContent.js"
+      isContentCompatible={(value) => Boolean(value?.titles?.signup && value?.form?.email)}
+    >
+      <SyncConnectionScreenContent {...props} />
+      <EditPanel />
+    </ContentEditProvider>
+  );
+}
+
+function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswordReset, onClearError, onOpenLegalModal, launcherName = "" }) {
+  const { content } = useContentEdit();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -8825,18 +8849,25 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
   const isLauncherLogin = mode === "launcher";
   const isAccessDenied = mode === "access-denied";
   const isSignupBlocked = !isLogin && !hasValidatedGateCode;
+  const titlePath = isLauncherLogin
+    ? "titles.launcher"
+    : isAccessDenied || isSignupBlocked
+      ? "titles.inviteOnly"
+      : isLogin
+        ? "titles.login"
+        : "titles.signup";
   const title = isLauncherLogin
-    ? "Welcome back to MyBishBash"
+    ? content.titles.launcher
     : isAccessDenied
-      ? "MyBishBash is invite-only right now."
+      ? content.titles.inviteOnly
     : isSignupBlocked
-      ? "MyBishBash is invite-only right now."
+      ? content.titles.inviteOnly
     : isLogin
-      ? "MyBishBash"
-      : "Create your MyBishBash account";
+      ? content.titles.login
+      : content.titles.signup;
   const loginCopy = isLauncherLogin
-    ? `Log in to continue to your ${launcherName || "app"} launcher.`
-    : "Log in to sync this shortcut with your MyBishBash profile.";
+    ? `${content.copy.launcherPrefix} ${launcherName || "app"} ${content.copy.launcherSuffix}`
+    : content.copy.login;
   function switchMode(nextIsLogin) {
     setIsLogin(nextIsLogin);
     setShowPassword(false);
@@ -8849,7 +8880,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
     event.preventDefault();
     if (!email.trim() || !password.trim()) return;
     if (!isLogin && !agreedToLegal) {
-      alert("Please agree to the Terms of Use and Privacy Policy to continue.");
+      alert(content.status.legalRequired);
       return;
     }
     if (isLogin) {
@@ -8868,9 +8899,9 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
     onClearError?.();
     try {
       await onPasswordReset?.(trimmedEmail);
-      setResetStatus("Password reset email sent. Check your inbox for the link to return to MyBishBash.");
+      setResetStatus(content.status.passwordResetSent);
     } catch (resetRequestError) {
-      setResetError(getSyncErrorMessage(resetRequestError, "Could not send a password reset email."));
+      setResetError(getSyncErrorMessage(resetRequestError, content.status.passwordResetError));
     } finally {
       setResetPending(false);
     }
@@ -8882,30 +8913,30 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
         <span className="sync-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h1>{title}</h1>
+        <h1><EditableText path={titlePath}>{title}</EditableText></h1>
         {mode === "loading" ? (
-          <p>Loading your shared MyBishBash...</p>
+          <EditableText as="p" path="copy.loading" />
         ) : (
           <>
             <p>
               {isAccessDenied
-                ? "Get MyBishBash with an invite code, join the waitlist, or log in if you already have access."
+                ? content.copy.accessDenied
                 : isSignupBlocked
-                ? "Get MyBishBash is the invite gate. Enter your access code there first, or join the waitlist."
+                ? content.copy.signupBlocked
                 : isLogin
                 ? loginCopy
-                : "Create your account with the access you already unlocked."}
+                : content.copy.signup}
             </p>
-            {isLogin && isStandalone ? <p className="sync-note">Log in once here to reconnect this Home Screen shortcut.</p> : null}
+            {isLogin && isStandalone ? <EditableText as="p" className="sync-note" path="copy.standalone" /> : null}
             {error ? <p className="sync-error">{error}</p> : null}
 
             {isSignupBlocked ? (
               <div className="sync-form">
-                <a className="save-button" href={`${BASE_PATH}/invite`}>Get MyBishBash</a>
+                <a className="save-button" href={`${BASE_PATH}/invite`}><EditableText path="actions.getMyBishBash" /></a>
                 <div className="sync-auth-switch">
-                  <span>Already have an account?</span>
+                  <EditableText path="actions.alreadyHaveAccount" />
                   <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(true)}>
-                    Log in
+                    <EditableText path="actions.loginSwitch" />
                   </button>
                 </div>
               </div>
@@ -8913,7 +8944,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
               <>
                 <form className="sync-form" onSubmit={submitExisting}>
                   <div className="field">
-                    <label htmlFor="sync-email">Email</label>
+                    <label htmlFor="sync-email"><EditableText path="form.email" /></label>
                     <input
                       id="sync-email"
                       type="email"
@@ -8922,12 +8953,12 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
                       className="settings-input"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      placeholder="you@example.com"
+                      placeholder={content.form.emailPlaceholder}
                       required
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="sync-password">Password</label>
+                    <label htmlFor="sync-password"><EditableText path="form.password" /></label>
                     <span className="password-field">
                       <input
                         id="sync-password"
@@ -8936,11 +8967,11 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
                         className="settings-input"
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
-                        placeholder="Password"
+                        placeholder={content.form.passwordPlaceholder}
                         required
                       />
                       <button type="button" className="password-toggle" onClick={() => setShowPassword((current) => !current)}>
-                        {showPassword ? "Hide" : "Show"}
+                        {showPassword ? content.form.hidePassword : content.form.showPassword}
                       </button>
                     </span>
                     {isLogin ? (
@@ -8950,7 +8981,7 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
                         onClick={submitPasswordReset}
                         disabled={!email.trim() || resetPending}
                       >
-                        {resetPending ? "Sending..." : "Forgot password?"}
+                        {resetPending ? content.form.sending : <EditableText path="form.forgotPassword" />}
                       </button>
                     ) : null}
                   </div>
@@ -8966,26 +8997,26 @@ function SyncConnectionScreen({ mode, error, onSignUp, onLogIn, onPasswordReset,
                           style={{ width: "auto", margin: 0 }}
                         />
                         <span style={{ lineHeight: "1.4" }}>
-                          I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}>Terms of Use</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}>Privacy Policy</a>.
+                          <EditableText path="form.legalPrefix" /> <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}><EditableText path="form.terms" /></a> <EditableText path="form.legalMiddle" /> <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}><EditableText path="form.privacy" /></a><EditableText path="form.legalSuffix" />
                         </span>
                       </label>
                     </>
                   ) : null}
                   <button type="submit" className="save-button">
-                    {isLogin ? "Log In" : "Create Account"}
+                    {isLogin ? content.form.loginSubmit : content.form.signupSubmit}
                   </button>
                 </form>
 
                 <div className="sync-auth-switch">
-                  <span>{isLogin ? "Need an account?" : "Already have an account?"}</span>
+                  <span>{isLogin ? content.actions.needAccount : content.actions.alreadyHaveAccount}</span>
                   <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(!isLogin)}>
-                    {isLogin ? "Sign up" : "Log in"}
+                    {isLogin ? content.actions.signupSwitch : content.actions.loginSwitch}
                   </button>
                 </div>
               </>
             )}
             <p className="sync-waitlist-line">
-              No invite yet? <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}>Join waitlist</a>
+              <EditableText path="actions.noInvite" /> <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}><EditableText path="actions.joinWaitlist" /></a>
             </p>
           </>
         )}

@@ -15,6 +15,8 @@ const EDITABLE_CONTENT_FILES = {
   "/__save-about-content": ["src/content/aboutContent.js", "aboutContent"],
   "/__save-early-access-content": ["src/content/earlyAccessContent.js", "earlyAccessContent"],
   "/__save-onboarding-content": ["src/content/onboardingContent.js", "onboardingContent"],
+  "/__save-download-content": ["src/content/downloadContent.js", "downloadContent"],
+  "/__save-auth-content": ["src/content/authContent.js", "authContent"],
 };
 
 function localContentEditorPlugin() {

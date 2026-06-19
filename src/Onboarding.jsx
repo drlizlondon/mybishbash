@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
-import { ContentEditProvider } from "./editing/ContentEditContext";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
 import { getGreeting } from "./utils";
+
+const ONBOARDING_DEMO_CTA_UNLOCK_MS = 5400;
 
 export const DEFAULT_INTERRUPTER_CARDS = [
   "Do I actually want to open Instagram right now?",
@@ -178,9 +180,10 @@ export default function Onboarding(props) {
       storageKey="mybishbash.onboardingContentDraft.v1"
       saveEndpoint="/__save-onboarding-content"
       saveLabel="src/content/onboardingContent.js"
-      isContentCompatible={(value) => Boolean(value?.welcome?.title && value?.done?.primary)}
+      isContentCompatible={(value) => Boolean(value?.steps?.learn?.title && value?.done?.primary)}
     >
       <OnboardingContent {...props} />
+      <EditPanel />
     </ContentEditProvider>
   );
 }
@@ -200,6 +203,7 @@ function OnboardingContent({
   availableLaunchers = [],
 }) {
   const pendingProtectedAppSetup = readPendingProtectedAppSetup();
+  const { content } = useContentEdit();
   const initialProtectedAppInterruptionPrefs = pendingProtectedAppSetup?.appId
     ? { [pendingProtectedAppSetup.appId]: Boolean(pendingProtectedAppSetup.useInterruptionCard) }
     : {};
@@ -232,7 +236,7 @@ function OnboardingContent({
   useEffect(() => {
     if (stepIndex !== 0) return undefined;
     setDemoComplete(false);
-    const timer = window.setTimeout(() => setDemoComplete(true), 15400);
+    const timer = window.setTimeout(() => setDemoComplete(true), ONBOARDING_DEMO_CTA_UNLOCK_MS);
     return () => window.clearTimeout(timer);
   }, [demoReplayKey, stepIndex]);
 
@@ -270,7 +274,7 @@ function OnboardingContent({
     setSelectedCardIds((current) => {
       if (current.includes(cardId)) return current.filter((id) => id !== cardId);
       if (selectedCardTexts.length >= 5) {
-        setCardSelectionMessage("You can choose up to five.");
+        setCardSelectionMessage(content.steps?.intention?.limitMessage ?? "You can choose up to five.");
         return current;
       }
       setCardSelectionMessage("");
@@ -292,7 +296,7 @@ function OnboardingContent({
     const text = customCardText.trim();
     if (!text) return;
     if (selectedCardTexts.length >= 5) {
-      setCardSelectionMessage("Deselect one card first.");
+      setCardSelectionMessage(content.steps?.intention?.deselectMessage ?? "Deselect one card first.");
       return;
     }
     setCustomCards((current) => [
@@ -439,11 +443,15 @@ function OnboardingContent({
 
           {currentStep === "learn" ? (
             <OnboardingStep
+              titlePath="steps.learn.title"
               title="Before your apps open"
+              bodyPath="steps.learn.body"
               body="MyBishBash shows a personal reminder before selected apps, so your phone can bring you back to what you meant to do."
+              primaryPath="steps.learn.primary"
               primaryLabel="Create your first card"
               onPrimary={goNext}
               primaryDisabled={!demoComplete}
+              secondaryPath="steps.learn.secondary"
               secondaryLabel="Skip Personal Cards for now"
               onSecondary={showSkipSummary}
             >
@@ -458,10 +466,14 @@ function OnboardingContent({
           {currentStep === "intention" ? (
             <OnboardingStep
               className="onboarding-step-card-selection"
+              titlePath="steps.intention.title"
               title="Things I genuinely mean to do, but don’t always remember."
+              bodyPath="steps.intention.body"
               body="Choose up to five. These will become your first Personal Cards."
+              primaryPath="steps.intention.primary"
               primaryLabel="Continue"
               onPrimary={saveAndContinue}
+              secondaryPath="steps.intention.secondary"
               secondaryLabel="Skip Personal Cards for now"
               onSecondary={showSkipSummary}
               canGoBack={canGoBack}
@@ -480,6 +492,10 @@ function OnboardingContent({
                 onOpenCustom={openCustomCardInput}
                 onCustomTextChange={setCustomCardText}
                 onAddCustom={addCustomCard}
+                selectedLabel={content.steps?.intention?.selectedLabel ?? "selected"}
+                writeOwnLabel={content.steps?.intention?.writeOwn ?? "Write my own"}
+                customPlaceholder={content.steps?.intention?.customPlaceholder ?? "Write your own reminder…"}
+                addCustomLabel={content.steps?.intention?.addCustom ?? "Add"}
               />
             </OnboardingStep>
           ) : null}
@@ -487,18 +503,21 @@ function OnboardingContent({
           {currentStep === "commitment-intro" ? (
             <OnboardingStep
               className="onboarding-commitment-intro-step"
+              titlePath="steps.commitmentIntro.title"
               title="Make plans. Not just reminders."
+              primaryPath="steps.commitmentIntro.primary"
               primaryLabel="Show me"
               onPrimary={startCommitmentDemo}
+              secondaryPath="steps.commitmentIntro.secondary"
               secondaryLabel="Skip Commitment Cards for now"
               onSecondary={skipCommitmentDemo}
               canGoBack={canGoBack}
               onBack={goBack}
             >
               <div className="onboarding-commitment-intro-copy">
-                <p>Personal Cards help you remember.</p>
-                <p>Commitment Cards help you follow through.</p>
-                <p>When you accept a commitment, MyBishBash checks back later and asks how it went.</p>
+                <EditableText as="p" path="steps.commitmentIntro.copy.0">Personal Cards help you remember.</EditableText>
+                <EditableText as="p" path="steps.commitmentIntro.copy.1">Commitment Cards help you follow through.</EditableText>
+                <EditableText as="p" path="steps.commitmentIntro.copy.2">When you accept a commitment, MyBishBash checks back later and asks how it went.</EditableText>
               </div>
             </OnboardingStep>
           ) : null}
@@ -525,8 +544,11 @@ function OnboardingContent({
 
           {currentStep === "commitment-review-time" ? (
             <CommitmentTimePassage
+              labelPath="steps.commitmentTime.label"
               label="Later..."
+              bodyPath="steps.commitmentTime.body"
               body="At the end, MyBishBash helps you reflect."
+              nextPath="steps.commitmentTime.next"
               onComplete={() => setStepIndex(STEPS.indexOf("commitment-review"))}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -546,8 +568,11 @@ function OnboardingContent({
           {currentStep === "commitment-complete" ? (
             <OnboardingStep
               className="onboarding-commitment-complete-step"
+              titlePath="steps.commitmentComplete.title"
               title="Commitment Cards help you follow through on the things that matter to you."
+              bodyPath="steps.commitmentComplete.body"
               body="You won’t create any Commitment Cards during setup. You can create them later when you’re using MyBishBash."
+              primaryPath="steps.commitmentComplete.primary"
               primaryLabel="Continue"
               onPrimary={completeCommitmentDemo}
               canGoBack={canGoBack && commitmentDemoChoice !== "accepted"}
@@ -557,10 +582,14 @@ function OnboardingContent({
 
           {currentStep === "protected-app" ? (
             <OnboardingStep
+              titlePath="steps.protectedApp.title"
               title="Install Your First MyBishBash App"
+              bodyPath="steps.protectedApp.body"
               body="Choose an app you use regularly."
+              primaryPath="steps.protectedApp.primary"
               primaryLabel="Continue"
               onPrimary={continueToProtectedAppDemo}
+              secondaryPath="steps.protectedApp.secondary"
               secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "Choose an app later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
@@ -576,10 +605,11 @@ function OnboardingContent({
 
           {currentStep === "protected-demo" ? (
             <OnboardingStep
-              title={`Before ${selectedProtectedAppName} opens`}
-              body={`Would you like a Pause Card before ${selectedProtectedAppName} opens?`}
-              primaryLabel={`Install ${selectedProtectedAppName} Launcher`}
+              title={<><EditableText path="steps.protectedDemo.titlePrefix">Before</EditableText> {selectedProtectedAppName} opens</>}
+              body={<><EditableText path="steps.protectedDemo.bodyPrefix">Would you like a Pause Card before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens?</EditableText></>}
+              primaryLabel={<><EditableText path="steps.protectedDemo.primaryPrefix">Install</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.primarySuffix">Launcher</EditableText></>}
               onPrimary={continueToProtectedAppSetup}
+              secondaryPath="steps.protectedDemo.secondary"
               secondaryLabel="Choose an app later"
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
@@ -596,15 +626,17 @@ function OnboardingContent({
           {currentStep === "protected-setup" ? (
             <OnboardingStep
               className="onboarding-protected-setup-step"
-              title={protectedAppSetupPhase === "confirmed" ? `${selectedProtectedAppName} Launcher Ready` : `Install ${selectedProtectedAppName} Launcher`}
+              title={protectedAppSetupPhase === "confirmed"
+                ? <>{selectedProtectedAppName} <EditableText path="steps.protectedSetup.confirmedSuffix">Launcher Ready</EditableText></>
+                : <><EditableText path="steps.protectedSetup.installPrefix">Install</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedSetup.installSuffix">Launcher</EditableText></>}
               body={protectedAppSetupPhase === "confirmed"
-                ? `${selectedProtectedAppName} is now ready to use with MyBishBash.`
-                : `See your Personal Cards before opening ${selectedProtectedAppName}.`}
+                ? <>{selectedProtectedAppName} <EditableText path="steps.protectedSetup.confirmedBodySuffix">is now ready to use with MyBishBash.</EditableText></>
+                : <><EditableText path="steps.protectedSetup.installBodyPrefix">See your Personal Cards before opening</EditableText> {selectedProtectedAppName}<EditableText path="steps.protectedSetup.installBodySuffix">.</EditableText></>}
               primaryLabel={protectedAppSetupPhase === "confirmed"
-                ? "Continue to Home"
+                ? <EditableText path="steps.protectedSetup.continueHome">Continue to Home</EditableText>
                 : protectedAppSetupPhase === "install_started"
-                  ? "I’ve saved it"
-                  : `Add ${selectedProtectedAppName} Launcher`}
+                  ? <EditableText path="steps.protectedSetup.saved">I’ve saved it</EditableText>
+                  : <><EditableText path="steps.protectedSetup.addPrefix">Add</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedSetup.addSuffix">Launcher</EditableText></>}
               onPrimary={() => {
                 if (protectedAppSetupPhase === "confirmed") {
                   finishProtectedAppSetup({ completed: true });
@@ -616,7 +648,7 @@ function OnboardingContent({
                 }
                 openProtectedAppInstall();
               }}
-              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "Choose an app later"}
+              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : <EditableText path="steps.protectedSetup.secondary">Choose an app later</EditableText>}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -630,8 +662,11 @@ function OnboardingContent({
 
           {currentStep === "skip" ? (
             <OnboardingStep
+              titlePath="steps.skip.title"
               title="You can set up your first card later."
+              bodyPath="steps.skip.body"
               body="Personal Cards live in MyBishBash. When you are ready, create one reminder and let your phone bring you back to what matters."
+              primaryPath="steps.skip.primary"
               primaryLabel="Go to Home"
               onPrimary={onSkip}
               canGoBack={!skipRequested}
@@ -678,13 +713,22 @@ function OnboardingCommitmentDemoStage({ children, canGoBack, onBack, dataTestId
   );
 }
 
-function CommitmentTimePassage({ label = "Great.", body = "We'll check back later.", onComplete, canGoBack, onBack }) {
+function CommitmentTimePassage({
+  label = "Great.",
+  labelPath,
+  body = "We'll check back later.",
+  bodyPath,
+  nextPath,
+  onComplete,
+  canGoBack,
+  onBack,
+}) {
   return (
     <div className="onboarding-step onboarding-commitment-time-step" data-testid="commitment-time-passage">
       <div className="onboarding-step-top">
         {canGoBack ? (
           <button type="button" className="onboarding-back-button" onClick={onBack} aria-label="Go back">
-            Back
+            <EditableText path="common.back">Back</EditableText>
           </button>
         ) : null}
       </div>
@@ -692,10 +736,10 @@ function CommitmentTimePassage({ label = "Great.", body = "We'll check back late
         <div className="onboarding-time-ring" aria-hidden="true">
           <span />
         </div>
-        <h2>{label}</h2>
-        <p>{body}</p>
+        <h2>{labelPath ? <EditableText path={labelPath}>{label}</EditableText> : label}</h2>
+        <p>{bodyPath ? <EditableText path={bodyPath}>{body}</EditableText> : body}</p>
         <button type="button" className="onboarding-time-next" onClick={onComplete}>
-          Next
+          {nextPath ? <EditableText path={nextPath}>Next</EditableText> : "Next"}
         </button>
       </div>
     </div>
@@ -706,6 +750,7 @@ function ReminderIdeaGrid({
   options,
   selectedIds,
   selectedCount,
+  selectedLabel = "selected",
   customCards,
   customCardOpen,
   customCardText,
@@ -715,12 +760,15 @@ function ReminderIdeaGrid({
   onOpenCustom,
   onCustomTextChange,
   onAddCustom,
+  writeOwnLabel = "Write my own",
+  customPlaceholder = "Write your own reminder…",
+  addCustomLabel = "Add",
 }) {
   const cleanCustomText = customCardText.trim();
   return (
     <div className="onboarding-reminder-picker">
       <div className="onboarding-selection-count" aria-live="polite">
-        <span>{selectedCount} of 5 selected</span>
+        <span>{selectedCount} of 5 {selectedLabel}</span>
       </div>
       {message ? <p className="onboarding-selection-message" aria-live="polite">{message}</p> : null}
       <div className="onboarding-idea-grid" role="group" aria-label="Choose Personal Cards">
@@ -754,22 +802,22 @@ function ReminderIdeaGrid({
         {customCardOpen ? (
           <div className="onboarding-custom-card">
             <label>
-              <span>Write my own</span>
+              <span>{writeOwnLabel}</span>
               <input
                 type="text"
                 value={customCardText}
                 onChange={(event) => onCustomTextChange(event.target.value)}
-                placeholder="Write your own reminder…"
+                placeholder={customPlaceholder}
                 maxLength={140}
               />
             </label>
             <button type="button" onClick={onAddCustom} disabled={!cleanCustomText}>
-              Add
+              {addCustomLabel}
             </button>
           </div>
         ) : (
           <button type="button" className="onboarding-idea-card onboarding-write-own-card" onClick={onOpenCustom}>
-            <strong>Write my own</strong>
+            <strong>{writeOwnLabel}</strong>
           </button>
         )}
       </div>
@@ -778,8 +826,9 @@ function ReminderIdeaGrid({
 }
 
 function ProtectedAppChoiceGrid({ apps, selectedId, onSelect }) {
+  const { content } = useContentEdit();
   return (
-    <div className="onboarding-protected-app-grid" role="radiogroup" aria-label="Choose your first app">
+    <div className="onboarding-protected-app-grid" role="radiogroup" aria-label={content.steps?.protectedApp?.ariaLabel ?? "Choose your first app"}>
       {apps.map((app) => {
         const selected = app.id === selectedId;
         return (
@@ -801,6 +850,7 @@ function ProtectedAppChoiceGrid({ apps, selectedId, onSelect }) {
 }
 
 function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
+  const { content } = useContentEdit();
   const appName = getLauncherName(app);
   const demo = APP_INTERRUPTION_DEMOS[app?.id] ?? {
     title: `Before ${appName}`,
@@ -817,13 +867,13 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
         <i aria-hidden="true" />
         <p>{demo.body}</p>
         <div className="onboarding-real-card-actions">
-          <button type="button">Continue to {appName}</button>
-          <button type="button">Not now</button>
+          <button type="button"><EditableText path="steps.protectedDemo.continuePrefix">Continue to</EditableText> {appName}</button>
+          <button type="button"><EditableText path="steps.protectedDemo.notNow">Not now</EditableText></button>
         </div>
       </article>
-      <p className="onboarding-interruption-demo-note">This is an example of a Pause Card.</p>
+      <EditableText as="p" className="onboarding-interruption-demo-note" path="steps.protectedDemo.note">This is an example of a Pause Card.</EditableText>
       <div className="onboarding-interruption-toggle" data-testid="onboarding-interruption-toggle">
-        <span>Pause Cards</span>
+        <EditableText as="span" path="steps.protectedDemo.toggleLabel">Pause Cards</EditableText>
         <div role="group" aria-label="Pause Cards">
           <button
             type="button"
@@ -831,7 +881,7 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
             aria-pressed={enabled}
             onClick={() => onChange(true)}
           >
-            On
+            {content.steps?.protectedDemo?.on ?? "On"}
           </button>
           <button
             type="button"
@@ -839,19 +889,20 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
             aria-pressed={!enabled}
             onClick={() => onChange(false)}
           >
-            Off
+            {content.steps?.protectedDemo?.off ?? "Off"}
           </button>
         </div>
-        <p>You can change this later.</p>
+        <EditableText as="p" path="steps.protectedDemo.later">You can change this later.</EditableText>
       </div>
     </div>
   );
 }
 
 function ProtectedAppSetupCard({ app, phase = "ready" }) {
+  const { content } = useContentEdit();
   const appName = getLauncherName(app);
   const isConfirmed = phase === "confirmed";
-  const steps = [
+  const steps = content.steps?.protectedSetup?.steps ?? [
     `Tap Add ${appName} Launcher.`,
     "Tap Share.",
     "Tap Add to Home Screen.",
@@ -863,32 +914,30 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
       <div className="onboarding-protected-setup-heading">
         <OnboardingAppIcon launcher={app} />
         <div>
-          <p>{isConfirmed ? "Marked as saved" : "Home Screen launcher"}</p>
+          <p>{isConfirmed ? (content.steps?.protectedSetup?.markedSaved ?? "Marked as saved") : (content.steps?.protectedSetup?.homeScreenLauncher ?? "Home Screen launcher")}</p>
           <h3>{appName}</h3>
         </div>
       </div>
       {isConfirmed ? (
         <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
-          <strong>{appName} launcher ready</strong>
-          <p>{appName} is now ready to use with MyBishBash.</p>
-          <p>Move the MyBishBash {appName} launcher to where {appName} normally sits on your Home Screen. Put the original {appName} app in a folder so you open MyBishBash first.</p>
+          <strong>{appName} {content.steps?.protectedSetup?.launcherReadySuffix ?? "launcher ready"}</strong>
+          <p>{appName} {content.steps?.protectedSetup?.confirmedBodySuffix ?? "is now ready to use with MyBishBash."}</p>
+          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the MyBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {content.steps?.protectedSetup?.moveLauncherSuffix ?? "normally sits on your Home Screen. Put the original app in a folder so you open MyBishBash first."}</p>
         </div>
       ) : (
         <>
-          <p>Add the {appName} launcher to your Home Screen.</p>
+          <p>{content.steps?.protectedSetup?.addLauncherPrefix ?? "Add the"} {appName} {content.steps?.protectedSetup?.addLauncherSuffix ?? "launcher to your Home Screen."}</p>
           <div className="onboarding-install-guidance" data-testid="onboarding-install-guidance">
             <ol className="onboarding-install-steps">
               {steps.map((step, index) => (
                 <li key={step}>
                   <span className="onboarding-install-step-marker" aria-hidden="true">{index + 1}</span>
-                  <span>{step}</span>
+                  <span>{step.replace("{appName}", appName)}</span>
                 </li>
               ))}
             </ol>
           </div>
-          <p className="onboarding-install-return-note">
-            Once it is saved, return to MyBishBash to continue.
-          </p>
+          <EditableText as="p" className="onboarding-install-return-note" path="steps.protectedSetup.returnNote">Once it is saved, return to MyBishBash to continue.</EditableText>
         </>
       )}
     </article>
@@ -925,6 +974,7 @@ function HeartGlyph() {
 }
 
 function TutorialDemoIntro({ isComplete = false, onReplay }) {
+  const { content } = useContentEdit();
   const instagram = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "instagram");
   const whatsapp = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "whatsapp");
   const safari = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "safari");
@@ -935,24 +985,24 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
       <div className="onboarding-demo-phone-screen" aria-hidden="true">
         <span className="onboarding-demo-phone-app onboarding-demo-phone-app-instagram">
           <OnboardingAppIcon launcher={instagram} />
-          <span>Instagram</span>
+          <EditableText as="span" path="tutorialDemo.instagram">Instagram</EditableText>
         </span>
         <span className="onboarding-demo-phone-app onboarding-demo-phone-app-whatsapp">
           <OnboardingAppIcon launcher={whatsapp} />
-          <span>WhatsApp</span>
+          <EditableText as="span" path="tutorialDemo.whatsapp">WhatsApp</EditableText>
         </span>
         <span className="onboarding-demo-phone-app onboarding-demo-phone-app-safari">
           <OnboardingAppIcon launcher={safari} />
-          <span>Safari</span>
+          <EditableText as="span" path="tutorialDemo.safari">Safari</EditableText>
         </span>
       </div>
       <div className="onboarding-demo-app onboarding-demo-app-instagram">
         <OnboardingAppIcon launcher={instagram} />
-        <span>Opening Instagram</span>
+        <EditableText as="span" path="tutorialDemo.openingInstagram">Opening Instagram</EditableText>
       </div>
       <div className="onboarding-demo-app onboarding-demo-app-whatsapp">
         <OnboardingAppIcon launcher={whatsapp} />
-        <span>Opening WhatsApp</span>
+        <EditableText as="span" path="tutorialDemo.openingWhatsApp">Opening WhatsApp</EditableText>
       </div>
       <div className="onboarding-demo-cursor" aria-hidden="true" />
       <span className="onboarding-demo-click-ripple" aria-hidden="true" />
@@ -961,13 +1011,13 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <span className="onboarding-demo-card-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h3>Have you taken your vitamins today?</h3>
+        <EditableText as="h3" path="tutorialDemo.vitaminTitle">Have you taken your vitamins today?</EditableText>
         <i aria-hidden="true" />
-        <p>A gentle nudge from the version of you that cares.</p>
+        <EditableText as="p" path="tutorialDemo.vitaminBody">A gentle nudge from the version of you that cares.</EditableText>
         <div className="onboarding-real-card-actions" aria-label="Example card choices">
-          <button type="button">Done</button>
-          <button type="button">I’ll do it now</button>
-          <button type="button">Not done</button>
+          <button type="button">{content.tutorialDemo?.done ?? "Done"}</button>
+          <button type="button">{content.tutorialDemo?.doNow ?? "I’ll do it now"}</button>
+          <button type="button">{content.tutorialDemo?.notDone ?? "Not done"}</button>
         </div>
       </article>
       <article className="onboarding-demo-real-card onboarding-demo-real-card-whatsapp">
@@ -975,35 +1025,35 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <span className="onboarding-demo-card-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h3>Have you put your sunscreen on today?</h3>
+        <EditableText as="h3" path="tutorialDemo.sunscreenTitle">Have you put your sunscreen on today?</EditableText>
         <i aria-hidden="true" />
-        <p>A small reminder before the next thing takes over.</p>
+        <EditableText as="p" path="tutorialDemo.sunscreenBody">A small reminder before the next thing takes over.</EditableText>
         <div className="onboarding-real-card-actions" aria-label="Example card choices">
-          <button type="button">Done</button>
-          <button type="button">I’ll do it now</button>
-          <button type="button">Not done</button>
+          <button type="button">{content.tutorialDemo?.done ?? "Done"}</button>
+          <button type="button">{content.tutorialDemo?.doNow ?? "I’ll do it now"}</button>
+          <button type="button">{content.tutorialDemo?.notDone ?? "Not done"}</button>
         </div>
       </article>
       <article className="onboarding-demo-continue-card onboarding-demo-continue-card-instagram">
-        <span>Ready</span>
-        <strong>Continue to Instagram</strong>
+        <EditableText as="span" path="tutorialDemo.ready">Ready</EditableText>
+        <EditableText as="strong" path="tutorialDemo.continueInstagram">Continue to Instagram</EditableText>
       </article>
       <article className="onboarding-demo-continue-card onboarding-demo-continue-card-whatsapp">
-        <span>Ready</span>
-        <strong>Continue to WhatsApp</strong>
+        <EditableText as="span" path="tutorialDemo.ready">Ready</EditableText>
+        <EditableText as="strong" path="tutorialDemo.continueWhatsApp">Continue to WhatsApp</EditableText>
       </article>
       <div className="onboarding-demo-app-open onboarding-demo-app-open-instagram">
         <OnboardingAppIcon launcher={instagram} />
-        <span>Instagram opens</span>
+        <EditableText as="span" path="tutorialDemo.instagramOpens">Instagram opens</EditableText>
       </div>
       <div className="onboarding-demo-app-open onboarding-demo-app-open-whatsapp">
         <OnboardingAppIcon launcher={whatsapp} />
-        <span>WhatsApp opens</span>
+        <EditableText as="span" path="tutorialDemo.whatsappOpens">WhatsApp opens</EditableText>
       </div>
-      <p className="onboarding-demo-final-line">For the things you genuinely mean to do.</p>
+      <EditableText as="p" className="onboarding-demo-final-line" path="tutorialDemo.finalLine">For the things you genuinely mean to do.</EditableText>
       {isComplete ? (
         <button type="button" className="onboarding-demo-replay" onClick={onReplay}>
-          Replay
+          {content.tutorialDemo?.replay ?? "Replay"}
         </button>
       ) : null}
     </div>
@@ -1011,20 +1061,21 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
 }
 
 function OnboardingDemoCard({ text, timing, place }) {
+  const { content } = useContentEdit();
   return (
     <div className="onboarding-demo-stage" aria-label="Personal Card example">
       <article className="onboarding-demo-phone">
-        <span className="onboarding-demo-kicker">Personal Card</span>
+        <EditableText as="span" className="onboarding-demo-kicker" path="demoCard.kicker">Personal Card</EditableText>
         <h3>{text}</h3>
-        <p>A gentle interruption before the next automatic moment.</p>
+        <EditableText as="p" path="demoCard.body">A gentle interruption before the next automatic moment.</EditableText>
         <div className="onboarding-demo-actions" aria-hidden="true">
-          <span>Done</span>
-          <span>I’ll do it now</span>
-          <span>Not done</span>
+          <span>{content.demoCard?.done ?? "Done"}</span>
+          <span>{content.demoCard?.doNow ?? "I’ll do it now"}</span>
+          <span>{content.demoCard?.notDone ?? "Not done"}</span>
         </div>
       </article>
       <div className="onboarding-demo-notes" aria-label="What this card does">
-        <span>Your words</span>
+        <span>{content.demoCard?.words ?? "Your words"}</span>
         <span>{timing}</span>
         <span>{place}</span>
       </div>
@@ -1033,17 +1084,18 @@ function OnboardingDemoCard({ text, timing, place }) {
 }
 
 function PersonalCardPreview({ text, timing, place, compact = false, highlight = null }) {
+  const { content } = useContentEdit();
   return (
     <article className={`onboarding-personal-preview ${compact ? "compact" : ""}`} data-testid="personal-card-onboarding-preview">
-      <p>Personal Card</p>
+      <p>{content.personalPreview?.label ?? "Personal Card"}</p>
       <h3 className={highlight === "text" ? "is-highlighted" : ""}>{text}</h3>
       <dl>
         <div className={highlight === "timing" ? "is-highlighted" : ""}>
-          <dt>When</dt>
+          <dt>{content.personalPreview?.when ?? "When"}</dt>
           <dd>{timing}</dd>
         </div>
         <div className={highlight === "place" ? "is-highlighted" : ""}>
-          <dt>Where</dt>
+          <dt>{content.personalPreview?.where ?? "Where"}</dt>
           <dd>{place}</dd>
         </div>
       </dl>
@@ -1054,11 +1106,15 @@ function PersonalCardPreview({ text, timing, place, compact = false, highlight =
 function OnboardingStep({
   className = "",
   title,
+  titlePath,
   body,
+  bodyPath,
   children,
   primaryLabel,
+  primaryPath,
   onPrimary,
   secondaryLabel,
+  secondaryPath,
   onSecondary,
   canGoBack = false,
   onBack,
@@ -1069,24 +1125,24 @@ function OnboardingStep({
       <div className="onboarding-step-top">
         {canGoBack ? (
           <button type="button" className="onboarding-back-button" onClick={onBack} aria-label="Go back">
-            Back
+            <EditableText path="common.back">Back</EditableText>
           </button>
         ) : null}
       </div>
       <div className="onboarding-step-copy">
-        <h2>{title}</h2>
-        {body ? <p>{body}</p> : null}
+        <h2>{titlePath ? <EditableText path={titlePath}>{title}</EditableText> : title}</h2>
+        {body ? <p>{bodyPath ? <EditableText path={bodyPath}>{body}</EditableText> : body}</p> : null}
       </div>
       {children ? <div className="onboarding-step-body">{children}</div> : null}
       <div className="onboarding-actions">
         {primaryLabel ? (
           <button type="button" className="save-button" onClick={onPrimary} disabled={primaryDisabled}>
-            {primaryLabel}
+            {primaryPath ? <EditableText path={primaryPath}>{primaryLabel}</EditableText> : primaryLabel}
           </button>
         ) : null}
         {secondaryLabel ? (
           <button type="button" className="secondary-button" onClick={onSecondary}>
-            {secondaryLabel}
+            {secondaryPath ? <EditableText path={secondaryPath}>{secondaryLabel}</EditableText> : secondaryLabel}
           </button>
         ) : null}
       </div>

@@ -98,7 +98,9 @@ test('valid code at gate allows signup without an access-code field', async ({ p
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
 
-  await page.getByRole('link', { name: 'I can’t do this right now' }).click();
+  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await expect(page.getByTestId('download-success-page')).toBeVisible();
+  await page.getByRole('link', { name: 'I’ve opened MyBishBash' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
