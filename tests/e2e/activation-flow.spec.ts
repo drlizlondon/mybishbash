@@ -123,22 +123,22 @@ test('download page presents Home Screen install flow before the success step', 
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await expect(page.getByTestId('download-success-page')).toBeVisible();
   await expect(page.getByRole('heading', { name: "You're in." })).toBeVisible();
-  await expect(page.getByText('Create your account here, then open MyBishBash from your Home Screen.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Create account here' })).toBeVisible();
+  await expect(page.getByText('Open the MyBishBash app from your Home Screen and create your account.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Create account here' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Can’t install it right now?' })).toBeVisible();
   await expect(page.getByText('Create your account here and use MyBishBash in your browser for now.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Create account without installing' })).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Next you’ll create your account');
 
-  await page.getByRole('link', { name: 'Create account here' }).click();
+  const installedProfile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
+  expect(installedProfile.hasCompletedHomeScreenInstall).toBe(true);
+  expect(installedProfile.hasSkippedHomeScreenInstallPrompt).toBe(false);
+  expect(installedProfile.plan).toBe('free');
+
+  await page.getByRole('link', { name: 'Create account without installing' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
-
-  const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
-  expect(profile.hasCompletedHomeScreenInstall).toBe(true);
-  expect(profile.hasSkippedHomeScreenInstallPrompt).toBe(false);
-  expect(profile.plan).toBe('free');
 });
 
 test('download success fallback stores incomplete install state and continues to browser signup', async ({ page }) => {

@@ -147,6 +147,9 @@ function getLauncherInstallUrl(launcher) {
   const basePath = getAppBasePath() || "/mybishbash";
   const path = launcher?.installPath ?? `${basePath}/install/${launcher?.id ?? "instagram"}/`;
   if (typeof window === "undefined") return path;
+  if ((window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") && path.endsWith("/")) {
+    return new URL(`${path}index.html`, window.location.origin).toString();
+  }
   return new URL(path, window.location.origin).toString();
 }
 
@@ -208,7 +211,11 @@ function OnboardingContent({
     ? { [pendingProtectedAppSetup.appId]: Boolean(pendingProtectedAppSetup.useInterruptionCard) }
     : {};
   const [stepIndex, setStepIndex] = useState(() => (
-    pendingProtectedAppSetup ? STEPS.indexOf("protected-setup") : 0
+    pendingProtectedAppSetup?.status === "confirmed"
+      ? STEPS.indexOf("protected-setup")
+      : pendingProtectedAppSetup
+        ? STEPS.indexOf("protected-app")
+        : 0
   ));
   const [demoComplete, setDemoComplete] = useState(false);
   const [demoReplayKey, setDemoReplayKey] = useState(0);
@@ -221,7 +228,7 @@ function OnboardingContent({
   const [commitmentDemoChoice, setCommitmentDemoChoice] = useState(null);
   const protectedAppOptions = getFirstProtectedApps(availableLaunchers);
   const [selectedProtectedAppId, setSelectedProtectedAppId] = useState(pendingProtectedAppSetup?.appId ?? protectedAppOptions[0]?.id ?? "instagram");
-  const [protectedAppSetupPhase, setProtectedAppSetupPhase] = useState(pendingProtectedAppSetup?.status === "install_started" ? "install_started" : "ready");
+  const [protectedAppSetupPhase, setProtectedAppSetupPhase] = useState(pendingProtectedAppSetup?.status === "confirmed" ? "confirmed" : "ready");
   const [protectedAppInterruptionPrefs, setProtectedAppInterruptionPrefs] = useState(initialProtectedAppInterruptionPrefs);
   const protectedAppInterruptionPrefsRef = useRef(initialProtectedAppInterruptionPrefs);
 
@@ -255,7 +262,7 @@ function OnboardingContent({
       "commitment-complete": commitmentDemoChoice === "declined" ? "commitment-motivation" : "commitment-review",
       "protected-app": previousProtectedAppStep,
       "protected-demo": "protected-app",
-      "protected-setup": "protected-demo",
+      "protected-setup": "protected-app",
     };
     const previousStep = previousStepByCurrent[currentStep];
     if (previousStep) {
@@ -369,15 +376,10 @@ function OnboardingContent({
     setStepIndex(STEPS.indexOf("protected-app"));
   }
 
-  function continueToProtectedAppDemo() {
+  function continueToProtectedAppInstall() {
     clearPendingProtectedAppSetup();
-    setProtectedAppSetupPhase("ready");
-    setStepIndex(STEPS.indexOf("protected-demo"));
-  }
-
-  function continueToProtectedAppSetup() {
     saveProtectedAppInterruptionPreference(selectedProtectedAppId, getSelectedProtectedAppInterruptionEnabled());
-    setStepIndex(STEPS.indexOf("protected-setup"));
+    openProtectedAppInstall();
   }
 
   function selectProtectedApp(appId) {
@@ -407,8 +409,6 @@ function OnboardingContent({
     const installUrl = getLauncherInstallUrl(selectedProtectedApp);
     writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled());
     setProtectedAppSetupPhase("install_started");
-    const opened = window.open(installUrl, "_blank", "noopener,noreferrer");
-    if (opened) return;
     window.location.assign(installUrl);
   }
 
@@ -588,7 +588,7 @@ function OnboardingContent({
               body="Choose an app you use regularly."
               primaryPath="steps.protectedApp.primary"
               primaryLabel="Continue"
-              onPrimary={continueToProtectedAppDemo}
+              onPrimary={continueToProtectedAppInstall}
               secondaryPath="steps.protectedApp.secondary"
               secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "Choose an app later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
@@ -608,7 +608,7 @@ function OnboardingContent({
               title={<><EditableText path="steps.protectedDemo.titlePrefix">Before</EditableText> {selectedProtectedAppName} opens</>}
               body={<><EditableText path="steps.protectedDemo.bodyPrefix">Would you like a Pause Card before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens?</EditableText></>}
               primaryLabel={<><EditableText path="steps.protectedDemo.primaryPrefix">Install</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.primarySuffix">Launcher</EditableText></>}
-              onPrimary={continueToProtectedAppSetup}
+              onPrimary={continueToProtectedAppInstall}
               secondaryPath="steps.protectedDemo.secondary"
               secondaryLabel="Choose an app later"
               onSecondary={() => finishProtectedAppSetup({ completed: false })}

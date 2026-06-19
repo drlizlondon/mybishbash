@@ -151,6 +151,10 @@ export async function saveSharedState(userId, state) {
 
 export async function getSession() {
   if (isDemoMode()) {
+    const isSignupRoute = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("signup") === "1";
+    if (isSignupRoute) return null;
+    const demoSession = readE2EAuthSession();
+    if (demoSession) return demoSession;
     return { user: { id: "demo-user", email: "demo@example.com" } };
   }
   if (isE2EAuthMockMode()) {
@@ -549,6 +553,10 @@ export async function signUp(email, password, accessCode = null) {
     }
   }
   if (!handoffRef) {
+    if (isDemoMode()) {
+      window.localStorage.setItem("MYBISHBASH_E2E_AUTH_MOCK", "true");
+      return rememberE2EAuthSession(buildE2EAuthSession(email));
+    }
     throw new Error(INVITE_ONLY_ACCESS_ERROR);
   }
   if (isE2EAuthMockMode()) {

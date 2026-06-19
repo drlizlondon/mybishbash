@@ -85,6 +85,24 @@ test('direct signup without validated gate code is blocked', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Before your apps open' })).toHaveCount(0);
 });
 
+test('demo mode can create an account without an access-code field', async ({ page }) => {
+  await seedAuthMock(page);
+  await page.goto('/mybishbash/demo-signup');
+
+  await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
+  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByLabel('Access code')).toHaveCount(0);
+  await fillSignup(page);
+
+  await expect(page.getByRole('heading', { name: 'Before your apps open' })).toBeVisible({ timeout: 10000 });
+  const authState = await page.evaluate(() => ({
+    authMock: window.localStorage.getItem('MYBISHBASH_E2E_AUTH_MOCK'),
+    session: JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_AUTH_SESSION') ?? '{}'),
+  }));
+  expect(authState.authMock).toBe('true');
+  expect(authState.session.user.email).toContain('@example.com');
+});
+
 test('expired validated gate code is blocked at signup', async ({ page }) => {
   await seedAuthMock(page);
   await seedSignupHandoff(page, 'WELCOME', Date.now() - 60 * 1000);
@@ -109,7 +127,7 @@ test('valid code at gate allows signup without an access-code field', async ({ p
 
   await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'Create account here' }).click();
+  await page.getByRole('link', { name: 'Create account without installing' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
@@ -234,7 +252,7 @@ test('shared device logout clears prior account state before a new signup starts
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
-  await page.getByRole('link', { name: 'Create account here' }).click();
+  await page.getByRole('link', { name: 'Create account without installing' }).click();
   await page.getByLabel('Email').fill('new-shared-device-user@example.com');
   await page.getByLabel('Password').fill('password123');
   await page.getByLabel(/I agree to the Terms/i).check();

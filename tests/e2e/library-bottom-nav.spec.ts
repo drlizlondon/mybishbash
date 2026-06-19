@@ -194,6 +194,15 @@ async function tapNavAndAssert(page: Page, item: typeof navItems[number]) {
   await assertInteractionCleanup(page);
 }
 
+async function getAppScrollTop(page: Page) {
+  return page.evaluate(() => Math.max(
+    window.scrollY,
+    document.documentElement.scrollTop,
+    document.body.scrollTop,
+    document.querySelector<HTMLElement>('[data-testid="app-shell"]')?.scrollTop ?? 0,
+  ));
+}
+
 async function runNavTapMatrix(page: Page, sourcePath: string) {
   await page.goto(`/mybishbash${sourcePath}`);
   await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -283,6 +292,29 @@ test('pre-launch bottom nav tapability matrix and hit-test audit', async ({ page
   for (const item of navItems) await tapNavAndAssert(page, item);
 
   assertNoRuntimeIssues();
+});
+
+test('bottom navigation starts each destination at the top of the page', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await seedState(page);
+
+  await page.goto('/mybishbash/library');
+  await expect(page.getByTestId('library-panel')).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await getAppScrollTop(page)).toBeGreaterThan(0);
+
+  await page.getByTestId('bottom-nav-explore').click();
+  await expectAppRoute(page, '/explore');
+  await expect(page.getByTestId('explore-panel')).toBeVisible();
+  await expect.poll(() => getAppScrollTop(page)).toBe(0);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await getAppScrollTop(page)).toBeGreaterThan(0);
+
+  await page.getByTestId('bottom-nav-apps').click();
+  await expectAppRoute(page, '/apps');
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
+  await expect.poll(() => getAppScrollTop(page)).toBe(0);
 });
 
 test('pre-launch journey audit keeps bottom nav tappable', async ({ page }) => {

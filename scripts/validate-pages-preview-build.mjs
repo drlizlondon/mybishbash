@@ -48,7 +48,7 @@ for (const launcherId of supportedLauncherIds) {
 
   const legacyShell = readFileSync(`dist/${launcherId}/index.html`, "utf8");
   assert.match(legacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
-  assert.match(legacyShell, /This Home Screen shortcut opens MyBishBash before/);
+  assert.match(legacyShell, /MyBishBash will show your Personal Cards before/);
   assert.doesNotMatch(legacyShell, /launcherContext|shared MyBishBash state/);
 }
 

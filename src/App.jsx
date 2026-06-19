@@ -322,6 +322,10 @@ function isE2EModeEnabled() {
   return typeof window !== "undefined" && window.localStorage.getItem(E2E_MODE_KEY) === "true";
 }
 
+function isDemoModeEnabled() {
+  return typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+}
+
 function loadExplicitLauncherBehaviorSettings() {
   if (typeof window === "undefined") return {};
   try {
@@ -1454,8 +1458,84 @@ const ONBOARDING_COMMITMENT_DEMO_REVIEW_CARD = {
   dashboardTitle: "Commitment review",
 };
 
+function shouldStartDemoOnboarding() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("demoOnboarding") === "1") return true;
+  const routeParam = params.get("route");
+  const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
+  return normalizeRoutePath(rawPath) === "/demo-onboarding";
+}
+
+function shouldStartDemoSignup() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("demoSignup") === "1") return true;
+  const routeParam = params.get("route");
+  const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
+  return normalizeRoutePath(rawPath) === "/demo-signup";
+}
+
+function resetDemoSignupState() {
+  if (typeof window === "undefined") return;
+  const demoKeysToRemove = [
+    "MYBISHBASH_E2E_AUTH_MOCK",
+    "MYBISHBASH_E2E_AUTH_SESSION",
+    "MYBISHBASH_E2E_MODE",
+    "MYBISHBASH_E2E_TESTER_MODE",
+    "mybishbash.cards.v1",
+    "mybishbash.profile.v1",
+    "mybishbash.action-cards.v1",
+    "mybishbash.event-log.v1",
+    "mybishbash.offline-event-queue.v1",
+    "mybishbash.onboarding-protected-app-setup-pending.v1",
+    "mybishbash.signup-onboarding-pending.v1",
+    "mybishbash.launcher-behavior-settings.v1",
+    "mybishbash.app-pauses.v1",
+    "mybishbash.setup-complete.v1",
+  ];
+  demoKeysToRemove.forEach((key) => window.localStorage.removeItem(key));
+  window.localStorage.setItem("MYBISHBASH_DEMO_MODE", "true");
+}
+
+function resetDemoOnboardingState() {
+  if (typeof window === "undefined") return;
+  const demoKeysToRemove = [
+    "mybishbash.cards.v1",
+    "mybishbash.profile.v1",
+    "mybishbash.action-cards.v1",
+    "mybishbash.event-log.v1",
+    "mybishbash.offline-event-queue.v1",
+    "mybishbash.onboarding-protected-app-setup-pending.v1",
+    "mybishbash.signup-onboarding-pending.v1",
+    "mybishbash.launcher-behavior-settings.v1",
+    "mybishbash.app-pauses.v1",
+  ];
+  demoKeysToRemove.forEach((key) => window.localStorage.removeItem(key));
+  window.localStorage.setItem("MYBISHBASH_E2E_MODE", "true");
+  window.localStorage.setItem("MYBISHBASH_E2E_TESTER_MODE", "true");
+  window.localStorage.setItem("MYBISHBASH_DEMO_MODE", "true");
+  window.localStorage.setItem("mybishbash.setup-complete.v1", "false");
+  window.localStorage.setItem("mybishbash.profile.v1", JSON.stringify({
+    name: "Demo",
+    timezone: "Europe/London",
+    plan: "premium",
+    hasSeenCommitmentCardDemo: false,
+    hasSkippedCommitmentCardDemo: false,
+    hasCompletedHomeSpotlightTour: false,
+  }));
+}
+
 function App() {
   if (typeof window !== "undefined") {
+    if (shouldStartDemoOnboarding()) {
+      resetDemoOnboardingState();
+      window.history.replaceState({}, "", `${BASE_PATH}/onboarding`);
+    } else if (shouldStartDemoSignup()) {
+      resetDemoSignupState();
+      window.history.replaceState({}, "", `${BASE_PATH}/home?signup=1`);
+    }
+
     const params = new URLSearchParams(window.location.search);
     const routeParam = params.get("route");
     const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
@@ -2707,10 +2787,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (screen === "library" && activeTab === "home") {
+    if (screen !== "library" || overlay) return undefined;
+    const frame = window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    }
-  }, [screen, activeTab]);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      document.querySelector("[data-testid='app-shell']")?.scrollTo?.({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [screen, route.path, overlay]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -3420,6 +3505,14 @@ function App() {
     if (route.kind === "caught-up") {
       setScreen("library");
       const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current, getFakeLauncherShellContextId());
+      if (!fakeContext) {
+        debugLaunch("[CARD_ORIGIN] direct caught-up route redirected home");
+        suppressNextHomeAutoLaunchRef.current = true;
+        setShouldLaunchOverlay(false);
+        navigateTo("/home", { replace: true });
+        setOverlay(null);
+        return;
+      }
       const nextOverlay = fakeContext
         ? { ...buildFakeLauncherEmptyOverlay(fakeContext.versionId, fakeContext.activationKey), origin: "home" }
         : { ...buildEmptyOverlay(), origin: "home" };
@@ -3569,11 +3662,15 @@ function App() {
 
       debugLaunch("[LAUNCH_DIAG_DECISION]", "personal -> empty");
       debugLaunch("[LAUNCH_DECISION]", "personal -> empty");
-      const nextOverlayEmpty = fakeContext
-        ? { ...buildFakeLauncherEmptyOverlay(fakeContext.versionId, fakeContext.activationKey), origin: "home" }
-        : { ...buildEmptyOverlay(), origin: "home" };
-      debugLaunch("[CARD_ORIGIN] home empty created", nextOverlayEmpty);
-      setOverlay(nextOverlayEmpty);
+      if (fakeContext) {
+        const nextOverlayEmpty = { ...buildFakeLauncherEmptyOverlay(fakeContext.versionId, fakeContext.activationKey), origin: "home" };
+        debugLaunch("[CARD_ORIGIN] home empty created", nextOverlayEmpty);
+        setOverlay(nextOverlayEmpty);
+        return;
+      }
+      debugLaunch("[CARD_ORIGIN] home empty skipped; Home is the empty state");
+      suppressNextHomeAutoLaunchRef.current = true;
+      setOverlay(null);
       return;
     }
 
@@ -4116,10 +4213,12 @@ function App() {
         return;
       }
 
+      debugLaunch("[CONTINUE_DECISION] home confirmation -> returning home");
       suppressNextHomeAutoLaunchRef.current = true;
       setShouldLaunchOverlay(false);
       setScreen("library");
-      setOverlay(buildFlowConfirmationOverlay(null, options.confirmationMessage, null, options.confirmationActionLabel));
+      navigateTo("/home", { replace: true });
+      setOverlay(null);
       return;
     }
 
@@ -6540,13 +6639,17 @@ function App() {
               <span>Home</span>
             </button>
             <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => {
+              signalHomeSpotlightAction("library");
               setLibraryFocusMode(null);
               navigateTo("/library");
             }}>
               <BookGlyph />
               <span>Library</span>
             </button>
-            <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} data-testid="bottom-nav-log" onClick={() => navigateTo("/log")}>
+            <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} data-testid="bottom-nav-log" onClick={() => {
+              signalHomeSpotlightAction("log");
+              navigateTo("/log");
+            }}>
               <LogGlyph />
               <span>Log</span>
             </button>
@@ -6568,7 +6671,12 @@ function App() {
           {shouldShowHomeSpotlightTour ? (
             <HomeSpotlightTour
               actionSignal={homeSpotlightActionSignal}
+              locationKey={route.path}
               onComplete={completeHomeSpotlightTour}
+              onNavigate={(path) => {
+                if (path === "/library") setLibraryFocusMode(null);
+                navigateTo(path);
+              }}
             />
           ) : null}
         </div>
@@ -7357,53 +7465,55 @@ function Masthead({ onCreate, onOpenSettings }) {
 const HOME_SPOTLIGHT_STEPS = [
   {
     id: "home",
+    path: "/home",
     selector: '[data-testid="home-panel"]',
     title: "Home",
-    body: "Start here when you want to see what matters today.",
+    body: "Home is your daily starting point. Get a quick overview of how well you’re meeting your daily intentions and your Personal Cards: messages from yourself about things you genuinely mean to do, but don’t always remember. This is the heart of MyBishBash.",
     button: "Next",
   },
   {
-    id: "personal-cards",
-    selector: '[data-testid="home-progress-ring"]',
-    title: "Personal Cards",
-    body: "These are the reminders you chose for yourself.",
-    button: "Next",
-  },
-  {
-    id: "commitments",
-    selector: '[data-testid="home-live-commitment-card"]',
-    title: "Commitments",
-    body: "Optional promises to yourself live here when you make one.",
+    id: "library",
+    path: "/library",
+    selector: '[data-testid="bottom-nav-library"]',
+    title: "Library",
+    body: "Your Library is where all your cards live. Review, organise and manage the reminders and commitments you’ve chosen for yourself.",
     button: "Next",
   },
   {
     id: "explore",
+    path: "/explore",
     selector: '[data-testid="bottom-nav-explore"]',
     title: "Explore",
-    body: "Find more ideas when you want them.",
-    button: "Tap Explore",
-    advanceOnTargetClick: true,
-    allowTargetDefault: true,
+    body: "Explore helps you discover new cards and packs to support the habits, goals and routines that matter to you.",
+    button: "Next",
   },
   {
     id: "apps",
+    path: "/apps",
     selector: '[data-testid="bottom-nav-apps"]',
     title: "Apps",
-    body: "Manage where MyBishBash appears and how each app opens.",
-    button: "Tap Apps",
-    advanceOnTargetClick: true,
-    allowTargetDefault: true,
+    body: "Choose which apps MyBishBash appears before. A quick reminder at the right moment can help you use your phone more intentionally.",
+    button: "Next",
+  },
+  {
+    id: "log",
+    path: "/log",
+    selector: '[data-testid="bottom-nav-log"]',
+    title: "Log",
+    body: "Your Log keeps a record of your activity, helping you see the reminders you’ve completed and the commitments you’ve kept over time.",
+    button: "Next",
   },
   {
     id: "ready",
+    path: "/home",
     selector: '[data-testid="app-shell"]',
     title: "You’re ready",
-    body: "You can come back to Apps whenever you want to change an app.",
+    body: "You’re ready.",
     button: "Done",
   },
 ];
 
-function HomeSpotlightTour({ actionSignal, onComplete }) {
+function HomeSpotlightTour({ actionSignal, locationKey = "", onComplete, onNavigate }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState(null);
   const visibleSteps = HOME_SPOTLIGHT_STEPS;
@@ -7412,6 +7522,7 @@ function HomeSpotlightTour({ actionSignal, onComplete }) {
 
   useLayoutEffect(() => {
     if (!step) return undefined;
+    setTargetRect(null);
     const targets = Array.from(document.querySelectorAll(step.selector)).filter((node) => {
       const rect = node.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0;
@@ -7440,7 +7551,7 @@ function HomeSpotlightTour({ actionSignal, onComplete }) {
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
     };
-  }, [step, visibleSteps.length]);
+  }, [step, visibleSteps.length, locationKey]);
 
   useEffect(() => {
     if (!actionSignal || !step?.advanceOnTargetClick || actionSignal.id !== step.id) return;
@@ -7450,6 +7561,7 @@ function HomeSpotlightTour({ actionSignal, onComplete }) {
   if (!step) return null;
 
   function finish() {
+    onNavigate?.("/home");
     onComplete?.();
   }
 
@@ -7458,7 +7570,21 @@ function HomeSpotlightTour({ actionSignal, onComplete }) {
       finish();
       return;
     }
-    setStepIndex((current) => current + 1);
+    setStepIndex((current) => {
+      const nextIndex = current + 1;
+      const nextStep = visibleSteps[nextIndex];
+      if (nextStep?.path) onNavigate?.(nextStep.path);
+      return nextIndex;
+    });
+  }
+
+  function previous() {
+    setStepIndex((current) => {
+      const nextIndex = Math.max(0, current - 1);
+      const nextStep = visibleSteps[nextIndex];
+      if (nextStep?.path) onNavigate?.(nextStep.path);
+      return nextIndex;
+    });
   }
 
   const cardPlacement = targetRect && targetRect.top > 140 && targetRect.top < window.innerHeight / 2 ? "below" : "above";
@@ -7487,17 +7613,29 @@ function HomeSpotlightTour({ actionSignal, onComplete }) {
         <h2 id="home-spotlight-title">{step.title}</h2>
         <p>{step.body}</p>
         <div className="home-spotlight-actions">
-          <button type="button" className="home-spotlight-skip" onClick={finish}>
-            Skip
+          <button
+            type="button"
+            className="home-spotlight-back"
+            onClick={previous}
+            disabled={stepIndex === 0}
+            aria-label="Previous spotlight step"
+          >
+            ←
           </button>
-          {step.advanceOnTargetClick && !isFinalStep ? (
-            <span className="home-spotlight-tap-hint">{step.button}</span>
-          ) : (
-            <button type="button" className="home-spotlight-next" onClick={next}>
-              {isFinalStep ? "Done" : step.button}
-            </button>
-          )}
+          <button type="button" className="home-spotlight-next" onClick={next}>
+            {isFinalStep ? "Done" : step.button}
+          </button>
         </div>
+        <a
+          className="home-spotlight-skip-link"
+          href="#"
+          onClick={(event) => {
+            event.preventDefault();
+            finish();
+          }}
+        >
+          Skip
+        </a>
       </article>
     </div>
   );
@@ -8302,7 +8440,7 @@ function StandardLibraryPanel({
   }
 
   return (
-    <section className="library">
+    <section className="library" data-testid="library-panel">
       <div className="section-heading solo">
         <div>
           <h2>Library</h2>
@@ -8866,11 +9004,12 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
   });
   const [agreedToLegal, setAgreedToLegal] = useState(false);
   const hasSignupHandoff = Boolean(getSignupHandoffReference());
+  const isDemoMode = isDemoModeEnabled();
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
   const isLauncherLogin = mode === "launcher";
   const isAccessDenied = mode === "access-denied";
-  const isSignupBlocked = !isLogin && !hasSignupHandoff;
+  const isSignupBlocked = !isLogin && !hasSignupHandoff && !isDemoMode;
   const isStandaloneSignupRecovery = isSignupBlocked && isStandalone;
   const titlePath = isLauncherLogin
     ? "titles.launcher"

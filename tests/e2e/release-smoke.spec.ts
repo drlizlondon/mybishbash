@@ -180,6 +180,34 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
   );
 }
 
+async function seedMainDemoState(page: Page, options: Pick<SeedOptions, 'cards' | 'launcherBehaviorSettings'> = {}) {
+  const {
+    cards = [],
+    launcherBehaviorSettings = launcherSettings(false),
+  } = options;
+  const actionCards = hiddenStarterActionCards();
+  await page.addInitScript(
+    ({ seededActionCards, seededCards, seededLauncherBehaviorSettings }) => {
+      window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+      window.localStorage.removeItem('MYBISHBASH_E2E_MODE');
+      window.localStorage.removeItem('MYBISHBASH_E2E_TESTER_MODE');
+      window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+      window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'Demo', timezone: 'Europe/London' }));
+      window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(seededCards));
+      window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+      window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+      window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+      window.localStorage.setItem('mybishbash.action-cards.v1', JSON.stringify(seededActionCards));
+      window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(seededLauncherBehaviorSettings));
+    },
+    {
+      seededActionCards: actionCards,
+      seededCards: cards,
+      seededLauncherBehaviorSettings: launcherBehaviorSettings,
+    },
+  );
+}
+
 async function getNavigationAttempts(page: Page) {
   return page.evaluate(() => window.__MYBISHBASH_NAVIGATION_ATTEMPTS ?? []);
 }
@@ -704,6 +732,58 @@ test('Home progress denominator uses total Personal Cards, not only currently el
   await gotoApp(page, '/home');
   await expect(page.locator('.home-progress-number')).toHaveText('1/2');
   await expect(page.getByTestId('home-dashboard-summary')).toContainText('1 of 2 cards completed today.');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('main app opens Home directly when no Personal Cards are due', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedMainDemoState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up for now.")).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back home' })).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('main app Personal Card response returns directly Home without caught-up screen', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedMainDemoState(page, {
+    cards: [smokeCard('main-personal-card', 'Drink some water')],
+  });
+
+  await gotoApp(page, '/card/main-personal-card');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Drink some water' })).toBeVisible();
+  await page.getByTestId('card-action-done').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up for now.")).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back home' })).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('main app Commitment Card response returns directly Home without confirmation screen', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedMainDemoState(page, {
+    cards: [commitmentCard('main-commitment-card', 'I will go to the gym today')],
+  });
+
+  await gotoApp(page, '/card/main-commitment-card');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'I will go to the gym today' })).toBeVisible();
+  await page.getByRole('button', { name: 'I will commit to this' }).click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expect(page.getByText('Keep this with you.')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0);
   await expectNoConsoleErrors(consoleErrors);
 });
 

@@ -76,7 +76,11 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
   const installHtml = readFileSync(installPath, "utf8");
   assert.match(
     installHtml,
-    new RegExp(`This Home Screen shortcut opens MyBishBash before ${escapeRegExp(launcher.displayName)}\\.`),
+    new RegExp(`Add [\\s\\S]{0,120}${escapeRegExp(launcher.displayName)}[\\s\\S]{0,120} to your Home Screen`),
+  );
+  assert.match(
+    installHtml,
+    new RegExp(`MyBishBash will show your Personal Cards before [\\s\\S]{0,120}${escapeRegExp(launcher.displayName)}`),
   );
 }
 
@@ -159,7 +163,7 @@ assert.equal(whatsappManifest.start_url, "https://drlizlondon.github.io/mybishba
 assert.equal(whatsappManifest.display, "standalone");
 assert.match(
   readFileSync(whatsappInstallPath, "utf8"),
-  /This Home Screen shortcut opens MyBishBash before WhatsApp\./,
+  /Add [\s\S]{0,120}WhatsApp[\s\S]{0,120} to your Home Screen/,
 );
 
 const launchersWithUnknownCloudConfig = mergeLauncherConfigs([
