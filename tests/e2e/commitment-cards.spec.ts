@@ -475,7 +475,7 @@ test('Not this time shows motivation reminder before a final decision', async ({
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && !card.commitmentStatusToday);
 });
 
-test('I’ll commit after all records made and shows acknowledgement', async ({ page }) => {
+test('I’ll commit after all records made and returns Home from Library', async ({ page }) => {
   await seedE2EState(page, [commitmentCard({ commitmentCheckInEnabled: true, commitmentCheckInTime: '12:00' })]);
   await gotoLibrary(page, 'commitment');
 
@@ -486,11 +486,13 @@ test('I’ll commit after all records made and shows acknowledgement', async ({ 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
   const events = await storedEvents(page);
   expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_made')).toBe(true);
-  await expect(page.getByRole('heading', { name: /Nice choice\.\s+We’ll check in later\./ })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Nice choice\.\s+We’ll check in later\./ })).toHaveCount(0);
+  await expect(page.getByTestId('card-action-continue')).toHaveCount(0);
 });
 
-test('final Not this time from motivation records declined and shows soft acknowledgement', async ({ page }) => {
+test('final Not this time from motivation records declined and returns Home from Library', async ({ page }) => {
   await seedE2EState(page, [commitmentCard()]);
   await gotoLibrary(page, 'commitment');
 
@@ -501,8 +503,10 @@ test('final Not this time from motivation records declined and shows soft acknow
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
   const events = await storedEvents(page);
   expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_declined')).toBe(true);
-  await expect(page.getByRole('heading', { name: /That’s okay\.\s+Another day\./ })).toBeVisible();
-  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /That’s okay\.\s+Another day\./ })).toHaveCount(0);
+  await expect(page.getByTestId('card-action-continue')).toHaveCount(0);
 });
 
 test('Not this time without motivation records declined and does not automatically reappear', async ({ page }) => {
