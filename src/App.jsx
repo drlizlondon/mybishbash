@@ -10903,6 +10903,9 @@ function CardRevealTemplate({
   const hasActions = actions?.length > 0;
   const hasCtaContent = hasLaunchers || hasActions;
   const [showPauseModal, setShowPauseModal] = useState(false);
+  useEffect(() => {
+    setShowPauseModal(false);
+  }, [cardOverlayKey]);
   const pauseButtonRef = useRef(null);
   const shouldManageLauncherApp = Boolean(launcherAppId && onManageApp);
   const dashboardLabel = shouldManageLauncherApp ? "Open app settings" : "Open dashboard";

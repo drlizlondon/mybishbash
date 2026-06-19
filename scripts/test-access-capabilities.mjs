@@ -132,6 +132,10 @@ const migrationSource = readFileSync(
   resolve(root, "supabase", "migrations", "202606120001_access_tiers_grants_audit.sql"),
   "utf8",
 );
+const handoffMigrationSource = readFileSync(
+  resolve(root, "supabase", "migrations", "202606190001_signup_handoffs.sql"),
+  "utf8",
+);
 
 assert.match(
   migrationSource,
@@ -152,6 +156,36 @@ assert.doesNotMatch(
   migrationSource,
   /grant (insert|update|delete) on public\.access_audit_log/,
   "the audit log must stay append-only: no client write grants",
+);
+assert.match(
+  handoffMigrationSource,
+  /revoke execute on function public\.create_mybishbash_signup_handoff\(text\) from public;\s*\ngrant execute on function public\.create_mybishbash_signup_handoff\(text\) to anon, authenticated;/,
+  "only the invite-gate handoff creation RPC should be client-callable",
+);
+assert.match(
+  handoffMigrationSource,
+  /revoke execute on function public\.redeem_mybishbash_signup_handoff\(text, uuid, text\) from public, anon, authenticated;/,
+  "handoff redemption must not be executable by anon or authenticated clients",
+);
+assert.doesNotMatch(
+  handoffMigrationSource,
+  /grant execute on function public\.redeem_mybishbash_signup_handoff\(text, uuid, text\) to (anon|authenticated|public)/,
+  "handoff redemption must remain internal to the security-definer trigger path",
+);
+assert.match(
+  handoffMigrationSource,
+  /revoke execute on function public\.handle_new_user_profile\(\) from public, anon, authenticated;/,
+  "the profile trigger function must not be a public-facing RPC",
+);
+assert.match(
+  handoffMigrationSource,
+  /perform public\.redeem_mybishbash_signup_handoff\(metadata_handoff_ref, new\.id, new\.email\);[\s\S]*if not exists \(select 1 from public\.user_profiles where user_id = new\.id\) then[\s\S]*metadata_access_code := public\.normalize_mybishbash_access_code/,
+  "signup via handoff must redeem through the trigger before the legacy access-code path runs",
+);
+assert.match(
+  handoffMigrationSource,
+  /if not exists \(select 1 from public\.user_profiles where user_id = new\.id\) then[\s\S]*'system:signup'[\s\S]*'pending_grant_applied'[\s\S]*end if;\s*\n\s*return new;/,
+  "legacy signup and pending-grant writes must be skipped when handoff redemption already created the profile",
 );
 
 const testPilotApiSource = readFileSync(resolve(root, "src", "testing", "TestPilot", "testPilotApi.js"), "utf8");
