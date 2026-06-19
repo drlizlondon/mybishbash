@@ -85,7 +85,7 @@ export const onboardingContent = {
       launcherReadySuffix: "launcher ready",
       moveLauncherPrefix: "Move the MyBishBash",
       moveLauncherMiddle: "launcher to where",
-      moveLauncherSuffix: "normally sits on your Home Screen. Put the original app in a folder so you open MyBishBash first.",
+      moveLauncherSuffix: "normally sits on your Home Screen. Put the original {appName} app in a folder so you open MyBishBash first.",
       addLauncherPrefix: "Add the",
       addLauncherSuffix: "launcher to your Home Screen.",
       returnNote: "Once it is saved, return to MyBishBash to continue.",
