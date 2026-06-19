@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const VALIDATED_GATE_ACCESS_CODE_KEY = 'mybishbash.validated-gate-access-code.v1';
+const SIGNUP_HANDOFF_REFERENCE_KEY = 'mybishbash.signup-handoff-ref.v1';
+const E2E_SIGNUP_HANDOFFS_KEY = 'MYBISHBASH_E2E_SIGNUP_HANDOFFS';
 
 async function seedAuthMock(page: Page) {
   await page.addInitScript(() => {
@@ -9,12 +10,21 @@ async function seedAuthMock(page: Page) {
 }
 
 async function seedGateCode(page: Page, code = 'WELCOME') {
-  await page.addInitScript(({ key, accessCode }) => {
-    window.localStorage.setItem(key, JSON.stringify({
-      accessCode,
-      validatedAt: Date.now(),
+  await page.addInitScript(({ handoffKey, handoffsKey, accessCode }) => {
+    const handoffRef = `seeded-handoff-${accessCode.toLowerCase()}`;
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    window.localStorage.setItem(handoffKey, JSON.stringify({
+      handoffRef,
+      expiresAt,
     }));
-  }, { key: VALIDATED_GATE_ACCESS_CODE_KEY, accessCode: code });
+    window.localStorage.setItem(handoffsKey, JSON.stringify({
+      [handoffRef]: {
+        accessCode,
+        expiresAt,
+        claimed: false,
+      },
+    }));
+  }, { handoffKey: SIGNUP_HANDOFF_REFERENCE_KEY, handoffsKey: E2E_SIGNUP_HANDOFFS_KEY, accessCode: code });
 }
 
 test('landing Get MyBishBash opens the invite gate, not download', async ({ page }) => {
@@ -38,9 +48,11 @@ test('WELCOME unlocks the existing download page', async ({ page }) => {
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await expect(page.getByTestId('download-page')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Install MyBishBash', exact: true })).toBeVisible();
-  const gateAccess = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '{}'), VALIDATED_GATE_ACCESS_CODE_KEY);
-  expect(gateAccess.accessCode).toBe('WELCOME');
-  expect(typeof gateAccess.validatedAt).toBe('number');
+  const gateAccess = await page.evaluate(() => window.localStorage.getItem('mybishbash.validated-gate-access-code.v1'));
+  const handoff = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '{}'), SIGNUP_HANDOFF_REFERENCE_KEY);
+  expect(gateAccess).toBeNull();
+  expect(handoff.handoffRef).toMatch(/^e2e-handoff-/);
+  expect(typeof handoff.expiresAt).toBe('string');
 });
 
 test('wrong rollout code shows retry and waitlist actions', async ({ page }) => {
@@ -110,16 +122,15 @@ test('download page presents Home Screen install flow before the success step', 
   await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await expect(page.getByRole('heading', { name: "Congratulations, you're in." })).toBeVisible();
-  await expect(page.getByText('MyBishBash has been added to your Home Screen.')).toBeVisible();
-  await expect(page.getByText('Open your newly installed MyBishBash app from your Home Screen to create your account and get started.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'I’ve opened MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: "You're in." })).toBeVisible();
+  await expect(page.getByText('Create your account here, then open MyBishBash from your Home Screen.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Create account here' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Can’t install it right now?' })).toBeVisible();
-  await expect(page.getByText('You can still create your account here and use MyBishBash in your browser for now.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Continue in browser instead' })).toBeVisible();
+  await expect(page.getByText('Create your account here and use MyBishBash in your browser for now.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Create account without installing' })).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Next you’ll create your account');
 
-  await page.getByRole('link', { name: 'I’ve opened MyBishBash' }).click();
+  await page.getByRole('link', { name: 'Create account here' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
@@ -136,7 +147,7 @@ test('download success fallback stores incomplete install state and continues to
 
   await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'Continue in browser instead' }).click();
+  await page.getByRole('link', { name: 'Create account without installing' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);

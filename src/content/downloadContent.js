@@ -45,15 +45,14 @@ export const downloadContent = {
     "primary": "I’ve added MyBishBash",
     "skip": "I can’t do this right now",
     "success": {
-      "title": "Congratulations, you're in.",
+      "title": "You're in.",
       "body": [
-        "MyBishBash has been added to your Home Screen.",
-        "Open your newly installed MyBishBash app from your Home Screen to create your account and get started."
+        "Create your account here, then open MyBishBash from your Home Screen."
       ],
-      "primary": "I’ve opened MyBishBash",
+      "primary": "Create account here",
       "fallbackTitle": "Can’t install it right now?",
-      "fallbackBody": "You can still create your account here and use MyBishBash in your browser for now.",
-      "fallbackCta": "Continue in browser instead"
+      "fallbackBody": "Create your account here and use MyBishBash in your browser for now.",
+      "fallbackCta": "Create account without installing"
     },
     "why": {
       "title": "Why install MyBishBash first?",

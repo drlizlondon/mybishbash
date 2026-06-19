@@ -54,7 +54,7 @@ async function startOnboardingFromLandingSignup(page: Page) {
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'I’ve opened MyBishBash' }).click();
+  await page.getByRole('link', { name: 'Create account here' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
 

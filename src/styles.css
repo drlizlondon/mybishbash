@@ -5971,6 +5971,7 @@ body {
   --message-font-size: 40px;
   --button-width: min(86vw, 350px);
   --dashboard-shortcut-size: clamp(44px, 11vw, 50px);
+  --card-cta-reserved-height: clamp(150px, 24svh, 202px);
   position: fixed;
   inset: 0;
   z-index: 99999;
@@ -6042,7 +6043,7 @@ body {
 
 .premium-card-message-section {
   width: 100%;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   padding: 18px 0 20px;
   overflow-y: auto;
@@ -6254,7 +6255,7 @@ body {
 
 .premium-title-box {
   width: min(88vw, 390px);
-  min-height: 92px;
+  min-height: clamp(104px, 18svh, 154px);
   max-height: none;
   margin-top: 10px;
   padding: 0 2px 2px;
@@ -6278,13 +6279,13 @@ body {
   margin: 0;
   padding-bottom: 0.12em;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: var(--message-font-size);
+  font-size: clamp(18px, 10.8vw, var(--message-font-size));
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: 0;
   color: var(--bb-text);
   text-align: center;
-  overflow-wrap: normal;
+  overflow-wrap: break-word;
   word-break: normal;
   hyphens: none;
   text-wrap: balance;
@@ -6343,6 +6344,7 @@ body {
 .premium-card-cta {
   width: 100%;
   max-width: var(--content-max);
+  min-height: var(--card-cta-reserved-height);
   margin-inline: auto;
   padding-top: 12px;
   display: flex;
@@ -6354,6 +6356,11 @@ body {
 
 .premium-card-cta.no-launchers {
   justify-content: center;
+}
+
+.premium-card-cta.is-empty {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .premium-action-stack {

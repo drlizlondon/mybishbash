@@ -12,6 +12,7 @@ export const authContent = {
     loading: "Loading your shared MyBishBash...",
     accessDenied: "Get MyBishBash with an invite code, join the waitlist, or log in if you already have access.",
     signupBlocked: "Get MyBishBash is the invite gate. Enter your access code there first, or join the waitlist.",
+    signupRecoveryStandalone: "Finish creating your account in the browser tab where you entered your code.",
     login: "Log in to sync this shortcut with your MyBishBash profile.",
     launcherPrefix: "Log in to continue to your",
     launcherSuffix: "launcher.",
