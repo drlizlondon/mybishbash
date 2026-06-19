@@ -7,6 +7,11 @@ function requireSupabase() {
   return supabase;
 }
 
+function isDemoMode() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -59,6 +64,7 @@ export function buildTesterReportPayload(report = {}) {
 }
 
 export async function fetchTesterStatus(userId) {
+  if (isDemoMode()) return { is_tester: false };
   if (!userId) return { is_tester: false };
   const client = requireSupabase();
   const { data, error } = await client

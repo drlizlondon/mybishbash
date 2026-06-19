@@ -47,9 +47,8 @@ export const downloadContent = {
     "success": {
       "title": "You're in.",
       "body": [
-        "Create your account here, then open MyBishBash from your Home Screen."
+        "Open the MyBishBash app from your Home Screen and create your account."
       ],
-      "primary": "Create account here",
       "fallbackTitle": "Can’t install it right now?",
       "fallbackBody": "Create your account here and use MyBishBash in your browser for now.",
       "fallbackCta": "Create account without installing"

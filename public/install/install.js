@@ -1,5 +1,6 @@
 (async function () {
   const appBasePath = detectAppBasePath(window.location.pathname);
+  const ONBOARDING_PENDING_KEY = "mybishbash.onboarding-protected-app-setup-pending.v1";
   const NORMAL_APP_LAUNCHER = {
     id: "mybishbash",
     displayName: "MyBishBash",
@@ -88,14 +89,60 @@
     });
   }
 
-  const versionName = document.querySelector("[data-version-name]");
-  if (versionName) versionName.textContent = version.displayName || version.name;
+  const versionName = version.displayName || version.name;
+  queryAll("[data-version-name], [data-version-name-inline]").forEach((node) => {
+    node.textContent = versionName;
+  });
 
   const launcherContext = document.querySelector("[data-launcher-context]");
   if (launcherContext) launcherContext.textContent = version.id;
 
   const settingsLink = document.querySelector("[data-settings-link]");
   if (settingsLink) settingsLink.href = `${window.location.origin}${appBasePath}/settings`;
+
+  const backButton = document.querySelector("[data-install-back]");
+  if (backButton) {
+    backButton.addEventListener("click", () => {
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+      window.location.assign(`${window.location.origin}${appBasePath}/onboarding`);
+    });
+  }
+
+  const completeButton = document.querySelector("[data-install-complete]");
+  if (completeButton) {
+    completeButton.addEventListener("click", () => {
+      if (version.id !== "mybishbash") {
+        const existingPendingSetup = loadOnboardingPendingSetup(ONBOARDING_PENDING_KEY);
+        storeInstalledLauncherShell(version);
+        window.localStorage.setItem(
+          ONBOARDING_PENDING_KEY,
+          JSON.stringify({
+            appId: version.id,
+            status: "confirmed",
+            useInterruptionCard: Boolean(existingPendingSetup?.useInterruptionCard),
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+      }
+      const pendingInstallEvents = loadPendingEvents();
+      pendingInstallEvents.push({
+        event_type: "launcher_installed",
+        launcher_id: version.id,
+        route: window.location.pathname,
+        created_at: new Date().toISOString(),
+        is_standalone: isStandalone,
+        opened_from: "install_complete_button",
+      });
+      window.localStorage.setItem("mybishbash.pending-launcher-install.v1", JSON.stringify(pendingInstallEvents.slice(-20)));
+      document.querySelector("[data-install-success]")?.removeAttribute("hidden");
+      window.setTimeout(() => {
+        window.location.assign(`${window.location.origin}${appBasePath}/onboarding`);
+      }, 900);
+    });
+  }
 
   const pendingEvents = loadPendingEvents();
   pendingEvents.push(
@@ -204,6 +251,22 @@ function loadPendingEvents() {
   } catch {
     return [];
   }
+}
+
+function loadOnboardingPendingSetup(key) {
+  try {
+    return JSON.parse(window.localStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function queryAll(selector) {
+  if (typeof document.querySelectorAll === "function") {
+    return Array.from(document.querySelectorAll(selector));
+  }
+  const node = document.querySelector?.(selector);
+  return node ? [node] : [];
 }
 
 function storeInstalledLauncherShell(launcher) {

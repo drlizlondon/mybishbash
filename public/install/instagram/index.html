@@ -23,15 +23,21 @@
           <img data-install-icon class="install-icon" src="/mybishbash/icons/instagram-cover.jpg" alt="Instagram icon" />
         </a>
         <div class="install-copy">
-          <h2 data-version-name>Instagram</h2>
-          <p>Tap Share, then Add to Home Screen.</p>
-          <p class="install-note">This Home Screen shortcut opens MyBishBash before Instagram.</p>
+          <h2>Add <span data-version-name>Instagram</span> to your Home Screen</h2>
+          <p>Add this launcher to your Home Screen. When you open it, MyBishBash will show your Personal Cards before <span data-version-name-inline>Instagram</span>.</p>
         </div>
         <div class="install-steps">
-          <strong>Install</strong>
+          <strong>Install panel</strong>
           <p>Tap Share, then Add to Home Screen.</p>
         </div>
-        <a data-settings-link class="install-settings-link" href="/mybishbash/settings">Back to MyBishBash settings</a>
+        <div class="install-actions">
+          <button type="button" class="install-back-button" data-install-back>Back</button>
+          <button type="button" class="install-complete-button" data-install-complete>I’ve added it</button>
+        </div>
+        <div class="install-success" data-install-success hidden>
+          <strong>You’re all set.</strong>
+          <p>Open your new <span data-version-name-inline>Instagram</span> launcher from your Home Screen. If asked, log in to MyBishBash, then you’ll start seeing your Personal Cards before <span data-version-name-inline>Instagram</span> opens.</p>
+        </div>
       </section>
     </main>
     <script src="/mybishbash/install/install.js"></script>

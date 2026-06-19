@@ -218,10 +218,6 @@ function DownloadPageContent() {
             ))}
           </header>
 
-          <a className="download-primary" href={SIGNUP_HREF}>
-            <EditableText path="install.success.primary" />
-          </a>
-
           <section className="download-browser-fallback" aria-labelledby="download-browser-fallback-title">
             <h2 id="download-browser-fallback-title"><EditableText path="install.success.fallbackTitle" /></h2>
             <EditableText as="p" path="install.success.fallbackBody" />

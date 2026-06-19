@@ -244,6 +244,27 @@ test('x-button-does-not-pause — closing modal with X leaves no pause in localS
   expect(attempts).toHaveLength(0);
 });
 
+test('pause-modal-resets-when-card-overlay-key-changes', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('p-reset', 'Reset pause modal card')],
+    appIds: ['safari', 'youtube'],
+  });
+  await page.goto('/mybishbash/intercept/safari');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+
+  await page.getByTestId('pause-app-button').click();
+  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toBeVisible();
+
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/mybishbash/intercept/youtube');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+
+  await expect(page).toHaveURL(/\/mybishbash\/intercept\/youtube$/);
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toHaveCount(0);
+});
+
 test('continue-card-after-normal-completion — Done on personal card shows continue-to-app', async ({ page }) => {
   await seedState(page, { cards: [personalCard('p8', 'Completion card')] });
   await page.goto('/mybishbash/intercept/safari');

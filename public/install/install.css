@@ -58,9 +58,9 @@ body {
 
 .install-card {
   background: #FFFFFF;
-  border-radius: 40px;
+  border-radius: 32px;
   width: 100%;
-  padding: 40px 24px;
+  padding: 32px 22px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -86,14 +86,18 @@ body {
 }
 
 .install-copy {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .install-copy h2 {
   font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 500;
   margin: 0 0 12px;
+  line-height: 1.05;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
 }
 
 .install-copy p {
@@ -113,6 +117,7 @@ body {
   padding: 24px;
   width: 100%;
   text-align: center;
+  margin-bottom: 18px;
 }
 
 .install-steps strong {
@@ -130,6 +135,63 @@ body {
   font-size: 15px;
   line-height: 1.5;
   color: #2A2A28;
+}
+
+.install-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 0.78fr 1.22fr;
+  gap: 10px;
+}
+
+.install-actions button {
+  min-height: 50px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.install-back-button {
+  background: #F6F1EA;
+  color: #5A514A;
+}
+
+.install-complete-button {
+  background: #D96C52;
+  color: #FFF9F5;
+  box-shadow: 0 14px 30px rgba(201, 96, 70, 0.2);
+}
+
+.install-success {
+  width: 100%;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(232, 118, 97, 0.18);
+  border-radius: 22px;
+  background: rgba(255, 250, 247, 0.9);
+  text-align: left;
+}
+
+.install-success[hidden] {
+  display: none;
+}
+
+.install-success strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #2A2A28;
+  font-size: 16px;
+}
+
+.install-success p {
+  margin: 0;
+  color: #6F6660;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .install-real-app {

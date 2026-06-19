@@ -3423,8 +3423,8 @@ textarea {
 .home-spotlight-dim {
   position: absolute;
   inset: 0;
-  background: rgba(24, 20, 18, 0.48);
-  backdrop-filter: blur(3px);
+  background: rgba(24, 20, 18, 0.28);
+  backdrop-filter: blur(1px);
   animation: home-spotlight-fade 180ms ease both;
 }
 
@@ -3436,12 +3436,12 @@ textarea {
 .home-spotlight-ring {
   position: fixed;
   z-index: 10053;
-  border: 1px solid rgba(255, 250, 246, 0.92);
+  border: 2px solid rgba(255, 250, 246, 0.96);
   border-radius: 28px;
   box-shadow:
-    0 0 0 9999px rgba(24, 20, 18, 0.18),
-    0 0 0 8px rgba(217, 108, 82, 0.16),
-    0 18px 48px rgba(24, 20, 18, 0.22);
+    0 0 0 9999px rgba(24, 20, 18, 0.10),
+    0 0 0 9px rgba(255, 250, 246, 0.24),
+    0 18px 48px rgba(24, 20, 18, 0.18);
   pointer-events: none;
   transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
 }
@@ -3504,8 +3504,8 @@ textarea {
 }
 
 .home-spotlight-actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
   gap: 9px;
   margin-top: 4px;
 }
@@ -3521,15 +3521,31 @@ textarea {
   cursor: pointer;
 }
 
-.home-spotlight-skip {
-  background: transparent;
-  color: rgba(79, 71, 67, 0.7);
+.home-spotlight-back {
+  width: 44px;
+  padding: 0;
+  background: rgba(47, 42, 40, 0.08);
+  color: rgba(47, 42, 40, 0.82);
+}
+
+.home-spotlight-back:disabled {
+  opacity: 0.36;
+  cursor: not-allowed;
 }
 
 .home-spotlight-next {
   background: #d96c52;
   color: #fffaf6;
   box-shadow: 0 12px 26px rgba(201, 96, 70, 0.2);
+}
+
+.home-spotlight-skip-link {
+  justify-self: center;
+  color: rgba(79, 71, 67, 0.72);
+  font-size: 0.86rem;
+  font-weight: 680;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .home-spotlight-tap-hint {
@@ -9224,6 +9240,26 @@ body {
   color: rgba(91, 82, 75, 0.78);
   font-size: 1rem;
   line-height: 1.35;
+}
+
+.onboarding-time-next {
+  width: min(100%, 320px);
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 20px;
+  background: linear-gradient(180deg, #d96c52 0%, #cf6046 100%);
+  color: #fff9f5;
+  box-shadow: 0 14px 30px rgba(201, 96, 70, 0.18);
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 1.08rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.onboarding-time-next:active {
+  transform: translateY(1px) scale(0.99);
 }
 
 .onboarding-commitment-complete-step .onboarding-step-copy {
