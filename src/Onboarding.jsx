@@ -909,6 +909,10 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
     "Keep the suggested name.",
     "Return to MyBishBash to continue.",
   ];
+  const moveLauncherSuffix = (
+    content.steps?.protectedSetup?.moveLauncherSuffix ??
+    "normally sits on your Home Screen. Put the original {appName} app in a folder so you open MyBishBash first."
+  ).replace("{appName}", appName);
   return (
     <article className="onboarding-protected-setup-card" data-testid="onboarding-protected-app-setup">
       <div className="onboarding-protected-setup-heading">
@@ -922,7 +926,7 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
         <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
           <strong>{appName} {content.steps?.protectedSetup?.launcherReadySuffix ?? "launcher ready"}</strong>
           <p>{appName} {content.steps?.protectedSetup?.confirmedBodySuffix ?? "is now ready to use with MyBishBash."}</p>
-          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the MyBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {content.steps?.protectedSetup?.moveLauncherSuffix ?? "normally sits on your Home Screen. Put the original app in a folder so you open MyBishBash first."}</p>
+          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the MyBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {moveLauncherSuffix}</p>
         </div>
       ) : (
         <>
