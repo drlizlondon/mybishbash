@@ -29,6 +29,42 @@ async function seedFirstRun(page: Page) {
   });
 }
 
+async function seedSignupPreview(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_AUTH_MOCK', 'true');
+    window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', 'true');
+  });
+}
+
+async function fillSignup(page: Page) {
+  await page.getByLabel('Email').fill(`spotlight-${Date.now()}@example.com`);
+  await page.getByLabel('Password').fill('password123');
+  await page.getByLabel(/I agree to the Terms/i).check();
+  await page.getByRole('button', { name: 'Create Account' }).click();
+}
+
+async function startOnboardingFromLandingSignup(page: Page) {
+  await seedSignupPreview(page);
+  await page.goto('/mybishbash/');
+
+  await page.locator('.hero-actions .button.primary').click();
+  await expect(page).toHaveURL(/\/mybishbash\/invite$/);
+  await page.getByLabel('Access code').fill('WELCOME');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/download$/);
+  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await expect(page.getByTestId('download-success-page')).toBeVisible();
+  await page.getByRole('link', { name: 'I’ve opened MyBishBash' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
+  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+
+  await fillSignup(page);
+  await expect(page.getByRole('heading', { name: 'Before your apps open' })).toBeVisible({ timeout: 10000 });
+  await page.evaluate(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
+  });
+}
+
 async function expectTextOrder(locator: ReturnType<Page['locator']>, firstText: string, secondText: string) {
   const text = await locator.innerText();
   const firstIndex = text.indexOf(firstText);
@@ -169,6 +205,7 @@ test('first-time user sees Personal Card onboarding before Home', async ({ page 
   await page.goto('/mybishbash/home');
 
   await expect(page.getByRole('heading', { name: 'Before your apps open' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create your first card' })).toBeDisabled();
   await expect(page.getByTestId('home-panel')).toHaveCount(0);
   await expect(page.getByText('MyBishBash shows a personal reminder before selected apps')).toBeVisible();
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Have you taken your vitamins today?');
@@ -185,7 +222,8 @@ test('first-time user sees Personal Card onboarding before Home', async ({ page 
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('Instagram opens');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('WhatsApp opens');
   await expect(page.getByTestId('onboarding-tutorial-demo')).toContainText('For the things you genuinely mean to do.');
-  await expect(page.getByRole('button', { name: 'Replay' })).toBeVisible({ timeout: 28000 });
+  await expect(page.getByRole('button', { name: 'Replay' })).toBeVisible({ timeout: 7000 });
+  await expect(page.getByRole('button', { name: 'Create your first card' })).toBeEnabled();
   await expect(page.getByLabel('Local content editor')).toHaveCount(0);
 });
 
@@ -804,6 +842,60 @@ test('Home spotlight tour can be completed and does not reappear', async ({ page
 
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
+});
+
+test('Home spotlight tour appears after landing signup onboarding and persists dismissal', async ({ page }) => {
+  await startOnboardingFromLandingSignup(page);
+  await page.getByRole('button', { name: 'Create your first card' }).click();
+  await expect(page.getByRole('heading', { name: 'Things I genuinely mean to do, but don’t always remember.' })).toBeVisible();
+  await page.getByRole('button', { name: /Take five minutes outside./ }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Make plans. Not just reminders.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show me' }).click();
+  await expect(page.getByTestId('commitment-card-demo')).toContainText('TODAY’S COMMITMENT');
+  await page.getByRole('button', { name: 'I will commit to this' }).click();
+  await expect(page.getByTestId('commitment-time-passage')).toContainText('Later...');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByTestId('commitment-review-demo')).toContainText('How did it go?', { timeout: 4000 });
+  await page.getByRole('button', { name: 'I nearly did it' }).click();
+  await expect(page.getByRole('heading', { name: 'Commitment Cards help you follow through on the things that matter to you.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Install Your First MyBishBash App' })).toBeVisible();
+  await page.getByRole('radio', { name: 'Instagram' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expectInterruptionDemoForApp(page, 'Instagram', 'Why Instagram?', 'Watch your own life, not someone else’s.');
+  await page.getByTestId('onboarding-interruption-toggle').getByRole('button', { name: 'On', exact: true }).click();
+  await page.getByRole('button', { name: 'Install Instagram Launcher' }).click();
+  await expect(page.getByRole('heading', { name: 'Install Instagram Launcher' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add Instagram Launcher' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\//);
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'I’ve saved it' })).toBeVisible();
+  await page.getByRole('button', { name: 'I’ve saved it' }).click();
+  await expect(page.getByRole('heading', { name: 'Instagram Launcher Ready' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to Home' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+
+  const tour = page.getByTestId('home-spotlight-tour');
+  await expect(tour).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+
+  const preDismissProfile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
+  expect(preDismissProfile.onboardingRoute).toBe('personal_card_play_by_play');
+  expect(preDismissProfile.hasCompletedHomeSpotlightTour).toBe(false);
+
+  await tour.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
+
+  const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
+  expect(profile.onboardingRoute).toBe('personal_card_play_by_play');
+  expect(profile.hasCompletedHomeSpotlightTour).toBe(true);
+
+  await page.reload();
+  await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
 });
 

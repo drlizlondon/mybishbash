@@ -1,0 +1,52 @@
+// Local Edit Mode can save directly back to this file in development.
+// The edit panel can also copy the current JSON as a manual fallback.
+export const authContent = {
+  titles: {
+    loading: "MyBishBash",
+    launcher: "Welcome back to MyBishBash",
+    inviteOnly: "MyBishBash is invite-only right now.",
+    login: "MyBishBash",
+    signup: "Create your MyBishBash account",
+  },
+  copy: {
+    loading: "Loading your shared MyBishBash...",
+    accessDenied: "Get MyBishBash with an invite code, join the waitlist, or log in if you already have access.",
+    signupBlocked: "Get MyBishBash is the invite gate. Enter your access code there first, or join the waitlist.",
+    login: "Log in to sync this shortcut with your MyBishBash profile.",
+    launcherPrefix: "Log in to continue to your",
+    launcherSuffix: "launcher.",
+    signup: "Create your account with the access you already unlocked.",
+    standalone: "Log in once here to reconnect this Home Screen shortcut.",
+  },
+  form: {
+    email: "Email",
+    emailPlaceholder: "you@example.com",
+    password: "Password",
+    passwordPlaceholder: "Password",
+    showPassword: "Show",
+    hidePassword: "Hide",
+    forgotPassword: "Forgot password?",
+    sending: "Sending...",
+    loginSubmit: "Log In",
+    signupSubmit: "Create Account",
+    legalPrefix: "I agree to the",
+    terms: "Terms of Use",
+    legalMiddle: "and",
+    privacy: "Privacy Policy",
+    legalSuffix: ".",
+  },
+  actions: {
+    getMyBishBash: "Get MyBishBash",
+    alreadyHaveAccount: "Already have an account?",
+    needAccount: "Need an account?",
+    loginSwitch: "Log in",
+    signupSwitch: "Sign up",
+    noInvite: "No invite yet?",
+    joinWaitlist: "Join waitlist",
+  },
+  status: {
+    passwordResetSent: "Password reset email sent. Check your inbox for the link to return to MyBishBash.",
+    passwordResetError: "Could not send a password reset email.",
+    legalRequired: "Please agree to the Terms of Use and Privacy Policy to continue.",
+  },
+};

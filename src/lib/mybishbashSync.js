@@ -22,6 +22,8 @@ export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nY
 const PENDING_ACCESS_CODE_KEY = "MYBISHBASH_PENDING_ACCESS_CODE";
 const VALIDATED_GATE_ACCESS_CODE_KEY = "mybishbash.validated-gate-access-code.v1";
 const VALIDATED_GATE_ACCESS_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+const E2E_AUTH_SESSION_KEY = "MYBISHBASH_E2E_AUTH_SESSION";
+const E2E_FAIL_NEXT_ACCESS_PROFILE_KEY = "MYBISHBASH_E2E_FAIL_NEXT_ACCESS_PROFILE";
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -102,6 +104,11 @@ export function getSyncErrorMessage(error, fallback = "Could not sync your MyBis
 
 export async function loadSharedState(userId) {
   if (isDemoMode()) return null;
+  if (isE2EAuthMockMode()) {
+    const localSharedState = readE2ELocalSharedState();
+    if (localSharedState) return localSharedState;
+    throw new Error("E2E shared profile has not been created yet.");
+  }
   const client = requireSupabase();
 
   let firstMissingTableError = null;
@@ -124,7 +131,7 @@ export async function loadSharedState(userId) {
 }
 
 export async function saveSharedState(userId, state) {
-  if (isDemoMode()) return;
+  if (isDemoMode() || isE2EAuthMockMode()) return;
   const client = requireSupabase();
 
   let firstMissingTableError = null;
@@ -142,6 +149,9 @@ export async function saveSharedState(userId, state) {
 export async function getSession() {
   if (isDemoMode()) {
     return { user: { id: "demo-user", email: "demo@example.com" } };
+  }
+  if (isE2EAuthMockMode()) {
+    return readE2EAuthSession();
   }
   const client = requireSupabase();
   const { data, error } = await client.auth.getSession();
@@ -233,6 +243,68 @@ function isE2EAuthMockMode() {
   return window.localStorage.getItem("MYBISHBASH_E2E_AUTH_MOCK") === "true";
 }
 
+function buildE2EAuthSession(email) {
+  const normalizedEmail = String(email ?? "approved@example.com").trim().toLowerCase();
+  return {
+    user: {
+      id: `e2e-access-user:${normalizedEmail}`,
+      email: normalizedEmail,
+    },
+  };
+}
+
+function readE2EAuthSession() {
+  if (!isE2EAuthMockMode()) return null;
+  try {
+    return JSON.parse(window.localStorage.getItem(E2E_AUTH_SESSION_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+function rememberE2EAuthSession(session) {
+  if (!isE2EAuthMockMode() || !session) return session;
+  window.localStorage.setItem(E2E_AUTH_SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+function clearE2EAuthSession() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(E2E_AUTH_SESSION_KEY);
+}
+
+function readE2ELocalJson(key, fallback) {
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    return rawValue ? JSON.parse(rawValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readE2ELocalSharedState() {
+  if (!isE2EAuthMockMode()) return null;
+  if (window.localStorage.getItem("mybishbash.setup-complete.v1") !== "true") return null;
+  return {
+    version: 1,
+    cards: readE2ELocalJson("mybishbash.cards.v1", []),
+    setupComplete: window.localStorage.getItem("mybishbash.setup-complete.v1") === "true",
+    mood: window.localStorage.getItem("mybishbash.mood.v1") || "Minimal",
+    profile: readE2ELocalJson("mybishbash.profile.v1", {
+      name: "",
+      timezone: "Europe/London",
+      plan: "free",
+    }),
+    cardPacks: readE2ELocalJson("mybishbash.card-packs.v1", []),
+    hiddenLibraryPacks: readE2ELocalJson("mybishbash.hidden-library-packs.v1", []),
+    dislikedPackCardIds: readE2ELocalJson("mybishbash.disliked-pack-card-ids.v1", []),
+    globalInterruptionMode: window.localStorage.getItem("mybishbash.global-interruption-mode.v1") !== "false",
+    events: readE2ELocalJson("mybishbash.event-log.v1", []),
+    actionCards: readE2ELocalJson("mybishbash.action-cards.v1", []),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 async function validateAccessCode(accessCode) {
   if (isE2EAuthMockMode()) return getE2EAccessGrant(normalizeAccessCode(accessCode)) !== null;
   const client = requireSupabase();
@@ -322,6 +394,10 @@ export async function hasAccessEntitlement(userId) {
 // the free tier, so premium installs fail CLOSED, the opposite default to
 // the fail-open session gate above.
 export async function fetchOwnAccessProfile(userId) {
+  if (isE2EAuthMockMode() && window.localStorage.getItem(E2E_FAIL_NEXT_ACCESS_PROFILE_KEY) === "true") {
+    window.localStorage.removeItem(E2E_FAIL_NEXT_ACCESS_PROFILE_KEY);
+    throw new Error("E2E transient access profile failure");
+  }
   if (isE2EAuthMockMode() && userId) {
     const grant = getE2EAccessGrant(getValidatedGateAccessCode()) ?? E2E_ACCESS_GRANTS["BETA-VALID"];
     return {
@@ -378,7 +454,7 @@ export async function signUp(email, password, accessCode = null) {
       accessCode: normalizedAccessCode,
       ...grant,
     }));
-    return { user: { id: `e2e-access-user:${String(email).toLowerCase()}`, email } };
+    return rememberE2EAuthSession(buildE2EAuthSession(email));
   }
   const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
@@ -410,7 +486,7 @@ export async function signUp(email, password, accessCode = null) {
 
 export async function logIn(email, password) {
   if (isE2EAuthMockMode()) {
-    return { user: { id: `e2e-access-user:${String(email).toLowerCase()}`, email } };
+    return rememberE2EAuthSession(buildE2EAuthSession(email));
   }
   const client = requireSupabase();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
@@ -438,6 +514,10 @@ export async function resetPassword(email, redirectTo) {
 }
 
 export async function logOut() {
+  if (isE2EAuthMockMode()) {
+    clearE2EAuthSession();
+    return;
+  }
   const client = requireSupabase();
   const { error } = await client.auth.signOut();
   if (error) throw error;

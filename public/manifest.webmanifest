@@ -3,7 +3,7 @@
   "short_name": "MyBishBash",
   "id": "https://drlizlondon.github.io/mybishbash/",
   "description": "Private little reminders from yourself.",
-  "start_url": "https://drlizlondon.github.io/mybishbash/home",
+  "start_url": "https://drlizlondon.github.io/mybishbash/home?signup=1",
   "scope": "https://drlizlondon.github.io/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
