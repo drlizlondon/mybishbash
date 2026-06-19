@@ -2,7 +2,7 @@ import "./download.css";
 import { downloadContent } from "./content/downloadContent";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { loadProfile, saveProfile } from "./storage";
-import { getValidatedGateAccessCode, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
+import { getSignupHandoffReference, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
 import { useState } from "react";
 
 const BASE = import.meta.env.BASE_URL;
@@ -13,7 +13,7 @@ const LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
 function hasRolloutAccess() {
   if (typeof window === "undefined") return false;
-  return Boolean(getValidatedGateAccessCode());
+  return Boolean(getSignupHandoffReference());
 }
 
 function updateInstallState(updates) {

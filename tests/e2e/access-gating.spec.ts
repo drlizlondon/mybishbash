@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const VALIDATED_GATE_ACCESS_CODE_KEY = 'mybishbash.validated-gate-access-code.v1';
+const SIGNUP_HANDOFF_REFERENCE_KEY = 'mybishbash.signup-handoff-ref.v1';
+const E2E_SIGNUP_HANDOFFS_KEY = 'MYBISHBASH_E2E_SIGNUP_HANDOFFS';
 
 async function seedAuthMock(page: Page) {
   await page.addInitScript(() => {
@@ -8,13 +9,21 @@ async function seedAuthMock(page: Page) {
   });
 }
 
-async function seedGateCode(page: Page, code: string, validatedAt = Date.now()) {
-  await page.addInitScript(({ key, code: accessCode, validatedAt: timestamp }) => {
-    window.localStorage.setItem(key, JSON.stringify({
-      accessCode,
-      validatedAt: timestamp,
+async function seedSignupHandoff(page: Page, code: string, expiresAt = Date.now() + 30 * 60 * 1000) {
+  await page.addInitScript(({ handoffKey, handoffsKey, code: accessCode, expiresAt: expiry }) => {
+    const handoffRef = `seeded-handoff-${accessCode.toLowerCase()}`;
+    window.localStorage.setItem(handoffKey, JSON.stringify({
+      handoffRef,
+      expiresAt: new Date(expiry).toISOString(),
     }));
-  }, { key: VALIDATED_GATE_ACCESS_CODE_KEY, code, validatedAt });
+    window.localStorage.setItem(handoffsKey, JSON.stringify({
+      [handoffRef]: {
+        accessCode,
+        expiresAt: new Date(expiry).toISOString(),
+        claimed: false,
+      },
+    }));
+  }, { handoffKey: SIGNUP_HANDOFF_REFERENCE_KEY, handoffsKey: E2E_SIGNUP_HANDOFFS_KEY, code, expiresAt });
 }
 
 async function fillSignup(page: Page) {
@@ -27,10 +36,6 @@ async function fillSignup(page: Page) {
 async function seedSharedDeviceExistingAccount(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem('MYBISHBASH_E2E_AUTH_MOCK', 'true');
-    window.localStorage.setItem('mybishbash.validated-gate-access-code.v1', JSON.stringify({
-      accessCode: 'WELCOME',
-      validatedAt: Date.now(),
-    }));
     window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
     window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
       name: 'Previous Device User',
@@ -82,7 +87,7 @@ test('direct signup without validated gate code is blocked', async ({ page }) =>
 
 test('expired validated gate code is blocked at signup', async ({ page }) => {
   await seedAuthMock(page);
-  await seedGateCode(page, 'WELCOME', Date.now() - 25 * 60 * 60 * 1000);
+  await seedSignupHandoff(page, 'WELCOME', Date.now() - 60 * 1000);
   await page.goto('/mybishbash/home?signup=1');
 
   await expect(page.getByText('MyBishBash is invite-only right now.')).toBeVisible();
@@ -97,10 +102,14 @@ test('valid code at gate allows signup without an access-code field', async ({ p
   await page.getByLabel('Access code').fill('WELCOME');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
+  const storedGateCode = await page.evaluate(() => window.localStorage.getItem('mybishbash.validated-gate-access-code.v1'));
+  const storedHandoff = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '{}'), SIGNUP_HANDOFF_REFERENCE_KEY);
+  expect(storedGateCode).toBeNull();
+  expect(storedHandoff.handoffRef).toMatch(/^e2e-handoff-/);
 
   await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'I’ve opened MyBishBash' }).click();
+  await page.getByRole('link', { name: 'Create account here' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
@@ -116,7 +125,7 @@ test('valid code at gate allows signup without an access-code field', async ({ p
 
 test('signup with invalid remembered gate code is blocked', async ({ page }) => {
   await seedAuthMock(page);
-  await seedGateCode(page, 'WRONG-CODE');
+  await seedSignupHandoff(page, 'WRONG-CODE');
   await page.goto('/mybishbash/home?signup=1');
 
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
@@ -130,7 +139,7 @@ test('signup with invalid remembered gate code is blocked', async ({ page }) => 
 
 test('different gate codes map through signup to their access group', async ({ page }) => {
   await seedAuthMock(page);
-  await seedGateCode(page, 'TESTER');
+  await seedSignupHandoff(page, 'TESTER');
   await page.goto('/mybishbash/home?signup=1');
 
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
@@ -143,6 +152,31 @@ test('different gate codes map through signup to their access group', async ({ p
   expect(signupAccess.grant_reason).toBe('tester');
   expect(signupAccess.is_tester).toBe(true);
   expect(signupAccess.tester_group).toBe('tester');
+});
+
+test('standalone signup recovery points back to the validated browser tab', async ({ page }) => {
+  await seedAuthMock(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, 'standalone', { value: true, configurable: true });
+    window.matchMedia = (query: string) => ({
+      matches: query === '(display-mode: standalone)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  });
+
+  await page.goto('/mybishbash/home?signup=1');
+
+  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByText('Finish creating your account in the browser tab where you entered your code.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Get MyBishBash' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Join waitlist' })).toHaveCount(0);
+  await expect(page.getByLabel('Access code')).toHaveCount(0);
 });
 
 test('existing approved user can log in without access code', async ({ page }) => {
@@ -195,7 +229,12 @@ test('shared device logout clears prior account state before a new signup starts
   await page.getByRole('button', { name: 'Log out' }).click();
 
   await expect(page.getByTestId('sync-screen')).toBeVisible();
-  await page.getByRole('button', { name: 'Sign up' }).click();
+  await page.goto('/mybishbash/invite');
+  await page.getByLabel('Access code').fill('WELCOME');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/download$/);
+  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await page.getByRole('link', { name: 'Create account here' }).click();
   await page.getByLabel('Email').fill('new-shared-device-user@example.com');
   await page.getByLabel('Password').fill('password123');
   await page.getByLabel(/I agree to the Terms/i).check();

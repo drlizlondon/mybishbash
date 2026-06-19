@@ -90,8 +90,8 @@ assert.match(
 );
 assert.match(
   syncSource,
-  /mybishbash_access_code:\s*normalizedAccessCode/,
-  "signup must pass the validated access code into auth metadata so the database signup trigger can grant access",
+  /mybishbash_signup_handoff_ref:\s*handoffRef/,
+  "signup must pass the server-created handoff reference into auth metadata so the database signup trigger can grant access",
 );
 assert.doesNotMatch(
   syncSource,
@@ -100,13 +100,13 @@ assert.doesNotMatch(
 );
 assert.match(
   syncSource,
-  /getValidatedGateAccessCode\(\)/,
-  "signup must read the previously validated gate access code",
+  /getSignupHandoffReference\(\)/,
+  "signup must read the previously created signup handoff reference",
 );
-assert.match(
+assert.doesNotMatch(
   syncSource,
   /validateAccessCode\(normalizedAccessCode\)/,
-  "signup must revalidate the remembered gate code before account creation",
+  "signup must not revalidate a remembered access code client-side; it should redeem the server-side handoff",
 );
 assert.match(
   downloadSource,

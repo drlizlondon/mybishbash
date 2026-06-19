@@ -22,8 +22,11 @@ export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nY
 const PENDING_ACCESS_CODE_KEY = "MYBISHBASH_PENDING_ACCESS_CODE";
 const VALIDATED_GATE_ACCESS_CODE_KEY = "mybishbash.validated-gate-access-code.v1";
 const VALIDATED_GATE_ACCESS_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+const SIGNUP_HANDOFF_REFERENCE_KEY = "mybishbash.signup-handoff-ref.v1";
+const SIGNUP_HANDOFF_TTL_MS = 30 * 60 * 1000;
 const E2E_AUTH_SESSION_KEY = "MYBISHBASH_E2E_AUTH_SESSION";
 const E2E_FAIL_NEXT_ACCESS_PROFILE_KEY = "MYBISHBASH_E2E_FAIL_NEXT_ACCESS_PROFILE";
+const E2E_SIGNUP_HANDOFFS_KEY = "MYBISHBASH_E2E_SIGNUP_HANDOFFS";
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -204,6 +207,42 @@ export function clearValidatedGateAccessCode() {
   storage?.removeItem(VALIDATED_GATE_ACCESS_CODE_KEY);
 }
 
+export function clearSignupHandoffReference() {
+  const storage = getAccessCodeStorage();
+  storage?.removeItem(SIGNUP_HANDOFF_REFERENCE_KEY);
+}
+
+function rememberSignupHandoffReference(handoffRef, expiresAt) {
+  const storage = getAccessCodeStorage();
+  if (!storage || !handoffRef) return false;
+  const expiry = Date.parse(expiresAt) || Date.now() + SIGNUP_HANDOFF_TTL_MS;
+  storage.setItem(SIGNUP_HANDOFF_REFERENCE_KEY, JSON.stringify({
+    handoffRef,
+    expiresAt: new Date(expiry).toISOString(),
+  }));
+  return true;
+}
+
+export function getSignupHandoffReference(now = Date.now()) {
+  const storage = getAccessCodeStorage();
+  if (!storage) return "";
+  const raw = storage.getItem(SIGNUP_HANDOFF_REFERENCE_KEY);
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    const handoffRef = String(parsed?.handoffRef ?? "").trim();
+    const expiresAt = Date.parse(parsed?.expiresAt ?? "");
+    if (!handoffRef || !Number.isFinite(expiresAt) || expiresAt <= now) {
+      clearSignupHandoffReference();
+      return "";
+    }
+    return handoffRef;
+  } catch {
+    clearSignupHandoffReference();
+    return "";
+  }
+}
+
 export function getValidatedGateAccessCode(now = Date.now()) {
   const storage = getAccessCodeStorage();
   if (!storage) return "";
@@ -282,6 +321,16 @@ function readE2ELocalJson(key, fallback) {
   }
 }
 
+function readE2ESignupHandoffs() {
+  if (!isE2EAuthMockMode()) return {};
+  return readE2ELocalJson(E2E_SIGNUP_HANDOFFS_KEY, {});
+}
+
+function writeE2ESignupHandoffs(handoffs) {
+  if (!isE2EAuthMockMode()) return;
+  window.localStorage.setItem(E2E_SIGNUP_HANDOFFS_KEY, JSON.stringify(handoffs));
+}
+
 function readE2ELocalSharedState() {
   if (!isE2EAuthMockMode()) return null;
   if (window.localStorage.getItem("mybishbash.setup-complete.v1") !== "true") return null;
@@ -339,6 +388,54 @@ async function claimAccessCode(accessCode) {
   return data === true;
 }
 
+async function createSignupHandoff(accessCode) {
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return null;
+  if (isE2EAuthMockMode()) {
+    const grant = getE2EAccessGrant(normalizedAccessCode);
+    if (!grant) return null;
+    const handoffRef = `e2e-handoff-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const expiresAt = new Date(Date.now() + SIGNUP_HANDOFF_TTL_MS).toISOString();
+    writeE2ESignupHandoffs({
+      ...readE2ESignupHandoffs(),
+      [handoffRef]: {
+        accessCode: normalizedAccessCode,
+        expiresAt,
+        claimed: false,
+      },
+    });
+    return { handoffRef, expiresAt };
+  }
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("create_mybishbash_signup_handoff", {
+    access_code: normalizedAccessCode,
+  });
+  if (error) {
+    logSupabaseAccessError("rpc:create_mybishbash_signup_handoff", error);
+    return null;
+  }
+  const handoffRef = data?.handoff_ref ?? data?.handoffRef;
+  if (!handoffRef) return null;
+  return {
+    handoffRef,
+    expiresAt: data?.expires_at ?? data?.expiresAt ?? new Date(Date.now() + SIGNUP_HANDOFF_TTL_MS).toISOString(),
+  };
+}
+
+function redeemE2ESignupHandoff(handoffRef) {
+  const handoffs = readE2ESignupHandoffs();
+  const handoff = handoffs[handoffRef];
+  if (!handoff || handoff.claimed || Date.parse(handoff.expiresAt) <= Date.now()) return null;
+  const grant = getE2EAccessGrant(handoff.accessCode);
+  if (!grant) return null;
+  handoffs[handoffRef] = { ...handoff, claimed: true };
+  writeE2ESignupHandoffs(handoffs);
+  return {
+    accessCode: handoff.accessCode,
+    ...grant,
+  };
+}
+
 const E2E_ACCESS_GRANTS = {
   "BETA-VALID": { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: null },
   WELCOME: { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: "early_user" },
@@ -356,14 +453,17 @@ export async function validateAndRememberGateAccessCode(accessCode) {
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) {
     clearValidatedGateAccessCode();
+    clearSignupHandoffReference();
     return false;
   }
-  const codeIsValid = await validateAccessCode(normalizedAccessCode);
-  if (!codeIsValid) {
+  const handoff = await createSignupHandoff(normalizedAccessCode);
+  if (!handoff) {
     clearValidatedGateAccessCode();
+    clearSignupHandoffReference();
     return false;
   }
-  rememberValidatedGateAccessCode(normalizedAccessCode);
+  clearValidatedGateAccessCode();
+  rememberSignupHandoffReference(handoff.handoffRef, handoff.expiresAt);
   return true;
 }
 
@@ -399,7 +499,8 @@ export async function fetchOwnAccessProfile(userId) {
     throw new Error("E2E transient access profile failure");
   }
   if (isE2EAuthMockMode() && userId) {
-    const grant = getE2EAccessGrant(getValidatedGateAccessCode()) ?? E2E_ACCESS_GRANTS["BETA-VALID"];
+    const signupAccess = readE2ELocalJson("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", {});
+    const grant = getE2EAccessGrant(signupAccess.accessCode) ?? E2E_ACCESS_GRANTS["BETA-VALID"];
     return {
       has_access: true,
       access_tier: grant.access_tier,
@@ -439,21 +540,25 @@ export function onAuthStateChange(callback) {
 }
 
 export async function signUp(email, password, accessCode = null) {
-  const normalizedAccessCode = normalizeAccessCode(accessCode || getValidatedGateAccessCode());
-  if (!normalizedAccessCode) {
-    throw new Error(INVITE_ONLY_ACCESS_ERROR);
+  let handoffRef = getSignupHandoffReference();
+  if (accessCode && !handoffRef) {
+    const handoff = await createSignupHandoff(accessCode);
+    if (handoff) {
+      rememberSignupHandoffReference(handoff.handoffRef, handoff.expiresAt);
+      handoffRef = handoff.handoffRef;
+    }
   }
-  const codeIsValid = await validateAccessCode(normalizedAccessCode);
-  if (!codeIsValid) {
-    clearValidatedGateAccessCode();
+  if (!handoffRef) {
     throw new Error(INVITE_ONLY_ACCESS_ERROR);
   }
   if (isE2EAuthMockMode()) {
-    const grant = getE2EAccessGrant(normalizedAccessCode);
-    window.localStorage.setItem("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", JSON.stringify({
-      accessCode: normalizedAccessCode,
-      ...grant,
-    }));
+    const grant = redeemE2ESignupHandoff(handoffRef);
+    if (!grant) {
+      clearSignupHandoffReference();
+      throw new Error(INVITE_ONLY_ACCESS_ERROR);
+    }
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", JSON.stringify(grant));
+    clearSignupHandoffReference();
     return rememberE2EAuthSession(buildE2EAuthSession(email));
   }
   const client = requireSupabase();
@@ -463,7 +568,7 @@ export async function signUp(email, password, accessCode = null) {
     options: {
       data: {
         mybishbash_plan: "free",
-        mybishbash_access_code: normalizedAccessCode,
+        mybishbash_signup_handoff_ref: handoffRef,
       },
     },
   });
@@ -471,16 +576,8 @@ export async function signUp(email, password, accessCode = null) {
     logSupabaseAccessError("auth.signUp", error);
     throw error;
   }
-  if (!data.session) {
-    rememberPendingAccessCode(normalizedAccessCode);
-    return data.session;
-  }
-  const claimed = await claimAccessCode(normalizedAccessCode);
-  if (!claimed) {
-    clearValidatedGateAccessCode();
-    throw new Error(INVITE_ONLY_ACCESS_ERROR);
-  }
   clearValidatedGateAccessCode();
+  clearSignupHandoffReference();
   return data.session;
 }
 

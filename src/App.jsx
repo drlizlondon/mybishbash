@@ -67,7 +67,7 @@ import {
   fetchGlobalPacks,
   fetchLauncherConfigs,
   fetchOwnAccessProfile,
-  getValidatedGateAccessCode,
+  getSignupHandoffReference,
   touchUserProfile,
 } from "./lib/mybishbashSync";
 import { CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
@@ -8865,15 +8865,16 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     return new URLSearchParams(window.location.search).get("signup") !== "1";
   });
   const [agreedToLegal, setAgreedToLegal] = useState(false);
-  const hasValidatedGateCode = Boolean(getValidatedGateAccessCode());
+  const hasSignupHandoff = Boolean(getSignupHandoffReference());
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
   const isLauncherLogin = mode === "launcher";
   const isAccessDenied = mode === "access-denied";
-  const isSignupBlocked = !isLogin && !hasValidatedGateCode;
+  const isSignupBlocked = !isLogin && !hasSignupHandoff;
+  const isStandaloneSignupRecovery = isSignupBlocked && isStandalone;
   const titlePath = isLauncherLogin
     ? "titles.launcher"
-    : isAccessDenied || isSignupBlocked
+    : isAccessDenied || (isSignupBlocked && !isStandaloneSignupRecovery)
       ? "titles.inviteOnly"
       : isLogin
         ? "titles.login"
@@ -8882,7 +8883,7 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     ? content.titles.launcher
     : isAccessDenied
       ? content.titles.inviteOnly
-    : isSignupBlocked
+    : isSignupBlocked && !isStandaloneSignupRecovery
       ? content.titles.inviteOnly
     : isLogin
       ? content.titles.login
@@ -8943,6 +8944,8 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
             <p>
               {isAccessDenied
                 ? content.copy.accessDenied
+                : isStandaloneSignupRecovery
+                ? content.copy.signupRecoveryStandalone
                 : isSignupBlocked
                 ? content.copy.signupBlocked
                 : isLogin
@@ -8954,7 +8957,13 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
 
             {isSignupBlocked ? (
               <div className="sync-form">
-                <a className="save-button" href={`${BASE_PATH}/invite`}><EditableText path="actions.getMyBishBash" /></a>
+                {isStandaloneSignupRecovery ? (
+                  <a className="save-button" href={`${BASE_PATH}/home`}>
+                    <EditableText path="actions.loginSwitch" />
+                  </a>
+                ) : (
+                  <a className="save-button" href={`${BASE_PATH}/invite`}><EditableText path="actions.getMyBishBash" /></a>
+                )}
                 <div className="sync-auth-switch">
                   <EditableText path="actions.alreadyHaveAccount" />
                   <button type="button" className="text-button sync-secondary-link" onClick={() => switchMode(true)}>
@@ -9037,9 +9046,11 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
                 </div>
               </>
             )}
-            <p className="sync-waitlist-line">
-              <EditableText path="actions.noInvite" /> <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}><EditableText path="actions.joinWaitlist" /></a>
-            </p>
+            {!isStandalone && !isStandaloneSignupRecovery ? (
+              <p className="sync-waitlist-line">
+                <EditableText path="actions.noInvite" /> <a className="text-button sync-secondary-link" href={`${BASE_PATH}/early-access`}><EditableText path="actions.joinWaitlist" /></a>
+              </p>
+            ) : null}
           </>
         )}
       </section>
@@ -10601,7 +10612,6 @@ function PremiumCardScreen({
 }) {
   return (
     <CardRevealTemplate
-      key={cardOverlayKey}
       cardOverlayKey={cardOverlayKey}
       variant={type}
       greeting={greeting}
@@ -10891,6 +10901,7 @@ function CardRevealTemplate({
 }) {
   const hasLaunchers = launchers?.length > 0;
   const hasActions = actions?.length > 0;
+  const hasCtaContent = hasLaunchers || hasActions;
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseButtonRef = useRef(null);
   const shouldManageLauncherApp = Boolean(launcherAppId && onManageApp);
@@ -10957,8 +10968,7 @@ function CardRevealTemplate({
           {subtitle ? <p className="premium-subtitle">{subtitle}</p> : null}
           {children}
         </section>
-        {hasLaunchers || hasActions ? (
-          <section className={`premium-card-cta ${hasLaunchers ? "has-launchers" : "no-launchers"}`}>
+        <section className={`premium-card-cta ${hasLaunchers ? "has-launchers" : "no-launchers"} ${hasCtaContent ? "" : "is-empty"}`.trim()}>
             {hasLaunchers ? (
               <div className="premium-card-launchers">
                 <FakeAppLauncherBar
@@ -10969,8 +10979,7 @@ function CardRevealTemplate({
               </div>
             ) : null}
             <PremiumActionStack actions={actions} />
-          </section>
-        ) : null}
+        </section>
       </main>
     </div>
   );
@@ -10989,61 +10998,14 @@ function getMessageBaseSize(value) {
 }
 
 function CardRevealMessage({ message, className = "" }) {
-  const frameRef = useRef(null);
-  const headlineRef = useRef(null);
   const baseSize = getMessageBaseSize(message);
-  const [fontSize, setFontSize] = useState(baseSize);
-  const [isScrollable, setIsScrollable] = useState(false);
   const commitmentMatch = String(message ?? "").match(/^I will\r?\n([\s\S]+)$/);
 
-  useLayoutEffect(() => {
-    const frame = frameRef.current;
-    const headline = headlineRef.current;
-    if (!frame || !headline) return undefined;
-
-    let frameId;
-
-    function fit() {
-      const minSize = 18;
-      let nextSize = baseSize;
-      headline.style.fontSize = `${nextSize}px`;
-
-      while (
-        nextSize > minSize &&
-        (headline.scrollWidth > frame.clientWidth ||
-          headline.scrollHeight > frame.clientHeight)
-      ) {
-        nextSize -= 1;
-        headline.style.fontSize = `${nextSize}px`;
-      }
-
-      setFontSize(nextSize);
-      setIsScrollable(headline.scrollHeight > frame.clientHeight || headline.scrollWidth > frame.clientWidth);
-    }
-
-    frameId = window.requestAnimationFrame(fit);
-    if (typeof ResizeObserver === "undefined") {
-      return () => window.cancelAnimationFrame(frameId);
-    }
-
-    const observer = new ResizeObserver(() => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(fit);
-    });
-    observer.observe(frame);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      observer.disconnect();
-    };
-  }, [baseSize, message]);
-
   return (
-    <div className={`premium-title-box ${className} ${isScrollable ? "is-scrollable" : ""}`.trim()} ref={frameRef}>
+    <div className={`premium-title-box ${className}`.trim()}>
       <h2
         className={`premium-headline ${commitmentMatch ? "commitment-headline" : ""}`.trim()}
-        ref={headlineRef}
-        style={{ "--message-font-size": `${fontSize}px` }}
+        style={{ "--message-font-size": `${baseSize}px` }}
       >
         {commitmentMatch ? (
           <>
