@@ -6597,7 +6597,7 @@ function App() {
                   onOpenMyBishBash={() => {
                     setShellSettingsVersionId(null);
                     setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
-                    navigateTo("/home");
+                    navigateTo("/apps");
                   }}
                 />
               ) : null}
@@ -9579,13 +9579,14 @@ function AppsPanel({
 
       <div className="settings-card" data-testid="apps-list">
         <div className="settings-version-heading">
-          <p>Enabled Apps</p>
+          <p>Apps</p>
+          <span>Manage each app MyBishBash can support.</span>
         </div>
-        {enabledStatuses.length === 0 ? (
-          <p className="tiny-note">No enabled apps yet.</p>
+        {liveProtectedAppStatuses.length === 0 ? (
+          <p className="tiny-note">No apps available yet.</p>
         ) : (
           <div className="home-screen-version-list">
-            {enabledStatuses.map((status) => (
+            {liveProtectedAppStatuses.map((status) => (
               <EnabledAppRow
                 key={status.version.id}
                 status={status}
@@ -9628,7 +9629,7 @@ function AppsPanel({
 }
 
 function EnabledAppRow({ status, onManageApp, onPauseApp, onClearAppPause }) {
-  const { version, paused, pauseExpiry } = status;
+  const { version, protectedOn, paused, pauseExpiry } = status;
   const appName = version.realAppLabel ?? version.name ?? version.displayName ?? version.id;
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseButtonRef = useRef(null);
@@ -9645,14 +9646,14 @@ function EnabledAppRow({ status, onManageApp, onPauseApp, onClearAppPause }) {
         <div className="home-screen-version-title">
           <strong>{appName}</strong>
           <span data-testid={`apps-pause-status-${version.id}`}>
-            {paused ? `Paused until ${pauseUntil || "soon"}` : "✓ Enabled"}
+            {protectedOn ? (paused ? `Paused until ${pauseUntil || "soon"}` : "✓ Enabled") : "Available"}
           </span>
         </div>
         <div className="home-screen-version-actions apps-row-actions">
           <button type="button" className="pack-button apps-settings-button" onClick={() => onManageApp?.(version.id)}>
             Settings
           </button>
-          {paused ? (
+          {protectedOn && paused ? (
             <button
               type="button"
               className="pack-button secondary apps-pause-row-button"
@@ -9661,7 +9662,7 @@ function EnabledAppRow({ status, onManageApp, onPauseApp, onClearAppPause }) {
             >
               Resume
             </button>
-          ) : (
+          ) : protectedOn ? (
             <button
               type="button"
               className="pack-button secondary apps-pause-row-button"
@@ -9670,7 +9671,7 @@ function EnabledAppRow({ status, onManageApp, onPauseApp, onClearAppPause }) {
             >
               Pause
             </button>
-          )}
+          ) : null}
         </div>
       </div>
       {showPauseModal && onPauseApp ? (
@@ -9903,13 +9904,13 @@ function AppManagementScreen({
         <div className="settings-card">
           <div className="settings-version-heading">
             <p>Add MyBishBash to {appName}</p>
-            <span>Turn on App Prompts and pause controls for this app.</span>
+            <span>Turn on this app. App Prompts can be added separately.</span>
           </div>
           <button
             type="button"
             className="pack-button"
             data-testid={`apps-enable-${version.id}`}
-            onClick={() => onSaveVersionBehavior(version.id, { appEnabled: true, useInterruptionPack: true })}
+            onClick={() => onSaveVersionBehavior(version.id, { appEnabled: true })}
           >
             Enable {appName}
           </button>
@@ -9929,12 +9930,14 @@ function AppManagementScreen({
           <span>{promptsOn ? "On" : "Off"}</span>
         </label>
       </div>
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Example prompt</p>
-          <span>“{promptPreview}”</span>
+      {promptsOn ? (
+        <div className="settings-card" data-testid={`apps-prompt-preview-${version.id}`}>
+          <div className="settings-version-heading">
+            <p>Example prompt</p>
+            <span>“{promptPreview}”</span>
+          </div>
         </div>
-      </div>
+      ) : null}
       {protectedOn ? (
       <div className="settings-card">
         <div className="settings-version-heading">
@@ -9983,8 +9986,8 @@ function AppManagementScreen({
       ) : null}
       {isShellContext ? (
         <div className="settings-card settings-compact">
-          <button type="button" className="pack-button" onClick={onOpenMyBishBash}>
-            Open MyBishBash
+          <button type="button" className="pack-button" data-testid="apps-manage-all" onClick={onOpenMyBishBash}>
+            Manage all apps
           </button>
         </div>
       ) : null}

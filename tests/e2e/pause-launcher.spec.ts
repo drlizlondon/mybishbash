@@ -396,11 +396,11 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
   await expect(page.getByTestId('apps-panel')).toBeVisible();
   await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
   await expect(page.getByTestId('apps-list')).toBeVisible();
-  await expect(page.getByTestId('apps-list')).toContainText('No enabled apps yet.');
+  await expect(page.getByTestId('apps-list')).toContainText('Manage each app MyBishBash can support.');
   await expect(page.getByTestId('apps-add-more')).toContainText('Add Another App');
   await expect(page.getByText('MyBishBash installed')).toHaveCount(0);
   await expect(page.getByTestId('create-card-button')).toHaveCount(0);
-  await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-safari')).toContainText('Available');
   await expect(page.getByTestId('apps-direct-open-safari')).toHaveCount(0);
   await expect(page.getByTestId('apps-test-shortcut-safari')).toHaveCount(0);
   await expect(page.getByText('Replace icon')).toHaveCount(0);
@@ -431,15 +431,17 @@ test('account-menu-opens-above-app-controls — account menu is the top layer', 
   expect(menuButtonsAreTopLayer).toBe(true);
 });
 
-test('apps-enabled-list-shows-only-enabled-apps — zero, one, and multiple states', async ({ page }) => {
+test('main Apps control centre shows all apps while preserving enabled state', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-count-zero', 'Apps count zero')], appIds: ['safari', 'youtube'], enabledAppIds: [], testerMode: false });
   await page.goto('/mybishbash/apps');
-  await expect(page.getByTestId('apps-list')).toContainText('No enabled apps yet.');
+  await expect(page.getByTestId('apps-list')).toContainText('Apps');
+  await expect(page.getByTestId('protected-app-safari')).toContainText('Available');
+  await expect(page.getByTestId('protected-app-youtube')).toContainText('Available');
 
   await seedState(page, { cards: [personalCard('apps-count-one', 'Apps count one')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari'], testerMode: false });
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
-  await expect(page.getByTestId('protected-app-youtube')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-youtube')).toContainText('Available');
 
   await seedState(page, { cards: [personalCard('apps-count-two', 'Apps count two')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari', 'youtube'], testerMode: false });
   await page.goto('/mybishbash/apps');
@@ -490,6 +492,9 @@ test('apps-add-another-hides-enabled-apps — active apps do not duplicate in Ad
   await page.goto('/mybishbash/apps');
 
   await expect(page.getByTestId('protected-app-whatsapp')).toContainText('✓ Enabled');
+  await expect(page.getByTestId('protected-app-instagram')).toContainText('Available');
+  await expect(page.getByTestId('protected-app-youtube')).toContainText('Available');
+  await expect(page.getByTestId('protected-app-safari')).toContainText('Available');
   await page.getByRole('button', { name: 'See Options' }).click();
   await expect(page.getByTestId('apps-more-options')).toContainText('Add Another App');
   await expect(page.getByTestId('apps-more-options')).toContainText('Bring MyBishBash to more of the apps you use.');
@@ -575,6 +580,18 @@ test('apps-full-access — full-access user can enable multiple apps', async ({ 
   await expect(page.getByTestId('apps-enable-whatsapp')).toHaveText('Enable WhatsApp');
   await page.getByTestId('apps-enable-whatsapp').click();
   await expect(page.getByTestId('apps-pause-status-whatsapp')).toContainText('MyBishBash enabled');
+  await expect(page.getByTestId('apps-interruptions-toggle-whatsapp')).not.toBeChecked();
+  await expect(page.getByText('Who are you hoping to contact?')).toHaveCount(0);
+
+  const behaviorAfterEnable = await page.evaluate(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return settings.whatsapp;
+  });
+  expect(behaviorAfterEnable.appEnabled).toBe(true);
+  expect(behaviorAfterEnable.useInterruptionPack).toBe(false);
+
+  await page.getByTestId('apps-interruptions-toggle-whatsapp').check();
+  await expect(page.getByTestId('apps-prompt-preview-whatsapp')).toContainText('Who are you hoping to contact?');
 
   await page.getByTestId('apps-back-button').click();
   await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
@@ -612,12 +629,21 @@ test('apps-disabled-app-detail — unavailable app detail does not claim enabled
   await expect(page.getByTestId('protected-app-safari')).not.toContainText('MyBishBash enabled');
   await expect(page.getByTestId('apps-enable-safari')).toHaveText('Enable Safari');
   await expect(page.getByText('Prompt Preview')).toHaveCount(0);
-  await expect(page.getByText('Example prompt')).toBeVisible();
+  await expect(page.getByText('Example prompt')).toHaveCount(0);
   await expect(page.getByText('Add shortcut')).toHaveCount(0);
   await expect(page.getByText('Home-screen shortcut coming soon.')).toHaveCount(0);
 
   await page.getByTestId('apps-enable-safari').click();
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
+  await expect(page.getByTestId('apps-interruptions-toggle-safari')).not.toBeChecked();
+  await expect(page.getByText('Why are you opening Safari right now?')).toHaveCount(0);
+
+  const behavior = await page.evaluate(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return settings.safari;
+  });
+  expect(behavior.appEnabled).toBe(true);
+  expect(behavior.useInterruptionPack).toBe(false);
 });
 
 test('apps-app-prompts-toggle — prompts off does not disable the app', async ({ page }) => {
@@ -707,7 +733,7 @@ test('apps-remove-app — removing an app disables it without using prompt state
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
   await page.getByRole('button', { name: 'Remove App' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
-  await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-safari')).toContainText('Available');
 
   const behavior = await page.evaluate(() => {
     const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
@@ -755,8 +781,12 @@ test('apps-protected-launch-paused — active pause bypasses only that app', asy
   expect(attempts).toHaveLength(0);
 });
 
-test('fake-shell-dashboard shortcut opens source app settings', async ({ page }) => {
-  await seedState(page, { cards: [personalCard('apps5', 'Manage this app card')], enabledAppIds: ['safari'] });
+test('fake-shell-dashboard shortcut opens only the source app settings with route to main Apps', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps5', 'Manage this app card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+  });
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'mybishbash.installed-launcher-shell.v1',
@@ -776,8 +806,11 @@ test('fake-shell-dashboard shortcut opens source app settings', async ({ page })
   await expect(page).toHaveURL(/\/mybishbash\/apps\/safari$/);
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('protected-app-safari')).toBeVisible();
+  await expect(page.getByTestId('protected-app-whatsapp')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-instagram')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-youtube')).toHaveCount(0);
   await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
-  await expect(page.getByText('Open MyBishBash')).toBeVisible();
+  await expect(page.getByTestId('apps-manage-all')).toHaveText('Manage all apps');
   await expect(page.getByText('Pause for 30 minutes')).toBeVisible();
   await expect(page.getByText('Example prompt')).toBeVisible();
   await expect(page.getByTestId('bottom-nav-home')).toHaveCount(0);
@@ -792,6 +825,42 @@ test('fake-shell-dashboard shortcut opens source app settings', async ({ page })
   await expect(page.getByText('Help')).toHaveCount(0);
   await expect(page.getByText('Remove App')).toHaveCount(0);
   await expect(page.getByText('Test controls')).toHaveCount(0);
+
+  await page.getByTestId('apps-manage-all').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByTestId('protected-app-safari')).toBeVisible();
+  await expect(page.getByTestId('protected-app-whatsapp')).toBeVisible();
+  await expect(page.getByTestId('protected-app-instagram')).toBeVisible();
+  await expect(page.getByTestId('protected-app-youtube')).toBeVisible();
+});
+
+test('WhatsApp shell only shows WhatsApp controls', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-whatsapp-shell', 'WhatsApp shell card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+  });
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'mybishbash.installed-launcher-shell.v1',
+      JSON.stringify({
+        launcher_id: 'whatsapp',
+        launch_path: '/intercept/whatsapp',
+        updated_at: '2026-06-01T12:00:00.000Z',
+      }),
+    );
+  });
+  await page.goto('/mybishbash/intercept/whatsapp');
+
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await page.getByTestId('dashboard-shortcut').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
+  await expect(page.getByTestId('protected-app-whatsapp')).toBeVisible();
+  await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-instagram')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-youtube')).toHaveCount(0);
+  await expect(page.getByTestId('apps-manage-all')).toHaveText('Manage all apps');
 });
 
 test('settings-no-app-behaviour-owner — Settings no longer owns app behaviour management', async ({ page }) => {
