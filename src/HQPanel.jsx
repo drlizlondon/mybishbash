@@ -214,6 +214,7 @@ function useLiveActivityStream({ enabled, setStatus }) {
 
 export default function HQPanel({
   isAdmin,
+  isAdminLoading = false,
   session,
   libraryPacks = [],
   interruptionPacks = [],
@@ -241,6 +242,18 @@ export default function HQPanel({
     currentUrl.searchParams.set("view", activeView);
     window.history.replaceState(null, "", currentUrl);
   }, [activeView]);
+
+  if (isAdminLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 p-6 text-white">
+        <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">MyBishBash HQ</p>
+          <h2 className="mt-3 text-2xl font-semibold">Checking access</h2>
+          <p className="mt-2 text-sm text-slate-300">Confirming your HQ role.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return (

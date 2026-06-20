@@ -1613,6 +1613,7 @@ function App() {
     initialState.timingWindowsPrefs,
   );
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminStatus, setAdminStatus] = useState(e2eMode ? "ready" : "idle");
   const [testerStatus, setTesterStatus] = useState(() => {
     const e2eTesterMode = e2eMode && typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
     return e2eMode ? { is_tester: e2eTesterMode } : null;
@@ -2289,16 +2290,34 @@ function App() {
   useEffect(() => {
     if (e2eMode) {
       setIsAdmin(false);
+      setAdminStatus("ready");
       return;
     }
     if (session?.user?.id) {
       if (session.user.email && HQ_ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
         setIsAdmin(true);
+        setAdminStatus("ready");
         return;
       }
-      checkIsAdmin(session.user.id).then(setIsAdmin).catch(() => setIsAdmin(false));
+      let cancelled = false;
+      setIsAdmin(false);
+      setAdminStatus("checking");
+      checkIsAdmin(session.user.id)
+        .then((admin) => {
+          if (!cancelled) setIsAdmin(admin);
+        })
+        .catch(() => {
+          if (!cancelled) setIsAdmin(false);
+        })
+        .finally(() => {
+          if (!cancelled) setAdminStatus("ready");
+        });
+      return () => {
+        cancelled = true;
+      };
     } else {
       setIsAdmin(false);
+      setAdminStatus("ready");
     }
   }, [e2eMode, session?.user?.email, session?.user?.id]);
 
@@ -5427,7 +5446,10 @@ function App() {
   }
 
   function savePersonalOnboardingSetup({
+    selectedStrategyAreaIds = [],
     personalCards = DEFAULT_PERSONAL_CARD_TEXTS,
+    selectedStarterPackId = "",
+    starterCommitment = null,
     launcherId = "safari",
     selectedLauncherIds = [],
     shortcutSetup = null,
@@ -5443,6 +5465,12 @@ function App() {
     ));
     const cleanPersonalCards = personalCards.map((text) => text.trim()).filter(Boolean);
     const onboardingCardsToCreate = cleanPersonalCards;
+    const cleanStrategyAreaIds = Array.isArray(selectedStrategyAreaIds) ? selectedStrategyAreaIds.filter(Boolean) : [];
+    const selectedStarterPack = selectedStarterPackId
+      ? visibleLibraryPacks.find((pack) => pack.id === selectedStarterPackId) ?? PACKS.find((pack) => pack.id === selectedStarterPackId)
+      : null;
+    const cleanCommitmentText = starterCommitment?.promptText?.trim() ?? "";
+    const starterCommitmentDefaults = starterCommitment?.defaults ?? {};
     const cleanTimingWindows = Array.isArray(timingWindows) && timingWindows.length > 0 ? timingWindows : ["morning", "day", "evening"];
     const now = new Date().toISOString();
 
@@ -5455,7 +5483,10 @@ function App() {
       action_taken: "completed",
       metadata: {
         route: "personal_card_play_by_play",
+        selected_strategy_area_ids: cleanStrategyAreaIds,
         selected_personal_cards: onboardingCardsToCreate.length,
+        selected_starter_pack_id: selectedStarterPack?.id ?? null,
+        selected_starter_commitment_id: starterCommitment?.id ?? null,
         app_context: appContext,
       },
     });
@@ -5486,8 +5517,74 @@ function App() {
           disliked: false,
           deletedAt: null,
         }));
-      return [...starterCards, ...current];
+      const packAlreadyActive = selectedStarterPack
+        ? current.some((card) => card.sourcePackId === selectedStarterPack.id && !card.deletedAt)
+        : false;
+      const starterPackCards = selectedStarterPack && !packAlreadyActive
+        ? buildCardsFromPack(selectedStarterPack)
+        : [];
+      const hasCommitment = cleanCommitmentText
+        ? current.some((card) => card.cardKind === "commitment" && card.promptText?.trim().toLowerCase() === cleanCommitmentText.toLowerCase())
+        : true;
+      const starterCommitmentCard = cleanCommitmentText && !hasCommitment
+        ? [{
+            id: createId(),
+            cardKind: "commitment",
+            promptText: cleanCommitmentText,
+            dashboardTitle: cleanCommitmentText,
+            theme: starterCommitmentDefaults.theme ?? "Minimal",
+            icon: starterCommitmentDefaults.icon ?? "star",
+            statusToday: "fresh",
+            createdAt: now,
+            updatedAt: now,
+            lastShownAt: null,
+            notYetUntil: null,
+            doneDate: null,
+            frequency: "once_daily",
+            timingWindows: cleanTimingWindows,
+            paused: false,
+            disliked: false,
+            deletedAt: null,
+            commitmentReason: starterCommitmentDefaults.commitmentReason ?? "Chosen during onboarding.",
+            commitmentTimingMode: starterCommitmentDefaults.commitmentTimingMode ?? "anytime",
+            commitmentStartWindow: starterCommitmentDefaults.commitmentTimingMode ?? "anytime",
+            commitmentCustomStartTime: starterCommitmentDefaults.commitmentCustomStartTime ?? "",
+            commitmentCustomEndTime: starterCommitmentDefaults.commitmentCustomEndTime ?? "",
+            commitmentCheckInEnabled: Boolean(starterCommitmentDefaults.commitmentCheckInEnabled),
+            commitmentCheckInTime: starterCommitmentDefaults.commitmentCheckInEnabled ? starterCommitmentDefaults.commitmentCheckInTime ?? "20:30" : "",
+            commitmentStatusToday: null,
+            commitmentDecisionDate: null,
+            commitmentDecisionAt: null,
+            commitmentCheckInPendingDate: null,
+            commitmentLifecycleStatus: null,
+            commitmentCheckInShownDate: null,
+            commitmentCheckInResponse: null,
+            commitmentCheckInResponseDate: null,
+            commitmentCheckInResponseAt: null,
+            commitmentEncouragementRequestedDate: null,
+            commitmentEncouragementCompletedDate: null,
+            commitmentClosedEarlyDate: null,
+            commitmentReviewDueDate: null,
+            commitmentReviewResponse: null,
+            commitmentReviewResponseDate: null,
+            commitmentReviewResponseAt: null,
+            commitmentFinalOutcome: null,
+          }]
+        : [];
+      return [...starterCommitmentCard, ...starterPackCards, ...starterCards, ...current];
     });
+
+    if (selectedStarterPack) {
+      setHiddenLibraryPacks((current) => (current.includes(selectedStarterPack.id) ? current.filter((id) => id !== selectedStarterPack.id) : current));
+      void logEvent({
+        event_type: "pack_activated",
+        source_type: "onboarding",
+        card_source: "library",
+        pack_id: selectedStarterPack.id,
+        action_taken: "activated",
+        metadata: { packTitle: selectedStarterPack.title, route: "strategy_onboarding" },
+      });
+    }
 
     if (!isHomeOnboardingLocation) {
       setLauncherBehaviorSettings((current) => ({
@@ -5513,6 +5610,9 @@ function App() {
       onboardingCompletedAt: now,
       onboardingCompletedSection: "personal_cards",
       onboardingSkipped: false,
+      selectedStrategyAreaIds: cleanStrategyAreaIds,
+      onboardingStarterPackId: selectedStarterPack?.id ?? null,
+      onboardingStarterCommitmentId: starterCommitment?.id ?? null,
       hasCompletedPersonalCardSetup: onboardingCardsToCreate.length > 0,
     }));
 
@@ -6300,6 +6400,7 @@ function App() {
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
   const isFakeLauncherFlow = route.kind === "intercept" || overlay?.launchSource === "fake_launcher";
+  const isHqScreen = screen === "hq";
   const showAppUpdateBanner = appUpdate.updateAvailable && !overlay;
 
   const hasLocalCards = cards.length > 0;
@@ -6343,11 +6444,11 @@ function App() {
     );
   }
 
-  if (session && !e2eMode && !isFakeLauncherFlow && (accessStatus === "loading" || accessStatus === "unknown")) {
+  if (session && !e2eMode && !isFakeLauncherFlow && !isHqScreen && (accessStatus === "loading" || accessStatus === "unknown")) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (session && !e2eMode && !isFakeLauncherFlow && accessStatus === "denied") {
+  if (session && !e2eMode && !isFakeLauncherFlow && !isHqScreen && accessStatus === "denied") {
     return (
       <SyncConnectionScreen
         mode="access-denied"
@@ -6362,15 +6463,16 @@ function App() {
 
   // Skip the sync loading screen when the user is offline but already has local
   // cards — show the cached experience instead of a spinner.
-  if (session && syncStatus === "loading" && !isFakeLauncherFlow && !(isOffline && hasLocalCards)) {
+  if (session && syncStatus === "loading" && !isFakeLauncherFlow && !isHqScreen && !(isOffline && hasLocalCards)) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (screen === "hq") {
+  if (isHqScreen) {
     return (
       <Suspense fallback={<SyncConnectionScreen mode="loading" error={syncError} />}>
         <HQPanel
           isAdmin={isAdmin}
+          isAdminLoading={adminStatus !== "ready"}
           session={session}
           libraryPacks={visibleLibraryPacks}
           interruptionPacks={interruptionPacks}
