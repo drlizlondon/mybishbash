@@ -48,7 +48,7 @@ for (const launcherId of supportedLauncherIds) {
 
   const legacyShell = readFileSync(`dist/${launcherId}/index.html`, "utf8");
   assert.match(legacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
-  assert.match(legacyShell, /MyBishBash will show your Personal Cards before/);
+  assert.match(legacyShell, /Use it instead of the original/);
   assert.doesNotMatch(legacyShell, /launcherContext|shared MyBishBash state/);
 }
 
