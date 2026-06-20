@@ -7454,7 +7454,7 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
           <HeartGlyph />
         </div>
       </div>
-      <div className="account-menu-wrap" ref={accountMenuRef}>
+      <div className={`account-menu-wrap ${accountMenuOpen ? "account-menu-wrap-open" : ""}`} ref={accountMenuRef}>
       <button
         type="button"
         className="settings-gear-button"

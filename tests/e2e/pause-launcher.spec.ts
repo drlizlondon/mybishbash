@@ -412,6 +412,25 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
   expect(navLabels).toEqual(['Home', 'Library', 'Log', 'Explore', 'Apps']);
 });
 
+test('account-menu-opens-above-app-controls — account menu is the top layer', async ({ page }) => {
+  await seedState(page, { cards: [personalCard('apps-account', 'Account menu card')], enabledAppIds: ['safari'], testerMode: false });
+  await page.goto('/mybishbash/apps');
+
+  await page.getByTestId('settings-gear').click();
+  const menu = page.getByTestId('account-menu');
+  await expect(menu).toBeVisible();
+
+  const menuButtonsAreTopLayer = await menu.evaluate((element) => {
+    const buttons = Array.from(element.querySelectorAll('button'));
+    return buttons.every((button) => {
+      const rect = button.getBoundingClientRect();
+      const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return Boolean(topElement?.closest('[data-testid="account-menu"]'));
+    });
+  });
+  expect(menuButtonsAreTopLayer).toBe(true);
+});
+
 test('apps-enabled-list-shows-only-enabled-apps — zero, one, and multiple states', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-count-zero', 'Apps count zero')], appIds: ['safari', 'youtube'], enabledAppIds: [], testerMode: false });
   await page.goto('/mybishbash/apps');
@@ -622,7 +641,16 @@ test('apps-app-prompts-toggle — prompts off does not disable the app', async (
   expect(behavior.appEnabled).toBe(true);
   expect(behavior.useInterruptionPack).toBe(false);
 
-  await page.getByTestId('apps-back-button').click();
+  await page.evaluate(() => { window.__MYBISHBASH_NAVIGATION_ATTEMPTS = []; });
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/mybishbash/intercept/safari');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId('card-overlay-personal')).toContainText('Prompts toggle card');
+  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
+
+  await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
 });
 
