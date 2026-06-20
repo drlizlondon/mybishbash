@@ -153,6 +153,7 @@ textarea {
 
 .hero {
   position: relative;
+  z-index: 200000;
   text-align: center;
   padding-top: 4px;
   margin-bottom: 8px;
@@ -283,6 +284,20 @@ textarea {
   top: 14px;
   right: 0;
   z-index: 1200;
+}
+
+.account-menu-wrap-open {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 32px);
+  right: max(20px, calc((100vw - 430px) / 2));
+  width: 190px;
+  min-height: 326px;
+  z-index: 2147483646;
+}
+
+.account-menu-wrap-open .settings-gear-button {
+  display: grid;
+  margin-left: auto;
 }
 
 .settings-gear-button svg {
