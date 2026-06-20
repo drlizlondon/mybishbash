@@ -1613,6 +1613,7 @@ function App() {
     initialState.timingWindowsPrefs,
   );
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminStatus, setAdminStatus] = useState(e2eMode ? "ready" : "idle");
   const [testerStatus, setTesterStatus] = useState(() => {
     const e2eTesterMode = e2eMode && typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
     return e2eMode ? { is_tester: e2eTesterMode } : null;
@@ -2289,16 +2290,34 @@ function App() {
   useEffect(() => {
     if (e2eMode) {
       setIsAdmin(false);
+      setAdminStatus("ready");
       return;
     }
     if (session?.user?.id) {
       if (session.user.email && HQ_ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
         setIsAdmin(true);
+        setAdminStatus("ready");
         return;
       }
-      checkIsAdmin(session.user.id).then(setIsAdmin).catch(() => setIsAdmin(false));
+      let cancelled = false;
+      setIsAdmin(false);
+      setAdminStatus("checking");
+      checkIsAdmin(session.user.id)
+        .then((admin) => {
+          if (!cancelled) setIsAdmin(admin);
+        })
+        .catch(() => {
+          if (!cancelled) setIsAdmin(false);
+        })
+        .finally(() => {
+          if (!cancelled) setAdminStatus("ready");
+        });
+      return () => {
+        cancelled = true;
+      };
     } else {
       setIsAdmin(false);
+      setAdminStatus("ready");
     }
   }, [e2eMode, session?.user?.email, session?.user?.id]);
 
@@ -6381,6 +6400,7 @@ function App() {
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
   const isFakeLauncherFlow = route.kind === "intercept" || overlay?.launchSource === "fake_launcher";
+  const isHqScreen = screen === "hq";
   const showAppUpdateBanner = appUpdate.updateAvailable && !overlay;
 
   const hasLocalCards = cards.length > 0;
@@ -6424,11 +6444,11 @@ function App() {
     );
   }
 
-  if (session && !e2eMode && !isFakeLauncherFlow && (accessStatus === "loading" || accessStatus === "unknown")) {
+  if (session && !e2eMode && !isFakeLauncherFlow && !isHqScreen && (accessStatus === "loading" || accessStatus === "unknown")) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (session && !e2eMode && !isFakeLauncherFlow && accessStatus === "denied") {
+  if (session && !e2eMode && !isFakeLauncherFlow && !isHqScreen && accessStatus === "denied") {
     return (
       <SyncConnectionScreen
         mode="access-denied"
@@ -6443,15 +6463,16 @@ function App() {
 
   // Skip the sync loading screen when the user is offline but already has local
   // cards — show the cached experience instead of a spinner.
-  if (session && syncStatus === "loading" && !isFakeLauncherFlow && !(isOffline && hasLocalCards)) {
+  if (session && syncStatus === "loading" && !isFakeLauncherFlow && !isHqScreen && !(isOffline && hasLocalCards)) {
     return <SyncConnectionScreen mode="loading" error={syncError} />;
   }
 
-  if (screen === "hq") {
+  if (isHqScreen) {
     return (
       <Suspense fallback={<SyncConnectionScreen mode="loading" error={syncError} />}>
         <HQPanel
           isAdmin={isAdmin}
+          isAdminLoading={adminStatus !== "ready"}
           session={session}
           libraryPacks={visibleLibraryPacks}
           interruptionPacks={interruptionPacks}
