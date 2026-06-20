@@ -347,7 +347,7 @@ test('pre-launch journey audit keeps bottom nav tappable', async ({ page }) => {
   await page.getByTestId('explore-detail-close').click();
   await tapNavAndAssert(page, navItems[1]);
 
-  await page.goto('/mybishbash/apps');
+  await page.goto('/mybishbash/apps/safari');
   await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
   await page.getByTestId('apps-interruptions-toggle-safari').click();
   await page.getByTestId('apps-interruptions-toggle-safari').click();

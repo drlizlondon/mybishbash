@@ -185,7 +185,7 @@ test('login persists after pause and continue-to-app flows', async ({ page }) =>
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 10000 });
   await page.getByTestId('pause-app-button').click();
-  await page.getByRole('button', { name: '30 mins' }).click();
+  await page.getByRole('button', { name: '30 minutes' }).click();
   await expect.poll(
     () => page.evaluate(() => window.__MYBISHBASH_NAVIGATION_ATTEMPTS?.length ?? 0),
     { timeout: 5000 },
