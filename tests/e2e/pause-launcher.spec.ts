@@ -729,6 +729,16 @@ test('apps-protected-launch-paused — active pause bypasses only that app', asy
 
 test('fake-shell-dashboard shortcut opens source app settings', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps5', 'Manage this app card')], enabledAppIds: ['safari'] });
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'mybishbash.installed-launcher-shell.v1',
+      JSON.stringify({
+        launcher_id: 'safari',
+        launch_path: '/intercept/safari',
+        updated_at: '2026-06-01T12:00:00.000Z',
+      }),
+    );
+  });
   await page.goto('/mybishbash/intercept/safari');
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();

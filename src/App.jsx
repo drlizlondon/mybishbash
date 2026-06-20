@@ -6944,10 +6944,12 @@ function App() {
           onFakeLauncherLaunch={handleOverlayFakeLauncherLaunch}
           onPauseApp={handlePauseApp}
           onManageApp={(versionId) => {
+            const shellLauncherId = getFakeLauncherShellContextId();
+            const shouldUseShellSettings = shellLauncherId === versionId;
             setOverlay(null);
             setShouldLaunchOverlay(false);
-            setShellSettingsVersionId(versionId);
-            if (isKnownLauncher(versionId)) setLauncherContext(versionId);
+            setShellSettingsVersionId(shouldUseShellSettings ? versionId : null);
+            setLauncherContext(shouldUseShellSettings && isKnownLauncher(versionId) ? versionId : NORMAL_LAUNCHER_CONTEXT);
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             navigateTo(`/apps/${versionId}`, { replace: true });
