@@ -8963,9 +8963,9 @@ body {
   border-radius: 999px;
   padding: 0 2px;
   background: transparent;
-  color: rgba(79, 71, 67, 0.72);
+  color: rgba(79, 71, 67, 0.9);
   font-size: 13px;
-  font-weight: 680;
+  font-weight: 760;
 }
 
 .onboarding-back-button::before {
@@ -8983,7 +8983,7 @@ body {
   max-width: 18ch;
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(1.55rem, 6.7vw, 2.05rem);
+  font-size: clamp(1.48rem, 6.1vw, 1.92rem);
   font-weight: 500;
   line-height: 1.08;
   letter-spacing: 0;
@@ -9019,7 +9019,7 @@ body {
 .onboarding-step-copy p {
   max-width: 31ch;
   margin: 0;
-  color: rgba(91, 82, 75, 0.78);
+  color: rgba(71, 62, 58, 0.86);
   font-size: clamp(0.9rem, 3.7vw, 1rem);
   line-height: 1.36;
 }
@@ -9033,7 +9033,7 @@ body {
   display: grid;
   align-content: start;
   gap: 14px;
-  padding: 2px 2px 10px;
+  padding: 2px 2px 18px;
 }
 
 .onboarding-actions {
@@ -9044,6 +9044,7 @@ body {
   gap: 8px;
   padding: 8px 0 0;
   background: linear-gradient(180deg, rgba(246, 241, 234, 0), #f6f1ea 24%);
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 
 .onboarding-actions .save-button,
@@ -9051,7 +9052,7 @@ body {
 .onboarding-shortcut-actions .save-button,
 .onboarding-shortcut-actions .secondary-button {
   width: 100%;
-  min-height: 48px;
+  min-height: 50px;
   border-radius: 999px;
   border: 0;
   padding: 0 20px;
@@ -9071,16 +9072,16 @@ body {
 }
 
 .onboarding-actions .save-button:disabled {
-  opacity: 0.42;
+  opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .onboarding-actions .secondary-button,
 .onboarding-shortcut-actions .secondary-button {
-  min-height: 42px;
+  min-height: 44px;
   background: rgba(255, 255, 255, 0.58);
-  color: rgba(91, 82, 75, 0.78);
+  color: rgba(71, 62, 58, 0.82);
   box-shadow: 0 8px 18px rgba(47, 42, 40, 0.035);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.88rem;
@@ -9184,7 +9185,7 @@ body {
   display: grid;
   align-content: start;
   gap: 10px;
-  padding: 2px 2px 96px;
+  padding: 2px 2px 132px;
 }
 
 .onboarding-idea-card {
@@ -9198,7 +9199,7 @@ body {
   padding: 18px 18px;
   border: 1px solid rgba(120, 87, 65, 0.12);
   border-radius: 18px;
-  background: rgba(255, 252, 249, 0.72);
+  background: rgba(255, 252, 249, 0.82);
   color: rgba(21, 21, 21, 0.88);
   font: inherit;
   text-align: left;
@@ -9221,6 +9222,30 @@ body {
   border-color: rgba(214, 106, 80, 0.34);
   background: rgba(255, 244, 239, 0.72);
   box-shadow: 0 8px 18px rgba(201, 96, 70, 0.07);
+}
+
+.onboarding-priority-card {
+  justify-content: flex-start;
+}
+
+.onboarding-priority-checkbox {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(120, 87, 65, 0.22);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.62);
+  color: #9a5145;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.onboarding-priority-card.selected .onboarding-priority-checkbox {
+  border-color: rgba(214, 106, 80, 0.4);
+  background: rgba(214, 106, 80, 0.16);
 }
 
 .onboarding-idea-check {
@@ -9338,7 +9363,7 @@ body {
 
 .onboarding-commitment-intro-copy p {
   margin: 0;
-  color: rgba(91, 82, 75, 0.78);
+  color: rgba(71, 62, 58, 0.86);
   font-size: clamp(0.98rem, 4vw, 1.08rem);
   line-height: 1.42;
 }
@@ -9405,35 +9430,23 @@ body {
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 14px;
-  padding: 32px 18px 84px;
+  gap: 12px;
+  padding: 34px 22px 104px;
   text-align: center;
 }
 
-.onboarding-time-ring {
-  width: 88px;
-  height: 88px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background:
-    conic-gradient(from 0deg, rgba(214, 106, 80, 0.94), rgba(214, 106, 80, 0.08), rgba(214, 106, 80, 0.94));
-  animation: onboarding-time-spin 1500ms cubic-bezier(0.45, 0, 0.2, 1) forwards;
-  box-shadow: 0 18px 42px rgba(201, 96, 70, 0.14);
-}
-
-.onboarding-time-ring span {
-  width: 72px;
-  height: 72px;
-  border-radius: inherit;
-  background: #f6f1ea;
-  box-shadow: inset 0 0 0 1px rgba(120, 87, 65, 0.08);
+.onboarding-time-kicker {
+  color: #9a5145;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .onboarding-commitment-time h2 {
   margin: 0;
   font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: clamp(1.85rem, 8.5vw, 2.45rem);
+  font-size: clamp(1.72rem, 7.2vw, 2.12rem);
   font-weight: 500;
   line-height: 1;
   color: rgba(21, 21, 21, 0.96);
@@ -9441,7 +9454,8 @@ body {
 
 .onboarding-commitment-time p {
   margin: 0;
-  color: rgba(91, 82, 75, 0.78);
+  max-width: 25ch;
+  color: rgba(71, 62, 58, 0.86);
   font-size: 1rem;
   line-height: 1.35;
 }
@@ -9467,21 +9481,8 @@ body {
 }
 
 .onboarding-commitment-complete-step .onboarding-step-copy {
-  padding-top: clamp(36px, 9svh, 78px);
-}
-
-@keyframes onboarding-time-spin {
-  0% {
-    transform: rotate(0deg) scale(0.92);
-    opacity: 0;
-  }
-  22% {
-    opacity: 1;
-  }
-  100% {
-    transform: rotate(520deg) scale(1);
-    opacity: 1;
-  }
+  padding-top: clamp(52px, 13svh, 104px);
+  gap: 14px;
 }
 
 .onboarding-protected-app-grid {
@@ -9547,8 +9548,8 @@ body {
 
 .onboarding-protected-setup-step .onboarding-step-copy p {
   max-width: 26ch;
-  font-size: clamp(0.78rem, 3.2vw, 0.88rem);
-  line-height: 1.25;
+  font-size: clamp(0.86rem, 3.4vw, 0.94rem);
+  line-height: 1.4;
 }
 
 .onboarding-protected-setup-step .onboarding-step-body {
@@ -9556,11 +9557,11 @@ body {
 }
 
 .onboarding-protected-setup-step .onboarding-actions .save-button {
-  min-height: 38px;
+  min-height: 50px;
 }
 
 .onboarding-protected-setup-step .onboarding-actions .secondary-button {
-  min-height: 32px;
+  min-height: 44px;
 }
 
 .onboarding-protected-setup-step .onboarding-protected-setup-heading img,
@@ -9572,8 +9573,8 @@ body {
 }
 
 .onboarding-protected-setup-step .onboarding-protected-setup-card {
-  gap: 6px;
-  padding: 10px;
+  gap: 10px;
+  padding: 14px;
 }
 
 .onboarding-protected-setup-step .onboarding-protected-setup-heading h3 {
@@ -9583,8 +9584,8 @@ body {
 .onboarding-protected-setup-step .onboarding-protected-setup-card > p,
 .onboarding-protected-setup-step .onboarding-install-return-note,
 .onboarding-protected-setup-step .onboarding-install-steps {
-  font-size: clamp(0.76rem, 3vw, 0.84rem);
-  line-height: 1.2;
+  font-size: clamp(0.82rem, 3.3vw, 0.9rem);
+  line-height: 1.38;
 }
 
 .onboarding-protected-setup-step .onboarding-install-steps {
@@ -9795,25 +9796,24 @@ body {
 
 .onboarding-protected-confirmation {
   display: grid;
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 12px 14px;
   border-radius: 18px;
-  background: rgba(233, 120, 93, 0.08);
+  background: rgba(255, 255, 255, 0.52);
   color: rgba(47, 42, 40, 0.86);
 }
 
 .onboarding-protected-confirmation strong {
-  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
-  font-size: 1.35rem;
-  font-weight: 500;
+  font-size: 0.95rem;
+  font-weight: 850;
   color: #2f2a28;
 }
 
 .onboarding-protected-confirmation p {
   margin: 0;
-  color: rgba(47, 42, 40, 0.78);
-  font-size: clamp(0.92rem, 3.8vw, 1rem);
-  line-height: 1.38;
+  color: rgba(47, 42, 40, 0.76);
+  font-size: clamp(0.86rem, 3.4vw, 0.94rem);
+  line-height: 1.48;
 }
 
 .onboarding-personal-preview {
