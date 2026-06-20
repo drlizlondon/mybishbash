@@ -68,9 +68,10 @@ import {
   fetchLauncherConfigs,
   fetchOwnAccessProfile,
   getSignupHandoffReference,
+  claimAccessCodeForCurrentUser,
   touchUserProfile,
 } from "./lib/mybishbashSync";
-import { CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
+import { ACCESS_TIERS, CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
 import ExplorePanel from "./ExplorePanel";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
@@ -213,45 +214,7 @@ const COMMITMENT_TIMING_OPTIONS = [
   { id: "evening", label: "Evening", timingWindows: ["evening"] },
   { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
 ];
-
-const APP_PACK_PRESENTATION = {
-  instagram: {
-    title: "Pause Before Scrolling",
-    description: "Short reminders before Instagram opens.",
-  },
-  safari: {
-    title: "Intentional Browsing",
-    description: "Use Safari with more purpose.",
-  },
-  youtube: {
-    title: "YouTube Reality Check",
-    description: "Helpful prompts before videos start.",
-  },
-  chrome: {
-    title: "Intentional Browsing",
-    description: "Use Chrome with more purpose.",
-  },
-  whatsapp: {
-    title: "Message With Intention",
-    description: "Gentle prompts before reactive messaging.",
-  },
-  reddit: {
-    title: "Thread Check",
-    description: "Small pauses before long Reddit sessions.",
-  },
-  linkedin: {
-    title: "Professional Purpose",
-    description: "Prompts before comparison or feed-checking.",
-  },
-  "bbc-news": {
-    title: "News With Edges",
-    description: "Helpful prompts before checking headlines.",
-  },
-  duolingo: {
-    title: "Streak With Purpose",
-    description: "Language-learning prompts before the app opens.",
-  },
-};
+const APPS_OPTION_IDS = ["whatsapp", "instagram", "youtube", "safari"];
 
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
@@ -324,6 +287,12 @@ function isE2EModeEnabled() {
 
 function isDemoModeEnabled() {
   return typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+}
+
+function loadE2EAccessProfile() {
+  if (typeof window === "undefined") return null;
+  const accessTier = window.localStorage.getItem("MYBISHBASH_E2E_ACCESS_TIER") || ACCESS_TIERS.FREE_CORE;
+  return { access_tier: accessTier, has_access: true };
 }
 
 function loadExplicitLauncherBehaviorSettings() {
@@ -662,9 +631,9 @@ function getWeeklyShiftCount(events, now = new Date()) {
   }).length;
 }
 
-function formatPauseRemaining(expiry) {
+function formatPauseRemaining(expiry, nowMs = Date.now()) {
   if (!expiry) return "";
-  const remainingMs = new Date(expiry).getTime() - Date.now();
+  const remainingMs = new Date(expiry).getTime() - nowMs;
   if (!(remainingMs > 0)) return "";
   const remainingMinutes = Math.ceil(remainingMs / 60000);
   if (remainingMinutes < 60) return `${remainingMinutes} min${remainingMinutes === 1 ? "" : "s"} left`;
@@ -673,6 +642,13 @@ function formatPauseRemaining(expiry) {
   return minutes === 0
     ? `${hours} hr${hours === 1 ? "" : "s"} left`
     : `${hours} hr ${minutes} mins left`;
+}
+
+function formatPauseUntil(expiry, nowMs = Date.now()) {
+  if (!expiry) return "";
+  const date = new Date(expiry);
+  if (!(date.getTime() > nowMs)) return "";
+  return formatTwentyFourHourTime(date.toISOString());
 }
 
 // describeLogEvent, getLogEventDisplayLabel → moved to src/components/LogPanel.jsx
@@ -1612,6 +1588,7 @@ function App() {
   const [profile, setProfile] = useState(initialState.profile);
   const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
   const [launcherBehaviorSettings, setLauncherBehaviorSettings] = useState(initialState.launcherBehaviorSettings);
+  const [explicitLauncherBehaviorSettings, setExplicitLauncherBehaviorSettings] = useState(() => loadExplicitLauncherBehaviorSettings());
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
   const [hiddenPackCardIdsCompat, setHiddenPackCardIdsCompat] = useState(initialState.hiddenPackCardIdsCompat);
   const [globalInterruptionMode, setGlobalInterruptionMode] = useState(initialState.globalInterruptionMode);
@@ -1619,6 +1596,7 @@ function App() {
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
   const [libraryFocusMode, setLibraryFocusMode] = useState(null);
+  const [shellSettingsVersionId, setShellSettingsVersionId] = useState(null);
   const [homeSpotlightActionSignal, setHomeSpotlightActionSignal] = useState(null);
   const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
   const [notificationStatus, setNotificationStatus] = useState(() => getNotificationPermission());
@@ -1644,7 +1622,7 @@ function App() {
   // Own access profile for capability checks (premium pack gating). null =
   // unknown/unavailable, which getCapabilities treats as the free tier, so
   // premium installs fail closed.
-  const [accessProfile, setAccessProfile] = useState(null);
+  const [accessProfile, setAccessProfile] = useState(() => e2eMode ? loadE2EAccessProfile() : null);
   const [accessStatus, setAccessStatus] = useState(e2eMode ? "granted" : "unknown");
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [appPauseRevision, setAppPauseRevision] = useState(0);
@@ -1796,13 +1774,10 @@ function App() {
       testerStatus,
     ]
   );
-  const explicitLauncherBehaviorSettings = useMemo(
-    () => loadExplicitLauncherBehaviorSettings(),
-    [launcherBehaviorSettings],
-  );
   const protectedAppStatuses = useMemo(() => {
     const candidateIds = Array.from(new Set([
       ...INTERRUPTION_LAUNCHER_CONTEXTS,
+      ...APPS_OPTION_IDS,
       ...Object.keys(homeScreenVersions).filter((versionId) => isKnownLauncher(versionId)),
     ]));
     const candidates = candidateIds
@@ -1820,16 +1795,23 @@ function App() {
       testerStatus,
       context: LAUNCHER_CONTEXTS.SETTINGS,
     });
-    return visibleVersions.map((version) => {
+    const visibleVersionIds = new Set(visibleVersions.map((version) => version.id));
+    const appsOptionVersions = candidates.filter((version) =>
+      APPS_OPTION_IDS.includes(version.id) && !visibleVersionIds.has(version.id)
+    );
+    return [...visibleVersions, ...appsOptionVersions].map((version) => {
       const behavior = launcherBehaviorSettings[version.id] ?? {};
       const explicitBehavior = explicitLauncherBehaviorSettings[version.id] ?? {};
-      const hasUserSetup = Object.prototype.hasOwnProperty.call(explicitBehavior, "useInterruptionPack");
+      const hasUserSetup =
+        Object.prototype.hasOwnProperty.call(explicitBehavior, "appEnabled") ||
+        Object.prototype.hasOwnProperty.call(explicitBehavior, "useInterruptionPack");
       const pauseExpiry = getAppPauseExpiry(version.id);
       const paused = isAppPaused(version.id);
       return {
         version,
         configured: hasUserSetup,
-        protectedOn: explicitBehavior.useInterruptionPack === true,
+        protectedOn: explicitBehavior.appEnabled === true || explicitBehavior.useInterruptionPack === true,
+        promptsOn: explicitBehavior.useInterruptionPack === true,
         pauseExpiry,
         paused,
         pauseRemaining: paused ? formatPauseRemaining(pauseExpiry) : "",
@@ -2372,7 +2354,7 @@ function App() {
 
   useEffect(() => {
     if (!authReady || e2eMode || !session?.user?.id) {
-      setAccessProfile(null);
+      setAccessProfile(e2eMode ? loadE2EAccessProfile() : null);
       setAccessStatus(e2eMode ? "granted" : session?.user?.id ? "unknown" : "signed-out");
       return undefined;
     }
@@ -2394,6 +2376,26 @@ function App() {
       cancelled = true;
     };
   }, [authReady, e2eMode, session?.user?.id]);
+
+  const handleClaimInAppAccessCode = useCallback(async (accessCode) => {
+    const claimed = await claimAccessCodeForCurrentUser(accessCode);
+    if (!claimed) return false;
+
+    if (e2eMode || isDemoModeEnabled()) {
+      setAccessProfile(loadE2EAccessProfile());
+      setAccessStatus("granted");
+      return true;
+    }
+
+    if (session?.user?.id) {
+      const profileRow = await fetchOwnAccessProfile(session.user.id);
+      setAccessProfile(profileRow);
+      setAccessStatus(!profileRow || isAccessActive(profileRow) ? "granted" : "denied");
+    } else {
+      setAccessStatus("granted");
+    }
+    return true;
+  }, [e2eMode, session?.user?.id]);
 
   useEffect(() => {
     if (e2eMode) return undefined;
@@ -4027,6 +4029,12 @@ function App() {
     console.log("[LAUNCHER] App paused by user", { appId, durationMinutes, expiry });
     setAppPauseRevision((current) => current + 1);
     openDestinationApp(appId, { source: "app_pause_selected", reason: "user_paused" });
+  }
+
+  function handleSetAppPause(appId, durationMinutes) {
+    const expiry = pauseApp(appId, durationMinutes);
+    console.log("[LAUNCHER] App paused from Apps", { appId, durationMinutes, expiry });
+    setAppPauseRevision((current) => current + 1);
   }
 
   function handleClearAppPause(appId) {
@@ -5687,6 +5695,13 @@ function App() {
         ...updates,
       },
     }));
+    setExplicitLauncherBehaviorSettings((current) => ({
+      ...current,
+      [versionId]: {
+        ...(current[versionId] || {}),
+        ...updates,
+      },
+    }));
     if (typeof updates.useInterruptionPack === "boolean") {
       void logEvent({
         event_type: updates.useInterruptionPack ? "interruption_pack_activated" : "interruption_pack_deactivated",
@@ -6223,6 +6238,10 @@ function App() {
     () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT),
     [accessProfile],
   );
+  const canUseMultipleApps = useMemo(
+    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_MULTIPLE_APPS),
+    [accessProfile],
+  );
   // Unlike visibleActionCards (intercept surface), the Library list keeps
   // hidden starters so they can be restored.
   const libraryDoInsteadItems = useMemo(
@@ -6278,72 +6297,10 @@ function App() {
       ).filter(Boolean),
     [homeScreenVersions, launcherBehaviorSettings, cardPacks, hiddenPackCardIdsCompat, globalInterruptionMode],
   );
-  const appExplorePacks = useMemo(
-    () =>
-      interruptionPacks.map((pack) => {
-        const targetApp = pack.targetApp ?? pack.linkedVersionId;
-        const version = homeScreenVersions[targetApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[targetApp] ?? {};
-        const presentation = APP_PACK_PRESENTATION[targetApp] ?? {
-          title: `${version.name ?? version.displayName ?? pack.name ?? "App"} Prompts`,
-          description: `Intentional moments before ${version.name ?? version.displayName ?? "the app"} opens.`,
-        };
-        const entries = (pack.cards ?? []).map((card) => ({
-          id: card.id,
-          promptText: card.text,
-          attribution: version.name ?? version.displayName ?? pack.name,
-          isPreview: true,
-        }));
-        return {
-          id: pack.id,
-          title: presentation.title,
-          description: presentation.description,
-          whyText: `Use your favourite apps to help you become the person you're trying to be.`,
-          theme: "Soft Bloom",
-          icon: "heart",
-          sourceLabel: "MyBishBash",
-          contentType: "app-pack",
-          targetApp,
-          linkedVersionId: targetApp,
-          entries,
-          sortOrder: 100,
-        };
-      }),
-    [homeScreenVersions, interruptionPacks],
-  );
   const homeReminderItems = useMemo(() => homeItems, [homeItems]);
 
   const isFakeLauncherFlow = route.kind === "intercept" || overlay?.launchSource === "fake_launcher";
   const showAppUpdateBanner = appUpdate.updateAvailable && !overlay;
-  const isAppPackActive = useCallback(
-    (pack) => {
-      const targetApp = pack?.targetApp ?? pack?.linkedVersionId;
-      if (!targetApp) return false;
-      const behavior = launcherBehaviorSettings[targetApp] ?? {};
-      return Boolean(behavior.useInterruptionPack);
-    },
-    [launcherBehaviorSettings],
-  );
-  const isAppPackUsingNow = useCallback(
-    (pack) => {
-      const targetApp = pack?.targetApp ?? pack?.linkedVersionId;
-      if (!targetApp) return false;
-      const behavior = launcherBehaviorSettings[targetApp] ?? {};
-      return Boolean(behavior.useInterruptionPack) && (behavior.interruptionPackId || pack.id) === pack.id;
-    },
-    [launcherBehaviorSettings],
-  );
-  const useAppPackFromExplore = useCallback(
-    (pack) => {
-      const targetApp = pack?.targetApp ?? pack?.linkedVersionId;
-      if (!targetApp) return;
-      handleSaveVersionBehavior(targetApp, {
-        useInterruptionPack: true,
-        interruptionPaused: false,
-        interruptionPackId: pack.id,
-      });
-    },
-    [handleSaveVersionBehavior],
-  );
 
   const hasLocalCards = cards.length > 0;
   const routeLauncherName = route.kind === "intercept"
@@ -6444,6 +6401,11 @@ function App() {
     selectedLauncher: profile.onboardingLauncherId,
     setupComplete,
   };
+  const isShellAppSettingsRoute =
+    activeTab === "apps" &&
+    route.versionId &&
+    route.versionId === shellSettingsVersionId &&
+    isKnownLauncher(route.versionId);
 
   return (
     <TestPilotProvider
@@ -6455,16 +6417,19 @@ function App() {
     >
       <div className="grain" />
       {screen === "library" && !hideAppShell ? (
-      <div className={`app-shell app-mood theme-${getThemeClass(mood)} ${activeTab === "home" ? "home-shell" : ""}`} data-testid="app-shell">
+      <div className={`app-shell app-mood theme-${getThemeClass(mood)} ${activeTab === "home" ? "home-shell" : ""} ${isShellAppSettingsRoute ? "shell-app-settings-shell" : ""}`.trim()} data-testid="app-shell">
           <div className="app-inner">
-            {activeTab === "home" ? null : (
+            {activeTab === "home" || isShellAppSettingsRoute ? null : (
               <Masthead
                 onCreate={() => {
                   signalHomeSpotlightAction("personal-card");
                   if (shouldShowHomeSpotlightTour) return;
                   openCardComposerFromCurrentRoute();
                 }}
-                onOpenSettings={() => navigateTo("/settings")}
+                session={session}
+                onNavigate={navigateTo}
+                onLogOut={handleLogOut}
+                hideCreate={activeTab === "apps"}
               />
             )}
 
@@ -6495,7 +6460,6 @@ function App() {
               {activeTab === "apps" ? (
                 <AppsPanel
                   protectedAppStatuses={protectedAppStatuses}
-                  launcherBehaviorSettings={launcherBehaviorSettings}
                   onSaveVersionBehavior={handleSaveVersionBehavior}
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
                   onOpenDestinationApp={(versionId) =>
@@ -6504,14 +6468,35 @@ function App() {
                   onProtectedLaunch={(versionId) =>
                     handleFakeLauncherLaunch(versionId, "apps_protected_launch")
                   }
-                  onChoosePack={() => navigateTo("/explore")}
-                  onPauseApp={handlePauseApp}
+                  onManageApp={(versionId) => {
+                    setShellSettingsVersionId(null);
+                    navigateTo(`/apps/${versionId}`);
+                  }}
+                  onBackToApps={() => {
+                    setShellSettingsVersionId(null);
+                    navigateTo("/apps");
+                  }}
+                  onOpenPremiumOptions={() => {
+                    window.location.href = `${BASE_PATH}/invite`;
+                  }}
+                  onClaimAccessCode={handleClaimInAppAccessCode}
+                  onOpenInstallGuide={() => {
+                    window.location.href = `${BASE_PATH}/download`;
+                  }}
+                  onPauseApp={handleSetAppPause}
                   onClearAppPause={handleClearAppPause}
                   onLogLauncherEvent={logLauncherEvent}
                   selectedVersionId={route.versionId}
                   appPauseRevision={appPauseRevision}
                   pendingOnboardingShortcuts={pendingOnboardingShortcuts}
                   isTester={testerStatus?.is_tester === true}
+                  isShellContext={isShellAppSettingsRoute}
+                  canUseMultipleApps={canUseMultipleApps}
+                  onOpenMyBishBash={() => {
+                    setShellSettingsVersionId(null);
+                    setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
+                    navigateTo("/home");
+                  }}
                 />
               ) : null}
 
@@ -6565,13 +6550,9 @@ function App() {
               {activeTab === "explore" ? (
                 <ExplorePanel
                   packs={visibleLibraryPacks}
-                  appPacks={appExplorePacks}
                   isPackActive={isPackActive}
-                  isAppPackActive={isAppPackActive}
-                  isAppPackUsingNow={isAppPackUsingNow}
                   onInstallPack={activatePack}
                   onRemovePack={deactivatePack}
-                  onUseAppPack={useAppPackFromExplore}
                   onManageCards={(packId) => setSelectedPackDetail({ type: "library", id: packId })}
                   isTester={testerStatus?.is_tester === true}
                   canUsePremiumContent={canUsePremiumContent}
@@ -6619,7 +6600,7 @@ function App() {
               ) : null}
             </main>
 
-            {showActiveProtectedAppShortcut ? (
+            {showActiveProtectedAppShortcut && !isShellAppSettingsRoute ? (
               <ActiveProtectedAppShortcut
                 version={activeProtectedAppVersion}
                 onOpen={() =>
@@ -6633,6 +6614,7 @@ function App() {
             ) : null}
           </div>
 
+          {!isShellAppSettingsRoute ? (
           <nav className="bottom-nav" aria-label="Primary">
             <button type="button" className={`nav-item ${activeTab === "home" ? "active" : ""}`} data-testid="bottom-nav-home" onClick={() => navigateTo("/home")}>
               <HomeGlyph />
@@ -6668,6 +6650,7 @@ function App() {
               <span>Apps</span>
             </button>
           </nav>
+          ) : null}
           {shouldShowHomeSpotlightTour ? (
             <HomeSpotlightTour
               actionSignal={homeSpotlightActionSignal}
@@ -6963,6 +6946,8 @@ function App() {
           onManageApp={(versionId) => {
             setOverlay(null);
             setShouldLaunchOverlay(false);
+            setShellSettingsVersionId(versionId);
+            if (isKnownLauncher(versionId)) setLauncherContext(versionId);
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             navigateTo(`/apps/${versionId}`, { replace: true });
@@ -7431,7 +7416,35 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
   );
 }
 
-function Masthead({ onCreate, onOpenSettings }) {
+function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false }) {
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef(null);
+
+  function handleNavigate(path) {
+    setAccountMenuOpen(false);
+    onNavigate?.(path);
+  }
+
+  useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+    function handlePointerDown(event) {
+      if (!accountMenuRef.current?.contains(event.target)) {
+        setAccountMenuOpen(false);
+      }
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setAccountMenuOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [accountMenuOpen]);
+
   return (
     <header className="hero">
       <div className="hero-copy">
@@ -7439,25 +7452,43 @@ function Masthead({ onCreate, onOpenSettings }) {
           <HeartGlyph />
         </div>
       </div>
+      <div className="account-menu-wrap" ref={accountMenuRef}>
       <button
         type="button"
         className="settings-gear-button"
         data-testid="settings-gear"
-        onClick={onOpenSettings}
-        aria-label="Settings"
-        title="Settings"
+        onClick={() => setAccountMenuOpen((current) => !current)}
+        aria-label="Account menu"
+        aria-expanded={accountMenuOpen}
+        title="Account"
       >
-        <SettingsGlyph />
+        <span className="account-avatar-mark" aria-hidden="true">
+          <span className="account-avatar-head" />
+          <span className="account-avatar-body" />
+        </span>
       </button>
-      <button
-        type="button"
-        className="add-button"
-        data-testid="create-card-button"
-        onClick={onCreate}
-        aria-label="Create a MyBishBash"
-      >
-        +
-      </button>
+      {accountMenuOpen ? (
+        <div className="account-menu" data-testid="account-menu">
+          <button type="button" onClick={() => handleNavigate("/settings")}>My Account</button>
+          <button type="button" onClick={() => handleNavigate("/settings")}>Notifications</button>
+          <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/invite`; }}>Premium</button>
+          <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/about`; }}>Help</button>
+          <button type="button" onClick={() => { setAccountMenuOpen(false); onLogOut?.(); }}>Sign Out</button>
+          <button type="button" className="account-menu-close" onClick={() => setAccountMenuOpen(false)}>Close</button>
+        </div>
+      ) : null}
+      </div>
+      {!hideCreate ? (
+        <button
+          type="button"
+          className="add-button"
+          data-testid="create-card-button"
+          onClick={onCreate}
+          aria-label="Create a MyBishBash"
+        >
+          +
+        </button>
+      ) : null}
     </header>
   );
 }
@@ -9301,119 +9332,138 @@ function validateWindowDefsGapFree(defs) {
 
 function AppsPanel({
   protectedAppStatuses,
-  launcherBehaviorSettings,
   pendingOnboardingShortcuts = [],
   onSaveVersionBehavior,
   onUpdateHomeScreenIcon,
   onOpenDestinationApp,
   onProtectedLaunch,
-  onChoosePack,
+  onManageApp,
+  onBackToApps,
+  onOpenPremiumOptions,
   onPauseApp,
   onClearAppPause,
   onLogLauncherEvent,
+  onClaimAccessCode,
+  onOpenInstallGuide,
   selectedVersionId = null,
   appPauseRevision = 0,
   isTester = false,
+  isShellContext = false,
+  canUseMultipleApps = false,
+  onOpenMyBishBash,
 }) {
-  const [selectedAppId, setSelectedAppId] = useState(selectedVersionId ?? protectedAppStatuses[0]?.version?.id ?? "");
-  const [, setClockTick] = useState(0);
+  const [showOptions, setShowOptions] = useState(false);
+  const [showAccessScreen, setShowAccessScreen] = useState(false);
+  const [showCodeScreen, setShowCodeScreen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
-    if (selectedVersionId) setSelectedAppId(selectedVersionId);
-  }, [selectedVersionId]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => setClockTick((value) => value + 1), 30000);
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
-    setClockTick((value) => value + 1);
+    setNowMs(Date.now());
   }, [appPauseRevision]);
 
-  const selectedStatus =
-    protectedAppStatuses.find((status) => status.version.id === selectedAppId) ??
-    protectedAppStatuses[0] ??
-    null;
-  const activePauses = protectedAppStatuses.filter((status) => status.paused);
-  const configuredCount = protectedAppStatuses.filter((status) => status.protectedOn).length;
-  const appCountLabel =
-    configuredCount === 0
-      ? "No apps set up yet."
-      : configuredCount === 1
-        ? "1 app set up."
-        : `${configuredCount} apps set up.`;
-  const shortcutContexts = {
-    safari: "Personal reminders + Safari prompts",
-    instagram: "Personal reminders + Instagram prompts",
-    youtube: "Personal reminders + YouTube prompts",
-    chrome: "Personal reminders + Chrome prompts",
-    reddit: "Personal reminders + Reddit prompts",
-    linkedin: "Personal reminders + LinkedIn prompts",
-    whatsapp: "Personal reminders + WhatsApp prompts",
-    "bbc-news": "Personal reminders + news prompts",
-    duolingo: "Personal reminders + learning prompts",
-  };
+  const liveProtectedAppStatuses = useMemo(
+    () => protectedAppStatuses.map((status) => {
+      const pauseExpiryTime = status.pauseExpiry ? new Date(status.pauseExpiry).getTime() : 0;
+      const paused = pauseExpiryTime > nowMs;
+      return {
+        ...status,
+        paused,
+        pauseRemaining: paused ? formatPauseRemaining(status.pauseExpiry, nowMs) : "",
+      };
+    }),
+    [protectedAppStatuses, nowMs],
+  );
+
+  const selectedStatus = selectedVersionId
+    ? liveProtectedAppStatuses.find((status) => status.version.id === selectedVersionId) ?? null
+    : null;
+  const enabledStatuses = liveProtectedAppStatuses.filter((status) => status.protectedOn);
+  const canAddAnotherApp = canUseMultipleApps || enabledStatuses.length < 1;
+
+  if (showCodeScreen) {
+    return (
+      <section className="panel-section" data-testid="apps-panel">
+        <AppsCodeScreen
+          onClaimAccessCode={onClaimAccessCode}
+          onBack={() => setShowCodeScreen(false)}
+          onContinue={() => {
+            setShowCodeScreen(false);
+            setShowAccessScreen(false);
+            onBackToApps?.();
+          }}
+          onOpenInstallGuide={onOpenInstallGuide}
+        />
+      </section>
+    );
+  }
+
+  if (selectedStatus) {
+    if (!selectedStatus.protectedOn && !canAddAnotherApp) {
+      return (
+        <section className="panel-section" data-testid="apps-panel">
+          <AppsAccessScreen
+            onUnlock={onOpenPremiumOptions}
+            onHaveCode={() => setShowCodeScreen(true)}
+            onBack={onBackToApps}
+          />
+        </section>
+      );
+    }
+    return (
+      <section className="panel-section" data-testid="apps-panel">
+        <AppManagementScreen
+          status={selectedStatus}
+          onBack={onBackToApps}
+          onSaveVersionBehavior={onSaveVersionBehavior}
+          onUpdateHomeScreenIcon={onUpdateHomeScreenIcon}
+          onProtectedLaunch={onProtectedLaunch}
+          onOpenDestinationApp={onOpenDestinationApp}
+          onPauseApp={onPauseApp}
+          onClearAppPause={onClearAppPause}
+          onLogLauncherEvent={onLogLauncherEvent}
+          isTester={isTester}
+          isShellContext={isShellContext}
+          onOpenMyBishBash={onOpenMyBishBash}
+          nowMs={nowMs}
+        />
+      </section>
+    );
+  }
+
+  if (showAccessScreen) {
+    return (
+      <section className="panel-section" data-testid="apps-panel">
+        <AppsAccessScreen
+          onUnlock={onOpenPremiumOptions}
+          onHaveCode={() => {
+            setShowAccessScreen(false);
+            setShowCodeScreen(true);
+          }}
+          onBack={() => setShowAccessScreen(false)}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="panel-section" data-testid="apps-panel">
       <div className="section-heading solo">
         <div>
           <h2>Apps</h2>
-          <p>Manage how your favourite apps work with MyBishBash.</p>
+          <p>Where MyBishBash is currently helping you.</p>
         </div>
       </div>
-
-      <div className="settings-card settings-compact" data-testid="apps-status-summary">
-        <div className="settings-version-heading">
-          <p>{appCountLabel}</p>
-          <span>
-            {activePauses.length > 0
-              ? `${activePauses.length} active pause${activePauses.length === 1 ? "" : "s"}`
-              : "No active pauses"}
-          </span>
-        </div>
-      </div>
-
-      {activePauses.length > 0 ? (
-        <div className="settings-card" data-testid="apps-active-pauses">
-          <div className="settings-version-heading">
-            <p>Active pauses</p>
-            <span>End a pause when you want intentional moments to appear again.</span>
-          </div>
-          <div className="home-screen-version-list">
-            {activePauses.map(({ version, pauseRemaining }) => (
-              <article className="home-screen-version-card" key={`pause:${version.id}`} data-testid={`apps-pause-${version.id}`}>
-                <img
-                  src={resolveLauncherIconSrc(version)}
-                  alt={`${version.name} icon`}
-                  className="home-screen-version-icon"
-                />
-                <div className="home-screen-version-copy">
-                  <strong>{version.name ?? version.displayName}</strong>
-                  <p>{pauseRemaining || "Pause ending soon"}</p>
-                </div>
-                <div className="home-screen-version-actions">
-                  <button
-                    type="button"
-                    className="pack-button"
-                    data-testid={`apps-end-pause-${version.id}`}
-                    onClick={() => onClearAppPause(version.id)}
-                  >
-                    End Pause
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {pendingOnboardingShortcuts.length > 0 ? (
         <div className="settings-card" data-testid="apps-shortcut-setup-reminder">
           <div className="settings-version-heading">
-            <p>Shortcut setup waiting</p>
-            <span>These were selected during onboarding and can be finished any time.</span>
+            <p>Apps ready to add</p>
+            <span>Turn on MyBishBash when you are ready.</span>
           </div>
           <div className="home-screen-version-list">
             {pendingOnboardingShortcuts.map((app) => (
@@ -9425,7 +9475,7 @@ function AppsPanel({
                 )}
                 <div className="home-screen-version-copy">
                   <strong>{app.label}</strong>
-                  <p>Marked as pending. Add the MyBishBash shortcut from this app card.</p>
+                  <p>Ready when you want to finish adding it.</p>
                 </div>
               </article>
             ))}
@@ -9435,42 +9485,47 @@ function AppsPanel({
 
       <div className="settings-card" data-testid="apps-list">
         <div className="settings-version-heading">
-          <p>My Apps</p>
-          <span>Choose what appears before each app opens.</span>
+          <p>Enabled Apps</p>
         </div>
-        {protectedAppStatuses.length === 0 ? (
-          <p className="tiny-note">No apps are available for setup yet.</p>
+        {enabledStatuses.length === 0 ? (
+          <p className="tiny-note">No enabled apps yet.</p>
         ) : (
-          <>
-            <label className="field" style={{ marginBottom: "16px" }}>
-              <select
-                className="settings-input"
-                value={selectedStatus?.version.id ?? ""}
-                onChange={(event) => setSelectedAppId(event.target.value)}
-                data-testid="apps-select"
-              >
-                {protectedAppStatuses.map(({ version }) => (
-                  <option key={version.id} value={version.id}>{version.name ?? version.displayName}</option>
-                ))}
-              </select>
-            </label>
-
-            {selectedStatus ? (
-              <ProtectedAppCard
-                status={selectedStatus}
-                behavior={launcherBehaviorSettings[selectedStatus.version.id] ?? {}}
-                currentExperience={shortcutContexts[selectedStatus.version.id]}
-                onSaveVersionBehavior={onSaveVersionBehavior}
-                onUpdateHomeScreenIcon={onUpdateHomeScreenIcon}
-                onProtectedLaunch={onProtectedLaunch}
-                onOpenDestinationApp={onOpenDestinationApp}
-                onChoosePack={onChoosePack}
+          <div className="home-screen-version-list">
+            {enabledStatuses.map((status) => (
+              <EnabledAppRow
+                key={status.version.id}
+                status={status}
+                onManageApp={onManageApp}
                 onPauseApp={onPauseApp}
                 onClearAppPause={onClearAppPause}
-                onLogLauncherEvent={onLogLauncherEvent}
-                isTester={isTester}
               />
-            ) : null}
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="settings-card" data-testid="apps-add-more">
+        {showOptions ? (
+          <MoreAppsOptions
+            protectedAppStatuses={liveProtectedAppStatuses}
+            canAddAnotherApp={canAddAnotherApp}
+            onBack={() => setShowOptions(false)}
+            onManageApp={onManageApp}
+            onShowAccess={() => setShowAccessScreen(true)}
+            onHaveCode={() => setShowCodeScreen(true)}
+          />
+        ) : (
+          <>
+            <div className="settings-version-heading">
+              <p>Add Another App</p>
+              <span>Bring MyBishBash to more of the apps you use.</span>
+            </div>
+            <button type="button" className="pack-button" onClick={() => setShowOptions(true)}>
+              See Options
+            </button>
+            <button type="button" className="text-button apps-code-link" onClick={() => setShowCodeScreen(true)}>
+              Have a code?
+            </button>
           </>
         )}
       </div>
@@ -9478,108 +9533,320 @@ function AppsPanel({
   );
 }
 
-function ProtectedAppCard({
+function EnabledAppRow({ status, onManageApp, onPauseApp, onClearAppPause }) {
+  const { version, paused, pauseExpiry } = status;
+  const appName = version.realAppLabel ?? version.name ?? version.displayName ?? version.id;
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const pauseButtonRef = useRef(null);
+  const pauseUntil = formatPauseUntil(pauseExpiry);
+
+  return (
+    <article className="home-screen-version-card apps-enabled-row" data-testid={`protected-app-${version.id}`}>
+      <img
+        src={resolveLauncherIconSrc(version)}
+        alt={`${appName} icon`}
+        className="home-screen-version-icon"
+      />
+      <div className="home-screen-version-copy">
+        <div className="home-screen-version-title">
+          <strong>{appName}</strong>
+          <span data-testid={`apps-pause-status-${version.id}`}>
+            {paused ? `Paused until ${pauseUntil || "soon"}` : "✓ Enabled"}
+          </span>
+        </div>
+        <div className="home-screen-version-actions apps-row-actions">
+          <button type="button" className="pack-button apps-settings-button" onClick={() => onManageApp?.(version.id)}>
+            Settings
+          </button>
+          {paused ? (
+            <button
+              type="button"
+              className="pack-button secondary apps-pause-row-button"
+              data-testid={`apps-end-pause-${version.id}`}
+              onClick={() => onClearAppPause(version.id)}
+            >
+              Resume
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="pack-button secondary apps-pause-row-button"
+              ref={pauseButtonRef}
+              onClick={() => setShowPauseModal(true)}
+            >
+              Pause
+            </button>
+          )}
+        </div>
+      </div>
+      {showPauseModal && onPauseApp ? (
+        <AppPauseModal
+          appName={appName}
+          triggerRef={pauseButtonRef}
+          openAfterPause={false}
+          onClose={() => setShowPauseModal(false)}
+          onPause={(mins) => {
+            setShowPauseModal(false);
+            onPauseApp(version.id, mins);
+          }}
+        />
+      ) : null}
+    </article>
+  );
+}
+
+function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onManageApp, onShowAccess, onHaveCode }) {
+  const statusById = new Map(protectedAppStatuses.map((status) => [status.version.id, status]));
+  const availableOptionIds = APPS_OPTION_IDS.filter((id) => !statusById.get(id)?.protectedOn);
+  return (
+    <div className="apps-more-options" data-testid="apps-more-options">
+      <div className="settings-version-heading">
+        <p>Add Another App</p>
+        <span>Bring MyBishBash to more of the apps you use.</span>
+      </div>
+      <div className="home-screen-version-list">
+        {availableOptionIds.length === 0 ? (
+          <p className="tiny-note">All available apps are enabled.</p>
+        ) : null}
+        {availableOptionIds.map((id) => {
+          const status = statusById.get(id);
+          const version = status?.version ?? DEFAULT_HOME_SCREEN_VERSIONS[id] ?? getLauncherConfig(id);
+          if (!version) return null;
+          const appName = version.realAppLabel ?? version.name ?? version.displayName ?? id;
+          return (
+            <article className="home-screen-version-card apps-enabled-row" key={id} data-testid={`apps-option-${id}`}>
+              <img src={resolveLauncherIconSrc(version)} alt={`${appName} icon`} className="home-screen-version-icon" />
+              <div className="home-screen-version-copy">
+                <div className="home-screen-version-title">
+                  <strong>{appName}</strong>
+                  <span>Available</span>
+                </div>
+                <div className="home-screen-version-actions apps-row-actions">
+                  <button
+                    type="button"
+                    className="pack-button secondary"
+                    data-testid={`apps-option-action-${id}`}
+                    onClick={() => {
+                      if (!status?.protectedOn && !canAddAnotherApp) {
+                        onShowAccess?.();
+                        return;
+                      }
+                      onManageApp?.(id);
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="apps-more-actions">
+        <button type="button" className="text-button apps-code-link" onClick={onHaveCode}>
+          Have a code?
+        </button>
+        <button type="button" className="text-button apps-code-link" onClick={onBack}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AppsAccessScreen({ onUnlock, onHaveCode, onBack }) {
+  return (
+    <div className="apps-manage-screen" data-testid="apps-access-screen">
+      <button type="button" className="text-button apps-back-button" data-testid="apps-access-back" onClick={onBack}>
+        ← Apps
+      </button>
+      <div className="settings-card apps-manage-hero">
+        <div className="settings-version-heading">
+          <p>Add MyBishBash to more apps</p>
+          <span>Use MyBishBash with more of the apps you open every day.</span>
+        </div>
+      </div>
+      <div className="settings-card settings-compact">
+        <button type="button" className="pack-button" onClick={onUnlock}>
+          Unlock More Apps
+        </button>
+        <button type="button" className="text-button apps-code-link" onClick={onHaveCode}>
+          Have a code?
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AppsCodeScreen({ onClaimAccessCode, onBack, onContinue, onOpenInstallGuide }) {
+  const [code, setCode] = useState("");
+  const [status, setStatus] = useState("entry");
+  const [error, setError] = useState("");
+  const isChecking = status === "checking";
+  const isSuccess = status === "success";
+
+  async function submitCode(event) {
+    event.preventDefault();
+    const trimmedCode = code.trim();
+    if (!trimmedCode) {
+      setError("Enter your code to continue.");
+      return;
+    }
+    setStatus("checking");
+    setError("");
+    const claimed = await onClaimAccessCode?.(trimmedCode);
+    if (claimed) {
+      setStatus("success");
+      return;
+    }
+    setStatus("entry");
+    setError("That code did not work. Please check it and try again.");
+  }
+
+  return (
+    <div className="apps-manage-screen" data-testid="apps-code-screen">
+      {!isSuccess ? (
+        <button type="button" className="text-button apps-back-button" data-testid="apps-code-back" onClick={onBack}>
+          ← Apps
+        </button>
+      ) : null}
+      <div className="settings-card apps-manage-hero">
+        <div className="settings-version-heading">
+          <p>{isSuccess ? "You now have access to more apps." : "Have a code?"}</p>
+          <span>
+            {isSuccess
+              ? "You can add MyBishBash to more of the apps you use."
+              : "Enter your access code to add MyBishBash to more apps."}
+          </span>
+        </div>
+      </div>
+
+      {isSuccess ? (
+        <div className="settings-card apps-code-actions" data-testid="apps-code-success">
+          <button type="button" className="pack-button apps-settings-button" onClick={onContinue}>
+            Continue to Apps
+          </button>
+          <button type="button" className="pack-button secondary" onClick={onOpenInstallGuide}>
+            Add MyBishBash to your Home Screen
+          </button>
+        </div>
+      ) : (
+        <form className="settings-card apps-code-form" onSubmit={submitCode}>
+          <label htmlFor="apps-access-code">Access code</label>
+          <input
+            id="apps-access-code"
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+              if (error) setError("");
+            }}
+            placeholder="Enter access code"
+            autoCapitalize="characters"
+            autoComplete="one-time-code"
+            disabled={isChecking}
+          />
+          {error ? <p className="download-access-error" role="alert">{error}</p> : null}
+          <button type="submit" className="pack-button apps-settings-button" disabled={isChecking}>
+            {isChecking ? "Checking..." : "Continue"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function getDefaultAppPrompt(versionId, appName) {
+  const prompts = {
+    safari: "Why are you opening Safari right now?",
+    instagram: "Why are you opening Instagram right now?",
+    whatsapp: "Who are you hoping to contact?",
+    youtube: "What are you hoping to watch?",
+  };
+  return prompts[versionId] ?? `Why are you opening ${appName} right now?`;
+}
+
+function AppManagementScreen({
   status,
-  behavior,
-  currentExperience,
+  onBack,
   onSaveVersionBehavior,
   onUpdateHomeScreenIcon,
   onProtectedLaunch,
   onOpenDestinationApp,
-  onChoosePack,
   onPauseApp,
   onClearAppPause,
   onLogLauncherEvent,
   isTester = false,
+  isShellContext = false,
+  onOpenMyBishBash,
+  nowMs = Date.now(),
 }) {
-  const { version, protectedOn, paused, pauseRemaining } = status;
-  const [showPauseModal, setShowPauseModal] = useState(false);
-  const pauseButtonRef = useRef(null);
-  const installUrl = getInstallUrl(version.installPath ?? `${BASE_PATH}/install/${version.id}/`);
+  const { version, protectedOn, promptsOn, paused, pauseRemaining } = status;
   const appName = version.realAppLabel ?? version.name ?? version.displayName ?? version.id;
-  const appPack = APP_PACK_PRESENTATION[version.id] ?? {
-    title: `${appName} Prompts`,
-    description: `Intentional moments before ${appName} opens.`,
-  };
-  const currentPack = behavior.interruptionPackId || version.defaultInterruptionPackId || DEFAULT_INTERRUPTION_PACKS[version.id]?.id
-    ? appPack.title
-    : "Personal reminders";
-  const shortcutInstalled = paused
-    ? `Paused until ${pauseRemaining || "soon"}`
-    : protectedOn
-      ? "Using MyBishBash"
-      : "Not set up";
-  const pauseStatus = paused ? `Paused until ${pauseRemaining || "soon"}` : "None";
+  const promptPreview = getDefaultAppPrompt(version.id, appName);
+  const pauseUntil = formatPauseUntil(status.pauseExpiry, nowMs);
+  const enabledStatus = protectedOn
+    ? "MyBishBash enabled"
+    : `MyBishBash is not enabled for ${appName} yet`;
+  const pauseStatus = protectedOn && paused
+    ? `Paused until ${pauseUntil || pauseRemaining || "soon"}`
+    : enabledStatus;
 
   return (
-    <article className="home-screen-version-card" data-testid={`protected-app-${version.id}`}>
-      <button
-        type="button"
-        className="home-screen-version-icon-link"
-        aria-label={`Test ${appName} shortcut`}
-        data-testid={`apps-protected-launch-${version.id}`}
-        onClick={() => onProtectedLaunch(version.id)}
-      >
-        <img
-          src={resolveLauncherIconSrc(version)}
-          alt={`${appName} icon`}
-          className="home-screen-version-icon"
-        />
-      </button>
-      <div className="home-screen-version-copy">
-        <div className="home-screen-version-title">
-          <strong>{appName}</strong>
-          <span>{shortcutInstalled}</span>
+    <div className="apps-manage-screen" data-testid={`protected-app-${version.id}`}>
+      {!isShellContext ? (
+        <button type="button" className="text-button apps-back-button" data-testid="apps-back-button" onClick={onBack}>
+          ← Apps
+        </button>
+      ) : null}
+      <div className="settings-card apps-manage-hero">
+        <img src={resolveLauncherIconSrc(version)} alt={`${appName} icon`} className="home-screen-version-icon" />
+        <div className="settings-version-heading">
+          <p>{appName}</p>
+          <span data-testid={`apps-pause-status-${version.id}`}>{pauseStatus}</span>
         </div>
-        <dl className="apps-current-details">
-          <div>
-          <dt>WHAT YOU’LL SEE</dt>
-            <dd>{protectedOn ? currentExperience ?? `Personal reminders + ${appName} prompts` : "Not set up"}</dd>
-          </div>
-          <div>
-            <dt>ACTIVE PACK</dt>
-            <dd>{protectedOn ? currentPack : "None"}</dd>
-          </div>
-          <div>
-            <dt>PAUSE</dt>
-            <dd data-testid={`apps-pause-status-${version.id}`}>{pauseStatus}</dd>
-          </div>
-        </dl>
-        {version.requiresRelease ? (
-          <p className="tiny-note" style={{ margin: 0 }}>
-            Home-screen shortcut coming soon.
-          </p>
-        ) : (
-          <a
-            href={installUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="home-screen-install-link"
-            onClick={() => {
-              void onLogLauncherEvent?.("launcher_install_clicked", version.id);
-            }}
-          >
-            Add shortcut
-          </a>
-        )}
       </div>
-      <div className="home-screen-version-actions">
+      {!protectedOn ? (
+        <div className="settings-card">
+          <div className="settings-version-heading">
+            <p>Add MyBishBash to {appName}</p>
+            <span>Turn on App Prompts and pause controls for this app.</span>
+          </div>
+          <button
+            type="button"
+            className="pack-button"
+            data-testid={`apps-enable-${version.id}`}
+            onClick={() => onSaveVersionBehavior(version.id, { appEnabled: true, useInterruptionPack: true })}
+          >
+            Enable {appName}
+          </button>
+        </div>
+      ) : null}
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>App Prompts</p>
+        </div>
         <label className="timing-option settings-checkbox-row" style={{ marginBottom: "8px" }}>
           <input
             type="checkbox"
-            checked={protectedOn}
+            checked={promptsOn}
             data-testid={`apps-interruptions-toggle-${version.id}`}
             onChange={(event) => onSaveVersionBehavior(version.id, { useInterruptionPack: event.target.checked })}
           />
-          <span>{protectedOn ? "Use with MyBishBash" : "Open Normally"}</span>
+          <span>{promptsOn ? "On" : "Off"}</span>
         </label>
-        <button
-          type="button"
-          className="pack-button"
-          onClick={() => onChoosePack?.(version.id)}
-        >
-          Choose Pack
-        </button>
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Example prompt</p>
+          <span>“{promptPreview}”</span>
+        </div>
+      </div>
+      {protectedOn ? (
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Pause MyBishBash</p>
+          <span>Pause only affects {appName}.</span>
+        </div>
         {paused ? (
           <button
             type="button"
@@ -9587,31 +9854,53 @@ function ProtectedAppCard({
             data-testid={`apps-end-pause-inline-${version.id}`}
             onClick={() => onClearAppPause(version.id)}
           >
-            End Pause
+            Resume
           </button>
         ) : (
-          <button
-            type="button"
-            className="pack-button secondary"
-            ref={pauseButtonRef}
-            onClick={() => setShowPauseModal(true)}
-          >
-            Pause Temporarily
-          </button>
+          <div className="apps-pause-buttons">
+            {[30, 60, 180].map((minutes) => (
+              <button
+                key={minutes}
+                type="button"
+                className="pack-button secondary"
+                onClick={() => onPauseApp?.(version.id, minutes)}
+              >
+                Pause for {minutes === 30 ? "30 minutes" : minutes === 60 ? "1 hour" : "3 hours"}
+              </button>
+            ))}
+          </div>
         )}
-        {showPauseModal && onPauseApp ? (
-          <AppPauseModal
-            appName={appName}
-            triggerRef={pauseButtonRef}
-            onClose={() => setShowPauseModal(false)}
-            onPause={(mins) => {
-              setShowPauseModal(false);
-              onPauseApp(version.id, mins);
-            }}
-          />
-        ) : null}
-        {isTester ? (
-          <>
+      </div>
+      ) : null}
+      {!isShellContext ? (
+      <div className="settings-card settings-compact">
+        <button
+          type="button"
+          className="pack-button secondary"
+          onClick={() => {
+            onSaveVersionBehavior(version.id, { appEnabled: false, useInterruptionPack: false });
+            onClearAppPause(version.id);
+            onBack?.();
+          }}
+        >
+          Remove App
+        </button>
+      </div>
+      ) : null}
+      {isShellContext ? (
+        <div className="settings-card settings-compact">
+          <button type="button" className="pack-button" onClick={onOpenMyBishBash}>
+            Open MyBishBash
+          </button>
+        </div>
+      ) : null}
+      {isTester && !isShellContext ? (
+        <div className="settings-card">
+          <div className="settings-version-heading">
+            <p>Test controls</p>
+            <span>Only visible in tester mode.</span>
+          </div>
+          <div className="home-screen-version-actions">
             <button
               type="button"
               className="pack-button secondary"
@@ -9647,10 +9936,10 @@ function ProtectedAppCard({
               />
               Replace icon
             </label>
-          </>
-        ) : null}
-      </div>
-    </article>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -11248,13 +11537,12 @@ const PremiumPauseShortcut = React.forwardRef(function PremiumPauseShortcut({ on
 // Bottom sheet asking the user how long to pause MyBishBash for the current app.
 
 const PAUSE_DURATION_OPTIONS = [
-  { label: "30 mins",  minutes: 30 },
+  { label: "30 minutes",  minutes: 30 },
   { label: "1 hour",   minutes: 60 },
-  { label: "2 hours",  minutes: 120 },
   { label: "3 hours",  minutes: 180 },
 ];
 
-function AppPauseModal({ appName, onClose, onPause, triggerRef = null }) {
+function AppPauseModal({ appName, onClose, onPause, triggerRef = null, openAfterPause = true }) {
   const [confirmedLabel, setConfirmedLabel] = useState(null);
   const sheetRef = useRef(null);
 
@@ -11289,7 +11577,7 @@ function AppPauseModal({ appName, onClose, onPause, triggerRef = null }) {
           <div className="app-pause-confirmed" aria-live="polite">
             <span className="app-pause-confirmed-icon" aria-hidden="true">✓</span>
             <p className="app-pause-sheet-title">Paused for {confirmedLabel}</p>
-            <p className="app-pause-sheet-body">Opening {appName}…</p>
+            <p className="app-pause-sheet-body">{openAfterPause ? `Opening ${appName}…` : `${appName} will be active again automatically.`}</p>
           </div>
         ) : (
           <>
@@ -11306,7 +11594,7 @@ function AppPauseModal({ appName, onClose, onPause, triggerRef = null }) {
               Pause MyBishBash?
             </p>
             <p className="app-pause-sheet-body">
-              For a short time, {appName} will open directly without showing cards.
+              For a short time, {appName} will open directly without showing App Prompts.
             </p>
             <div className="app-pause-options">
               {PAUSE_DURATION_OPTIONS.map(({ label, minutes }) => (

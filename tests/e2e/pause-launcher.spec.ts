@@ -60,7 +60,7 @@ function launcherSettings(appIds: string[], enabledAppIds: string[] = []) {
   };
   const enabledSet = new Set(enabledAppIds);
   for (const id of appIds) {
-    entries[id] = { useInterruptionPack: enabledSet.has(id), interruptionPaused: false, interruptionPackId: '' };
+    entries[id] = { appEnabled: enabledSet.has(id), useInterruptionPack: enabledSet.has(id), interruptionPaused: false, interruptionPackId: '' };
   }
   return entries;
 }
@@ -78,18 +78,21 @@ async function seedState(
     enabledAppIds = [],
     appPauses = {},
     testerMode = true,
+    accessTier = 'free_core',
   }: {
     cards?: Array<Record<string, unknown>>;
     appIds?: string[];
     enabledAppIds?: string[];
     appPauses?: Record<string, string>;
     testerMode?: boolean;
+    accessTier?: 'free_core' | 'founding_access' | 'free' | 'premium';
   } = {},
 ) {
   await page.addInitScript(
-    ({ seededCards, seededSettings, seededAppPauses, seededTesterMode }) => {
+    ({ seededCards, seededSettings, seededAppPauses, seededTesterMode, seededAccessTier }) => {
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', seededTesterMode ? 'true' : 'false');
+      window.localStorage.setItem('MYBISHBASH_E2E_ACCESS_TIER', seededAccessTier);
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
       window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
       window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'Pause Tester', timezone: 'Europe/London' }));
@@ -112,6 +115,7 @@ async function seedState(
       seededSettings: launcherSettings(appIds, enabledAppIds),
       seededAppPauses: appPauses,
       seededTesterMode: testerMode,
+      seededAccessTier: accessTier,
     },
   );
 }
@@ -137,7 +141,7 @@ test('pause-button-absent-home — pause button NOT shown on home screen', async
   await expect(page.getByTestId('pause-app-button')).toHaveCount(0);
 });
 
-test('pause-selects-30min — selecting 30 mins writes a future expiry and navigates', async ({ page }) => {
+test('pause-selects-30min — selecting 30 minutes writes a future expiry and navigates', async ({ page }) => {
   await seedState(page, { cards: [personalCard('p3', 'Pause 30 min card')] });
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
@@ -145,11 +149,11 @@ test('pause-selects-30min — selecting 30 mins writes a future expiry and navig
   await page.getByTestId('pause-app-button').click();
   await expect(page.getByRole('dialog')).toBeVisible();
 
-  // Tap "30 mins"
-  await page.getByRole('button', { name: '30 mins' }).click();
+  // Tap "30 minutes"
+  await page.getByRole('button', { name: '30 minutes' }).click();
 
   // Confirmation state is shown
-  await expect(page.getByText(/Paused for 30 mins/i)).toBeVisible();
+  await expect(page.getByText(/Paused for 30 minutes/i)).toBeVisible();
 
   // Navigation attempt fires (after ~1400ms confirmation delay).
   // At least one attempt should be towards the safari destination.
@@ -390,45 +394,48 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
   await page.goto('/mybishbash/apps');
 
   await expect(page.getByTestId('apps-panel')).toBeVisible();
-  await expect(page.getByTestId('apps-status-summary')).toContainText('No apps set up yet.');
   await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
   await expect(page.getByTestId('apps-list')).toBeVisible();
-  await expect(page.getByTestId('protected-app-safari')).toContainText('Not set up');
+  await expect(page.getByTestId('apps-list')).toContainText('No enabled apps yet.');
+  await expect(page.getByTestId('apps-add-more')).toContainText('Add Another App');
+  await expect(page.getByText('MyBishBash installed')).toHaveCount(0);
+  await expect(page.getByTestId('create-card-button')).toHaveCount(0);
+  await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
   await expect(page.getByTestId('apps-direct-open-safari')).toHaveCount(0);
   await expect(page.getByTestId('apps-test-shortcut-safari')).toHaveCount(0);
   await expect(page.getByText('Replace icon')).toHaveCount(0);
+  await expect(page.getByText('Add shortcut')).toHaveCount(0);
+  await expect(page.getByText('Home-screen shortcut coming soon.')).toHaveCount(0);
   await expect(page.getByTestId('bottom-nav-settings')).toHaveCount(0);
   await expect(page.getByTestId('settings-gear')).toBeVisible();
   const navLabels = await page.locator('.bottom-nav .nav-item span').allTextContents();
   expect(navLabels).toEqual(['Home', 'Library', 'Log', 'Explore', 'Apps']);
 });
 
-test('apps-counts-configured-enabled-apps-only — zero, one, and multiple states', async ({ page }) => {
+test('apps-enabled-list-shows-only-enabled-apps — zero, one, and multiple states', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-count-zero', 'Apps count zero')], appIds: ['safari', 'youtube'], enabledAppIds: [], testerMode: false });
   await page.goto('/mybishbash/apps');
-  await expect(page.getByTestId('apps-status-summary')).toContainText('No apps set up yet.');
+  await expect(page.getByTestId('apps-list')).toContainText('No enabled apps yet.');
 
   await seedState(page, { cards: [personalCard('apps-count-one', 'Apps count one')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari'], testerMode: false });
   await page.goto('/mybishbash/apps');
-  await expect(page.getByTestId('apps-status-summary')).toContainText('1 app set up.');
-  await expect(page.getByTestId('protected-app-safari')).toContainText('Using MyBishBash');
+  await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
+  await expect(page.getByTestId('protected-app-youtube')).toHaveCount(0);
 
   await seedState(page, { cards: [personalCard('apps-count-two', 'Apps count two')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari', 'youtube'], testerMode: false });
   await page.goto('/mybishbash/apps');
-  await expect(page.getByTestId('apps-status-summary')).toContainText('2 apps set up.');
+  await expect(page.getByTestId('protected-app-safari')).toBeVisible();
+  await expect(page.getByTestId('protected-app-youtube')).toBeVisible();
 });
 
 test('apps-pause-temporarily — Apps control centre uses the timed app pause flow', async ({ page }) => {
-  await seedState(page, { cards: [personalCard('apps-pause', 'Apps pause card')] });
+  await seedState(page, { cards: [personalCard('apps-pause', 'Apps pause card')], enabledAppIds: ['safari'] });
   await page.goto('/mybishbash/apps/safari');
 
   await expect(page.getByTestId('apps-panel')).toBeVisible();
-  await page.getByRole('button', { name: 'Pause Temporarily' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: '30 mins' }).click();
-  await expect(page.getByText(/Paused for 30 mins/i)).toBeVisible();
-
-  await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+  await page.getByRole('button', { name: 'Pause for 30 minutes' }).click();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Paused until');
+  await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBe(0);
   const expiry = await page.evaluate(() => {
     const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
     return pauses['safari'] ?? null;
@@ -437,18 +444,186 @@ test('apps-pause-temporarily — Apps control centre uses the timed app pause fl
   expect(new Date(expiry).getTime()).toBeGreaterThan(Date.now());
 });
 
-test('apps-choose-pack — opens Explore without silently activating an app pack', async ({ page }) => {
+test('apps-more-options — shows simple consumer app options and code link', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-pack', 'Apps pack card')] });
+  await page.goto('/mybishbash/apps');
+
+  await page.getByRole('button', { name: 'See Options' }).click();
+  await expect(page.getByTestId('apps-more-options')).toContainText('Add Another App');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Bring MyBishBash to more of the apps you use.');
+  await expect(page.getByText('More Apps')).toHaveCount(0);
+  await expect(page.getByTestId('apps-more-options')).toContainText('WhatsApp');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Instagram');
+  await expect(page.getByTestId('apps-more-options')).toContainText('YouTube');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Safari');
+  await expect(page.getByRole('button', { name: 'Have a code?' })).toBeVisible();
+  await expect(page.getByText('Slots')).toHaveCount(0);
+  await expect(page.getByText('Entitlements')).toHaveCount(0);
+});
+
+test('apps-add-another-hides-enabled-apps — active apps do not duplicate in Add Another App', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-no-duplication', 'No duplication card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['whatsapp'],
+    testerMode: false,
+  });
+  await page.goto('/mybishbash/apps');
+
+  await expect(page.getByTestId('protected-app-whatsapp')).toContainText('✓ Enabled');
+  await page.getByRole('button', { name: 'See Options' }).click();
+  await expect(page.getByTestId('apps-more-options')).toContainText('Add Another App');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Bring MyBishBash to more of the apps you use.');
+  await expect(page.getByTestId('apps-option-whatsapp')).toHaveCount(0);
+  await expect(page.getByTestId('apps-option-instagram')).toBeVisible();
+  await expect(page.getByTestId('apps-option-youtube')).toBeVisible();
+  await expect(page.getByTestId('apps-option-safari')).toBeVisible();
+});
+
+test('apps-free-access-gate — free user cannot silently enable a second app', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-free-gate', 'Free gate card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+    accessTier: 'free_core',
+  });
+  await page.goto('/mybishbash/apps');
+
+  await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
+  await page.getByRole('button', { name: 'See Options' }).click();
+  await page.getByTestId('apps-option-action-whatsapp').click();
+
+  await expect(page.getByTestId('apps-access-screen')).toBeVisible();
+  await expect(page.getByText('Add MyBishBash to more apps')).toBeVisible();
+  await expect(page.getByText('Use MyBishBash with more of the apps you open every day.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Unlock More Apps' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Have a code?' })).toBeVisible();
+  await expect(page.getByText('slot')).toHaveCount(0);
+  await expect(page.getByText('entitlement')).toHaveCount(0);
+  await expect(page.getByText('limit reached')).toHaveCount(0);
+
+  const behavior = await page.evaluate(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return settings.whatsapp;
+  });
+  expect(behavior.appEnabled).toBe(false);
+  expect(behavior.useInterruptionPack).toBe(false);
+});
+
+test('apps-code-flow — logged-in user can unlock more apps and continue to Apps', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-code-flow', 'Code flow card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+    accessTier: 'free_core',
+  });
+  await page.goto('/mybishbash/apps');
+
+  await page.getByRole('button', { name: 'Have a code?' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByTestId('apps-code-screen')).toBeVisible();
+  await page.getByLabel('Access code').fill('FULLMELON');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.getByTestId('apps-code-success')).toBeVisible();
+  await expect(page.getByText('You now have access to more apps.')).toBeVisible();
+  await expect(page.getByText('You can add MyBishBash to more of the apps you use.')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to Apps' }).click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await page.getByRole('button', { name: 'See Options' }).click();
+  await page.getByTestId('apps-option-action-whatsapp').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
+  await expect(page.getByTestId('apps-enable-whatsapp')).toHaveText('Enable WhatsApp');
+  await expect(page.getByTestId('apps-access-screen')).toHaveCount(0);
+});
+
+test('apps-full-access — full-access user can enable multiple apps', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-full-access', 'Full access card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+    accessTier: 'founding_access',
+  });
+  await page.goto('/mybishbash/apps');
+
+  await page.getByRole('button', { name: 'See Options' }).click();
+  await page.getByTestId('apps-option-action-whatsapp').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
+  await expect(page.getByTestId('apps-enable-whatsapp')).toHaveText('Enable WhatsApp');
+  await page.getByTestId('apps-enable-whatsapp').click();
+  await expect(page.getByTestId('apps-pause-status-whatsapp')).toContainText('MyBishBash enabled');
+
+  await page.getByTestId('apps-back-button').click();
+  await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
+  await expect(page.getByTestId('protected-app-whatsapp')).toContainText('✓ Enabled');
+});
+
+test('download-logged-in-copy — logged-in install advice does not use signup copy', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('download-logged-in-copy', 'Download copy card')],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+    accessTier: 'free_core',
+  });
+  await page.goto('/mybishbash/download');
+
+  await expect(page.getByTestId('download-page')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add MyBishBash to your Home Screen' })).toBeVisible();
+  await expect(page.getByText('For the best experience, add MyBishBash to your Home Screen so it feels like a normal app.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to Apps' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Continue in Browser' })).toBeVisible();
+  await expect(page.getByText('Before creating your account')).toHaveCount(0);
+  await expect(page.getByText('Create account without installing')).toHaveCount(0);
+});
+
+test('apps-disabled-app-detail — unavailable app detail does not claim enabled', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-disabled', 'Disabled app card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: [],
+    testerMode: false,
+  });
   await page.goto('/mybishbash/apps/safari');
 
-  await page.getByRole('button', { name: 'Choose Pack' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/explore$/);
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash is not enabled for Safari yet');
+  await expect(page.getByTestId('protected-app-safari')).not.toContainText('MyBishBash enabled');
+  await expect(page.getByTestId('apps-enable-safari')).toHaveText('Enable Safari');
+  await expect(page.getByText('Prompt Preview')).toHaveCount(0);
+  await expect(page.getByText('Example prompt')).toBeVisible();
+  await expect(page.getByText('Add shortcut')).toHaveCount(0);
+  await expect(page.getByText('Home-screen shortcut coming soon.')).toHaveCount(0);
 
-  const safariBehavior = await page.evaluate(() => {
-    const behavior = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return behavior.safari;
+  await page.getByTestId('apps-enable-safari').click();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
+});
+
+test('apps-app-prompts-toggle — prompts off does not disable the app', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-prompts-toggle', 'Prompts toggle card')],
+    enabledAppIds: ['safari'],
+    testerMode: false,
   });
-  expect(safariBehavior.useInterruptionPack).toBe(false);
+  await page.goto('/mybishbash/apps/safari');
+
+  const promptsToggle = page.getByTestId('apps-interruptions-toggle-safari');
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
+  await promptsToggle.uncheck();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
+  await expect(page.getByText('Pause for 30 minutes')).toBeVisible();
+
+  const behavior = await page.evaluate(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return settings.safari;
+  });
+  expect(behavior.appEnabled).toBe(true);
+  expect(behavior.useInterruptionPack).toBe(false);
+
+  await page.getByTestId('apps-back-button').click();
+  await expect(page.getByTestId('protected-app-safari')).toContainText('✓ Enabled');
 });
 
 test('home-no-global-fake-launchers — Home no longer shows all fake app shortcut buttons', async ({ page }) => {
@@ -465,16 +640,20 @@ test('apps-pause-status-and-end-pause — paused app is visible and can resume M
   const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   await seedState(page, {
     cards: [personalCard('apps3', 'Resume card')],
+    enabledAppIds: ['safari'],
     appPauses: { safari: futureExpiry },
   });
   await page.goto('/mybishbash/apps/safari');
 
-  await expect(page.getByTestId('apps-pause-safari')).toBeVisible();
-  await expect(page.getByTestId('apps-pause-status-safari')).toContainText(/left|soon/i);
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Paused until');
+  const behaviorWhilePaused = await page.evaluate(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return settings.safari;
+  });
+  expect(behaviorWhilePaused.appEnabled).toBe(true);
 
-  await page.getByTestId('apps-end-pause-safari').click();
-  await expect(page.getByTestId('apps-pause-safari')).toHaveCount(0);
-  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('None');
+  await page.getByTestId('apps-end-pause-inline-safari').click();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
 
   const expiry = await page.evaluate(() => {
     const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
@@ -482,11 +661,48 @@ test('apps-pause-status-and-end-pause — paused app is visible and can resume M
   });
   expect(expiry).toBeNull();
 
-  await page.getByTestId('apps-protected-launch-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
   await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
   const attempts = await getNavigationAttempts(page);
   expect(attempts).toHaveLength(0);
+});
+
+test('apps-remove-app — removing an app disables it without using prompt state as enabled state', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-remove', 'Remove app card')],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+  });
+  await page.goto('/mybishbash/apps/safari');
+
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('MyBishBash enabled');
+  await page.getByRole('button', { name: 'Remove App' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
+
+  const behavior = await page.evaluate(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    return settings.safari;
+  });
+  expect(behavior.appEnabled).toBe(false);
+  expect(behavior.useInterruptionPack).toBe(false);
+});
+
+test('apps-expired-pause-visually-resumes — Apps page clears expired pause without navigation', async ({ page }) => {
+  const shortExpiry = new Date(Date.now() + 1500).toISOString();
+  await seedState(page, {
+    cards: [personalCard('apps-expiry', 'Expiry card')],
+    enabledAppIds: ['safari'],
+    appPauses: { safari: shortExpiry },
+    testerMode: false,
+  });
+  await page.goto('/mybishbash/apps');
+
+  const safariRow = page.getByTestId('protected-app-safari');
+  await expect(safariRow).toContainText('Paused until');
+  await expect(safariRow).toContainText('✓ Enabled', { timeout: 5000 });
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
 });
 
 test('apps-protected-launch-paused — active pause bypasses only that app', async ({ page }) => {
@@ -497,13 +713,13 @@ test('apps-protected-launch-paused — active pause bypasses only that app', asy
   });
   await page.goto('/mybishbash/apps/safari');
 
-  await page.getByTestId('apps-protected-launch-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
   await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBe(1);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
 
   await page.evaluate(() => { window.__MYBISHBASH_NAVIGATION_ATTEMPTS = []; });
   await page.goto('/mybishbash/apps/youtube');
-  await page.getByTestId('apps-protected-launch-youtube').click();
+  await page.getByTestId('apps-test-shortcut-youtube').click();
 
   await expect(page).toHaveURL(/\/mybishbash\/intercept\/youtube$/);
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 5000 });
@@ -512,7 +728,7 @@ test('apps-protected-launch-paused — active pause bypasses only that app', asy
 });
 
 test('fake-shell-dashboard shortcut opens source app settings', async ({ page }) => {
-  await seedState(page, { cards: [personalCard('apps5', 'Manage this app card')] });
+  await seedState(page, { cards: [personalCard('apps5', 'Manage this app card')], enabledAppIds: ['safari'] });
   await page.goto('/mybishbash/intercept/safari');
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
@@ -523,6 +739,21 @@ test('fake-shell-dashboard shortcut opens source app settings', async ({ page })
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('protected-app-safari')).toBeVisible();
   await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
+  await expect(page.getByText('Open MyBishBash')).toBeVisible();
+  await expect(page.getByText('Pause for 30 minutes')).toBeVisible();
+  await expect(page.getByText('Example prompt')).toBeVisible();
+  await expect(page.getByTestId('bottom-nav-home')).toHaveCount(0);
+  await expect(page.getByTestId('bottom-nav-library')).toHaveCount(0);
+  await expect(page.getByTestId('bottom-nav-log')).toHaveCount(0);
+  await expect(page.getByTestId('bottom-nav-explore')).toHaveCount(0);
+  await expect(page.getByTestId('bottom-nav-apps')).toHaveCount(0);
+  await expect(page.getByTestId('settings-gear')).toHaveCount(0);
+  await expect(page.getByText('Add Another App')).toHaveCount(0);
+  await expect(page.getByText('Have a code?')).toHaveCount(0);
+  await expect(page.getByText('Premium')).toHaveCount(0);
+  await expect(page.getByText('Help')).toHaveCount(0);
+  await expect(page.getByText('Remove App')).toHaveCount(0);
+  await expect(page.getByText('Test controls')).toHaveCount(0);
 });
 
 test('settings-no-app-behaviour-owner — Settings no longer owns app behaviour management', async ({ page }) => {

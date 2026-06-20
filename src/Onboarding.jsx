@@ -606,7 +606,7 @@ function OnboardingContent({
           {currentStep === "protected-demo" ? (
             <OnboardingStep
               title={<><EditableText path="steps.protectedDemo.titlePrefix">Before</EditableText> {selectedProtectedAppName} opens</>}
-              body={<><EditableText path="steps.protectedDemo.bodyPrefix">Would you like a Pause Card before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens?</EditableText></>}
+              body={<><EditableText path="steps.protectedDemo.bodyPrefix">Would you like an App Prompt before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens?</EditableText></>}
               primaryLabel={<><EditableText path="steps.protectedDemo.primaryPrefix">Install</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.primarySuffix">Launcher</EditableText></>}
               onPrimary={continueToProtectedAppInstall}
               secondaryPath="steps.protectedDemo.secondary"
@@ -871,10 +871,10 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
           <button type="button"><EditableText path="steps.protectedDemo.notNow">Not now</EditableText></button>
         </div>
       </article>
-      <EditableText as="p" className="onboarding-interruption-demo-note" path="steps.protectedDemo.note">This is an example of a Pause Card.</EditableText>
+      <EditableText as="p" className="onboarding-interruption-demo-note" path="steps.protectedDemo.note">This is an example of an App Prompt.</EditableText>
       <div className="onboarding-interruption-toggle" data-testid="onboarding-interruption-toggle">
-        <EditableText as="span" path="steps.protectedDemo.toggleLabel">Pause Cards</EditableText>
-        <div role="group" aria-label="Pause Cards">
+        <EditableText as="span" path="steps.protectedDemo.toggleLabel">App Prompts</EditableText>
+        <div role="group" aria-label="App Prompts">
           <button
             type="button"
             className={enabled ? "selected" : ""}

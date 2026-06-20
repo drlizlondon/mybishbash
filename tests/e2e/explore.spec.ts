@@ -116,6 +116,36 @@ test('Explore commitment templates create normal Commitment Cards', async ({ pag
   }).toBe(true);
 });
 
+test('Explore excludes App Prompts and App Packs even when saved locally', async ({ page }) => {
+  await seedE2EState(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem('mybishbash.card-packs.v1', JSON.stringify([
+      {
+        id: 'safari-app-prompts',
+        title: 'Safari App Prompts',
+        description: 'App-specific prompts belong in Apps.',
+        sourceLabel: 'MyBishBash',
+        contentType: 'app-pack',
+        entries: [
+          {
+            id: 'safari-prompt',
+            promptText: 'Why are you opening Safari right now?',
+            isPreview: true,
+          },
+        ],
+      },
+    ]));
+  });
+  await page.goto('/mybishbash/explore');
+
+  await expect(page.getByTestId('explore-panel')).toBeVisible();
+  await expect(page.getByTestId('explore-pack-card-safari-app-prompts')).toHaveCount(0);
+  await expect(page.getByText('Safari App Prompts')).toHaveCount(0);
+  await expect(page.getByText('App Pack')).toHaveCount(0);
+  await expect(page.getByText('Use this App Pack')).toHaveCount(0);
+  await expect(page.getByText('App Prompts')).toHaveCount(0);
+});
+
 test('Library shows all four sections including Do Instead Cards', async ({ page }) => {
   await seedE2EState(page);
   await page.goto('/mybishbash/library');

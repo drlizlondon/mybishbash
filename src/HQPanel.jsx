@@ -2800,8 +2800,8 @@ function getEventDisplayLabel(event) {
     pack_card_liked: "Really liked",
     pack_card_disliked: "Hidden card",
     pack_card_restored: "Restored card",
-    intercept_card_disliked: "Hidden Pause Card",
-    intercept_card_restored: "Restored Pause Card",
+    intercept_card_disliked: "Hidden App Prompt",
+    intercept_card_restored: "Restored App Prompt",
     return_session_24h: "User returned after 24h",
     return_session_7d: "User returned after 7d",
   };

@@ -53,6 +53,24 @@ export const downloadContent = {
       "fallbackBody": "Create your account here and use MyBishBash in your browser for now.",
       "fallbackCta": "Create account without installing"
     },
+    "loggedIn": {
+      "eyebrow": "Home Screen",
+      "title": "Add MyBishBash to your Home Screen",
+      "body": [
+        "For the best experience, add MyBishBash to your Home Screen so it feels like a normal app."
+      ],
+      "primary": "Back to Apps",
+      "secondary": "Continue in Browser",
+      "successTitle": "MyBishBash is ready.",
+      "successBody": [
+        "You can keep using MyBishBash here or open it from your Home Screen."
+      ],
+      "whyBullets": [
+        "It puts MyBishBash on your phone like an app",
+        "It only takes about 30 seconds",
+        "You can come back to Apps when you are ready to add more"
+      ]
+    },
     "why": {
       "title": "Why install MyBishBash first?",
       "bullets": [

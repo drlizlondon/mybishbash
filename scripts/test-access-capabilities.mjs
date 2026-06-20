@@ -39,12 +39,10 @@ assert.equal(getEffectiveTier({ access_tier: "nonsense" }, NOW), ACCESS_TIERS.FR
 const freeCapabilities = getCapabilities({ access_tier: "free_core", has_access: true }, NOW);
 const foundingAccessCapabilities = getCapabilities({ access_tier: "founding_access", has_access: true }, NOW);
 
-// The free set includes everything shipped today — nothing user-facing is
-// gated yet. If this assertion ever changes, that is a deliberate product
-// decision (with grandfathering via cohort), not a side effect.
+// Free Core keeps the main MyBishBash experience. Multiple additional apps
+// and future premium content are Founding Access capabilities.
 for (const capability of [
   CAPABILITIES.CAN_CONSUME_CONTENT,
-  CAPABILITIES.CAN_USE_MULTIPLE_APPS,
   CAPABILITIES.CAN_USE_COMMITMENTS,
   CAPABILITIES.CAN_USE_ADVANCED_SCHEDULING,
   CAPABILITIES.CAN_CREATE_CARDS,
@@ -53,6 +51,8 @@ for (const capability of [
   assert.equal(freeCapabilities.has(capability), true, `free tier keeps ${capability}`);
 }
 
+assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), false, "free tier uses one additional app");
+assert.equal(foundingAccessCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), true, "Founding Access unlocks more apps");
 assert.equal(freeCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), false, "publishing is born premium-gated");
 assert.equal(foundingAccessCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), true, "Founding Access grants publishing");
 
@@ -120,7 +120,7 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   appSource,
-  /id="sync-access-code"|htmlFor="sync-access-code"|Access code/,
+  /id="sync-access-code"|htmlFor="sync-access-code"/,
   "signup must not render a second access-code field",
 );
 
