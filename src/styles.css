@@ -142,7 +142,6 @@ textarea {
   color: var(--mood-muted);
 }
 
-.hero,
 .section-heading,
 .library-card,
 .composer,
@@ -153,7 +152,6 @@ textarea {
 
 .hero {
   position: relative;
-  z-index: 200000;
   text-align: center;
   padding-top: 4px;
   margin-bottom: 8px;
@@ -292,7 +290,7 @@ textarea {
   right: max(20px, calc((100vw - 430px) / 2));
   width: 190px;
   min-height: 326px;
-  z-index: 2147483646;
+  z-index: 100200;
 }
 
 .account-menu-wrap-open .settings-gear-button {
