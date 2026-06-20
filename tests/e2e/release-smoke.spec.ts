@@ -274,14 +274,14 @@ test('app loads into a safe entry state without console errors', async ({ page }
 
 test('in-app fake launchers route to caught-up screen when no cards and no pause', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
   await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   // Tapping the protected-launch control with no active pause must enter the
   // card flow, not launch the real app directly.
-  await page.getByTestId('apps-protected-launch-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
@@ -291,11 +291,11 @@ test('in-app fake launchers route to caught-up screen when no cards and no pause
 
 test('Safari desktop fake launcher routes to caught-up screen when no cards and no pause', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
   await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('apps-protected-launch-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
 
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
@@ -322,7 +322,7 @@ test('tester in-app fake launcher shortcuts enter card flow (no active pause)', 
 
   // Tapping a protected launcher with no active pause must enter the card flow,
   // even in tester mode — direct launch only happens with an active pause.
-  await page.getByTestId('apps-protected-launch-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
   await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);
 
@@ -334,11 +334,11 @@ test('Safari iOS fake launcher routes to caught-up screen when no cards and no p
   const page = await context.newPage();
   await simulateStandaloneDisplayMode(page);
   const consoleErrors = await installConsoleErrorGuard(page);
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
   await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('apps-protected-launch-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
 
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
@@ -790,7 +790,7 @@ test('main app Commitment Card response returns directly Home without confirmati
 test('mobile viewport keeps bottom nav and fake launcher destination behaviour working', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
   await gotoApp(page, '/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -800,8 +800,10 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
   await expect(page.getByTestId('home-panel')).toBeVisible();
 
   await page.getByTestId('bottom-nav-apps').click();
-  await page.getByTestId('apps-select').selectOption('instagram');
-  await page.getByTestId('apps-protected-launch-instagram').click();
+  await page.getByRole('button', { name: 'See Options' }).click();
+  await page.getByTestId('apps-option-action-instagram').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/instagram$/);
+  await page.getByTestId('apps-test-shortcut-instagram').click();
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   expect(await getNavigationAttempts(page)).toHaveLength(0);
