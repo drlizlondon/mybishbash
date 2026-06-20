@@ -2,12 +2,13 @@ import "./download.css";
 import { downloadContent } from "./content/downloadContent";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { loadProfile, saveProfile } from "./storage";
-import { getSignupHandoffReference, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
-import { useState } from "react";
+import { getSession, getSignupHandoffReference, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
+import { useEffect, useState } from "react";
 
 const BASE = import.meta.env.BASE_URL;
 const SIGNUP_HREF = `${BASE}home?signup=1`;
 const DOWNLOAD_HREF = `${BASE}download`;
+const APPS_HREF = `${BASE}apps`;
 const WAITLIST_HREF = `${BASE}early-access`;
 const LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
@@ -187,8 +188,37 @@ function DownloadAccessGate() {
 
 function DownloadPageContent() {
   const { content } = useContentEdit();
-  const hasAccess = hasRolloutAccess();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [showInstallSuccess, setShowInstallSuccess] = useState(readInstallSuccessState);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSession()
+      .then((session) => {
+        if (!cancelled) setIsLoggedIn(Boolean(session?.user?.id));
+      })
+      .catch(() => {
+        if (!cancelled) setIsLoggedIn(false);
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!authChecked) {
+    return (
+      <main className="download-page" data-testid="download-loading" aria-label="Loading">
+        <section className="download-panel" />
+      </main>
+    );
+  }
+
+  const hasAccess = hasRolloutAccess() || isLoggedIn;
+  const loggedInInstall = isLoggedIn && content.install.loggedIn;
 
   if (!hasAccess) {
     return <DownloadAccessGate />;
@@ -210,35 +240,54 @@ function DownloadPageContent() {
         <section className="download-panel download-success-panel" aria-labelledby="download-success-title">
           <div className="download-success-icon" aria-hidden="true" />
           <header className="download-hero">
-            <h1 id="download-success-title"><EditableText path="install.success.title" /></h1>
-            {content.install.success.body.map((item, index) => (
-              <EditableText as="p" path={`install.success.body.${index}`} key={index}>
+            <h1 id="download-success-title">
+              <EditableText path={loggedInInstall ? "install.loggedIn.successTitle" : "install.success.title"} />
+            </h1>
+            {(loggedInInstall ? content.install.loggedIn.successBody : content.install.success.body).map((item, index) => (
+              <EditableText as="p" path={loggedInInstall ? `install.loggedIn.successBody.${index}` : `install.success.body.${index}`} key={index}>
                 {item}
               </EditableText>
             ))}
           </header>
 
-          <section className="download-browser-fallback" aria-labelledby="download-browser-fallback-title">
-            <h2 id="download-browser-fallback-title"><EditableText path="install.success.fallbackTitle" /></h2>
-            <EditableText as="p" path="install.success.fallbackBody" />
-            <a className="download-secondary" href={SIGNUP_HREF} onClick={skipInstallForNow}>
-              <EditableText path="install.success.fallbackCta" />
-            </a>
+          <section className="download-browser-fallback" aria-labelledby={loggedInInstall ? undefined : "download-browser-fallback-title"}>
+            {loggedInInstall ? (
+              <>
+                <a className="download-primary" href={APPS_HREF}>
+                  <EditableText path="install.loggedIn.primary" />
+                </a>
+                <a className="download-secondary" href={APPS_HREF} onClick={skipInstallForNow}>
+                  <EditableText path="install.loggedIn.secondary" />
+                </a>
+              </>
+            ) : (
+              <>
+                <h2 id="download-browser-fallback-title"><EditableText path="install.success.fallbackTitle" /></h2>
+                <EditableText as="p" path="install.success.fallbackBody" />
+                <a className="download-secondary" href={SIGNUP_HREF} onClick={skipInstallForNow}>
+                  <EditableText path="install.success.fallbackCta" />
+                </a>
+              </>
+            )}
           </section>
         </section>
       </main>
     );
   }
 
+  const installContent = loggedInInstall ? content.install.loggedIn : content.install;
+
   return (
     <main className="download-page" data-testid="download-page">
       <section className="download-panel" aria-labelledby="download-title">
         <header className="download-hero">
           <img src={LOGO_SRC} alt="MyBishBash" />
-          <EditableText as="p" className="download-access-eyebrow" path="install.eyebrow" />
-          <h1 id="download-title"><EditableText path="install.title" /></h1>
-          {content.install.body.map((item, index) => (
-            <EditableText as="p" path={`install.body.${index}`} key={index}>
+          <EditableText as="p" className="download-access-eyebrow" path={loggedInInstall ? "install.loggedIn.eyebrow" : "install.eyebrow"} />
+          <h1 id="download-title">
+            <EditableText path={loggedInInstall ? "install.loggedIn.title" : "install.title"} />
+          </h1>
+          {installContent.body.map((item, index) => (
+            <EditableText as="p" path={loggedInInstall ? `install.loggedIn.body.${index}` : `install.body.${index}`} key={index}>
               {item}
             </EditableText>
           ))}
@@ -260,15 +309,26 @@ function DownloadPageContent() {
           />
         </div>
 
-        <button type="button" className="download-primary" onClick={confirmInstall}>
-          <EditableText path="install.primary" />
-        </button>
+        {loggedInInstall ? (
+          <div className="download-browser-fallback">
+            <a className="download-primary" href={APPS_HREF} onClick={continueAfterInstall}>
+              <EditableText path="install.loggedIn.primary" />
+            </a>
+            <a className="download-secondary" href={APPS_HREF} onClick={skipInstallForNow}>
+              <EditableText path="install.loggedIn.secondary" />
+            </a>
+          </div>
+        ) : (
+          <button type="button" className="download-primary" onClick={confirmInstall}>
+            <EditableText path="install.primary" />
+          </button>
+        )}
 
         <section className="download-why-card" aria-labelledby="download-why-title">
           <h2 id="download-why-title"><EditableText path="install.why.title" /></h2>
           <ul>
-            {content.install.why.bullets.map((item, index) => (
-              <EditableText as="li" path={`install.why.bullets.${index}`} key={index}>
+            {(loggedInInstall ? content.install.loggedIn.whyBullets : content.install.why.bullets).map((item, index) => (
+              <EditableText as="li" path={loggedInInstall ? `install.loggedIn.whyBullets.${index}` : `install.why.bullets.${index}`} key={index}>
                 {item}
               </EditableText>
             ))}
@@ -286,7 +346,7 @@ export default function DownloadPage() {
       storageKey="mybishbash.downloadContentDraft.v2"
       saveEndpoint="/__save-download-content"
       saveLabel="src/content/downloadContent.js"
-      isContentCompatible={(value) => Boolean(value?.access?.title && value?.install?.title && value?.install?.success?.title)}
+      isContentCompatible={(value) => Boolean(value?.access?.title && value?.install?.title && value?.install?.success?.title && value?.install?.loggedIn?.title)}
     >
       <DownloadPageContent />
       <EditPanel />

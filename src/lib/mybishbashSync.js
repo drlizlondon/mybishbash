@@ -376,7 +376,13 @@ async function validateAccessCode(accessCode) {
 }
 
 async function claimAccessCode(accessCode) {
-  if (isE2EAuthMockMode()) return getE2EAccessGrant(normalizeAccessCode(accessCode)) !== null;
+  if (isE2EAuthMockMode() || isDemoMode()) {
+    const grant = getE2EAccessGrant(normalizeAccessCode(accessCode));
+    if (!grant) return false;
+    window.localStorage.setItem("MYBISHBASH_E2E_ACCESS_TIER", grant.access_tier);
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", JSON.stringify({ accessCode: normalizeAccessCode(accessCode), ...grant }));
+    return true;
+  }
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
@@ -390,6 +396,10 @@ async function claimAccessCode(accessCode) {
     return false;
   }
   return data === true;
+}
+
+export async function claimAccessCodeForCurrentUser(accessCode) {
+  return claimAccessCode(accessCode);
 }
 
 async function createSignupHandoff(accessCode) {
@@ -442,6 +452,7 @@ function redeemE2ESignupHandoff(handoffRef) {
 
 const E2E_ACCESS_GRANTS = {
   "BETA-VALID": { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: null },
+  FULLMELON: { access_tier: "premium", grant_reason: "premium_code", cohort: "e2e", is_tester: false, tester_group: null },
   WELCOME: { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: "early_user" },
   TESTER: { access_tier: "premium", grant_reason: "tester", cohort: "e2e", is_tester: true, tester_group: "tester" },
   "FRIENDS-FAMILY": { access_tier: "premium", grant_reason: "friends_family", cohort: "e2e", is_tester: false, tester_group: "friends_family" },

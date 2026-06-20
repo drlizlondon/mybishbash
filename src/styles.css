@@ -250,7 +250,7 @@ textarea {
 .add-button {
   position: absolute;
   top: 8px;
-  right: 0;
+  left: 0;
   width: 62px;
   height: 62px;
   border: 0;
@@ -265,9 +265,7 @@ textarea {
 }
 
 .settings-gear-button {
-  position: absolute;
-  top: 14px;
-  left: 0;
+  position: relative;
   width: 44px;
   height: 44px;
   border: 1px solid rgba(17, 17, 17, 0.08);
@@ -280,9 +278,87 @@ textarea {
   z-index: 10;
 }
 
+.account-menu-wrap {
+  position: absolute;
+  top: 14px;
+  right: 0;
+  z-index: 1200;
+}
+
 .settings-gear-button svg {
   width: 20px;
   height: 20px;
+}
+
+.account-avatar-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 250, 247, 0.92);
+  color: var(--charcoal);
+  position: relative;
+}
+
+.account-avatar-head {
+  position: absolute;
+  top: 8px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.account-avatar-body {
+  position: absolute;
+  bottom: 8px;
+  width: 18px;
+  height: 10px;
+  border-radius: 999px 999px 7px 7px;
+  background: currentColor;
+}
+
+.account-menu {
+  position: absolute;
+  top: 58px;
+  right: 0;
+  z-index: 1300;
+  min-width: 190px;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid rgba(120, 87, 65, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 252, 250, 0.98);
+  box-shadow: 0 18px 38px rgba(47, 42, 40, 0.12);
+}
+
+.account-menu button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  padding: 0 12px;
+}
+
+.account-menu button:active {
+  background: rgba(233, 120, 93, 0.08);
+}
+
+.account-menu button:hover,
+.account-menu button:focus-visible {
+  background: rgba(233, 120, 93, 0.08);
+  outline: none;
+}
+
+.account-menu-close {
+  color: var(--ink-muted) !important;
 }
 
 .content {
@@ -5447,7 +5523,7 @@ body {
 
 .add-button {
   top: 0;
-  right: 0;
+  left: 0;
   width: 66px;
   height: 66px;
   background: #e76f51;
@@ -7725,6 +7801,134 @@ body {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.28;
+}
+
+.apps-enabled-row {
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 253, 250, 0.72);
+}
+
+.apps-enabled-row .home-screen-version-copy {
+  min-width: 0;
+}
+
+.apps-enabled-row .home-screen-version-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+
+.apps-enabled-row .home-screen-version-title {
+  gap: 4px;
+}
+
+.apps-enabled-row .home-screen-version-title strong {
+  color: var(--charcoal);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.apps-enabled-row .home-screen-version-title span {
+  width: fit-content;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(47, 42, 40, 0.58);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.apps-row-actions,
+.apps-pause-buttons,
+.apps-more-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.apps-row-actions .pack-button,
+.apps-pause-buttons .pack-button,
+.apps-more-actions .pack-button {
+  min-height: 36px;
+  margin-top: 0;
+  padding: 8px 13px;
+  font-size: 0.86rem;
+}
+
+.apps-row-actions .apps-settings-button {
+  background: var(--charcoal);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(47, 42, 40, 0.12);
+}
+
+.apps-row-actions .apps-pause-row-button {
+  border-color: transparent;
+  background: transparent;
+  color: rgba(47, 42, 40, 0.66);
+  box-shadow: none;
+}
+
+.apps-code-link,
+.apps-back-button {
+  justify-self: start;
+  min-height: 36px;
+  padding: 0;
+  color: var(--ink-muted);
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.apps-manage-screen {
+  display: grid;
+  gap: 16px;
+}
+
+.apps-manage-hero {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.apps-manage-hero .home-screen-install-link {
+  grid-column: 1 / -1;
+}
+
+.apps-code-form,
+.apps-code-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.apps-code-form label {
+  color: rgba(47, 42, 40, 0.76);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.apps-code-form input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(120, 87, 65, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 252, 249, 0.84);
+  color: var(--charcoal);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.apps-code-form input:focus {
+  outline: 2px solid rgba(217, 108, 82, 0.28);
+  outline-offset: 2px;
 }
 
 .explore-commitment-rail {

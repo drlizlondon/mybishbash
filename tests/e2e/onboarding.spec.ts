@@ -100,14 +100,14 @@ async function expectLogoBackedFirstApps(page: Page, expectedBasePath: string) {
 }
 
 async function expectInterruptionDemoForApp(page: Page, appName: string, title: string, body: string) {
-  await expect(page.getByText(`Would you like a Pause Card before ${appName} opens?`)).toBeVisible();
+  await expect(page.getByText(`Would you like an App Prompt before ${appName} opens?`)).toBeVisible();
   const demo = page.getByTestId('onboarding-interruption-demo');
   await expect(demo).toContainText(title);
   await expect(demo).toContainText(body);
   await expect(demo.getByRole('button', { name: `Continue to ${appName}` })).toBeVisible();
   await expect(demo.getByRole('button', { name: 'Not now' })).toBeVisible();
-  await expect(demo).toContainText('This is an example of a Pause Card.');
-  await expect(demo).toContainText('Pause Cards');
+  await expect(demo).toContainText('This is an example of an App Prompt.');
+  await expect(demo).toContainText('App Prompts');
   await expect(demo).not.toContainText(/interruption card/i);
   await expect(page.getByTestId('onboarding-interruption-toggle').getByRole('button', { name: 'On', exact: true })).toBeVisible();
   await expect(page.getByTestId('onboarding-interruption-toggle').getByRole('button', { name: 'Off', exact: true })).toBeVisible();

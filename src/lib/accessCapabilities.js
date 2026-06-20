@@ -7,10 +7,10 @@
 // `tier === "premium"` and never grant_reason/cohort, which are HQ/audit
 // metadata.
 //
-// Nothing user-facing is gated yet: the free set includes everything shipped
-// today. New gates are added by moving a key out of FREE_CAPABILITIES (a
-// product decision, with grandfathering expressible via cohort), and new
-// founding-access features are born here (see can_publish_packs).
+// Free Core includes the main MyBishBash experience and one additional app.
+// Capabilities that unlock more apps or future premium content live in
+// Founding Access. New gates should be product decisions expressed here, not
+// scattered tier checks in feature code.
 
 export const ACCESS_TIERS = {
   FREE_CORE: "free_core",
@@ -21,7 +21,7 @@ export const ACCESS_TIERS = {
 };
 
 export const CAPABILITIES = {
-  // Consumption — packs, cards, intercept flows. Everything live today.
+  // Consumption — packs, cards, and the main app experience.
   CAN_CONSUME_CONTENT: "can_consume_content",
   CAN_USE_MULTIPLE_APPS: "can_use_multiple_apps",
   CAN_USE_COMMITMENTS: "can_use_commitments",
@@ -46,7 +46,6 @@ export const CAPABILITIES = {
 
 const FREE_CAPABILITIES = new Set([
   CAPABILITIES.CAN_CONSUME_CONTENT,
-  CAPABILITIES.CAN_USE_MULTIPLE_APPS,
   CAPABILITIES.CAN_USE_COMMITMENTS,
   CAPABILITIES.CAN_USE_ADVANCED_SCHEDULING,
   CAPABILITIES.CAN_CREATE_CARDS,
@@ -55,6 +54,7 @@ const FREE_CAPABILITIES = new Set([
 
 const PREMIUM_CAPABILITIES = new Set([
   ...FREE_CAPABILITIES,
+  CAPABILITIES.CAN_USE_MULTIPLE_APPS,
   CAPABILITIES.CAN_PUBLISH_PACKS,
   CAPABILITIES.CAN_USE_PREMIUM_CONTENT,
 ]);
