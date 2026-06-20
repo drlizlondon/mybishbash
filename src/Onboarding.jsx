@@ -561,6 +561,7 @@ function OnboardingContent({
               primaryPath="steps.strategy.primary"
               primaryLabel="Continue"
               onPrimary={goNext}
+              primaryDisabled={selectedStrategyAreaIds.length === 0}
               secondaryPath="steps.strategy.secondary"
               secondaryLabel="Skip setup for now"
               onSecondary={showSkipSummary}
@@ -585,6 +586,7 @@ function OnboardingContent({
               primaryPath="steps.intention.primary"
               primaryLabel="Continue"
               onPrimary={saveAndContinue}
+              primaryDisabled={selectedCardTexts.length === 0}
               secondaryPath="steps.intention.secondary"
               secondaryLabel="Skip reminders"
               onSecondary={showSkipSummary}
@@ -689,7 +691,7 @@ function OnboardingContent({
           {currentStep === "protected-demo" ? (
             <OnboardingStep
               title={<><EditableText path="steps.protectedDemo.titlePrefix">What should appear before</EditableText> {selectedProtectedAppName}?</>}
-              body={<><EditableText path="steps.protectedDemo.bodyPrefix">Your Personal Cards can appear before</EditableText> {selectedProtectedAppName}. <EditableText path="steps.protectedDemo.bodySuffix">You can also add app-specific check-ins for moments when you want a little more friction.</EditableText></>}
+              body={<><EditableText path="steps.protectedDemo.bodyPrefix">App Prompts are optional. They add an extra pause before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens.</EditableText></>}
               primaryLabel={<><EditableText path="steps.protectedDemo.primaryPrefix">Continue to install</EditableText></>}
               onPrimary={continueToProtectedAppInstall}
               secondaryPath="steps.protectedDemo.secondary"
@@ -876,9 +878,7 @@ function CommitmentTimePassage({
         ) : null}
       </div>
       <div className="onboarding-commitment-time">
-        <div className="onboarding-time-ring" aria-hidden="true">
-          <span />
-        </div>
+        <span className="onboarding-time-kicker">Commitment Card</span>
         <h2>{labelPath ? <EditableText path={labelPath}>{label}</EditableText> : label}</h2>
         <p>{bodyPath ? <EditableText path={bodyPath}>{body}</EditableText> : body}</p>
         <button type="button" className="onboarding-time-next" onClick={onComplete}>

@@ -104,20 +104,24 @@ async function completeCoreSetup(page: Page, path = '/mybishbash/onboarding') {
   await startStrategySetup(page, path);
 
   await expect(page.getByRole('heading', { name: 'What do you want to reinforce?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   for (const area of ['Health Basics', 'Sleep', 'Phone Use', 'Punctuality']) {
     await page.getByRole('button', { name: area }).click();
   }
   await expect(page.getByText('3 of 3 selected')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Punctuality' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'Choose your first reminders' })).toBeVisible();
   await expect(page.getByText('Good cards are specific.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expect(page.getByText('Do the thing you’ve been putting off.')).toHaveCount(0);
   await expect(page.getByText('What matters most today?')).toHaveCount(0);
   await page.getByRole('button', { name: 'Have you drunk a glass of water today?' }).click();
   await page.getByRole('button', { name: 'Have you put your phone away for bedtime?' }).click();
   await expect(page.getByText('2 of 5 selected')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'Add a strategy pack' })).toBeVisible();
@@ -184,6 +188,7 @@ test('phone trigger selection goes through app check-ins before install and save
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'What should appear before Safari?' })).toBeVisible();
+  await expect(page.getByText('App Prompts are optional. They add an extra pause before Safari opens.')).toBeVisible();
   await expect(page.getByText('Personal reminders: On')).toBeVisible();
   await expect(page.getByTestId('onboarding-interruption-toggle').getByText('App-specific check-ins')).toBeVisible();
   await expect(page.getByTestId('onboarding-interruption-demo')).toContainText('What are you here to do?');
@@ -253,15 +258,21 @@ test('home spotlight tour supports navigation and persists dismissal after strat
   await expect(tour.getByRole('link', { name: 'Skip' })).toBeVisible();
   await expect(tour.getByRole('button', { name: 'Previous spotlight step' })).toBeDisabled();
   await tour.getByRole('button', { name: 'Next' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/library$/);
-  await expect(tour.getByRole('heading', { name: 'Library' })).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/explore$/);
+  await expect(tour.getByRole('heading', { name: 'Explore' })).toBeVisible();
   await tour.getByRole('button', { name: 'Previous spotlight step' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
 
-  for (let index = 0; index < 5; index += 1) {
-    await tour.getByRole('button', { name: 'Next' }).click();
-  }
+  await tour.getByRole('button', { name: 'Next' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/explore$/);
+  await expect(tour.getByRole('heading', { name: 'Explore' })).toBeVisible();
+  await tour.getByRole('button', { name: 'Next' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(tour.getByRole('heading', { name: 'Apps' })).toBeVisible();
+  await tour.getByRole('button', { name: 'Next' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(tour.getByRole('heading', { name: 'You’re ready' })).toBeVisible();
   await tour.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
 
@@ -276,7 +287,9 @@ test('home spotlight tour supports navigation and persists dismissal after strat
 
 test('onboarding visible copy avoids old blocker and technical language', async ({ page }) => {
   await startStrategySetup(page);
+  await page.getByRole('button', { name: 'Health Basics' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Have you drunk a glass of water today?' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Skip pack' }).click();
   await page.getByRole('button', { name: 'Skip commitment' }).click();
@@ -300,8 +313,8 @@ test('onboarding headlines fit mobile without mid-word splitting', async ({ page
   const checks: Array<{ action?: () => Promise<void>; heading: string }> = [
     { heading: 'Build your phone strategy' },
     { action: () => page.getByRole('button', { name: 'Start setting it up' }).click(), heading: 'What do you want to reinforce?' },
-    { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Choose your first reminders' },
-    { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Add a strategy pack' },
+    { action: async () => { await page.getByRole('button', { name: 'Health Basics' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Choose your first reminders' },
+    { action: async () => { await page.getByRole('button', { name: 'Have you drunk a glass of water today?' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Add a strategy pack' },
     { action: async () => { await page.getByRole('button', { name: 'Skip pack' }).click(); }, heading: 'Make one commitment' },
     { action: async () => { await page.getByRole('button', { name: 'Skip commitment' }).click(); }, heading: 'Choose your first phone trigger' },
     { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'What should appear before Instagram?' },

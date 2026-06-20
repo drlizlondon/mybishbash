@@ -55,8 +55,8 @@ export const onboardingContent = {
       ],
     },
     commitmentTime: {
-      label: "Later...",
-      body: "At the end, MyBishBash helps you reflect.",
+      label: "Later that day...",
+      body: "MyBishBash checks how it went.",
       next: "Next",
     },
     commitmentComplete: {
@@ -73,8 +73,8 @@ export const onboardingContent = {
     },
     protectedDemo: {
       titlePrefix: "What should appear before",
-      bodyPrefix: "Your Personal Cards can appear before",
-      bodySuffix: "You can also add app-specific check-ins for moments when you want a little more friction.",
+      bodyPrefix: "App Prompts are optional. They add an extra pause before",
+      bodySuffix: "opens.",
       primaryPrefix: "Continue to install",
       primarySuffix: "",
       secondary: "Choose an app later",

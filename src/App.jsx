@@ -1396,9 +1396,9 @@ function getCommitmentReviewOutcomeMessage(response) {
 const ONBOARDING_COMMITMENT_DEMO_CARD = {
   id: "onboarding-commitment-demo",
   cardKind: "commitment",
-  promptText: "I will go to the gym today.",
+  promptText: "I will go for a walk today.",
   dashboardTitle: "Today’s Commitment",
-  commitmentReason: "I feel so good after a great workout at the gym.",
+  commitmentReason: "A short walk helps me feel clearer.",
   commitmentTimingMode: "anytime",
   commitmentStartWindow: "anytime",
   commitmentCheckInEnabled: true,
@@ -7603,15 +7603,7 @@ const HOME_SPOTLIGHT_STEPS = [
     path: "/home",
     selector: '[data-testid="home-panel"]',
     title: "Home",
-    body: "Home is your daily starting point. Get a quick overview of how well you’re meeting your daily intentions and your Personal Cards: messages from yourself about things you genuinely mean to do, but don’t always remember. This is the heart of MyBishBash.",
-    button: "Next",
-  },
-  {
-    id: "library",
-    path: "/library",
-    selector: '[data-testid="bottom-nav-library"]',
-    title: "Library",
-    body: "Your Library is where all your cards live. Review, organise and manage the reminders and commitments you’ve chosen for yourself.",
+    body: "Start here. Home shows what needs your attention today.",
     button: "Next",
   },
   {
@@ -7619,7 +7611,7 @@ const HOME_SPOTLIGHT_STEPS = [
     path: "/explore",
     selector: '[data-testid="bottom-nav-explore"]',
     title: "Explore",
-    body: "Explore helps you discover new cards and packs to support the habits, goals and routines that matter to you.",
+    body: "Find extra support when you want it, including Packs for focus, confidence, sleep, punctuality or intentional phone use.",
     button: "Next",
   },
   {
@@ -7627,23 +7619,15 @@ const HOME_SPOTLIGHT_STEPS = [
     path: "/apps",
     selector: '[data-testid="bottom-nav-apps"]',
     title: "Apps",
-    body: "Choose which apps MyBishBash appears before. A quick reminder at the right moment can help you use your phone more intentionally.",
-    button: "Next",
-  },
-  {
-    id: "log",
-    path: "/log",
-    selector: '[data-testid="bottom-nav-log"]',
-    title: "Log",
-    body: "Your Log keeps a record of your activity, helping you see the reminders you’ve completed and the commitments you’ve kept over time.",
+    body: "Choose where MyBishBash appears. Add it before the apps you already open.",
     button: "Next",
   },
   {
     id: "ready",
     path: "/home",
-    selector: '[data-testid="app-shell"]',
+    selector: null,
     title: "You’re ready",
-    body: "You’re ready.",
+    body: "MyBishBash is set up around what matters to you.",
     button: "Done",
   },
 ];
@@ -7657,6 +7641,10 @@ function HomeSpotlightTour({ actionSignal, locationKey = "", onComplete, onNavig
 
   useLayoutEffect(() => {
     if (!step) return undefined;
+    if (!step.selector) {
+      setTargetRect(null);
+      return undefined;
+    }
     setTargetRect(null);
     const targets = Array.from(document.querySelectorAll(step.selector)).filter((node) => {
       const rect = node.getBoundingClientRect();
@@ -7761,16 +7749,18 @@ function HomeSpotlightTour({ actionSignal, locationKey = "", onComplete, onNavig
             {isFinalStep ? "Done" : step.button}
           </button>
         </div>
-        <a
-          className="home-spotlight-skip-link"
-          href="#"
-          onClick={(event) => {
-            event.preventDefault();
-            finish();
-          }}
-        >
-          Skip
-        </a>
+        {!isFinalStep ? (
+          <a
+            className="home-spotlight-skip-link"
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
+              finish();
+            }}
+          >
+            Skip
+          </a>
+        ) : null}
       </article>
     </div>
   );
