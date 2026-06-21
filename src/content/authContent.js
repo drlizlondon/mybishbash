@@ -2,19 +2,19 @@
 // The edit panel can also copy the current JSON as a manual fallback.
 export const authContent = {
   titles: {
-    loading: "MyBishBash",
-    launcher: "Welcome back to MyBishBash",
-    inviteOnly: "MyBishBash is invite-only right now.",
-    login: "MyBishBash",
-    signup: "Create your MyBishBash account",
-    signupRecovery: "Finish setting up MyBishBash",
+    loading: "myBishBash",
+    launcher: "Welcome back to myBishBash",
+    inviteOnly: "myBishBash is invite-only right now.",
+    login: "myBishBash",
+    signup: "Create your myBishBash account",
+    signupRecovery: "Finish setting up myBishBash",
   },
   copy: {
-    loading: "Loading your shared MyBishBash...",
-    accessDenied: "Get MyBishBash with an invite code, join the waitlist, or log in if you already have access.",
-    signupBlocked: "Get MyBishBash is the invite gate. Enter your access code there first, or join the waitlist.",
+    loading: "Loading your shared myBishBash...",
+    accessDenied: "Get myBishBash with an invite code, join the waitlist, or log in if you already have access.",
+    signupBlocked: "Get myBishBash is the invite gate. Enter your access code there first, or join the waitlist.",
     signupRecoveryStandalone: "We couldn’t find your access session. Enter your access code once more to finish creating your account in the app.",
-    login: "Log in to sync this shortcut with your MyBishBash profile.",
+    login: "Log in to sync this shortcut with your myBishBash profile.",
     launcherPrefix: "Log in to continue to your",
     launcherSuffix: "launcher.",
     signup: "Create your account with the access you already unlocked.",
@@ -41,7 +41,7 @@ export const authContent = {
     legalSuffix: ".",
   },
   actions: {
-    getMyBishBash: "Get MyBishBash",
+    getMyBishBash: "Get myBishBash",
     alreadyHaveAccount: "Already have an account?",
     needAccount: "Need an account?",
     loginSwitch: "Log in",
@@ -52,7 +52,7 @@ export const authContent = {
     joinWaitlist: "Join waitlist",
   },
   status: {
-    passwordResetSent: "Password reset email sent. Check your inbox for the link to return to MyBishBash.",
+    passwordResetSent: "Password reset email sent. Check your inbox for the link to return to myBishBash.",
     passwordResetError: "Could not send a password reset email.",
     legalRequired: "Please agree to the Terms of Use and Privacy Policy to continue.",
     recoveryInvalid: "That access code didn’t work. Please check it and try again.",

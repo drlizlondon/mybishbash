@@ -57,7 +57,8 @@ export function ContentEditProvider({
   saveLabel = "src/content/landingContent.js",
   isContentCompatible = isDefaultContentCompatible,
 }) {
-  const isDev = import.meta.env.DEV;
+  const isLocalPreview = typeof window !== "undefined" && ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+  const isDev = import.meta.env.DEV || isLocalPreview;
   const [content, setContent] = useState(() => {
     if (!isDev || typeof window === "undefined") return initialContent;
 
@@ -229,10 +230,10 @@ export function EditPanel() {
 
   const style = position.x == null || position.y == null
     ? undefined
-    : { left: position.x, top: position.y, right: "auto", bottom: "auto" };
+    : { "--edit-panel-x": `${position.x}px`, "--edit-panel-y": `${position.y}px` };
 
   return (
-    <aside className="edit-panel" style={style} aria-label="Local content editor">
+    <aside className={`edit-panel${style ? " edit-panel-positioned" : ""}`} style={style} aria-label="Local content editor">
       <button type="button" className="edit-panel-handle" onPointerDown={startDrag}>
         Move editor
       </button>

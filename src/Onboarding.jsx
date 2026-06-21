@@ -3,8 +3,9 @@ import "./landing.css";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
 import { getGreeting } from "./utils";
+import { BrandMark } from "./components/BrandMark";
 
-const ONBOARDING_DEMO_CTA_UNLOCK_MS = 5400;
+const ONBOARDING_DEMO_CTA_UNLOCK_MS = 11000;
 
 export const DEFAULT_INTERRUPTER_CARDS = [
   "Do I actually want to open Instagram right now?",
@@ -29,87 +30,24 @@ export const DEFAULT_PERSONAL_CARD_TEXTS = [
   "Have you taken your antihistamine?",
 ];
 
-export const STRATEGY_AREA_OPTIONS = [
-  { id: "fitness", label: "Fitness" },
-  { id: "health", label: "Health" },
-  { id: "faith-reflection", label: "Faith or reflection" },
-  { id: "getting-ready", label: "Getting ready" },
-  { id: "home", label: "Home" },
-  { id: "relationships", label: "Relationships" },
-  { id: "self-care", label: "Self-care" },
-  { id: "learning-creativity", label: "Learning or creativity" },
+const STARTER_PERSONAL_CARD_TEXTS = [
+  "Have you done something that counts towards your fitness today?",
+  "Have you taken your vitamins?",
+  "Have you drunk enough water?",
+  "Have you reflected on something you’re grateful for?",
+  "Have you got your bag ready for tomorrow?",
+  "Have you messaged someone you care about?",
+  "Have you stretched today?",
+  "Have you taken your medication?",
+  "Have you read something today?",
+  "Have you eaten something nourishing today?",
+  "Have you done one small thing for your home today?",
 ];
 
-const PERSONAL_CARD_GROUPS = {
-  fitness: [
-    "Have you done something that counts towards your fitness today?",
-    "Have you stretched?",
-    "Have you done 10 press-ups?",
-  ],
-  health: [
-    "Have you taken your vitamins?",
-    "Have you taken your antihistamine?",
-    "Have you drunk enough water?",
-  ],
-  "faith-reflection": [
-    "Have you read your Bible?",
-    "Have you prayed?",
-    "Have you reflected on a moment you are grateful for?",
-  ],
-  "getting-ready": [
-    "Have you got your bag ready for tomorrow?",
-    "Have you laid out what you need for the morning?",
-    "Have you checked tomorrow's first commitment?",
-  ],
-  home: [
-    "Have you watered the plants?",
-    "Have you reset one surface?",
-    "Have you put the laundry away?",
-  ],
-  relationships: [
-    "Have you told your partner you love them?",
-    "Have you checked in with someone important to you?",
-    "Have you done something kind for someone at home?",
-  ],
-  "self-care": [
-    "Have you done your face routine?",
-    "Have you put on SPF?",
-    "Have you moisturised?",
-  ],
-  "learning-creativity": [
-    "Have you read a few pages?",
-    "Have you practised something creative?",
-    "Have you spent time learning something useful?",
-  ],
-};
-
-const PERSONAL_CARD_OPTIONS = Object.entries(PERSONAL_CARD_GROUPS).flatMap(([areaId, cards]) =>
-  cards.map((text) => ({ id: `${areaId}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`, areaId, text })),
-);
-
-const PERSONAL_CARD_SUGGESTION_LIMIT = 8;
-
-const STARTER_PACK_OPTIONS = [
-  { id: "healthier-daily-basics", areaIds: ["health", "fitness"], title: "Healthier Daily Basics" },
-  { id: "better-bedtime", areaIds: ["self-care", "getting-ready"], title: "Better Bedtime" },
-  { id: "stop-being-late", areaIds: ["getting-ready"], title: "Stop Being Late" },
-  { id: "more-present-with-my-people", areaIds: ["relationships"], title: "More Present With My People" },
-  { id: "be-more-confident", areaIds: ["self-care"], title: "Be More Confident" },
-  { id: "faith-and-steadiness", areaIds: ["faith-reflection"], title: "Faith and Steadiness" },
-  { id: "feel-more-put-together", areaIds: ["self-care", "getting-ready"], title: "Feel More Put Together" },
-  { id: "creative-practice", areaIds: ["learning-creativity"], title: "Creative Practice" },
-];
-
-const STARTER_COMMITMENT_OPTIONS = [
-  { id: "water-before-coffee", text: "drink water before my next coffee", label: "I will drink water before my next coffee.", areaIds: ["health"], defaults: { commitmentTimingMode: "anytime", commitmentCheckInEnabled: false } },
-  { id: "walk-today", text: "go for a 10-minute walk today", label: "I will go for a 10-minute walk today.", areaIds: ["fitness", "health"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: false } },
-  { id: "phone-away-dinner", text: "put my phone away during dinner", label: "I will put my phone away during dinner.", areaIds: ["relationships"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "20:30" } },
-  { id: "message-friend", text: "message one friend before 20:00", label: "I will message one friend before 20:00.", areaIds: ["relationships"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: true, commitmentCheckInTime: "20:00" } },
-  { id: "pack-bag", text: "pack my bag before bed", label: "I will pack my bag before bed.", areaIds: ["getting-ready"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
-  { id: "leave-earlier", text: "leave 10 minutes earlier than usual", label: "I will leave 10 minutes earlier than usual.", areaIds: ["getting-ready"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: false } },
-  { id: "pray-before-sleep", text: "pray before I go to sleep", label: "I will pray before I go to sleep.", areaIds: ["faith-reflection"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
-  { id: "wind-down", text: "start winding down by 22:00", label: "I will start winding down by 22:00.", areaIds: ["self-care"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
-];
+const PERSONAL_CARD_OPTIONS = STARTER_PERSONAL_CARD_TEXTS.map((text) => ({
+  id: `starter-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+  text,
+}));
 
 export const DEFAULT_PERSONAL_CARD_TEXTS_LEGACY = [
   "Have you taken your vitamins today?",
@@ -220,11 +158,11 @@ function readPendingProtectedAppSetup() {
   }
 }
 
-function writePendingProtectedAppSetup(appId, useInterruptionCard = false) {
+function writePendingProtectedAppSetup(appId, useInterruptionCard = false, status = "install_started") {
   if (typeof window === "undefined" || !appId) return;
   window.localStorage.setItem(
     PROTECTED_APP_SETUP_PENDING_KEY,
-    JSON.stringify({ appId, status: "install_started", useInterruptionCard, updatedAt: new Date().toISOString() }),
+    JSON.stringify({ appId, status, useInterruptionCard, updatedAt: new Date().toISOString() }),
   );
 }
 
@@ -237,13 +175,12 @@ export default function Onboarding(props) {
   return (
     <ContentEditProvider
       initialContent={onboardingContent}
-      storageKey="mybishbash.onboardingContentDraft.v1"
+      storageKey="mybishbash.onboardingContentDraft.v3"
       saveEndpoint="/__save-onboarding-content"
       saveLabel="src/content/onboardingContent.js"
       isContentCompatible={(value) => Boolean(value?.steps?.learn?.title && value?.done?.primary)}
     >
       <OnboardingContent {...props} />
-      <EditPanel />
     </ContentEditProvider>
   );
 }
@@ -270,32 +207,30 @@ function OnboardingContent({
   const [stepIndex, setStepIndex] = useState(() => (
     pendingProtectedAppSetup?.status === "confirmed"
       ? STEPS.indexOf("protected-setup")
-      : pendingProtectedAppSetup
-        ? STEPS.indexOf("protected-app")
+      : pendingProtectedAppSetup?.status === "install_started" || pendingProtectedAppSetup?.status === "ready"
+        ? STEPS.indexOf("protected-demo")
         : 0
   ));
   const [demoComplete, setDemoComplete] = useState(false);
   const [demoReplayKey, setDemoReplayKey] = useState(0);
   const [skipRequested, setSkipRequested] = useState(false);
-  const [selectedStrategyAreaIds, setSelectedStrategyAreaIds] = useState([]);
   const [selectedCardIds, setSelectedCardIds] = useState([]);
   const [customCardText, setCustomCardText] = useState("");
   const [customCardOpen, setCustomCardOpen] = useState(false);
   const [customCards, setCustomCards] = useState([]);
   const [cardSelectionMessage, setCardSelectionMessage] = useState("");
-  const [selectedStarterPackId, setSelectedStarterPackId] = useState("");
-  const [selectedStarterCommitmentId, setSelectedStarterCommitmentId] = useState("");
   const protectedAppOptions = getFirstProtectedApps(availableLaunchers);
   const [selectedProtectedAppId, setSelectedProtectedAppId] = useState(pendingProtectedAppSetup?.appId ?? protectedAppOptions[0]?.id ?? "instagram");
-  const [protectedAppSetupPhase, setProtectedAppSetupPhase] = useState(pendingProtectedAppSetup?.status === "confirmed" ? "confirmed" : "ready");
+  const [protectedAppSetupPhase, setProtectedAppSetupPhase] = useState(
+    ["ready", "install_started", "confirmed"].includes(pendingProtectedAppSetup?.status)
+      ? pendingProtectedAppSetup.status
+      : "ready",
+  );
   const [protectedAppInterruptionPrefs, setProtectedAppInterruptionPrefs] = useState(initialProtectedAppInterruptionPrefs);
   const protectedAppInterruptionPrefsRef = useRef(initialProtectedAppInterruptionPrefs);
 
-  const orderedPersonalCardOptions = getPersonalCardSuggestions(selectedStrategyAreaIds);
-  const orderedStarterPackOptions = prioritizeByStrategy(STARTER_PACK_OPTIONS, selectedStrategyAreaIds);
-  const orderedStarterCommitmentOptions = prioritizeByStrategy(STARTER_COMMITMENT_OPTIONS, selectedStrategyAreaIds);
+  const orderedPersonalCardOptions = PERSONAL_CARD_OPTIONS;
   const selectedCards = PERSONAL_CARD_OPTIONS.filter((option) => selectedCardIds.includes(option.id));
-  const selectedStarterCommitment = STARTER_COMMITMENT_OPTIONS.find((option) => option.id === selectedStarterCommitmentId) ?? null;
   const selectedCardTexts = [
     ...selectedCards.map((option) => option.text),
     ...customCards.map((card) => card.text),
@@ -316,10 +251,8 @@ function OnboardingContent({
 
   function goBack() {
     const previousStepByCurrent = {
-      intention: "strategy",
-      pack: "intention",
-      commitment: "pack",
-      "protected-app": "commitment",
+      intention: "learn",
+      "protected-app": "intention",
       "protected-demo": "protected-app",
       "protected-setup": "protected-demo",
     };
@@ -333,14 +266,6 @@ function OnboardingContent({
 
   function showSkipSummary() {
     setStepIndex(STEPS.indexOf("skip"));
-  }
-
-  function toggleStrategyArea(areaId) {
-    setSelectedStrategyAreaIds((current) => {
-      if (current.includes(areaId)) return current.filter((id) => id !== areaId);
-      if (current.length >= 3) return current;
-      return [...current, areaId];
-    });
   }
 
   function toggleSelectedCard(cardId) {
@@ -399,23 +324,16 @@ function OnboardingContent({
 
   function savePersonalCard() {
     onSavePersonalSetup({
-      selectedStrategyAreaIds,
+      selectedStrategyAreaIds: [],
       personalCards: selectedCardTexts,
-      selectedStarterPackId,
-      starterCommitment: selectedStarterCommitment
-        ? {
-            id: selectedStarterCommitment.id,
-            promptText: selectedStarterCommitment.text,
-            label: selectedStarterCommitment.label,
-            defaults: selectedStarterCommitment.defaults,
-          }
-        : null,
+      selectedStarterPackId: "",
+      starterCommitment: null,
       launcherId: HOME_ONBOARDING_LOCATION_ID,
       selectedLauncherIds: [],
       shortcutSetup: null,
       appContext: {
         id: HOME_ONBOARDING_LOCATION_ID,
-        label: "MyBishBash Home",
+        label: "myBishBash Home",
         launcherId: null,
         selectedLauncherIds: [],
         onboardingSection: "personal_cards",
@@ -427,21 +345,12 @@ function OnboardingContent({
   }
 
   function saveAndContinue() {
-    setStepIndex(STEPS.indexOf("pack"));
-  }
-
-  function continueFromPack() {
-    setStepIndex(STEPS.indexOf("commitment"));
-  }
-
-  function continueFromCommitment() {
     savePersonalCard();
-    onCommitmentDemoComplete?.({ skipped: !selectedStarterCommitment });
+    onCommitmentDemoComplete?.({ skipped: true });
     setStepIndex(STEPS.indexOf("protected-app"));
   }
 
-  function continueToProtectedAppInstall() {
-    clearPendingProtectedAppSetup();
+  function continueToProtectedAppSetup() {
     saveProtectedAppInterruptionPreference(selectedProtectedAppId, getSelectedProtectedAppInterruptionEnabled());
     openProtectedAppInstall();
   }
@@ -471,14 +380,9 @@ function OnboardingContent({
 
   function openProtectedAppInstall() {
     const installUrl = getLauncherInstallUrl(selectedProtectedApp);
-    writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled());
+    writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled(), "install_started");
     setProtectedAppSetupPhase("install_started");
     window.location.assign(installUrl);
-  }
-
-  function confirmProtectedAppSaved() {
-    clearPendingProtectedAppSetup();
-    setProtectedAppSetupPhase("confirmed");
   }
 
   function finishProtectedAppSetup({ completed }) {
@@ -498,8 +402,8 @@ function OnboardingContent({
     <div className="overlay-screen onboarding-screen">
       <div className="onboarding-shell">
         <header className="onboarding-brand">
-          <img className="onboarding-logo" src={`${import.meta.env.BASE_URL}icons/mybishbash-cover.png`} alt="MyBishBash logo" />
-          <h1>MyBishBash</h1>
+          <BrandMark className="onboarding-logo" alt="myBishBash logo" />
+          <h1>myBishBash</h1>
         </header>
 
         <section className="onboarding-flow-card" aria-live="polite">
@@ -507,16 +411,17 @@ function OnboardingContent({
 
           {currentStep === "learn" ? (
             <OnboardingStep
+              className="onboarding-learn-step"
               titlePath="steps.learn.title"
-              title="Build your phone strategy"
+              title="Start with your Personal Cards"
               bodyPath="steps.learn.body"
-              body="MyBishBash helps you use your phone as a cue system for the habits, standards and commitments you want to keep. Choose what you want your phone to help you reinforce, then connect those reminders to the apps you already open every day."
+              body="You already open your favourite apps every day. myBishBash uses those moments to bring up Personal Cards for the things you genuinely mean to do."
               primaryPath="steps.learn.primary"
-              primaryLabel="Start setting it up"
+              primaryLabel="Set up my Personal Cards"
               onPrimary={goNext}
               primaryDisabled={!demoComplete}
               secondaryPath="steps.learn.secondary"
-              secondaryLabel="Skip setup for now"
+              secondaryLabel="I’ll do this later"
               onSecondary={showSkipSummary}
             >
               <TutorialDemoIntro
@@ -527,39 +432,13 @@ function OnboardingContent({
             </OnboardingStep>
           ) : null}
 
-          {currentStep === "strategy" ? (
-            <OnboardingStep
-              className="onboarding-step-card-selection"
-              titlePath="steps.strategy.title"
-              title="What would you like MyBishBash to help you remember?"
-              bodyPath="steps.strategy.body"
-              body="Choose a few areas. We’ll suggest Personal Cards you can use daily, and you can edit or write your own."
-              primaryPath="steps.strategy.primary"
-              primaryLabel="Continue"
-              onPrimary={goNext}
-              primaryDisabled={selectedStrategyAreaIds.length === 0}
-              secondaryPath="steps.strategy.secondary"
-              secondaryLabel="Skip setup for now"
-              onSecondary={showSkipSummary}
-              canGoBack={canGoBack}
-              onBack={goBack}
-            >
-              <StrategyAreaGrid
-                options={STRATEGY_AREA_OPTIONS}
-                selectedIds={selectedStrategyAreaIds}
-                onToggle={toggleStrategyArea}
-                emptyMessage={content.steps?.strategy?.emptyMessage ?? "Choose at least one area so we can suggest cards that fit you."}
-              />
-            </OnboardingStep>
-          ) : null}
-
           {currentStep === "intention" ? (
             <OnboardingStep
               className="onboarding-step-card-selection"
               titlePath="steps.intention.title"
-              title="Choose your first reminders"
+              title="Let’s start with a few things you’d like to remember more often."
               bodyPath="steps.intention.body"
-              body="Choose suggestions or write your own, up to 5 total."
+              body="Choose up to 5. You can edit them or write your own."
               primaryPath="steps.intention.primary"
               primaryLabel="Continue"
               onPrimary={saveAndContinue}
@@ -591,63 +470,12 @@ function OnboardingContent({
             </OnboardingStep>
           ) : null}
 
-          {currentStep === "pack" ? (
-            <OnboardingStep
-              className="onboarding-step-card-selection"
-              titlePath="steps.pack.title"
-              title="Add a strategy pack"
-              bodyPath="steps.pack.body"
-              body="Packs are ready-made sets of cards for a specific shift."
-              primaryPath="steps.pack.primary"
-              primaryLabel="Continue"
-              onPrimary={continueFromPack}
-              secondaryPath="steps.pack.secondary"
-              secondaryLabel="Skip pack"
-              onSecondary={continueFromPack}
-              canGoBack={canGoBack}
-              onBack={goBack}
-            >
-              <SingleChoiceGrid
-                ariaLabel="Choose a starter strategy pack"
-                options={orderedStarterPackOptions}
-                selectedId={selectedStarterPackId}
-                onSelect={(id) => setSelectedStarterPackId((current) => current === id ? "" : id)}
-              />
-            </OnboardingStep>
-          ) : null}
-
-          {currentStep === "commitment" ? (
-            <OnboardingStep
-              className="onboarding-step-card-selection"
-              titlePath="steps.commitment.title"
-              title="Make one commitment"
-              bodyPath="steps.commitment.body"
-              body="Reminders keep things in mind. Commitments help you make a clear decision for today."
-              primaryPath="steps.commitment.primary"
-              primaryLabel="Continue"
-              onPrimary={continueFromCommitment}
-              secondaryPath="steps.commitment.secondary"
-              secondaryLabel="Skip commitment"
-              onSecondary={continueFromCommitment}
-              canGoBack={canGoBack}
-              onBack={goBack}
-            >
-              <SingleChoiceGrid
-                ariaLabel="Choose one starter commitment"
-                options={orderedStarterCommitmentOptions}
-                selectedId={selectedStarterCommitmentId}
-                onSelect={(id) => setSelectedStarterCommitmentId((current) => current === id ? "" : id)}
-                getLabel={(option) => option.label}
-              />
-            </OnboardingStep>
-          ) : null}
-
           {currentStep === "protected-app" ? (
             <OnboardingStep
               titlePath="steps.protectedApp.title"
-              title="Choose your first phone trigger"
+              title="Where should myBishBash appear first?"
               bodyPath="steps.protectedApp.body"
-              body="Pick an app you open often. MyBishBash will use that moment to bring your strategy back to mind."
+              body="Choose one app you open often. You can add more later."
               primaryPath="steps.protectedApp.primary"
               primaryLabel="Continue"
               onPrimary={() => setStepIndex(STEPS.indexOf("protected-demo"))}
@@ -667,10 +495,10 @@ function OnboardingContent({
 
           {currentStep === "protected-demo" ? (
             <OnboardingStep
-              title={<><EditableText path="steps.protectedDemo.titlePrefix">What should appear before</EditableText> {selectedProtectedAppName}?</>}
-              body={<><EditableText path="steps.protectedDemo.bodyPrefix">App Prompts are optional. They add an extra pause before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens.</EditableText></>}
-              primaryLabel={<><EditableText path="steps.protectedDemo.primaryPrefix">Continue to install</EditableText></>}
-              onPrimary={continueToProtectedAppInstall}
+              title={<><EditableText path="steps.protectedDemo.titlePrefix">Add an extra</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.titleSuffix">prompt?</EditableText></>}
+              body={<><EditableText path="steps.protectedDemo.bodyPrefix">App Prompts add one extra question before</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedDemo.bodySuffix">opens.</EditableText></>}
+              primaryLabel={<EditableText path="steps.protectedDemo.primaryPrefix">Continue</EditableText>}
+              onPrimary={continueToProtectedAppSetup}
               secondaryPath="steps.protectedDemo.secondary"
               secondaryLabel="Choose an app later"
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
@@ -685,32 +513,16 @@ function OnboardingContent({
             </OnboardingStep>
           ) : null}
 
-          {currentStep === "protected-setup" ? (
+          {currentStep === "protected-setup" && protectedAppSetupPhase === "confirmed" ? (
             <OnboardingStep
               className="onboarding-protected-setup-step"
-              title={protectedAppSetupPhase === "confirmed"
-                ? <EditableText path="steps.protectedSetup.confirmedTitle">You’re in.</EditableText>
-                : <><EditableText path="steps.protectedSetup.installPrefix">Install</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedSetup.installSuffix">Launcher</EditableText></>}
-              body={protectedAppSetupPhase === "confirmed"
-                ? (content.steps?.protectedSetup?.confirmedBody ?? "Open your new {appName} icon from your Home Screen to see MyBishBash before {appName} opens.").replaceAll("{appName}", selectedProtectedAppName)
-                : <><EditableText path="steps.protectedSetup.installBodyPrefix">See your Personal Cards before opening</EditableText> {selectedProtectedAppName}<EditableText path="steps.protectedSetup.installBodySuffix">.</EditableText></>}
-              primaryLabel={protectedAppSetupPhase === "confirmed"
-                ? <EditableText path="steps.protectedSetup.continueHome">Continue to Home</EditableText>
-                : protectedAppSetupPhase === "install_started"
-                  ? <EditableText path="steps.protectedSetup.saved">I’ve saved it</EditableText>
-                  : <><EditableText path="steps.protectedSetup.addPrefix">Add</EditableText> {selectedProtectedAppName} <EditableText path="steps.protectedSetup.addSuffix">Launcher</EditableText></>}
+              title={<EditableText path="steps.protectedSetup.confirmedTitle">You’re set up</EditableText>}
+              body={(content.steps?.protectedSetup?.confirmedBody ?? "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.").replaceAll("{appName}", selectedProtectedAppName)}
+              primaryLabel={<EditableText path="steps.protectedSetup.continueHome">Go to Home</EditableText>}
               onPrimary={() => {
-                if (protectedAppSetupPhase === "confirmed") {
-                  finishProtectedAppSetup({ completed: true });
-                  return;
-                }
-                if (protectedAppSetupPhase === "install_started") {
-                  confirmProtectedAppSaved();
-                  return;
-                }
-                openProtectedAppInstall();
+                finishProtectedAppSetup({ completed: true });
               }}
-              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : <EditableText path="steps.protectedSetup.secondary">Choose an app later</EditableText>}
+              secondaryLabel={null}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -727,94 +539,34 @@ function OnboardingContent({
               titlePath="steps.skip.title"
               title="You can set up your first card later."
               bodyPath="steps.skip.body"
-              body="Personal Cards live in MyBishBash. When you are ready, create one reminder and let your phone bring you back to what matters."
+              body="Personal Cards live in myBishBash. When you are ready, create one reminder and let your phone bring you back to what matters."
               primaryPath="steps.skip.primary"
               primaryLabel="Go to Home"
               onPrimary={onSkip}
               canGoBack={!skipRequested}
               onBack={goBack}
             >
-              <OnboardingDemoCard text="What matters most today?" timing="When you need the nudge" place="MyBishBash Home" />
+              <OnboardingDemoCard text="What matters most today?" timing="When you need the nudge" place="myBishBash Home" />
             </OnboardingStep>
           ) : null}
         </section>
       </div>
+      <EditPanel />
     </div>
   );
 }
 
 const STEPS = [
   "learn",
-  "strategy",
   "intention",
-  "pack",
-  "commitment",
   "protected-app",
   "protected-demo",
   "protected-setup",
   "skip",
 ];
 
-function prioritizeByStrategy(options, selectedAreaIds) {
-  if (!selectedAreaIds.length) return options;
-  const selected = new Set(selectedAreaIds);
-  return [...options].sort((left, right) => {
-    const leftMatch = left.areaIds?.some((id) => selected.has(id)) || selected.has(left.areaId);
-    const rightMatch = right.areaIds?.some((id) => selected.has(id)) || selected.has(right.areaId);
-    if (leftMatch === rightMatch) return 0;
-    return leftMatch ? -1 : 1;
-  });
-}
-
 function normalizePersonalCardText(text) {
   return String(text || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ");
-}
-
-function getPersonalCardSuggestions(selectedAreaIds) {
-  const texts = [];
-  const seen = new Set();
-  const addText = (text) => {
-    const key = normalizePersonalCardText(text);
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    texts.push(text);
-  };
-
-  selectedAreaIds.forEach((areaId) => {
-    (PERSONAL_CARD_GROUPS[areaId] || []).forEach(addText);
-  });
-  Object.values(PERSONAL_CARD_GROUPS).flat().forEach(addText);
-
-  const optionsByText = new Map(PERSONAL_CARD_OPTIONS.map((option) => [option.text, option]));
-  return texts.slice(0, PERSONAL_CARD_SUGGESTION_LIMIT).map((text) => optionsByText.get(text)).filter(Boolean);
-}
-
-function StrategyAreaGrid({ options, selectedIds, onToggle, emptyMessage }) {
-  return (
-    <div className="onboarding-reminder-picker">
-      <div className="onboarding-selection-count" aria-live="polite">
-        <span>{selectedIds.length} of 3 selected</span>
-      </div>
-      {!selectedIds.length ? <p className="onboarding-selection-message" aria-live="polite">{emptyMessage}</p> : null}
-      <div className="onboarding-idea-grid onboarding-area-grid" role="group" aria-label="Choose strategy areas">
-        {options.map((option) => {
-          const selected = selectedIds.includes(option.id);
-          return (
-            <button
-              key={option.id}
-              type="button"
-              className={`onboarding-idea-card onboarding-area-chip ${selected ? "selected" : ""}`}
-              onClick={() => onToggle(option.id)}
-              aria-pressed={selected}
-            >
-              <strong>{option.label}</strong>
-              {selected ? <span className="onboarding-idea-check" aria-hidden="true">✓</span> : null}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function SingleChoiceGrid({ options, selectedId, onSelect, ariaLabel, getLabel = (option) => option.title }) {
@@ -1001,12 +753,13 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
     title: `Before ${appName}`,
     body: "Open with intention.",
   };
+  const toggleLabel = (content.steps?.protectedDemo?.toggleLabel ?? "Extra {appName} App Prompt").replaceAll("{appName}", appName);
   return (
     <div className="onboarding-interruption-demo" data-testid="onboarding-interruption-demo">
       <article className="onboarding-interruption-example-card">
-        <p className="onboarding-demo-card-greeting">MyBishBash</p>
+        <p className="onboarding-demo-card-greeting">myBishBash</p>
         <span className="onboarding-demo-card-heart" aria-hidden="true">
-          <HeartGlyph />
+          <BrandMark />
         </span>
         <h3>{demo.title}</h3>
         <i aria-hidden="true" />
@@ -1018,9 +771,8 @@ function ProtectedAppInterruptionDemo({ app, enabled, onChange }) {
       </article>
       <EditableText as="p" className="onboarding-interruption-demo-note" path="steps.protectedDemo.note">This is an example of an App Prompt.</EditableText>
       <div className="onboarding-interruption-toggle" data-testid="onboarding-interruption-toggle">
-        <EditableText as="span" path="steps.protectedDemo.personalLabel">Personal reminders: On</EditableText>
-        <EditableText as="span" path="steps.protectedDemo.toggleLabel">App-specific check-ins</EditableText>
-        <div role="group" aria-label="App-specific check-ins">
+        <span>{toggleLabel}</span>
+        <div role="group" aria-label="Extra App Prompt">
           <button
             type="button"
             className={enabled ? "selected" : ""}
@@ -1053,11 +805,11 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
     "Tap Share.",
     "Tap Add to Home Screen.",
     "Keep the suggested name.",
-    "Return to MyBishBash to continue.",
+    "Return to myBishBash to continue.",
   ];
   const moveLauncherSuffix = (
     content.steps?.protectedSetup?.moveLauncherSuffix ??
-    "normally sits on your Home Screen. Put the original {appName} app in a folder so you open MyBishBash first."
+    "normally sits on your Home Screen. Put the original {appName} app in a folder so you open myBishBash first."
   ).replace("{appName}", appName);
   return (
     <article className="onboarding-protected-setup-card" data-testid="onboarding-protected-app-setup">
@@ -1070,13 +822,13 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
       </div>
       {isConfirmed ? (
         <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
-          <strong>{content.steps?.protectedSetup?.confirmedTitle ?? "You’re in."}</strong>
-          <p>{(content.steps?.protectedSetup?.confirmedBody ?? "Open your new {appName} icon from your Home Screen to see MyBishBash before {appName} opens.").replaceAll("{appName}", appName)}</p>
-          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the MyBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {moveLauncherSuffix}</p>
+          <strong>{content.steps?.protectedSetup?.confirmedTitle ?? "You’re set up"}</strong>
+          <p>{(content.steps?.protectedSetup?.confirmedBody ?? "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.").replaceAll("{appName}", appName)}</p>
+          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the myBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {moveLauncherSuffix}</p>
         </div>
       ) : (
         <>
-          <p>{(content.steps?.protectedSetup?.addLauncherBody ?? "Add this version to your Home Screen. Use it instead of the original {appName} icon when you want MyBishBash to appear first.").replaceAll("{appName}", appName)}</p>
+          <p>{(content.steps?.protectedSetup?.addLauncherBody ?? "Add this version to your Home Screen. Use it instead of the original {appName} icon when you want myBishBash to appear first.").replaceAll("{appName}", appName)}</p>
           <div className="onboarding-install-guidance" data-testid="onboarding-install-guidance">
             <ol className="onboarding-install-steps">
               {steps.map((step, index) => (
@@ -1087,7 +839,7 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
               ))}
             </ol>
           </div>
-          <EditableText as="p" className="onboarding-install-return-note" path="steps.protectedSetup.returnNote">Once it is saved, return to MyBishBash to continue.</EditableText>
+          <EditableText as="p" className="onboarding-install-return-note" path="steps.protectedSetup.returnNote">Once it is added, return to myBishBash to continue.</EditableText>
         </>
       )}
     </article>
@@ -1115,22 +867,14 @@ function OnboardingAppIcon({ launcher, className = "" }) {
   );
 }
 
-function HeartGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 20s-6.6-4.18-8.48-8.26C2.1 8.66 3.78 5.5 6.8 5.5c1.75 0 3.12.9 4.02 2.18C11.72 6.4 13.1 5.5 14.85 5.5c3.02 0 4.7 3.16 3.28 6.24C16.25 15.82 12 20 12 20Z" />
-    </svg>
-  );
-}
-
 function TutorialDemoIntro({ isComplete = false, onReplay }) {
   const { content } = useContentEdit();
   const instagram = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "instagram");
   const whatsapp = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "whatsapp");
   const safari = FALLBACK_AVAILABLE_LAUNCHERS.find((launcher) => launcher.id === "safari");
-  const demoGreeting = getGreeting(new Date());
+  const showFinalLine = content.tutorialDemo?.finalLine !== "";
   return (
-    <div className="onboarding-tutorial-demo" data-testid="onboarding-tutorial-demo" aria-label="MyBishBash opening demo">
+    <div className="onboarding-tutorial-demo" data-testid="onboarding-tutorial-demo" aria-label="myBishBash opening demo">
       <div className="onboarding-demo-orbit" aria-hidden="true" />
       <div className="onboarding-demo-phone-screen" aria-hidden="true">
         <span className="onboarding-demo-phone-app onboarding-demo-phone-app-instagram">
@@ -1157,13 +901,12 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
       <div className="onboarding-demo-cursor" aria-hidden="true" />
       <span className="onboarding-demo-click-ripple" aria-hidden="true" />
       <article className="onboarding-demo-real-card onboarding-demo-real-card-instagram">
-        <span className="onboarding-demo-card-greeting">{demoGreeting}</span>
         <span className="onboarding-demo-card-heart" aria-hidden="true">
-          <HeartGlyph />
+          <BrandMark />
         </span>
-        <EditableText as="h3" path="tutorialDemo.vitaminTitle">Have you taken your vitamins today?</EditableText>
+        <EditableText as="h3" path="tutorialDemo.vitaminTitle">Have you done something that counts towards your fitness today?</EditableText>
         <i aria-hidden="true" />
-        <EditableText as="p" path="tutorialDemo.vitaminBody">A clear cue before the next app-opening moment.</EditableText>
+        {content.tutorialDemo?.vitaminBody ? <EditableText as="p" path="tutorialDemo.vitaminBody">Before Instagram opens.</EditableText> : null}
         <div className="onboarding-real-card-actions" aria-label="Example card choices">
           <button type="button">{content.tutorialDemo?.done ?? "Done"}</button>
           <button type="button">{content.tutorialDemo?.doNow ?? "I’ll do it now"}</button>
@@ -1171,9 +914,8 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         </div>
       </article>
       <article className="onboarding-demo-real-card onboarding-demo-real-card-whatsapp">
-        <span className="onboarding-demo-card-greeting">{demoGreeting}</span>
         <span className="onboarding-demo-card-heart" aria-hidden="true">
-          <HeartGlyph />
+          <BrandMark />
         </span>
         <EditableText as="h3" path="tutorialDemo.sunscreenTitle">Have you put your sunscreen on today?</EditableText>
         <i aria-hidden="true" />
@@ -1200,10 +942,10 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         <OnboardingAppIcon launcher={whatsapp} />
         <EditableText as="span" path="tutorialDemo.whatsappOpens">WhatsApp opens</EditableText>
       </div>
-      <EditableText as="p" className="onboarding-demo-final-line" path="tutorialDemo.finalLine">Set up your phone around the standards you want to keep.</EditableText>
+      {showFinalLine ? <EditableText as="p" className="onboarding-demo-final-line" path="tutorialDemo.finalLine">Set up your phone around the standards you want to keep.</EditableText> : null}
       {isComplete ? (
         <button type="button" className="onboarding-demo-replay" onClick={onReplay}>
-          {content.tutorialDemo?.replay ?? "Replay"}
+          {content.tutorialDemo?.replay ?? "Replay demo"}
         </button>
       ) : null}
     </div>
