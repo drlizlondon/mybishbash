@@ -216,7 +216,7 @@ export function clearSignupHandoffReference() {
   storage?.removeItem(SIGNUP_HANDOFF_REFERENCE_KEY);
 }
 
-function rememberSignupHandoffReference(handoffRef, expiresAt) {
+export function rememberSignupHandoffReference(handoffRef, expiresAt) {
   const storage = getAccessCodeStorage();
   if (!storage || !handoffRef) return false;
   const expiry = Date.parse(expiresAt) || Date.now() + SIGNUP_HANDOFF_TTL_MS;
@@ -227,24 +227,31 @@ function rememberSignupHandoffReference(handoffRef, expiresAt) {
   return true;
 }
 
-export function getSignupHandoffReference(now = Date.now()) {
+export function getSignupHandoffPayload(now = Date.now()) {
   const storage = getAccessCodeStorage();
-  if (!storage) return "";
+  if (!storage) return null;
   const raw = storage.getItem(SIGNUP_HANDOFF_REFERENCE_KEY);
-  if (!raw) return "";
+  if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
     const handoffRef = String(parsed?.handoffRef ?? "").trim();
     const expiresAt = Date.parse(parsed?.expiresAt ?? "");
     if (!handoffRef || !Number.isFinite(expiresAt) || expiresAt <= now) {
       clearSignupHandoffReference();
-      return "";
+      return null;
     }
-    return handoffRef;
+    return {
+      handoffRef,
+      expiresAt: new Date(expiresAt).toISOString(),
+    };
   } catch {
     clearSignupHandoffReference();
-    return "";
+    return null;
   }
+}
+
+export function getSignupHandoffReference(now = Date.now()) {
+  return getSignupHandoffPayload(now)?.handoffRef ?? "";
 }
 
 export function getValidatedGateAccessCode(now = Date.now()) {

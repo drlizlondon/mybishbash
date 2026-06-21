@@ -172,7 +172,34 @@ test('different gate codes map through signup to their access group', async ({ p
   expect(signupAccess.tester_group).toBe('tester');
 });
 
-test('standalone signup recovery points back to the validated browser tab', async ({ page }) => {
+test('installed PWA signup with handoff query opens the create-account form', async ({ page }) => {
+  await seedAuthMock(page);
+  await page.addInitScript(({ handoffKey, handoffsKey }) => {
+    const handoffRef = 'installed-handoff-welcome';
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    window.localStorage.setItem(handoffsKey, JSON.stringify({
+      [handoffRef]: {
+        accessCode: 'WELCOME',
+        expiresAt,
+        claimed: false,
+      },
+    }));
+  }, { handoffKey: SIGNUP_HANDOFF_REFERENCE_KEY, handoffsKey: E2E_SIGNUP_HANDOFFS_KEY });
+
+  await page.goto(`/mybishbash/home?signup=1&handoff=installed-handoff-welcome&handoffExpires=${encodeURIComponent(new Date(Date.now() + 30 * 60 * 1000).toISOString())}`);
+
+  await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
+  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByText('Finish creating your account in the browser tab')).toHaveCount(0);
+  await expect(page.getByLabel('Access code')).toHaveCount(0);
+  await fillSignup(page);
+
+  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  const signupAccess = await page.evaluate(() => JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_LAST_SIGNUP_ACCESS') ?? '{}'));
+  expect(signupAccess.accessCode).toBe('WELCOME');
+});
+
+test('standalone missing-handoff recovery validates code before showing signup', async ({ page }) => {
   await seedAuthMock(page);
   await page.addInitScript(() => {
     Object.defineProperty(window.navigator, 'standalone', { value: true, configurable: true });
@@ -190,10 +217,20 @@ test('standalone signup recovery points back to the validated browser tab', asyn
 
   await page.goto('/mybishbash/home?signup=1');
 
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
-  await expect(page.getByText('Finish creating your account in the browser tab where you entered your code.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Finish setting up MyBishBash' })).toBeVisible();
+  await expect(page.getByText('We couldn’t find your access session. Enter your access code once more to finish creating your account in the app.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Create account in browser instead' })).toHaveAttribute('href', '/mybishbash/home?signup=1');
   await expect(page.getByRole('link', { name: 'Get MyBishBash' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Join waitlist' })).toHaveCount(0);
+  await page.getByLabel('Access code').fill('NOPE');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('That access code didn’t work. Please check it and try again.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toHaveCount(0);
+
+  await page.getByLabel('Access code').fill('WELCOME');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 });
 

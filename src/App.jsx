@@ -68,6 +68,8 @@ import {
   fetchLauncherConfigs,
   fetchOwnAccessProfile,
   getSignupHandoffReference,
+  rememberSignupHandoffReference,
+  validateAndRememberGateAccessCode,
   claimAccessCodeForCurrentUser,
   touchUserProfile,
 } from "./lib/mybishbashSync";
@@ -247,6 +249,22 @@ function consumeHomeAutoLaunchSuppressedAfterDestination() {
 function isStandaloneDisplayMode() {
   if (typeof window === "undefined") return false;
   return Boolean(window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true || window.Capacitor);
+}
+
+function consumeSignupHandoffFromUrl() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  const wantsSignup = params.get("signup") === "1";
+  const handoffRef = String(params.get("handoff") ?? "").trim();
+  if (!wantsSignup || !handoffRef) return;
+
+  const rawExpiresAt = params.get("handoffExpires");
+  const fallbackExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  rememberSignupHandoffReference(handoffRef, rawExpiresAt || fallbackExpiresAt);
+  params.delete("handoff");
+  params.delete("handoffExpires");
+  const nextSearch = params.toString();
+  window.history.replaceState({}, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`);
 }
 
 function getInstalledLauncherShellId() {
@@ -1541,6 +1559,8 @@ function resetDemoOnboardingState() {
 
 function App() {
   if (typeof window !== "undefined") {
+    consumeSignupHandoffFromUrl();
+
     if (shouldStartDemoOnboarding()) {
       resetDemoOnboardingState();
       window.history.replaceState({}, "", `${BASE_PATH}/onboarding`);
@@ -6473,6 +6493,7 @@ function App() {
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
         onPasswordReset={handlePasswordReset}
+        onRecoverSignupAccess={validateAndRememberGateAccessCode}
         onClearError={() => setSyncError("")}
       />
     );
@@ -6486,6 +6507,7 @@ function App() {
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
         onPasswordReset={handlePasswordReset}
+        onRecoverSignupAccess={validateAndRememberGateAccessCode}
         onClearError={() => setSyncError("")}
       />
     );
@@ -6503,6 +6525,7 @@ function App() {
         onSignUp={handleSignUp}
         onLogIn={handleLogIn}
         onPasswordReset={handlePasswordReset}
+        onRecoverSignupAccess={validateAndRememberGateAccessCode}
         onClearError={() => setSyncError("")}
       />
     );
@@ -9165,7 +9188,7 @@ function SyncConnectionScreen(props) {
   );
 }
 
-function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswordReset, onClearError, onOpenLegalModal, launcherName = "" }) {
+function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswordReset, onRecoverSignupAccess, onClearError, onOpenLegalModal, launcherName = "" }) {
   const { content } = useContentEdit();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -9173,12 +9196,16 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
   const [resetStatus, setResetStatus] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetPending, setResetPending] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoveryPending, setRecoveryPending] = useState(false);
+  const [handoffRevision, setHandoffRevision] = useState(0);
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
     return new URLSearchParams(window.location.search).get("signup") !== "1";
   });
   const [agreedToLegal, setAgreedToLegal] = useState(false);
-  const hasSignupHandoff = Boolean(getSignupHandoffReference());
+  const hasSignupHandoff = useMemo(() => Boolean(getSignupHandoffReference()), [handoffRevision]);
   const isDemoMode = isDemoModeEnabled();
 
   const isStandalone = typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
@@ -9188,6 +9215,8 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
   const isStandaloneSignupRecovery = isSignupBlocked && isStandalone;
   const titlePath = isLauncherLogin
     ? "titles.launcher"
+    : isStandaloneSignupRecovery
+      ? "titles.signupRecovery"
     : isAccessDenied || (isSignupBlocked && !isStandaloneSignupRecovery)
       ? "titles.inviteOnly"
       : isLogin
@@ -9197,6 +9226,8 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     ? content.titles.launcher
     : isAccessDenied
       ? content.titles.inviteOnly
+    : isStandaloneSignupRecovery
+      ? content.titles.signupRecovery
     : isSignupBlocked && !isStandaloneSignupRecovery
       ? content.titles.inviteOnly
     : isLogin
@@ -9210,7 +9241,31 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     setShowPassword(false);
     setResetStatus("");
     setResetError("");
+    setRecoveryError("");
     onClearError?.();
+  }
+
+  async function submitSignupRecovery(event) {
+    event.preventDefault();
+    const trimmedCode = recoveryCode.trim();
+    if (!trimmedCode || recoveryPending) return;
+    setRecoveryPending(true);
+    setRecoveryError("");
+    onClearError?.();
+    try {
+      const isValid = await onRecoverSignupAccess?.(trimmedCode);
+      if (!isValid) {
+        setRecoveryError(content.status.recoveryInvalid);
+        return;
+      }
+      setRecoveryCode("");
+      setHandoffRevision((current) => current + 1);
+      setIsLogin(false);
+    } catch {
+      setRecoveryError(content.status.recoveryInvalid);
+    } finally {
+      setRecoveryPending(false);
+    }
   }
 
   function submitExisting(event) {
@@ -9272,9 +9327,33 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
             {isSignupBlocked ? (
               <div className="sync-form">
                 {isStandaloneSignupRecovery ? (
-                  <a className="save-button" href={`${BASE_PATH}/home`}>
-                    <EditableText path="actions.loginSwitch" />
-                  </a>
+                  <>
+                    <form className="sync-form" onSubmit={submitSignupRecovery}>
+                      <div className="field">
+                        <label htmlFor="sync-recovery-code"><EditableText path="form.accessCode" /></label>
+                        <input
+                          id="sync-recovery-code"
+                          className="settings-input"
+                          value={recoveryCode}
+                          onChange={(event) => {
+                            setRecoveryCode(event.target.value);
+                            if (recoveryError) setRecoveryError("");
+                          }}
+                          autoCapitalize="characters"
+                          autoComplete="one-time-code"
+                          placeholder={content.form.accessCodePlaceholder}
+                          required
+                        />
+                      </div>
+                      {recoveryError ? <p className="sync-error" role="alert">{recoveryError}</p> : null}
+                      <button type="submit" className="save-button" disabled={recoveryPending}>
+                        {recoveryPending ? content.form.checkingAccess : content.actions.continue}
+                      </button>
+                    </form>
+                    <a className="text-button sync-secondary-link" href={`${BASE_PATH}/home?signup=1`}>
+                      <EditableText path="actions.createInBrowser" />
+                    </a>
+                  </>
                 ) : (
                   <a className="save-button" href={`${BASE_PATH}/invite`}><EditableText path="actions.getMyBishBash" /></a>
                 )}

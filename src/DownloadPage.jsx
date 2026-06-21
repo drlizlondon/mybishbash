@@ -2,7 +2,7 @@ import "./download.css";
 import { downloadContent } from "./content/downloadContent";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { loadProfile, saveProfile } from "./storage";
-import { getSession, getSignupHandoffReference, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
+import { getSession, getSignupHandoffPayload, getSignupHandoffReference, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
 import { useEffect, useState } from "react";
 
 const BASE = import.meta.env.BASE_URL;
@@ -11,6 +11,58 @@ const DOWNLOAD_HREF = `${BASE}download`;
 const APPS_HREF = `${BASE}apps`;
 const WAITLIST_HREF = `${BASE}early-access`;
 const LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
+
+function buildSignupStartUrl(handoff) {
+  if (typeof window === "undefined" || !handoff?.handoffRef) return `${BASE}home?signup=1`;
+  const startUrl = new URL(`${BASE}home`, window.location.origin);
+  startUrl.searchParams.set("signup", "1");
+  startUrl.searchParams.set("handoff", handoff.handoffRef);
+  startUrl.searchParams.set("handoffExpires", handoff.expiresAt);
+  return startUrl.href;
+}
+
+function useSignupInstallManifest(hasAccess, isLoggedIn) {
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined" || !hasAccess || isLoggedIn) return undefined;
+    const handoff = getSignupHandoffPayload();
+    if (!handoff) return undefined;
+
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (!manifestLink) return undefined;
+
+    const previousHref = manifestLink.getAttribute("href");
+    const manifest = {
+      name: "MyBishBash",
+      short_name: "MyBishBash",
+      id: "https://drlizlondon.github.io/mybishbash/",
+      description: "Private little reminders from yourself.",
+      start_url: buildSignupStartUrl(handoff),
+      scope: `${window.location.origin}${BASE}`,
+      display: "standalone",
+      background_color: "#F7F2EE",
+      theme_color: "#F7F2EE",
+      orientation: "portrait",
+      icons: [
+        { src: `${BASE}icons/mybishbash-cover.png`, sizes: "1254x1254", type: "image/png" },
+        { src: `${BASE}icons/mybishbash-cover.png`, sizes: "1254x1254", type: "image/png", purpose: "any maskable" },
+      ],
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+    const manifestUrl = URL.createObjectURL(manifestBlob);
+    manifestLink.setAttribute("href", manifestUrl);
+    manifestLink.setAttribute("data-signup-start-url", manifest.start_url);
+
+    return () => {
+      if (previousHref) {
+        manifestLink.setAttribute("href", previousHref);
+      } else {
+        manifestLink.removeAttribute("href");
+      }
+      manifestLink.removeAttribute("data-signup-start-url");
+      URL.revokeObjectURL(manifestUrl);
+    };
+  }, [hasAccess, isLoggedIn]);
+}
 
 function hasRolloutAccess() {
   if (typeof window === "undefined") return false;
@@ -191,6 +243,9 @@ function DownloadPageContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [showInstallSuccess, setShowInstallSuccess] = useState(readInstallSuccessState);
+  const hasAccess = hasRolloutAccess() || isLoggedIn;
+  const loggedInInstall = isLoggedIn && content.install.loggedIn;
+  useSignupInstallManifest(authChecked && hasAccess, isLoggedIn);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,9 +271,6 @@ function DownloadPageContent() {
       </main>
     );
   }
-
-  const hasAccess = hasRolloutAccess() || isLoggedIn;
-  const loggedInInstall = isLoggedIn && content.install.loggedIn;
 
   if (!hasAccess) {
     return <DownloadAccessGate />;

@@ -53,6 +53,9 @@ test('WELCOME unlocks the existing download page', async ({ page }) => {
   expect(gateAccess).toBeNull();
   expect(handoff.handoffRef).toMatch(/^e2e-handoff-/);
   expect(typeof handoff.expiresAt).toBe('string');
+  const signupStartUrl = await page.evaluate(() => document.querySelector('link[rel="manifest"]')?.getAttribute('data-signup-start-url'));
+  expect(signupStartUrl).toContain('/mybishbash/home?signup=1');
+  expect(signupStartUrl).toContain('handoff=');
 });
 
 test('wrong rollout code shows retry and waitlist actions', async ({ page }) => {

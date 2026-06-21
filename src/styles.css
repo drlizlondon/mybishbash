@@ -7205,6 +7205,10 @@ body {
   margin: 0;
 }
 
+.sync-form > .sync-secondary-link {
+  justify-self: center;
+}
+
 .sync-auth-switch {
   display: flex;
   flex-wrap: wrap;
