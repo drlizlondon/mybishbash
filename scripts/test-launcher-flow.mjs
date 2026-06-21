@@ -237,8 +237,8 @@ assert.equal(caughtUp.selected, null);
 assert.equal(caughtUp.selectedSource, "none");
 assert.equal(caughtUp.selectionReason, "no_eligible_primary_or_fallback_cards");
 
-assert.match(appSource, /buildEligibleCommitmentLifecycleCards\(normalizedSelectionCards, selectionNow, profile\.timezone\)/);
-assert.match(appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: selectableSelectionCards,[\s\S]{0,500}timezone: profile\.timezone/);
+assert.match(appSource, /function getLaunchPersonalCardPool\(cards = \[\]\) \{[\s\S]{0,220}!isCommitmentCard\(card\)[\s\S]{0,120}cardKind/);
+assert.match(appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedSelectionCards\),[\s\S]{0,500}timezone: profile\.timezone/);
 assert.doesNotMatch(appSource, /selectPersonalFirstLauncherCard\(\{/);
 assert.doesNotMatch(appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assert.match(appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
