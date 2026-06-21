@@ -125,9 +125,9 @@ test('valid code at gate allows signup without an access-code field', async ({ p
   expect(storedGateCode).toBeNull();
   expect(storedHandoff.handoffRef).toMatch(/^e2e-handoff-/);
 
-  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await page.getByRole('button', { name: 'I’ve installed it' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'Create account without installing' }).click();
+  await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
@@ -288,8 +288,8 @@ test('shared device logout clears prior account state before a new signup starts
   await page.getByLabel('Access code').fill('WELCOME');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
-  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
-  await page.getByRole('link', { name: 'Create account without installing' }).click();
+  await page.getByRole('button', { name: 'I’ve installed it' }).click();
+  await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await page.getByLabel('Email').fill('new-shared-device-user@example.com');
   await page.getByLabel('Password').fill('password123');
   await page.getByLabel(/I agree to the Terms/i).check();

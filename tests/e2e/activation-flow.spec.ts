@@ -47,7 +47,7 @@ test('WELCOME unlocks the existing download page', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await expect(page.getByTestId('download-page')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Install MyBishBash', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Install myBishBash', exact: true })).toBeVisible();
   const gateAccess = await page.evaluate(() => window.localStorage.getItem('mybishbash.validated-gate-access-code.v1'));
   const handoff = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '{}'), SIGNUP_HANDOFF_REFERENCE_KEY);
   expect(gateAccess).toBeNull();
@@ -85,7 +85,7 @@ test('direct download after WELCOME is allowed', async ({ page }) => {
   await page.goto('/mybishbash/download');
 
   await expect(page.getByTestId('download-page')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Install MyBishBash', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Install myBishBash', exact: true })).toBeVisible();
 });
 
 test('download page presents Home Screen install flow before the success step', async ({ page }) => {
@@ -94,26 +94,34 @@ test('download page presents Home Screen install flow before the success step', 
 
   await expect(page.getByTestId('download-page')).toBeVisible();
   await expect(page.getByText('Step 1 of 2')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Install MyBishBash', exact: true })).toBeVisible();
-  await expect(page.getByText('Before creating your account, add MyBishBash to your Home Screen.')).toBeVisible();
-  await expect(page.getByText('This only takes about 30 seconds.')).toBeVisible();
-  await expect(page.getByText('iPhone')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Install myBishBash', exact: true })).toBeVisible();
+  await expect(page.getByText('Add myBishBash to your Home Screen so it opens like an app.')).toBeVisible();
+  await expect(page.getByText('On iPhone, use Safari.')).toBeVisible();
+  await expect(page.getByText('On Android, use Chrome.')).toBeVisible();
+  await expect(page.getByText('iPhone', { exact: true })).toBeVisible();
   await expect(page.getByText('Use Safari for the smoothest setup.')).toBeVisible();
-  await expect(page.getByText('Open this page in Safari')).toBeVisible();
-  await expect(page.getByText('Tap the Share button')).toBeVisible();
-  await expect(page.getByText('Scroll and tap Add to Home Screen')).toBeVisible();
-  await expect(page.getByText('Tap Add', { exact: true })).toBeVisible();
-  await expect(page.getByText('Android')).toBeVisible();
+  await expect(page.getByText('Open this page in Safari.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tap Share.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Scroll down and tap Add to Home Screen.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tap Add.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Can’t see Share? Tap the three dots (…) in Safari’s bottom toolbar, then tap Share.')).toBeVisible();
+  await expect(page.getByText('Can’t see the three dots? Tap the website bar at the bottom of Safari first to show the toolbar.')).toBeVisible();
+  await expect(page.getByText('Then open myBishBash from your Home Screen.').first()).toBeVisible();
+  await expect(page.getByRole('img', { name: /iPhone install options: tap Share/i })).toBeVisible();
+  await expect(page.getByText('(…) → Share')).toBeVisible();
+  await expect(page.getByText('Android', { exact: true })).toBeVisible();
   await expect(page.getByText('Use Chrome for the smoothest setup.')).toBeVisible();
-  await expect(page.getByText('Open this page in Chrome')).toBeVisible();
-  await expect(page.getByText('Tap the three dots menu')).toBeVisible();
-  await expect(page.getByText('Tap Add to Home screen or Install app')).toBeVisible();
-  await expect(page.getByText('Tap Add or Install')).toBeVisible();
+  await expect(page.getByText('Open this page in Chrome.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tap the three dots menu.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tap Add to Home screen or Install app.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tap Add or Install.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Android install options: open Chrome/i })).toBeVisible();
   await expect(page.getByText('Next you’ll create your account.')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Why install MyBishBash first?' })).toBeVisible();
-  await expect(page.getByText('It puts MyBishBash on your phone like an app')).toBeVisible();
-  await expect(page.getByText('You’ll use the same process later for the shortcuts you choose')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Why install myBishBash first?' })).toBeVisible();
+  await expect(page.getByText('It puts myBishBash on your phone like an app.')).toBeVisible();
+  await expect(page.getByText('You can come back to Apps when you are ready to add more.')).toBeVisible();
   await expect(page.locator('main')).not.toContainText('PWA');
+  await expect(page.locator('main')).not.toContainText('download');
   await expect(page.locator('main')).not.toContainText('Personal Cards before apps');
   await expect(page.locator('main')).not.toContainText('Reminders before apps');
   await expect(page.locator('main')).not.toContainText('working differently');
@@ -122,15 +130,15 @@ test('download page presents Home Screen install flow before the success step', 
   await expect(page.locator('main')).not.toContainText('Intercept');
   await expect(page.locator('main')).not.toContainText('Fake App');
 
-  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await page.getByRole('button', { name: 'I’ve installed it' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
   await expect(page.getByTestId('download-success-page')).toBeVisible();
   await expect(page.getByRole('heading', { name: "You're in." })).toBeVisible();
-  await expect(page.getByText('Open the MyBishBash app from your Home Screen and create your account.')).toBeVisible();
+  await expect(page.getByText('Open myBishBash from your Home Screen and create your account.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Create account here' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Can’t install it right now?' })).toBeVisible();
-  await expect(page.getByText('Create your account here and use MyBishBash in your browser for now.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Create account without installing' })).toBeVisible();
+  await expect(page.getByText('Create your account here and use myBishBash in your browser for now.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Continue in Browser' })).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Next you’ll create your account');
 
   const installedProfile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
@@ -138,7 +146,7 @@ test('download page presents Home Screen install flow before the success step', 
   expect(installedProfile.hasSkippedHomeScreenInstallPrompt).toBe(false);
   expect(installedProfile.plan).toBe('free');
 
-  await page.getByRole('link', { name: 'Create account without installing' }).click();
+  await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
@@ -148,9 +156,9 @@ test('download success fallback stores incomplete install state and continues to
   await seedGateCode(page, 'WELCOME');
   await page.goto('/mybishbash/download');
 
-  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await page.getByRole('button', { name: 'I’ve installed it' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'Create account without installing' }).click();
+  await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);

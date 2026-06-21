@@ -608,9 +608,9 @@ test('download-logged-in-copy — logged-in install advice does not use signup c
   await page.goto('/mybishbash/download');
 
   await expect(page.getByTestId('download-page')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Add MyBishBash to your Home Screen' })).toBeVisible();
-  await expect(page.getByText('For the best experience, add MyBishBash to your Home Screen so it feels like a normal app.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Back to Apps' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Install myBishBash', exact: true })).toBeVisible();
+  await expect(page.getByText('Add myBishBash to your Home Screen so it opens like an app.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'I’ve installed it' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Continue in Browser' })).toBeVisible();
   await expect(page.getByText('Before creating your account')).toHaveCount(0);
   await expect(page.getByText('Create account without installing')).toHaveCount(0);

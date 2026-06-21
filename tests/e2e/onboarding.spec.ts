@@ -52,9 +52,9 @@ async function startOnboardingFromLandingSignup(page: Page) {
   await page.getByLabel('Access code').fill('WELCOME');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/download$/);
-  await page.getByRole('button', { name: 'I’ve added MyBishBash' }).click();
+  await page.getByRole('button', { name: 'I’ve installed it' }).click();
   await expect(page.getByTestId('download-success-page')).toBeVisible();
-  await page.getByRole('link', { name: 'Create account without installing' }).click();
+  await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
   await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
 

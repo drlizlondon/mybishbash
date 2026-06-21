@@ -102,42 +102,44 @@ function readInstallSuccessState() {
 function PhoneFrame({ variant }) {
   const { content } = useContentEdit();
   const phoneVisual = content.install.phoneVisual;
+  const visualLabel = variant === "safari" ? phoneVisual.iphoneAria : phoneVisual.androidAria;
 
   return (
-    <div className={`download-phone download-phone-${variant}`} aria-hidden="true">
+    <div className={`download-phone download-phone-${variant}`} role="img" aria-label={visualLabel}>
       <div className="download-phone-speaker" />
       {variant === "safari" ? (
         <>
           <div className="download-safari-bar">{phoneVisual.domain}</div>
-          <div className="download-mini-page">
-            <img src={LOGO_SRC} alt="" />
-            <span />
-            <span />
+          <div className="download-visual-stack">
+            <div className="download-route-row download-route-primary">
+              <span>{phoneVisual.share}</span>
+            </div>
+            <div className="download-route-row download-route-fallback">
+              <span>{phoneVisual.fallback}</span>
+            </div>
+            <div className="download-route-arrow" aria-hidden="true" />
+            <strong>{phoneVisual.addToHomeScreen}</strong>
+            <small>{phoneVisual.toolbarHint}</small>
           </div>
-          <div className="download-share-row">
+          <div className="download-safari-toolbar" aria-hidden="true">
             <i />
-            <b />
-            <i className="is-highlighted" />
+            <i className="is-share" />
             <i />
+            <i className="is-dots" />
           </div>
         </>
       ) : null}
-      {variant === "sheet" ? (
-        <div className="download-sheet">
-          <span />
-          <span />
-          <strong>{phoneVisual.addToHomeScreen}</strong>
-          <span />
-        </div>
-      ) : null}
-      {variant === "home" ? (
-        <div className="download-home-grid">
-          <span />
-          <span />
-          <span />
-          <img src={LOGO_SRC} alt="" />
-          <span />
-          <span />
+      {variant === "android" ? (
+        <div className="download-android-visual">
+          <div className="download-android-topbar">
+            <span>Chrome</span>
+            <i aria-hidden="true" />
+          </div>
+          <div className="download-android-menu">
+            <span>{phoneVisual.addToHomeScreen}</span>
+            <span>Install app</span>
+          </div>
+          <div className="download-android-action">Add</div>
         </div>
       ) : null}
     </div>
@@ -147,6 +149,10 @@ function PhoneFrame({ variant }) {
 function PhoneInstallSection({ titlePath, introPath, stepsPath, variant }) {
   const { content } = useContentEdit();
   const steps = stepsPath.split(".").reduce((current, key) => current?.[key], content) ?? [];
+  const helperNotesPath = stepsPath.replace(".steps", ".helperNotes");
+  const helperNotes = helperNotesPath.split(".").reduce((current, key) => current?.[key], content) ?? [];
+  const finalLinePath = stepsPath.replace(".steps", ".finalLine");
+  const finalLine = finalLinePath.split(".").reduce((current, key) => current?.[key], content);
 
   return (
     <details className="download-install-section" open>
@@ -163,6 +169,20 @@ function PhoneInstallSection({ titlePath, introPath, stepsPath, variant }) {
               </EditableText>
             ))}
           </ol>
+          {helperNotes.length ? (
+            <div className="download-helper-notes">
+              {helperNotes.map((note, index) => (
+                <EditableText as="p" path={`${helperNotesPath}.${index}`} key={index}>
+                  {note}
+                </EditableText>
+              ))}
+            </div>
+          ) : null}
+          {finalLine ? (
+            <EditableText as="p" className="download-final-line" path={finalLinePath}>
+              {finalLine}
+            </EditableText>
+          ) : null}
         </div>
         <PhoneFrame variant={variant} />
       </div>
@@ -356,7 +376,7 @@ function DownloadPageContent() {
           <PhoneInstallSection
             titlePath="install.android.title"
             introPath="install.android.intro"
-            variant="home"
+            variant="android"
             stepsPath="install.android.steps"
           />
         </div>
