@@ -317,6 +317,33 @@ test('bottom navigation starts each destination at the top of the page', async (
   await expect.poll(() => getAppScrollTop(page)).toBe(0);
 });
 
+test('stale Pages and launcher routes fall back without breaking bottom navigation', async ({ page }) => {
+  const assertNoRuntimeIssues = installRuntimeAudit(page);
+  await seedState(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem('mybishbash.installed-launcher-shell.v1', JSON.stringify({ launcher_id: 'retired-app' }));
+    window.localStorage.setItem('mybishbash.active-protected-app-context.v1', JSON.stringify({
+      launcherId: 'retired-app',
+      createdAt: Date.now(),
+    }));
+  });
+
+  await page.goto('/mybishbash/?route=%2Fmybishbash%2Fapps%2Fretired-app');
+  await expectAppRoute(page, '/apps');
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
+  await tapNavAndAssert(page, navItems[0]);
+
+  await page.goto('/mybishbash/apps/retired-app');
+  await expectAppRoute(page, '/apps');
+  await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
+  await tapNavAndAssert(page, navItems[1]);
+
+  await page.goto('/mybishbash/intercept/retired-app');
+  await expectAppRoute(page, '/home');
+  await tapNavAndAssert(page, navItems[4]);
+  assertNoRuntimeIssues();
+});
+
 test('settings entered after shell app controls keeps main navigation working', async ({ page }) => {
   const assertNoRuntimeIssues = installRuntimeAudit(page);
   await seedState(page, { cards: [card('shell-settings-nav-card', 'Shell settings nav card')] });

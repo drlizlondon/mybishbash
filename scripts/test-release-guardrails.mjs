@@ -117,7 +117,7 @@ assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
 assertMatch("Explore tab renders ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<ExplorePanel/);
 assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
 assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
-assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /<nav className="bottom-nav"[\s\S]*data-testid="bottom-nav-home"[\s\S]*data-testid="bottom-nav-library"[\s\S]*data-testid="bottom-nav-log"[\s\S]*data-testid="bottom-nav-explore"[\s\S]*data-testid="bottom-nav-apps"[\s\S]*<\/nav>/);
+assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /const BOTTOM_NAV_ITEMS = \[[\s\S]*testId: "bottom-nav-home"[\s\S]*testId: "bottom-nav-library"[\s\S]*testId: "bottom-nav-log"[\s\S]*testId: "bottom-nav-explore"[\s\S]*testId: "bottom-nav-apps"[\s\S]*\];/);
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
 assertNoMatch("bottom nav no longer exposes Settings", appSource, /data-testid="bottom-nav-settings"/);
 assertMatch("Settings is reachable from the masthead affordance", appSource, /data-testid="settings-gear"/);

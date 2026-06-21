@@ -189,7 +189,8 @@ function resolveTheme(theme) {
 }
 
 const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-const LEGACY_BASE_PATHS = ["/bishbash"];
+const PRODUCTION_BASE_PATH = "/" + "mybishbash";
+const LEGACY_BASE_PATHS = [PRODUCTION_BASE_PATH, "/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
@@ -219,6 +220,14 @@ const COMMITMENT_TIMING_OPTIONS = [
   { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
 ];
 const APPS_OPTION_IDS = ["whatsapp", "instagram", "youtube", "safari"];
+const APP_SHELL_TABS = ["home", "library", "log", "explore", "apps", "settings"];
+const BOTTOM_NAV_ITEMS = [
+  { id: "home", label: "Home", path: "/home", testId: "bottom-nav-home", Glyph: HomeGlyph },
+  { id: "library", label: "Library", path: "/library", testId: "bottom-nav-library", Glyph: BookGlyph },
+  { id: "log", label: "Log", path: "/log", testId: "bottom-nav-log", Glyph: LogGlyph },
+  { id: "explore", label: "Explore", path: "/explore", testId: "bottom-nav-explore", Glyph: PacksGlyph },
+  { id: "apps", label: "Apps", path: "/apps", testId: "bottom-nav-apps", Glyph: AppsGlyph },
+];
 
 function hasSignupOnboardingPending() {
   if (typeof window === "undefined") return false;
@@ -524,9 +533,11 @@ function normalizeRoutePath(path) {
 }
 
 function getPathRelativeToKnownBase(pathname) {
-  const knownBasePaths = [BASE_PATH, ...LEGACY_BASE_PATHS].filter(Boolean).sort((a, b) => b.length - a.length);
-  const matchingBase = knownBasePaths.find((basePath) => pathname === basePath || pathname.startsWith(`${basePath}/`));
-  return matchingBase ? pathname.slice(matchingBase.length) || "/" : pathname || "/";
+  const cleanPathname = String(pathname || "/");
+  const knownBasePaths = Array.from(new Set([BASE_PATH, ...LEGACY_BASE_PATHS].filter(Boolean)))
+    .sort((a, b) => b.length - a.length);
+  const matchingBase = knownBasePaths.find((basePath) => cleanPathname === basePath || cleanPathname.startsWith(`${basePath}/`));
+  return matchingBase ? cleanPathname.slice(matchingBase.length) || "/" : cleanPathname || "/";
 }
 
 function getRouteFromLocation(setupComplete) {
@@ -542,7 +553,7 @@ function getRouteFromLocation(setupComplete) {
     return `/intercept/${disguisedVersion}`;
   }
 
-  const rawPath = routeParam || getPathRelativeToKnownBase(window.location.pathname);
+  const rawPath = routeParam ? getPathRelativeToKnownBase(routeParam) : getPathRelativeToKnownBase(window.location.pathname);
   const normalized = normalizeRoutePath(rawPath);
 
   if (routeParam) {
@@ -613,9 +624,63 @@ function parseRoute(path) {
   if (appsMatch && isKnownLauncher(appsMatch[1])) {
     return { kind: "apps", path: normalized, tab: "apps", versionId: appsMatch[1] };
   }
+  if (appsMatch) {
+    return { kind: "apps", path: "/apps", tab: "apps", versionId: null, fallbackFrom: normalized };
+  }
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
-  return { kind: "home", path: "/home", tab: "home" };
+  return { kind: "home", path: "/home", tab: "home", fallbackFrom: normalized };
+}
+
+function getSafeAppTab(tab) {
+  return APP_SHELL_TABS.includes(tab) ? tab : "home";
+}
+
+function getBottomNavItems(items = BOTTOM_NAV_ITEMS) {
+  return items.filter((item) =>
+    item &&
+    typeof item.id === "string" &&
+    typeof item.label === "string" &&
+    typeof item.path === "string" &&
+    typeof item.testId === "string" &&
+    typeof item.Glyph === "function"
+  );
+}
+
+class AppShellErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("[APP_SHELL_ERROR]", error, info);
+  }
+
+  componentDidUpdate(previousProps) {
+    if (this.state.error && previousProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    return (
+      <main className="sync-screen" data-testid="app-shell-error">
+        <BrandMark />
+        <h1>MyBishBash needs a quick reset.</h1>
+        <p>Something in this view did not load cleanly.</p>
+        <button type="button" className="save-button" onClick={this.props.onRecover}>
+          Back to Home
+        </button>
+      </main>
+    );
+  }
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -1777,7 +1842,21 @@ function App() {
     previousOverlayDebugRef.current = next;
   }, [cards, overlay, route.path]);
 
-  const activeTab = route.tab ?? "home";
+  useEffect(() => {
+    if (!route.fallbackFrom && route.path === routePath) return;
+    const nextPath = route.path || "/home";
+    if (routePath !== nextPath) {
+      setRoutePath(nextPath);
+    }
+    if (typeof window !== "undefined") {
+      const nextUrl = `${BASE_PATH}${nextPath === "/" ? "" : nextPath}`;
+      if (window.location.pathname !== nextUrl) {
+        window.history.replaceState({}, "", nextUrl);
+      }
+    }
+  }, [route.fallbackFrom, route.path, routePath]);
+
+  const activeTab = getSafeAppTab(route.tab);
   const activeInterceptionVersion = useMemo(
     () =>
       route.kind === "intercept"
@@ -6524,6 +6603,10 @@ function App() {
       getDisplayMode={getAppDisplayMode}
     >
       <div className="grain" />
+      <AppShellErrorBoundary
+        resetKey={`${screen}:${route.path}:${activeTab}:${hideAppShell ? "hidden" : "visible"}`}
+        onRecover={() => navigateTo("/home", { replace: true })}
+      >
       {screen === "library" && !hideAppShell ? (
       <div className={`app-shell app-mood theme-${getThemeClass(mood)} ${activeTab === "home" ? "home-shell" : ""} ${isShellAppSettingsRoute ? "shell-app-settings-shell" : ""}`.trim()} data-testid="app-shell">
           <div className="app-inner">
@@ -6727,39 +6810,22 @@ function App() {
 
           {!isShellAppSettingsRoute ? (
           <nav className="bottom-nav" aria-label="Primary">
-            <button type="button" className={`nav-item ${activeTab === "home" ? "active" : ""}`} data-testid="bottom-nav-home" onClick={() => navigateTo("/home")}>
-              <HomeGlyph />
-              <span>Home</span>
-            </button>
-            <button type="button" className={`nav-item ${activeTab === "library" ? "active" : ""}`} data-testid="bottom-nav-library" onClick={() => {
-              signalHomeSpotlightAction("library");
-              setLibraryFocusMode(null);
-              navigateTo("/library");
-            }}>
-              <BookGlyph />
-              <span>Library</span>
-            </button>
-            <button type="button" className={`nav-item ${activeTab === "log" ? "active" : ""}`} data-testid="bottom-nav-log" onClick={() => {
-              signalHomeSpotlightAction("log");
-              navigateTo("/log");
-            }}>
-              <LogGlyph />
-              <span>Log</span>
-            </button>
-            <button type="button" className={`nav-item ${activeTab === "explore" ? "active" : ""}`} data-testid="bottom-nav-explore" onClick={() => {
-              signalHomeSpotlightAction("explore");
-              navigateTo("/explore");
-            }}>
-              <PacksGlyph />
-              <span>Explore</span>
-            </button>
-            <button type="button" className={`nav-item ${activeTab === "apps" ? "active" : ""}`} data-testid="bottom-nav-apps" onClick={() => {
-              signalHomeSpotlightAction("apps");
-              navigateTo("/apps");
-            }}>
-              <AppsGlyph />
-              <span>Apps</span>
-            </button>
+            {getBottomNavItems().map(({ id, label, path, testId, Glyph }) => (
+              <button
+                type="button"
+                className={`nav-item ${activeTab === id ? "active" : ""}`}
+                data-testid={testId}
+                key={id}
+                onClick={() => {
+                  signalHomeSpotlightAction(id);
+                  if (id === "library") setLibraryFocusMode(null);
+                  navigateTo(path);
+                }}
+              >
+                <Glyph />
+                <span>{label}</span>
+              </button>
+            ))}
           </nav>
           ) : null}
           {shouldShowHomeSpotlightTour ? (
@@ -6775,6 +6841,7 @@ function App() {
           ) : null}
         </div>
       ) : null}
+      </AppShellErrorBoundary>
 
       {screen === "onboarding" ? (
         <Onboarding
