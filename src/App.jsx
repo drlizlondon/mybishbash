@@ -198,6 +198,7 @@ const ACTIVE_PROTECTED_APP_CONTEXT_TTL_MS = 8 * 60 * 60 * 1000;
 const NATIVE_SCHEME_FALLBACK_MS = 1400;
 const INSTALLED_LAUNCHER_SHELL_KEY = "mybishbash.installed-launcher-shell.v1";
 const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalone-launcher-recovery.v1";
+const SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY = "mybishbash.suppress-installed-shell-card-context.v1";
 const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
@@ -276,6 +277,33 @@ function consumeStandaloneLauncherRecoverySuppression() {
       window.sessionStorage.removeItem(SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY);
     }
     return value;
+  } catch {
+    return false;
+  }
+}
+
+function suppressInstalledShellCardContext() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY, "true");
+  } catch {
+    // Session storage can be unavailable in constrained browser contexts.
+  }
+}
+
+function clearInstalledShellCardContextSuppression() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY);
+  } catch {
+    // Session storage can be unavailable in constrained browser contexts.
+  }
+}
+
+function isInstalledShellCardContextSuppressed() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY) === "true";
   } catch {
     return false;
   }
@@ -1236,6 +1264,15 @@ function persistActiveProtectedAppContext(launcherId) {
   return nextContext;
 }
 
+function clearActiveProtectedAppContext() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(ACTIVE_PROTECTED_APP_CONTEXT_KEY);
+  } catch {
+    // Session storage can be unavailable in private or embedded contexts.
+  }
+}
+
 function buildLaunchSessionForRoute(route) {
   if (route?.kind === "intercept" && isKnownLauncher(route.versionId)) {
     return buildLaunchSession("fake_launcher", route.versionId);
@@ -2006,6 +2043,7 @@ function App() {
 
   useEffect(() => {
     if (route.kind === "intercept" && isKnownLauncher(route.versionId)) {
+      clearInstalledShellCardContextSuppression();
       setActiveProtectedAppContext(persistActiveProtectedAppContext(route.versionId));
       setLaunchSession((current) => {
         if (current?.entrySurface === "fake_launcher" && current?.launcherId === route.versionId) {
@@ -2059,8 +2097,9 @@ function App() {
   }
 
   function buildRevealOverlayForCurrentShell(cardId) {
-    const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current, getFakeLauncherShellContextId());
-    const installedLauncherId = getFakeLauncherShellContextId() || fakeContext?.versionId;
+    const installedShellId = isInstalledShellCardContextSuppressed() ? null : getFakeLauncherShellContextId();
+    const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current, installedShellId);
+    const installedLauncherId = fakeContext?.versionId;
     if (installedLauncherId) {
       const nextSession = buildLaunchSession("fake_launcher", installedLauncherId);
       persistLaunchSession(nextSession);
@@ -3708,6 +3747,14 @@ function App() {
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
+    const nextRoute = parseRoute(normalized);
+    if (nextRoute.kind === "settings") {
+      setShellSettingsVersionId(null);
+      setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
+      suppressInstalledShellCardContext();
+      clearActiveProtectedAppContext();
+      setActiveProtectedAppContext(null);
+    }
     const url = `${BASE_PATH}${normalized === "/" ? "" : normalized}`;
     window.history[replace ? "replaceState" : "pushState"]({}, "", url);
     setRoutePath(normalized);
@@ -6597,6 +6644,9 @@ function App() {
                   onOpenMyBishBash={() => {
                     setShellSettingsVersionId(null);
                     setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
+                    suppressInstalledShellCardContext();
+                    clearActiveProtectedAppContext();
+                    setActiveProtectedAppContext(null);
                     navigateTo("/apps");
                   }}
                 />
@@ -6687,7 +6737,7 @@ function App() {
                   onRestoreActionCards={handleRestoreActionCards}
                   interruptionPacks={interruptionPacks}
                   onOpenInterruptionPack={setSelectedPackDetail}
-                  launcherContext={launcherContext}
+                  launcherContext={NORMAL_LAUNCHER_CONTEXT}
                   onLogLauncherEvent={logLauncherEvent}
                   morningSummaryDebug={morningSummaryDebug}
                   onShowMorningSummaryNow={showMorningSummaryNow}

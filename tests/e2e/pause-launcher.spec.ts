@@ -863,6 +863,55 @@ test('WhatsApp shell only shows WhatsApp controls', async ({ page }) => {
   await expect(page.getByTestId('apps-manage-all')).toHaveText('Manage all apps');
 });
 
+test('main app cards do not inherit stale app context after Manage all apps', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('today-shell-leak', 'Today shell leak card')],
+    appIds: ['whatsapp', 'instagram'],
+    enabledAppIds: ['whatsapp', 'instagram'],
+  });
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'mybishbash.installed-launcher-shell.v1',
+      JSON.stringify({
+        launcher_id: 'whatsapp',
+        launch_path: '/intercept/whatsapp',
+        updated_at: '2026-06-01T12:00:00.000Z',
+      }),
+    );
+    window.sessionStorage.setItem(
+      'mybishbash.active-protected-app-context.v1',
+      JSON.stringify({
+        launcherId: 'instagram',
+        updatedAt: Date.now(),
+      }),
+    );
+  });
+
+  await page.goto('/mybishbash/intercept/whatsapp');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await page.getByTestId('dashboard-shortcut').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
+  await expect(page.getByTestId('protected-app-whatsapp')).toBeVisible();
+  await expect(page.getByTestId('protected-app-instagram')).toHaveCount(0);
+  await expect(page.getByTestId('bottom-nav-home')).toHaveCount(0);
+
+  await page.getByTestId('apps-manage-all').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByTestId('active-protected-app-bypass')).toHaveCount(0);
+
+  await page.getByTestId('bottom-nav-home').click();
+  await expect(page.getByTestId('home-progress-card')).toBeVisible();
+  await page.getByTestId('home-progress-card').click();
+  await expect(page.getByTestId('today-personal-card-today-shell-leak')).toBeVisible();
+  await page.getByTestId('today-personal-card-today-shell-leak').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/card\/today-shell-leak$/);
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByTestId('fake-launcher-instagram')).toHaveCount(0);
+  await expect(page.getByTestId('fake-launcher-whatsapp')).toHaveCount(0);
+});
+
 test('settings-no-app-behaviour-owner — Settings no longer owns app behaviour management', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps6', 'Settings ownership card')] });
   await page.goto('/mybishbash/settings');

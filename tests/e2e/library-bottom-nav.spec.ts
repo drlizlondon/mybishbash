@@ -317,6 +317,44 @@ test('bottom navigation starts each destination at the top of the page', async (
   await expect.poll(() => getAppScrollTop(page)).toBe(0);
 });
 
+test('settings entered after shell app controls keeps main navigation working', async ({ page }) => {
+  const assertNoRuntimeIssues = installRuntimeAudit(page);
+  await seedState(page, { cards: [card('shell-settings-nav-card', 'Shell settings nav card')] });
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'mybishbash.installed-launcher-shell.v1',
+      JSON.stringify({
+        launcher_id: 'safari',
+        launch_path: '/intercept/safari',
+        updated_at: '2026-06-20T12:00:00.000Z',
+      }),
+    );
+  });
+
+  await page.goto('/mybishbash/intercept/safari');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await page.getByTestId('dashboard-shortcut').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/safari$/);
+  await expect(page.getByTestId('protected-app-safari')).toBeVisible();
+  await expect(page.getByTestId('bottom-nav-home')).toHaveCount(0);
+
+  await page.getByTestId('apps-manage-all').click();
+  await expectAppRoute(page, '/apps');
+  await expect(page.getByTestId('bottom-nav-home')).toBeVisible();
+  await assertInteractionCleanup(page);
+
+  await page.getByTestId('settings-gear').click();
+  await page.getByRole('button', { name: 'My Account' }).click();
+  await expectAppRoute(page, '/settings');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();
+  await assertInteractionCleanup(page);
+
+  await tapNavAndAssert(page, navItems[0]);
+  await tapNavAndAssert(page, navItems[4]);
+  assertNoRuntimeIssues();
+});
+
 test('pre-launch journey audit keeps bottom nav tappable', async ({ page }) => {
   const assertNoRuntimeIssues = installRuntimeAudit(page);
   await seedState(page);
