@@ -3,8 +3,8 @@
   const ONBOARDING_PENDING_KEY = "mybishbash.onboarding-protected-app-setup-pending.v1";
   const NORMAL_APP_LAUNCHER = {
     id: "mybishbash",
-    displayName: "MyBishBash",
-    name: "MyBishBash",
+    displayName: "myBishBash",
+    name: "myBishBash",
     iconSrc: `${appBasePath}/icons/mybishbash-cover.png`,
     manifestPath: `${appBasePath}/manifest.webmanifest`,
     launchPath: "/home",
@@ -33,7 +33,7 @@
   const version = { ...launcher, ...storedLauncher };
   const iconSrc = version.customIconSrc || version.iconSrc;
 
-  document.title = version.id === "mybishbash" ? "MyBishBash" : `${version.displayName || version.name} · MyBishBash`;
+  document.title = version.id === "mybishbash" ? "myBishBash" : `${version.displayName || version.name} · myBishBash`;
 
   const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   if (appleTitle) appleTitle.setAttribute("content", version.displayName || version.name);

@@ -76,7 +76,7 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
   const installHtml = readFileSync(installPath, "utf8");
   assert.match(
     installHtml,
-    new RegExp(`Add [\\s\\S]{0,120}${escapeRegExp(launcher.displayName)}[\\s\\S]{0,120} with MyBishBash`),
+    new RegExp(`Add [\\s\\S]{0,120}${escapeRegExp(launcher.displayName)}[\\s\\S]{0,120} with myBishBash`),
   );
   assert.match(
     installHtml,
@@ -163,7 +163,7 @@ assert.equal(whatsappManifest.start_url, "https://drlizlondon.github.io/mybishba
 assert.equal(whatsappManifest.display, "standalone");
 assert.match(
   readFileSync(whatsappInstallPath, "utf8"),
-  /Add [\s\S]{0,120}WhatsApp[\s\S]{0,120} with MyBishBash/,
+  /Add [\s\S]{0,120}WhatsApp[\s\S]{0,120} with myBishBash/,
 );
 
 const launchersWithUnknownCloudConfig = mergeLauncherConfigs([

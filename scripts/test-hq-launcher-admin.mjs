@@ -253,8 +253,8 @@ assert.match(
 );
 assert.match(
   appSource,
-  /\{version\.requiresRelease \? \(/,
-  "Settings must not render install links for apps that still require release promotion",
+  /installableHomeScreenVersions = Object\.values\(homeScreenVersions\)\.filter\([\s\S]{0,300}isLauncherVisibleInContext\(version, \{ testerStatus: settingsTesterStatus, context: LAUNCHER_CONTEXTS\.SETTINGS \}\)/,
+  "Settings install links must use launcher availability so unreleased apps stay hidden",
 );
 
 // ── Custom rows in the merged HQ list ────────────────────────────────────────
