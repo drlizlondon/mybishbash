@@ -4643,6 +4643,45 @@ textarea {
   color: #8c4f43;
 }
 
+.account-delete-card {
+  border: 1px solid rgba(140, 79, 67, 0.18);
+}
+
+.danger-button {
+  background: linear-gradient(180deg, #b35d4f 0%, #8c4f43 100%);
+  color: #fff8f4;
+  box-shadow: 0 12px 24px rgba(140, 79, 67, 0.18);
+}
+
+.delete-account-modal {
+  display: grid;
+  gap: 14px;
+}
+
+.delete-account-backdrop {
+  align-items: center;
+  padding-bottom: 20px;
+  z-index: 100300;
+}
+
+.delete-account-modal h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 28px;
+  line-height: 1.12;
+  color: var(--charcoal);
+}
+
+.delete-account-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 10px;
+}
+
+.delete-account-actions .pack-button {
+  margin-top: 0;
+}
+
 .custom-pack-message-grid {
   display: grid;
   gap: 12px;

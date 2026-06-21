@@ -26,6 +26,7 @@ const SIGNUP_HANDOFF_REFERENCE_KEY = "mybishbash.signup-handoff-ref.v1";
 const SIGNUP_HANDOFF_TTL_MS = 30 * 60 * 1000;
 const E2E_AUTH_SESSION_KEY = "MYBISHBASH_E2E_AUTH_SESSION";
 const E2E_FAIL_NEXT_ACCESS_PROFILE_KEY = "MYBISHBASH_E2E_FAIL_NEXT_ACCESS_PROFILE";
+const E2E_FAIL_DELETE_ACCOUNT_KEY = "MYBISHBASH_E2E_FAIL_DELETE_ACCOUNT";
 const E2E_SIGNUP_HANDOFFS_KEY = "MYBISHBASH_E2E_SIGNUP_HANDOFFS";
 
 function isDemoMode() {
@@ -644,6 +645,38 @@ export async function logOut() {
   const client = requireSupabase();
   const { error } = await client.auth.signOut();
   if (error) throw error;
+}
+
+export async function deleteCurrentAccount() {
+  if (isE2EAuthMockMode()) {
+    await wait(50);
+    if (window.localStorage.getItem(E2E_FAIL_DELETE_ACCOUNT_KEY) === "true") {
+      throw new Error("We could not delete your account just now. Please try again in a moment.");
+    }
+    clearE2EAuthSession();
+    return;
+  }
+
+  const client = requireSupabase();
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  if (sessionError) throw sessionError;
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) {
+    throw new Error("Please log in again before deleting your account.");
+  }
+
+  const { data, error } = await client.functions.invoke("delete-account", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+
+  const { error: signOutError } = await client.auth.signOut({ scope: "local" });
+  if (signOutError) {
+    console.warn("Could not clear Supabase auth storage after account deletion", signOutError);
+  }
 }
 
 export async function savePushSubscription(userId, subscription, userAgent) {

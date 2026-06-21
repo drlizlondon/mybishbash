@@ -60,6 +60,7 @@ import {
   logIn,
   resetPassword,
   logOut,
+  deleteCurrentAccount,
   markNotificationOpened,
   saveLauncherEvent,
   saveNotificationPreferences,
@@ -6056,6 +6057,28 @@ function App() {
     setSyncError("");
   }
 
+  async function handleDeleteAccount() {
+    if (cloudSaveTimerRef.current) {
+      window.clearTimeout(cloudSaveTimerRef.current);
+      cloudSaveTimerRef.current = null;
+    }
+    if (cardSaveTimerRef.current) {
+      window.clearTimeout(cardSaveTimerRef.current);
+      cardSaveTimerRef.current = null;
+    }
+    localDirtyRef.current = false;
+    setSyncError("");
+
+    await deleteCurrentAccount();
+
+    setSession(null);
+    signupOnboardingPendingRef.current = false;
+    setSignupOnboardingPending(false);
+    resetLocalMyBishBashState();
+    setSyncStatus("needs-connection");
+    setSyncError("");
+  }
+
   async function handleRefreshSession() {
     console.log("[AUTH] Refreshing session manually...");
     try {
@@ -6766,6 +6789,7 @@ function App() {
                   onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
           session={session}
                   onLogOut={handleLogOut}
+                  onDeleteAccount={handleDeleteAccount}
                   onRefreshSession={handleRefreshSession}
                   onRefreshAppShell={refreshAppShell}
                   onResetSharedState={handleResetSharedState}
@@ -10183,6 +10207,7 @@ function SettingsPanel({
   onSetGlobalInterruptionMode,
   session,
   onLogOut,
+  onDeleteAccount,
   onRefreshSession,
   onRefreshAppShell,
   onResetSharedState,
@@ -10210,6 +10235,7 @@ function SettingsPanel({
   const [draftWindowDefs, setDraftWindowDefs] = useState(timingWindowsPrefs);
   const [windowSaveStatus, setWindowSaveStatus] = useState(null); // null | "saved" | { error: string }
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState("mybishbash");
 
   const isInsideFakeLauncher =
@@ -10405,6 +10431,15 @@ function SettingsPanel({
         </div>
         <AuthDiagnostics session={session} />
       </div>
+      <div className="settings-card settings-compact account-delete-card" data-testid="delete-account-settings-card">
+        <div className="settings-version-heading">
+          <p>Delete account</p>
+          <span>This permanently deletes your MyBishBash account, cards, settings and saved app data. This cannot be undone.</span>
+        </div>
+        <button type="button" className="pack-button secondary danger-soft-button" onClick={() => setIsDeleteAccountModalOpen(true)}>
+          Delete account
+        </button>
+      </div>
       <div className="settings-card">
         <div className="settings-version-heading">
           <p>Notifications</p>
@@ -10496,7 +10531,85 @@ function SettingsPanel({
           onClose={() => setIsRestoreModalOpen(false)}
         />
       ) : null}
+      {isDeleteAccountModalOpen ? (
+        <DeleteAccountModal
+          email={session?.user?.email ?? ""}
+          onDelete={onDeleteAccount}
+          onClose={() => setIsDeleteAccountModalOpen(false)}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function DeleteAccountModal({ email, onDelete, onClose }) {
+  const [confirmationText, setConfirmationText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const canDelete = confirmationText.trim() === "DELETE" && !isDeleting;
+
+  async function handleDelete() {
+    if (!canDelete) return;
+    setIsDeleting(true);
+    setError("");
+    try {
+      await onDelete();
+    } catch (deleteError) {
+      console.error("[DELETE_ACCOUNT_ERROR]", deleteError);
+      setError(getSyncErrorMessage(deleteError, "We could not delete your account just now. Please try again in a moment."));
+      setIsDeleting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop delete-account-backdrop" onClick={isDeleting ? undefined : onClose}>
+      <div
+        className="composer delete-account-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-account-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="composer-heading">
+          <p className="eyebrow">Delete account</p>
+          <button type="button" className="text-button" onClick={onClose} disabled={isDeleting}>
+            Close
+          </button>
+        </div>
+        <h3 id="delete-account-title">Delete your MyBishBash account?</h3>
+        <p className="pack-editor-copy">
+          This permanently deletes your MyBishBash account, cards, settings and saved app data. This cannot be undone.
+        </p>
+        {email ? <p className="tiny-note">Signed in as {email}</p> : null}
+        <label className="field">
+          <span>Type DELETE to confirm</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={confirmationText}
+            onChange={(event) => setConfirmationText(event.target.value)}
+            disabled={isDeleting}
+            autoComplete="off"
+            data-testid="delete-account-confirmation-input"
+          />
+        </label>
+        {error ? <p className="sync-error" role="alert">{error}</p> : null}
+        <div className="delete-account-actions">
+          <button type="button" className="pack-button secondary" onClick={onClose} disabled={isDeleting}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="pack-button danger-button"
+            onClick={handleDelete}
+            disabled={!canDelete}
+            data-testid="delete-account-final-button"
+          >
+            {isDeleting ? "Deleting..." : "Delete my account"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

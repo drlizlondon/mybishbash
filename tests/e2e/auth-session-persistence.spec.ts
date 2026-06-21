@@ -10,6 +10,7 @@ declare global {
 const AUTH_SESSION_KEY = 'MYBISHBASH_E2E_AUTH_SESSION';
 const AUTH_MOCK_KEY = 'MYBISHBASH_E2E_AUTH_MOCK';
 const FAIL_NEXT_ACCESS_PROFILE_KEY = 'MYBISHBASH_E2E_FAIL_NEXT_ACCESS_PROFILE';
+const FAIL_DELETE_ACCOUNT_KEY = 'MYBISHBASH_E2E_FAIL_DELETE_ACCOUNT';
 const SEED_KEY = 'mybishbash.auth-session-persistence-seeded.v1';
 const now = '2026-06-19T09:00:00.000Z';
 
@@ -126,6 +127,14 @@ async function expectSessionMissing(page: Page) {
   ).toBe(false);
 }
 
+async function goToSettings(page: Page) {
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/mybishbash/settings');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+}
+
 test('login persists after reload', async ({ page }) => {
   await seedAppState(page);
   await logIn(page);
@@ -211,11 +220,7 @@ test('log out signs the user out globally across main app and shell routes', asy
   await page.goto('/mybishbash/home');
   await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10000 });
 
-  await page.evaluate(() => {
-    window.history.pushState({}, '', '/mybishbash/settings');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  });
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await goToSettings(page);
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toContain('Log out of this MyBishBash profile?');
     await dialog.accept();
@@ -228,6 +233,66 @@ test('log out signs the user out globally across main app and shell routes', asy
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('sync-screen')).toBeVisible({ timeout: 10000 });
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+});
+
+test('delete account confirmation requires DELETE and cancel keeps the session', async ({ page }) => {
+  await seedAppState(page, { session: authSession() });
+  await page.goto('/mybishbash/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10000 });
+  await goToSettings(page);
+
+  await expect(page.getByTestId('delete-account-settings-card')).toContainText('This permanently deletes your MyBishBash account, cards, settings and saved app data. This cannot be undone.');
+  await page.getByTestId('delete-account-settings-card').getByRole('button', { name: 'Delete account' }).click();
+  await expect(page.getByRole('dialog', { name: 'Delete your MyBishBash account?' })).toBeVisible();
+  await expect(page.getByTestId('delete-account-final-button')).toBeDisabled();
+
+  await page.getByTestId('delete-account-confirmation-input').fill('delete');
+  await expect(page.getByTestId('delete-account-final-button')).toBeDisabled();
+
+  await page.getByTestId('delete-account-confirmation-input').fill('DELETE');
+  await expect(page.getByTestId('delete-account-final-button')).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog', { name: 'Delete your MyBishBash account?' })).toHaveCount(0);
+  await expectSessionPresent(page);
+});
+
+test('successful account deletion clears local state and returns to signed-out state', async ({ page }) => {
+  await seedAppState(page, { session: authSession() });
+  await page.goto('/mybishbash/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10000 });
+  await goToSettings(page);
+
+  await page.getByTestId('delete-account-settings-card').getByRole('button', { name: 'Delete account' }).click();
+  await page.getByTestId('delete-account-confirmation-input').fill('DELETE');
+  await page.getByTestId('delete-account-final-button').click();
+  await expect(page.getByTestId('delete-account-final-button')).toContainText('Deleting...');
+
+  await expectSessionMissing(page);
+  await expect(page.getByTestId('sync-screen')).toBeVisible({ timeout: 10000 });
+  await expect.poll(async () => page.evaluate(() => ({
+    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
+    cards: window.localStorage.getItem('mybishbash.cards.v1'),
+  }))).toEqual({ setupComplete: 'false', cards: '[]' });
+});
+
+test('failed account deletion shows an error and keeps the user signed in', async ({ page }) => {
+  await seedAppState(page, { session: authSession() });
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(key, 'true');
+  }, FAIL_DELETE_ACCOUNT_KEY);
+  await page.goto('/mybishbash/home');
+  await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10000 });
+  await goToSettings(page);
+
+  await page.getByTestId('delete-account-settings-card').getByRole('button', { name: 'Delete account' }).click();
+  await page.getByTestId('delete-account-confirmation-input').fill('DELETE');
+  await page.getByTestId('delete-account-final-button').click();
+
+  await expect(page.getByRole('alert')).toContainText('We could not delete your account just now. Please try again in a moment.');
+  await expect(page.getByRole('dialog', { name: 'Delete your MyBishBash account?' })).toBeVisible();
+  await expectSessionPresent(page);
+  await expect(page.getByTestId('app-shell')).toBeVisible();
 });
 
 test('a transient profile load failure does not immediately clear auth', async ({ page }) => {

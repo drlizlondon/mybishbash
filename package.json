@@ -18,6 +18,7 @@
     "test:cover-generation": "node scripts/test-generated-pack-cover.mjs",
     "test:launchers": "node scripts/validate-launchers.mjs && node scripts/test-launcher-install-resolver.mjs && node scripts/test-whatsapp-launcher-qa.mjs && node scripts/test-launcher-availability.mjs && node scripts/test-hq-launcher-admin.mjs && node scripts/test-destination-resolver.mjs",
     "test:fake-launchers": "node scripts/test-fake-launcher-destinations.mjs",
+    "test:account-deletion-security": "node scripts/test-account-deletion-security.mjs",
     "test:release-guardrails": "node scripts/test-release-guardrails.mjs",
     "test:access-contract": "node scripts/check-access-code-contract.mjs",
     "test:e2e": "playwright test",
