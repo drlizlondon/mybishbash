@@ -19,106 +19,67 @@ export const DEFAULT_ACTION_CARD_TITLES = [
 ];
 
 export const DEFAULT_PERSONAL_CARD_TEXTS = [
-  "Have you drunk a glass of water today?",
-  "Have you put your phone away for bedtime?",
-  "Have you checked what time you need to leave?",
-  "Have you messaged a friend today?",
-  "Do you actually want to open this app right now?",
+  "Have you done something that counts towards your fitness today?",
+  "Have you reflected on a moment you are grateful for?",
+  "Have you got your bag ready for tomorrow?",
+  "Have you taken your vitamins?",
+  "Have you done your face routine?",
+  "Have you watered the plants?",
+  "Have you read your Bible?",
+  "Have you taken your antihistamine?",
 ];
 
 export const STRATEGY_AREA_OPTIONS = [
-  { id: "health-basics", label: "Health Basics" },
-  { id: "sleep", label: "Sleep" },
   { id: "fitness", label: "Fitness" },
-  { id: "punctuality", label: "Punctuality" },
+  { id: "health", label: "Health" },
+  { id: "faith-reflection", label: "Faith or reflection" },
+  { id: "getting-ready", label: "Getting ready" },
+  { id: "home", label: "Home" },
   { id: "relationships", label: "Relationships" },
-  { id: "confidence", label: "Confidence" },
-  { id: "faith-reflection", label: "Faith or Reflection" },
-  { id: "phone-use", label: "Phone Use" },
-  { id: "being-present", label: "Being More Present" },
-  { id: "put-together", label: "Feeling Put Together" },
+  { id: "self-care", label: "Self-care" },
+  { id: "learning-creativity", label: "Learning or creativity" },
 ];
 
 const PERSONAL_CARD_GROUPS = {
-  "health-basics": [
-    "Have you drunk a glass of water today?",
-    "Have you eaten vegetables today?",
-    "Have you taken your vitamins today?",
-    "Have you taken your medication today?",
-    "Have you eaten something that will actually fuel you?",
-    "Have you been outside today?",
-  ],
-  sleep: [
-    "Have you put your phone away for bedtime?",
-    "Have you started winding down?",
-    "Have you brushed your teeth before getting too tired?",
-    "Have you set your alarm for tomorrow?",
-    "Have you charged your phone away from the bed?",
-    "Have you got into bed on time?",
-  ],
   fitness: [
-    "Have you been for a walk today?",
-    "Have you moved your body today?",
-    "Have you stretched today?",
-    "Have you done your steps today?",
-    "Have you done your workout today?",
-    "Have you done your physio exercises today?",
+    "Have you done something that counts towards your fitness today?",
+    "Have you stretched?",
+    "Have you done 10 press-ups?",
   ],
-  punctuality: [
-    "Have you checked what time you need to leave?",
-    "Have you packed your bag for tomorrow?",
-    "Have you put your keys somewhere obvious?",
-    "Have you chosen what you are wearing?",
-    "Have you left 10 minutes earlier than usual?",
-    "Have you checked the route before leaving?",
-  ],
-  relationships: [
-    "Have you told your partner you love them today?",
-    "Have you hugged your partner today?",
-    "Have you messaged a friend today?",
-    "Have you replied to someone who matters to you?",
-    "Have you called your mum today?",
-    "Have you checked in on someone you care about?",
-  ],
-  confidence: [
-    "Have you stood up straight today?",
-    "Have you spoken clearly today?",
-    "Have you worn something that makes you feel good?",
-    "Have you said what you actually think?",
-    "Have you stopped apologising for something reasonable?",
-    "Have you done one small brave thing today?",
+  health: [
+    "Have you taken your vitamins?",
+    "Have you taken your antihistamine?",
+    "Have you drunk enough water?",
   ],
   "faith-reflection": [
-    "Have you prayed today?",
-    "Have you read your Bible today?",
-    "Have you had a quiet moment today?",
-    "Have you written down one thing you are grateful for?",
-    "Have you listened to something uplifting today?",
-    "Have you reflected before reacting?",
+    "Have you read your Bible?",
+    "Have you prayed?",
+    "Have you reflected on a moment you are grateful for?",
   ],
-  "phone-use": [
-    "Do you actually want to open this app right now?",
-    "Are you opening this app for a reason?",
-    "Is this helping what you meant to do?",
-    "Could this wait until later?",
-    "Are you choosing this, or did your thumb just take you here?",
-    "Have you used your phone for something useful today?",
+  "getting-ready": [
+    "Have you got your bag ready for tomorrow?",
+    "Have you laid out what you need for the morning?",
+    "Have you checked tomorrow's first commitment?",
   ],
-  "being-present": [
-    "Have you put your phone down during dinner?",
-    "Have you given someone your full attention today?",
-    "Have you sat quietly without scrolling today?",
-    "Have you looked around instead of looking down?",
-    "Have you played with your child without checking your phone?",
-    "Have you had a proper conversation today?",
+  home: [
+    "Have you watered the plants?",
+    "Have you reset one surface?",
+    "Have you put the laundry away?",
   ],
-  "put-together": [
-    "Have you washed your face today?",
-    "Have you moisturised today?",
-    "Have you put SPF on today?",
-    "Have you done your skincare today?",
-    "Have you flossed today?",
-    "Have you put on something that makes you feel good?",
+  relationships: [
+    "Have you told your partner you love them?",
+    "Have you checked in with someone important to you?",
+    "Have you done something kind for someone at home?",
+  ],
+  "self-care": [
+    "Have you done your face routine?",
+    "Have you put on SPF?",
+    "Have you moisturised?",
+  ],
+  "learning-creativity": [
+    "Have you read a few pages?",
+    "Have you practised something creative?",
+    "Have you spent time learning something useful?",
   ],
 };
 
@@ -126,26 +87,28 @@ const PERSONAL_CARD_OPTIONS = Object.entries(PERSONAL_CARD_GROUPS).flatMap(([are
   cards.map((text) => ({ id: `${areaId}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`, areaId, text })),
 );
 
+const PERSONAL_CARD_SUGGESTION_LIMIT = 8;
+
 const STARTER_PACK_OPTIONS = [
-  { id: "healthier-daily-basics", areaIds: ["health-basics", "fitness"], title: "Healthier Daily Basics" },
-  { id: "better-bedtime", areaIds: ["sleep"], title: "Better Bedtime" },
-  { id: "stop-being-late", areaIds: ["punctuality"], title: "Stop Being Late" },
-  { id: "more-present-with-my-people", areaIds: ["relationships", "being-present"], title: "More Present With My People" },
-  { id: "be-more-confident", areaIds: ["confidence"], title: "Be More Confident" },
+  { id: "healthier-daily-basics", areaIds: ["health", "fitness"], title: "Healthier Daily Basics" },
+  { id: "better-bedtime", areaIds: ["self-care", "getting-ready"], title: "Better Bedtime" },
+  { id: "stop-being-late", areaIds: ["getting-ready"], title: "Stop Being Late" },
+  { id: "more-present-with-my-people", areaIds: ["relationships"], title: "More Present With My People" },
+  { id: "be-more-confident", areaIds: ["self-care"], title: "Be More Confident" },
   { id: "faith-and-steadiness", areaIds: ["faith-reflection"], title: "Faith and Steadiness" },
-  { id: "feel-more-put-together", areaIds: ["put-together"], title: "Feel More Put Together" },
-  { id: "phone-use-reality-check", areaIds: ["phone-use"], title: "Phone Use Reality Check" },
+  { id: "feel-more-put-together", areaIds: ["self-care", "getting-ready"], title: "Feel More Put Together" },
+  { id: "creative-practice", areaIds: ["learning-creativity"], title: "Creative Practice" },
 ];
 
 const STARTER_COMMITMENT_OPTIONS = [
-  { id: "water-before-coffee", text: "drink water before my next coffee", label: "I will drink water before my next coffee.", areaIds: ["health-basics"], defaults: { commitmentTimingMode: "anytime", commitmentCheckInEnabled: false } },
-  { id: "walk-today", text: "go for a 10-minute walk today", label: "I will go for a 10-minute walk today.", areaIds: ["fitness", "health-basics"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: false } },
-  { id: "phone-away-dinner", text: "put my phone away during dinner", label: "I will put my phone away during dinner.", areaIds: ["being-present", "phone-use", "relationships"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "20:30" } },
+  { id: "water-before-coffee", text: "drink water before my next coffee", label: "I will drink water before my next coffee.", areaIds: ["health"], defaults: { commitmentTimingMode: "anytime", commitmentCheckInEnabled: false } },
+  { id: "walk-today", text: "go for a 10-minute walk today", label: "I will go for a 10-minute walk today.", areaIds: ["fitness", "health"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: false } },
+  { id: "phone-away-dinner", text: "put my phone away during dinner", label: "I will put my phone away during dinner.", areaIds: ["relationships"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "20:30" } },
   { id: "message-friend", text: "message one friend before 20:00", label: "I will message one friend before 20:00.", areaIds: ["relationships"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: true, commitmentCheckInTime: "20:00" } },
-  { id: "pack-bag", text: "pack my bag before bed", label: "I will pack my bag before bed.", areaIds: ["punctuality", "sleep"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
-  { id: "leave-earlier", text: "leave 10 minutes earlier than usual", label: "I will leave 10 minutes earlier than usual.", areaIds: ["punctuality"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: false } },
-  { id: "pray-before-sleep", text: "pray before I go to sleep", label: "I will pray before I go to sleep.", areaIds: ["faith-reflection", "sleep"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
-  { id: "wind-down", text: "start winding down by 22:00", label: "I will start winding down by 22:00.", areaIds: ["sleep"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
+  { id: "pack-bag", text: "pack my bag before bed", label: "I will pack my bag before bed.", areaIds: ["getting-ready"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
+  { id: "leave-earlier", text: "leave 10 minutes earlier than usual", label: "I will leave 10 minutes earlier than usual.", areaIds: ["getting-ready"], defaults: { commitmentTimingMode: "day", commitmentCheckInEnabled: false } },
+  { id: "pray-before-sleep", text: "pray before I go to sleep", label: "I will pray before I go to sleep.", areaIds: ["faith-reflection"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
+  { id: "wind-down", text: "start winding down by 22:00", label: "I will start winding down by 22:00.", areaIds: ["self-care"], defaults: { commitmentTimingMode: "evening", commitmentCheckInEnabled: true, commitmentCheckInTime: "21:30" } },
 ];
 
 export const DEFAULT_PERSONAL_CARD_TEXTS_LEGACY = [
@@ -328,7 +291,7 @@ function OnboardingContent({
   const [protectedAppInterruptionPrefs, setProtectedAppInterruptionPrefs] = useState(initialProtectedAppInterruptionPrefs);
   const protectedAppInterruptionPrefsRef = useRef(initialProtectedAppInterruptionPrefs);
 
-  const orderedPersonalCardOptions = prioritizeByStrategy(PERSONAL_CARD_OPTIONS, selectedStrategyAreaIds);
+  const orderedPersonalCardOptions = getPersonalCardSuggestions(selectedStrategyAreaIds);
   const orderedStarterPackOptions = prioritizeByStrategy(STARTER_PACK_OPTIONS, selectedStrategyAreaIds);
   const orderedStarterCommitmentOptions = prioritizeByStrategy(STARTER_COMMITMENT_OPTIONS, selectedStrategyAreaIds);
   const selectedCards = PERSONAL_CARD_OPTIONS.filter((option) => selectedCardIds.includes(option.id));
@@ -407,6 +370,19 @@ function OnboardingContent({
     if (!text) return;
     if (selectedCardTexts.length >= 5) {
       setCardSelectionMessage(content.steps?.intention?.deselectMessage ?? "Deselect one card first.");
+      return;
+    }
+    if (text.length > 96) {
+      setCardSelectionMessage(content.steps?.intention?.tooLongMessage ?? "Keep it a bit shorter.");
+      return;
+    }
+    const normalizedText = normalizePersonalCardText(text);
+    const existingTexts = [
+      ...PERSONAL_CARD_OPTIONS.map((option) => option.text),
+      ...customCards.map((card) => card.text),
+    ].map(normalizePersonalCardText);
+    if (existingTexts.includes(normalizedText)) {
+      setCardSelectionMessage(content.steps?.intention?.duplicateMessage ?? "That card is already selected.");
       return;
     }
     setCustomCards((current) => [
@@ -555,9 +531,9 @@ function OnboardingContent({
             <OnboardingStep
               className="onboarding-step-card-selection"
               titlePath="steps.strategy.title"
-              title="What do you want to reinforce?"
+              title="What would you like MyBishBash to help you remember?"
               bodyPath="steps.strategy.body"
-              body="Choose a few areas where a small reminder at the right moment would help."
+              body="Choose a few areas. We’ll suggest Personal Cards you can use daily, and you can edit or write your own."
               primaryPath="steps.strategy.primary"
               primaryLabel="Continue"
               onPrimary={goNext}
@@ -572,6 +548,7 @@ function OnboardingContent({
                 options={STRATEGY_AREA_OPTIONS}
                 selectedIds={selectedStrategyAreaIds}
                 onToggle={toggleStrategyArea}
+                emptyMessage={content.steps?.strategy?.emptyMessage ?? "Choose at least one area so we can suggest cards that fit you."}
               />
             </OnboardingStep>
           ) : null}
@@ -582,7 +559,7 @@ function OnboardingContent({
               titlePath="steps.intention.title"
               title="Choose your first reminders"
               bodyPath="steps.intention.body"
-              body="Good cards are specific. You should know exactly what they mean the moment you see them."
+              body="Choose suggestions or write your own, up to 5 total."
               primaryPath="steps.intention.primary"
               primaryLabel="Continue"
               onPrimary={saveAndContinue}
@@ -789,20 +766,44 @@ function prioritizeByStrategy(options, selectedAreaIds) {
   });
 }
 
-function StrategyAreaGrid({ options, selectedIds, onToggle }) {
+function normalizePersonalCardText(text) {
+  return String(text || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ");
+}
+
+function getPersonalCardSuggestions(selectedAreaIds) {
+  const texts = [];
+  const seen = new Set();
+  const addText = (text) => {
+    const key = normalizePersonalCardText(text);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    texts.push(text);
+  };
+
+  selectedAreaIds.forEach((areaId) => {
+    (PERSONAL_CARD_GROUPS[areaId] || []).forEach(addText);
+  });
+  Object.values(PERSONAL_CARD_GROUPS).flat().forEach(addText);
+
+  const optionsByText = new Map(PERSONAL_CARD_OPTIONS.map((option) => [option.text, option]));
+  return texts.slice(0, PERSONAL_CARD_SUGGESTION_LIMIT).map((text) => optionsByText.get(text)).filter(Boolean);
+}
+
+function StrategyAreaGrid({ options, selectedIds, onToggle, emptyMessage }) {
   return (
     <div className="onboarding-reminder-picker">
       <div className="onboarding-selection-count" aria-live="polite">
         <span>{selectedIds.length} of 3 selected</span>
       </div>
-      <div className="onboarding-idea-grid" role="group" aria-label="Choose strategy areas">
+      {!selectedIds.length ? <p className="onboarding-selection-message" aria-live="polite">{emptyMessage}</p> : null}
+      <div className="onboarding-idea-grid onboarding-area-grid" role="group" aria-label="Choose strategy areas">
         {options.map((option) => {
           const selected = selectedIds.includes(option.id);
           return (
             <button
               key={option.id}
               type="button"
-              className={`onboarding-idea-card ${selected ? "selected" : ""}`}
+              className={`onboarding-idea-card onboarding-area-chip ${selected ? "selected" : ""}`}
               onClick={() => onToggle(option.id)}
               aria-pressed={selected}
             >
@@ -914,16 +915,17 @@ function ReminderIdeaGrid({
         <span>{selectedCount} of 5 {selectedLabel}</span>
       </div>
       {message ? <p className="onboarding-selection-message" aria-live="polite">{message}</p> : null}
-      <div className="onboarding-idea-grid" role="group" aria-label="Choose Personal Cards">
+      <div className="onboarding-idea-grid onboarding-personal-card-grid" role="group" aria-label="Choose Personal Cards">
         {options.map((option) => {
           const selected = selectedIds.includes(option.id);
           return (
             <button
               key={option.id}
               type="button"
-              className={`onboarding-idea-card ${selected ? "selected" : ""}`}
+              className={`onboarding-idea-card onboarding-personal-card-suggestion ${selected ? "selected" : ""}`}
               onClick={() => onToggle(option.id)}
               aria-pressed={selected}
+              data-testid="onboarding-personal-card-suggestion"
             >
               <strong>{option.text}</strong>
               {selected ? <span className="onboarding-idea-check" aria-hidden="true">✓</span> : null}
@@ -951,7 +953,7 @@ function ReminderIdeaGrid({
                 value={customCardText}
                 onChange={(event) => onCustomTextChange(event.target.value)}
                 placeholder={customPlaceholder}
-                maxLength={140}
+                maxLength={96}
               />
             </label>
             <button type="button" onClick={onAddCustom} disabled={!cleanCustomText}>

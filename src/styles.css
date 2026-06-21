@@ -9196,13 +9196,16 @@ body {
 
 .onboarding-idea-grid {
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
   display: grid;
   align-content: start;
   gap: 10px;
-  padding: 2px 2px 132px;
+  padding: 2px;
+}
+
+.onboarding-area-grid,
+.onboarding-personal-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .onboarding-idea-card {
@@ -9225,13 +9228,27 @@ body {
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
+.onboarding-area-chip,
+.onboarding-personal-card-suggestion {
+  align-items: flex-start;
+  min-height: 54px;
+  padding: 11px 12px;
+  border-radius: 14px;
+}
+
 .onboarding-idea-card strong {
   min-width: 0;
-  font-size: clamp(0.98rem, 4vw, 1.06rem);
+  font-size: clamp(0.9rem, 3.5vw, 1rem);
   line-height: 1.28;
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
+}
+
+.onboarding-area-chip strong,
+.onboarding-personal-card-suggestion strong {
+  font-size: clamp(0.78rem, 3.2vw, 0.9rem);
+  line-height: 1.22;
 }
 
 .onboarding-idea-card.selected {
@@ -11036,4 +11053,10 @@ body {
   .onboarding-demo-stage .onboarding-demo-notes {
     display: grid;
   }
+}
+
+.onboarding-area-chip,
+.onboarding-personal-card-suggestion {
+  min-height: 54px;
+  padding: 11px 12px;
 }

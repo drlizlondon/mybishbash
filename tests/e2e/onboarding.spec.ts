@@ -103,23 +103,26 @@ async function startStrategySetup(page: Page, path = '/mybishbash/onboarding') {
 async function completeCoreSetup(page: Page, path = '/mybishbash/onboarding') {
   await startStrategySetup(page, path);
 
-  await expect(page.getByRole('heading', { name: 'What do you want to reinforce?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'What would you like MyBishBash to help you remember?' })).toBeVisible();
+  await expect(page.getByText('Choose a few areas. We’ll suggest Personal Cards you can use daily')).toBeVisible();
+  await expect(page.getByText('Choose at least one area so we can suggest cards that fit you.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
-  for (const area of ['Health Basics', 'Sleep', 'Phone Use', 'Punctuality']) {
+  for (const area of ['Health', 'Fitness', 'Faith or reflection', 'Home']) {
     await page.getByRole('button', { name: area }).click();
   }
   await expect(page.getByText('3 of 3 selected')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Punctuality' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   await expect(page.getByRole('heading', { name: 'Choose your first reminders' })).toBeVisible();
-  await expect(page.getByText('Good cards are specific.')).toBeVisible();
+  await expect(page.getByText('Choose suggestions or write your own, up to 5 total.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(page.getByTestId('onboarding-personal-card-suggestion')).toHaveCount(8);
   await expect(page.getByText('Do the thing you’ve been putting off.')).toHaveCount(0);
   await expect(page.getByText('What matters most today?')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Have you drunk a glass of water today?' }).click();
-  await page.getByRole('button', { name: 'Have you put your phone away for bedtime?' }).click();
+  await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
+  await page.getByRole('button', { name: 'Have you done something that counts towards your fitness today?' }).click();
   await expect(page.getByText('2 of 5 selected')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -172,13 +175,94 @@ test('strategy onboarding saves selected areas, personal cards, starter pack and
   }));
 
   expect(state.setupComplete).toBe('true');
-  expect(state.profile.selectedStrategyAreaIds).toEqual(['health-basics', 'sleep', 'phone-use']);
+  expect(state.profile.selectedStrategyAreaIds).toEqual(['health', 'fitness', 'faith-reflection']);
   expect(state.profile.onboardingStarterPackId).toBe('healthier-daily-basics');
   expect(state.profile.onboardingStarterCommitmentId).toBe('water-before-coffee');
-  expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Have you drunk a glass of water today?' && !card.sourcePackId)).toBe(true);
+  expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Have you taken your vitamins?' && !card.sourcePackId)).toBe(true);
+  expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Have you done something that counts towards your fitness today?' && !card.sourcePackId)).toBe(true);
   expect(state.cards.some((card: Record<string, unknown>) => card.sourcePackId === 'healthier-daily-basics')).toBe(true);
   expect(state.cards.some((card: Record<string, unknown>) => card.cardKind === 'commitment' && card.promptText === 'drink water before my next coffee')).toBe(true);
   expect(state.events.some((event: Record<string, unknown>) => event.event_type === 'pack_activated' && event.pack_id === 'healthier-daily-basics')).toBe(true);
+});
+
+test('personal card area selection shows 8 visible suggestions and excludes weak old examples', async ({ page }) => {
+  await startStrategySetup(page);
+
+  await page.getByRole('button', { name: 'Fitness' }).click();
+  await page.getByRole('button', { name: 'Getting ready' }).click();
+  await page.getByRole('button', { name: 'Self-care' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  const suggestions = page.getByTestId('onboarding-personal-card-suggestion');
+  await expect(suggestions).toHaveCount(8);
+  await expect(page.getByRole('button', { name: 'Have you done something that counts towards your fitness today?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Have you got your bag ready for tomorrow?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Have you done your face routine?' })).toBeVisible();
+
+  const visibleSuggestions = await suggestions.allTextContents();
+  expect(visibleSuggestions).toHaveLength(8);
+  for (const weakCopy of [
+    'Have you done something productive today?',
+    'Have you looked after yourself today?',
+    'Have you done enough for your health today?',
+    'Have you made progress on your goals today?',
+    'Have you been disciplined today?',
+    'Have you connected with someone you love?',
+    'Have you sent that one message you’ve been meaning to send?',
+  ]) {
+    expect(visibleSuggestions.join('\n')).not.toContain(weakCopy);
+    await expect(page.getByText(weakCopy)).toHaveCount(0);
+  }
+});
+
+test('personal card areas are required before suggestions appear', async ({ page }) => {
+  await startStrategySetup(page);
+  await expect(page.getByText('Choose at least one area so we can suggest cards that fit you.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(page.getByTestId('onboarding-personal-card-suggestion')).toHaveCount(0);
+  await expect(page.getByText('Have you read your Bible?')).toHaveCount(0);
+  await expect(page.getByText('Have you taken your antihistamine?')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Faith or reflection' }).click();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('onboarding-personal-card-suggestion')).toHaveCount(8);
+  await expect(page.getByRole('button', { name: 'Have you read your Bible?' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByRole('button', { name: 'Faith or reflection' }).click();
+  await page.getByRole('button', { name: 'Health' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByTestId('onboarding-personal-card-suggestion')).toHaveCount(8);
+  await expect(page.getByRole('button', { name: 'Have you taken your antihistamine?' })).toBeVisible();
+});
+
+test('personal card setup caps selected and custom cards at 5 total', async ({ page }) => {
+  await startStrategySetup(page);
+  await page.getByRole('button', { name: 'Health' }).click();
+  await page.getByRole('button', { name: 'Fitness' }).click();
+  await page.getByRole('button', { name: 'Faith or reflection' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  for (const name of [
+    'Have you taken your vitamins?',
+    'Have you taken your antihistamine?',
+    'Have you drunk enough water?',
+    'Have you done something that counts towards your fitness today?',
+  ]) {
+    await page.getByRole('button', { name }).click();
+  }
+  await expect(page.getByText('4 of 5 selected')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Write my own' }).click();
+  await page.getByPlaceholder('Write your own reminder…').fill('Have you packed tomorrow’s lunch?');
+  await page.locator('.onboarding-custom-card').getByRole('button', { name: 'Add' }).click();
+  await expect(page.getByText('5 of 5 selected')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Have you packed tomorrow’s lunch?' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Have you stretched?' }).click();
+  await expect(page.getByText('You can choose up to five.')).toBeVisible();
+  await expect(page.getByText('5 of 5 selected')).toBeVisible();
 });
 
 test('phone trigger selection goes through app check-ins before install and saves preference', async ({ page }) => {
@@ -287,9 +371,9 @@ test('home spotlight tour supports navigation and persists dismissal after strat
 
 test('onboarding visible copy avoids old blocker and technical language', async ({ page }) => {
   await startStrategySetup(page);
-  await page.getByRole('button', { name: 'Health Basics' }).click();
+  await page.getByRole('button', { name: 'Health' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Have you drunk a glass of water today?' }).click();
+  await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Skip pack' }).click();
   await page.getByRole('button', { name: 'Skip commitment' }).click();
@@ -312,9 +396,9 @@ test('onboarding headlines fit mobile without mid-word splitting', async ({ page
 
   const checks: Array<{ action?: () => Promise<void>; heading: string }> = [
     { heading: 'Build your phone strategy' },
-    { action: () => page.getByRole('button', { name: 'Start setting it up' }).click(), heading: 'What do you want to reinforce?' },
-    { action: async () => { await page.getByRole('button', { name: 'Health Basics' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Choose your first reminders' },
-    { action: async () => { await page.getByRole('button', { name: 'Have you drunk a glass of water today?' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Add a strategy pack' },
+    { action: () => page.getByRole('button', { name: 'Start setting it up' }).click(), heading: 'What would you like MyBishBash to help you remember?' },
+    { action: async () => { await page.getByRole('button', { name: 'Health' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Choose your first reminders' },
+    { action: async () => { await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Add a strategy pack' },
     { action: async () => { await page.getByRole('button', { name: 'Skip pack' }).click(); }, heading: 'Make one commitment' },
     { action: async () => { await page.getByRole('button', { name: 'Skip commitment' }).click(); }, heading: 'Choose your first phone trigger' },
     { action: async () => { await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'What should appear before Instagram?' },
