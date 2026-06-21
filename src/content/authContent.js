@@ -47,7 +47,7 @@ export const authContent = {
     loginSwitch: "Log in",
     signupSwitch: "Sign up",
     continue: "Continue",
-    createInBrowser: "Create account in browser instead",
+    backToBrowserSetup: "Back to browser setup",
     noInvite: "No invite yet?",
     joinWaitlist: "Join waitlist",
   },

@@ -220,7 +220,7 @@ test('standalone missing-handoff recovery validates code before showing signup',
   await expect(page.getByRole('heading', { name: 'Finish setting up MyBishBash' })).toBeVisible();
   await expect(page.getByText('We couldn’t find your access session. Enter your access code once more to finish creating your account in the app.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Create account in browser instead' })).toHaveAttribute('href', '/mybishbash/home?signup=1');
+  await expect(page.getByRole('link', { name: 'Back to browser setup' })).toHaveAttribute('href', '/mybishbash/download');
   await expect(page.getByRole('link', { name: 'Get MyBishBash' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Join waitlist' })).toHaveCount(0);
   await page.getByLabel('Access code').fill('NOPE');

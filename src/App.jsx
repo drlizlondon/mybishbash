@@ -9350,8 +9350,8 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
                         {recoveryPending ? content.form.checkingAccess : content.actions.continue}
                       </button>
                     </form>
-                    <a className="text-button sync-secondary-link" href={`${BASE_PATH}/home?signup=1`}>
-                      <EditableText path="actions.createInBrowser" />
+                    <a className="text-button sync-secondary-link" href={`${BASE_PATH}/download`}>
+                      <EditableText path="actions.backToBrowserSetup" />
                     </a>
                   </>
                 ) : (
