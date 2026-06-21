@@ -88,8 +88,9 @@ assertMatch(
 assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
 assertNoMatch("old weighted launcher selector is not used by the app", appSource, /selectWeightedLauncherCard\(\{/);
 assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
-assertMatch("App builds generated commitment lifecycle cards for launcher selection", appSource, /buildEligibleCommitmentLifecycleCards\(normalizedSelectionCards, selectionNow, profile\.timezone\)/);
-assertMatch("App uses shared eligible card selection for launcher and home decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: selectableSelectionCards,[\s\S]{0,500}timezone: profile\.timezone/);
+assertMatch("App filters launch selection to non-commitment cards", appSource, /function getLaunchPersonalCardPool\(cards = \[\]\) \{[\s\S]{0,220}!isCommitmentCard\(card\)[\s\S]{0,120}cardKind/);
+assertMatch("App uses Personal Card launch pool for launcher decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedSelectionCards\),[\s\S]{0,500}timezone: profile\.timezone/);
+assertMatch("App uses Personal Card launch pool for home decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedHomeCards\),[\s\S]{0,500}events,/);
 assertNoMatch("App has no legacy selector call sites", appSource, /selectPersonalFirstLauncherCard\(\{/);
 assertNoMatch("App has no manual pack card randomisation path", appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);
