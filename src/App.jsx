@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LogPanel } from "./components/LogPanel";
-import { HeartGlyph, LogGlyph } from "./components/Glyphs";
+import { LogGlyph } from "./components/Glyphs";
+import { BrandMark } from "./components/BrandMark";
 import { authContent } from "./content/authContent";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import {
@@ -474,6 +475,10 @@ function logCommitmentDebug(label, payload = {}) {
 
 function isCommitmentCard(card) {
   return isCommitmentLikeCard(card);
+}
+
+function getLaunchPersonalCardPool(cards = []) {
+  return cards.filter((card) => !isCommitmentCard(card) && !String(card?.cardKind ?? "").startsWith("commitment"));
 }
 
 function resolveRevealCard(cards, cardId, timezone) {
@@ -1863,11 +1868,13 @@ function App() {
       const hasUserSetup =
         Object.prototype.hasOwnProperty.call(explicitBehavior, "appEnabled") ||
         Object.prototype.hasOwnProperty.call(explicitBehavior, "useInterruptionPack");
+      const explicitlyRemoved = explicitBehavior.appEnabled === false && explicitBehavior.useInterruptionPack === false;
       const pauseExpiry = getAppPauseExpiry(version.id);
       const paused = isAppPaused(version.id);
       return {
         version,
         configured: hasUserSetup,
+        explicitlyRemoved,
         protectedOn: explicitBehavior.appEnabled === true || explicitBehavior.useInterruptionPack === true,
         promptsOn: explicitBehavior.useInterruptionPack === true,
         pauseExpiry,
@@ -1886,6 +1893,16 @@ function App() {
     () => protectedAppStatuses.filter((status) => status.paused),
     [protectedAppStatuses],
   );
+  const hasConfiguredMyBishBashApp = useMemo(() => {
+    if (protectedAppStatuses.some((status) => status.protectedOn)) return true;
+    if (!profile.hasCompletedProtectedAppSetup || !profile.selectedProtectedApp) return false;
+    const selectedStatus = protectedAppStatuses.find((status) => status.version.id === profile.selectedProtectedApp);
+    return selectedStatus?.explicitlyRemoved !== true;
+  }, [
+    profile.hasCompletedProtectedAppSetup,
+    profile.selectedProtectedApp,
+    protectedAppStatuses,
+  ]);
   const pendingOnboardingShortcuts = useMemo(() => {
     const apps = Array.isArray(profile.onboardingShortcutSetup?.apps) ? profile.onboardingShortcutSetup.apps : [];
     return apps
@@ -1921,7 +1938,7 @@ function App() {
         action: "create-card",
       });
     }
-    if (!profile.hasCompletedProtectedAppSetup || !profile.selectedProtectedApp) {
+    if (!hasConfiguredMyBishBashApp) {
       items.push({
         id: "protected-app",
         label: "Choose your first app",
@@ -1931,9 +1948,8 @@ function App() {
     return items;
   }, [
     cards,
+    hasConfiguredMyBishBashApp,
     profile.hasCompletedHomeScreenInstall,
-    profile.hasCompletedProtectedAppSetup,
-    profile.selectedProtectedApp,
     profile.hasSkippedHomeScreenInstallPrompt,
   ]);
   const completeHomeSpotlightTour = useCallback(() => {
@@ -3085,12 +3101,8 @@ function App() {
     }, testerStatus);
     const selectionNow = new Date();
     const normalizedSelectionCards = normalizeCards(cards, selectionNow, profile.timezone);
-    const selectableSelectionCards = [
-      ...normalizedSelectionCards,
-      ...buildEligibleCommitmentLifecycleCards(normalizedSelectionCards, selectionNow, profile.timezone),
-    ];
     const fallbackDisplay = selectEligibleCard({
-      cards: selectableSelectionCards,
+      cards: getLaunchPersonalCardPool(normalizedSelectionCards),
       timezone: profile.timezone,
       events: selectionEvents,
       excludedCardIds: launchCompletedCardIdsRef.current,
@@ -3689,12 +3701,8 @@ function App() {
       const launchAttemptId = createLaunchAttemptId("personal", "route");
       const homeNow = new Date();
       const normalizedHomeCards = normalizeCards(cards, homeNow, profile.timezone);
-      const selectableHomeCards = [
-        ...normalizedHomeCards,
-        ...buildEligibleCommitmentLifecycleCards(normalizedHomeCards, homeNow, profile.timezone),
-      ];
       const homeDecision = selectEligibleCard({
-        cards: selectableHomeCards,
+        cards: getLaunchPersonalCardPool(normalizedHomeCards),
         events,
         timezone: profile.timezone,
       });
@@ -5515,8 +5523,6 @@ function App() {
   function savePersonalOnboardingSetup({
     selectedStrategyAreaIds = [],
     personalCards = DEFAULT_PERSONAL_CARD_TEXTS,
-    selectedStarterPackId = "",
-    starterCommitment = null,
     launcherId = "safari",
     selectedLauncherIds = [],
     shortcutSetup = null,
@@ -5533,11 +5539,6 @@ function App() {
     const cleanPersonalCards = personalCards.map((text) => text.trim()).filter(Boolean);
     const onboardingCardsToCreate = cleanPersonalCards;
     const cleanStrategyAreaIds = Array.isArray(selectedStrategyAreaIds) ? selectedStrategyAreaIds.filter(Boolean) : [];
-    const selectedStarterPack = selectedStarterPackId
-      ? visibleLibraryPacks.find((pack) => pack.id === selectedStarterPackId) ?? PACKS.find((pack) => pack.id === selectedStarterPackId)
-      : null;
-    const cleanCommitmentText = starterCommitment?.promptText?.trim() ?? "";
-    const starterCommitmentDefaults = starterCommitment?.defaults ?? {};
     const cleanTimingWindows = Array.isArray(timingWindows) && timingWindows.length > 0 ? timingWindows : ["morning", "day", "evening"];
     const now = new Date().toISOString();
 
@@ -5552,8 +5553,8 @@ function App() {
         route: "personal_card_play_by_play",
         selected_strategy_area_ids: cleanStrategyAreaIds,
         selected_personal_cards: onboardingCardsToCreate.length,
-        selected_starter_pack_id: selectedStarterPack?.id ?? null,
-        selected_starter_commitment_id: starterCommitment?.id ?? null,
+        selected_starter_pack_id: null,
+        selected_starter_commitment_id: null,
         app_context: appContext,
       },
     });
@@ -5584,74 +5585,8 @@ function App() {
           disliked: false,
           deletedAt: null,
         }));
-      const packAlreadyActive = selectedStarterPack
-        ? current.some((card) => card.sourcePackId === selectedStarterPack.id && !card.deletedAt)
-        : false;
-      const starterPackCards = selectedStarterPack && !packAlreadyActive
-        ? buildCardsFromPack(selectedStarterPack)
-        : [];
-      const hasCommitment = cleanCommitmentText
-        ? current.some((card) => card.cardKind === "commitment" && card.promptText?.trim().toLowerCase() === cleanCommitmentText.toLowerCase())
-        : true;
-      const starterCommitmentCard = cleanCommitmentText && !hasCommitment
-        ? [{
-            id: createId(),
-            cardKind: "commitment",
-            promptText: cleanCommitmentText,
-            dashboardTitle: cleanCommitmentText,
-            theme: starterCommitmentDefaults.theme ?? "Minimal",
-            icon: starterCommitmentDefaults.icon ?? "star",
-            statusToday: "fresh",
-            createdAt: now,
-            updatedAt: now,
-            lastShownAt: null,
-            notYetUntil: null,
-            doneDate: null,
-            frequency: "once_daily",
-            timingWindows: cleanTimingWindows,
-            paused: false,
-            disliked: false,
-            deletedAt: null,
-            commitmentReason: starterCommitmentDefaults.commitmentReason ?? "Chosen during onboarding.",
-            commitmentTimingMode: starterCommitmentDefaults.commitmentTimingMode ?? "anytime",
-            commitmentStartWindow: starterCommitmentDefaults.commitmentTimingMode ?? "anytime",
-            commitmentCustomStartTime: starterCommitmentDefaults.commitmentCustomStartTime ?? "",
-            commitmentCustomEndTime: starterCommitmentDefaults.commitmentCustomEndTime ?? "",
-            commitmentCheckInEnabled: Boolean(starterCommitmentDefaults.commitmentCheckInEnabled),
-            commitmentCheckInTime: starterCommitmentDefaults.commitmentCheckInEnabled ? starterCommitmentDefaults.commitmentCheckInTime ?? "20:30" : "",
-            commitmentStatusToday: null,
-            commitmentDecisionDate: null,
-            commitmentDecisionAt: null,
-            commitmentCheckInPendingDate: null,
-            commitmentLifecycleStatus: null,
-            commitmentCheckInShownDate: null,
-            commitmentCheckInResponse: null,
-            commitmentCheckInResponseDate: null,
-            commitmentCheckInResponseAt: null,
-            commitmentEncouragementRequestedDate: null,
-            commitmentEncouragementCompletedDate: null,
-            commitmentClosedEarlyDate: null,
-            commitmentReviewDueDate: null,
-            commitmentReviewResponse: null,
-            commitmentReviewResponseDate: null,
-            commitmentReviewResponseAt: null,
-            commitmentFinalOutcome: null,
-          }]
-        : [];
-      return [...starterCommitmentCard, ...starterPackCards, ...starterCards, ...current];
+      return [...starterCards, ...current];
     });
-
-    if (selectedStarterPack) {
-      setHiddenLibraryPacks((current) => (current.includes(selectedStarterPack.id) ? current.filter((id) => id !== selectedStarterPack.id) : current));
-      void logEvent({
-        event_type: "pack_activated",
-        source_type: "onboarding",
-        card_source: "library",
-        pack_id: selectedStarterPack.id,
-        action_taken: "activated",
-        metadata: { packTitle: selectedStarterPack.title, route: "strategy_onboarding" },
-      });
-    }
 
     if (!isHomeOnboardingLocation) {
       setLauncherBehaviorSettings((current) => ({
@@ -5678,8 +5613,8 @@ function App() {
       onboardingCompletedSection: "personal_cards",
       onboardingSkipped: false,
       selectedStrategyAreaIds: cleanStrategyAreaIds,
-      onboardingStarterPackId: selectedStarterPack?.id ?? null,
-      onboardingStarterCommitmentId: starterCommitment?.id ?? null,
+      onboardingStarterPackId: null,
+      onboardingStarterCommitmentId: null,
       hasCompletedPersonalCardSetup: onboardingCardsToCreate.length > 0,
     }));
 
@@ -5731,6 +5666,7 @@ function App() {
         ...current,
         [supportedLauncherId]: {
           ...(current[supportedLauncherId] || {}),
+          appEnabled: true,
           useInterruptionPack: Boolean(useInterruptionCard),
           interruptionPaused: false,
         },
@@ -7406,7 +7342,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
             <div className={`composer-preview theme-${getThemeClass(theme)}`} data-testid="commitment-preview">
               <p className="eyebrow">TODAY’S COMMITMENT</p>
               <span className="composer-mini-heart" aria-hidden="true">
-                <HeartGlyph />
+                <BrandMark />
               </span>
               <div className="composer-preview-copy commitment-preview-copy">
                 <p>I will</p>
@@ -7509,7 +7445,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
             <div className={`composer-preview theme-${getThemeClass(theme)}`}>
               <p className="eyebrow">{getGreeting(new Date())}</p>
               <span className="composer-mini-heart" aria-hidden="true">
-                <HeartGlyph />
+                <BrandMark />
               </span>
               <div className="composer-preview-copy">
                 <h3>{promptText.trim() || "Have you stretched today?"}</h3>
@@ -7626,7 +7562,7 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
     <header className="hero">
       <div className="hero-copy">
         <div className="hero-mark" aria-hidden="true">
-          <HeartGlyph />
+          <BrandMark />
         </div>
       </div>
       <div className={`account-menu-wrap ${accountMenuOpen ? "account-menu-wrap-open" : ""}`} ref={accountMenuRef}>
@@ -9303,7 +9239,7 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     <main className="sync-screen" data-testid="sync-screen">
       <section className="sync-card">
         <span className="sync-heart" aria-hidden="true">
-          <HeartGlyph />
+          <BrandMark />
         </span>
         <h1><EditableText path={titlePath}>{title}</EditableText></h1>
         {mode === "loading" ? (
@@ -10599,7 +10535,7 @@ function MorningSummaryModal({ summary, onClose }) {
           </button>
         </div>
         <div className="morning-summary-hero">
-          <span className="morning-summary-icon" aria-hidden="true"><HeartGlyph /></span>
+          <span className="morning-summary-icon" aria-hidden="true"><BrandMark /></span>
           <h2>Yesterday’s reflection</h2>
           <p>{summary.dateKey}</p>
         </div>
@@ -11684,7 +11620,7 @@ function PremiumCardIcon({ icon }) {
 
   return (
     <span className={`premium-card-icon premium-card-icon-${icon}`} aria-hidden="true">
-      {icon === "spark" ? <SparkGlyph /> : <HeartGlyph />}
+      {icon === "spark" ? <SparkGlyph /> : <BrandMark />}
     </span>
   );
 }
@@ -12510,7 +12446,7 @@ function CardIcon({ icon = "heart", sourcePackId }) {
   );
 }
 
-// HeartGlyph → imported from ./components/Glyphs
+// BrandMark → imported from ./components/BrandMark
 
 function EnvelopeGlyph() {
   return (

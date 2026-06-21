@@ -148,7 +148,7 @@ test('download page presents Home Screen install flow before the success step', 
 
   await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 });
 
@@ -160,7 +160,7 @@ test('download success fallback stores incomplete install state and continues to
   await expect(page.getByTestId('download-success-page')).toBeVisible();
   await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 
   const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
@@ -202,9 +202,88 @@ test('Home shows only incomplete activation checklist items', async ({ page }) =
 
   await expect(page.getByTestId('home-activation-checklist')).toBeVisible();
   await expect(page.getByText('Your next step')).toBeVisible();
-  await expect(page.getByText('Add MyBishBash to your Home Screen')).toBeVisible();
+  await expect(page.getByText('Add myBishBash to your Home Screen')).toBeVisible();
   await expect(page.getByText('Create your first Personal Card')).toBeVisible();
   await expect(page.getByText('Choose your first app')).toBeVisible();
+});
+
+test('Home hides first app task when an app is already configured', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
+    window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+    window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+    window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
+      name: 'Existing App Tester',
+      timezone: 'Europe/London',
+      plan: 'free',
+      hasCompletedHomeScreenInstall: true,
+      hasCompletedPersonalCardSetup: false,
+      hasCompletedProtectedAppSetup: false,
+      hasCompletedHomeSpotlightTour: true,
+    }));
+    window.localStorage.setItem('mybishbash.cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.card-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+    window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+    window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+    window.localStorage.setItem('mybishbash.hidden-library-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify({
+      mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      instagram: { appEnabled: true, useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      safari: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      whatsapp: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      chrome: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+    }));
+  });
+
+  await page.goto('/mybishbash/home');
+
+  await expect(page.getByTestId('home-activation-checklist')).toBeVisible();
+  await expect(page.getByText('Create your first Personal Card')).toBeVisible();
+  await expect(page.getByText('Choose your first app')).toHaveCount(0);
+});
+
+test('Home first app task disappears immediately after enabling an app', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
+    window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+    window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+    window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
+      name: 'Enable App Tester',
+      timezone: 'Europe/London',
+      plan: 'free',
+      hasCompletedHomeScreenInstall: true,
+      hasCompletedPersonalCardSetup: false,
+      hasCompletedProtectedAppSetup: false,
+      hasCompletedHomeSpotlightTour: true,
+    }));
+    window.localStorage.setItem('mybishbash.cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.card-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
+    window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+    window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+    window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+    window.localStorage.setItem('mybishbash.hidden-library-packs.v1', '[]');
+    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify({
+      mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      safari: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+      whatsapp: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+    }));
+  });
+
+  await page.goto('/mybishbash/home');
+
+  await expect(page.getByText('Choose your first app')).toBeVisible();
+  await page.getByRole('button', { name: 'Choose your first app' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await page.getByTestId('protected-app-instagram').getByRole('button', { name: 'Settings' }).click();
+  await page.getByTestId('apps-enable-instagram').click();
+  await page.getByTestId('bottom-nav-home').click();
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByText('Choose your first app')).toHaveCount(0);
 });
 
 test('Home hides activation checklist when setup is complete', async ({ page }) => {
