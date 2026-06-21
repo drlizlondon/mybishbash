@@ -77,12 +77,12 @@ test('direct signup without validated gate code is blocked', async ({ page }) =>
   await seedAuthMock(page);
   await page.goto('/mybishbash/home?signup=1');
 
-  await expect(page.getByText('MyBishBash is invite-only right now.')).toBeVisible();
+  await expect(page.getByText('myBishBash is invite-only right now.')).toBeVisible();
   await expect(page.getByTestId('sync-screen')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Get MyBishBash' })).toHaveAttribute('href', '/mybishbash/invite');
+  await expect(page.getByRole('link', { name: 'Get myBishBash' })).toHaveAttribute('href', '/mybishbash/invite');
   await expect(page.getByRole('button', { name: 'Create Account' })).toHaveCount(0);
   await expect(page.getByLabel('Access code')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toHaveCount(0);
 });
 
 test('demo mode can create an account without an access-code field', async ({ page }) => {
@@ -90,11 +90,11 @@ test('demo mode can create an account without an access-code field', async ({ pa
   await page.goto('/mybishbash/demo-signup');
 
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
   await fillSignup(page);
 
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
   const authState = await page.evaluate(() => ({
     authMock: window.localStorage.getItem('MYBISHBASH_E2E_AUTH_MOCK'),
     session: JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_AUTH_SESSION') ?? '{}'),
@@ -108,7 +108,7 @@ test('expired validated gate code is blocked at signup', async ({ page }) => {
   await seedSignupHandoff(page, 'WELCOME', Date.now() - 60 * 1000);
   await page.goto('/mybishbash/home?signup=1');
 
-  await expect(page.getByText('MyBishBash is invite-only right now.')).toBeVisible();
+  await expect(page.getByText('myBishBash is invite-only right now.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create Account' })).toHaveCount(0);
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 });
@@ -129,12 +129,12 @@ test('valid code at gate allows signup without an access-code field', async ({ p
   await expect(page.getByTestId('download-success-page')).toBeVisible();
   await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 
   await fillSignup(page);
 
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
   const signupAccess = await page.evaluate(() => JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_LAST_SIGNUP_ACCESS') ?? '{}'));
   expect(signupAccess.accessCode).toBe('WELCOME');
   expect(signupAccess.grant_reason).toBe('early_user');
@@ -146,13 +146,13 @@ test('signup with invalid remembered gate code is blocked', async ({ page }) => 
   await seedSignupHandoff(page, 'WRONG-CODE');
   await page.goto('/mybishbash/home?signup=1');
 
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
   await fillSignup(page);
 
   await expect(page.getByText('Your access code was not recognised.')).toBeVisible();
   await expect(page.getByTestId('sync-screen')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toHaveCount(0);
 });
 
 test('different gate codes map through signup to their access group', async ({ page }) => {
@@ -160,11 +160,11 @@ test('different gate codes map through signup to their access group', async ({ p
   await seedSignupHandoff(page, 'TESTER');
   await page.goto('/mybishbash/home?signup=1');
 
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
   await fillSignup(page);
 
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
   const signupAccess = await page.evaluate(() => JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_LAST_SIGNUP_ACCESS') ?? '{}'));
   expect(signupAccess.accessCode).toBe('TESTER');
   expect(signupAccess.grant_reason).toBe('tester');
@@ -189,12 +189,12 @@ test('installed PWA signup with handoff query opens the create-account form', as
   await page.goto(`/mybishbash/home?signup=1&handoff=installed-handoff-welcome&handoffExpires=${encodeURIComponent(new Date(Date.now() + 30 * 60 * 1000).toISOString())}`);
 
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByText('Finish creating your account in the browser tab')).toHaveCount(0);
   await expect(page.getByLabel('Access code')).toHaveCount(0);
   await fillSignup(page);
 
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
   const signupAccess = await page.evaluate(() => JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_LAST_SIGNUP_ACCESS') ?? '{}'));
   expect(signupAccess.accessCode).toBe('WELCOME');
 });
@@ -217,20 +217,20 @@ test('standalone missing-handoff recovery validates code before showing signup',
 
   await page.goto('/mybishbash/home?signup=1');
 
-  await expect(page.getByRole('heading', { name: 'Finish setting up MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Finish setting up myBishBash' })).toBeVisible();
   await expect(page.getByText('We couldn’t find your access session. Enter your access code once more to finish creating your account in the app.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Back to browser setup' })).toHaveAttribute('href', '/mybishbash/download');
-  await expect(page.getByRole('link', { name: 'Get MyBishBash' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Get myBishBash' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Join waitlist' })).toHaveCount(0);
   await page.getByLabel('Access code').fill('NOPE');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('That access code didn’t work. Please check it and try again.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toHaveCount(0);
 
   await page.getByLabel('Access code').fill('WELCOME');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'Create your MyBishBash account' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 });
 
@@ -238,12 +238,12 @@ test('existing approved user can log in without access code', async ({ page }) =
   await seedAuthMock(page);
   await page.goto('/mybishbash/home');
 
-  await expect(page.getByRole('heading', { name: 'MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'myBishBash' })).toBeVisible();
   await page.getByLabel('Email').fill('approved@example.com');
   await page.getByLabel('Password').fill('password123');
   await page.getByRole('button', { name: 'Log In' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 });
 
@@ -251,7 +251,7 @@ test('login screen offers password reset help and triggers the reset flow', asyn
   await seedAuthMock(page);
   await page.goto('/mybishbash/home');
 
-  await expect(page.getByRole('heading', { name: 'MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'myBishBash' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Forgot password?' })).toBeDisabled();
 
   await page.getByLabel('Email').fill('reset-me@example.com');
@@ -295,7 +295,7 @@ test('shared device logout clears prior account state before a new signup starts
   await page.getByLabel(/I agree to the Terms/i).check();
   await page.getByRole('button', { name: 'Create Account' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
   const state = await page.evaluate(() => ({
     setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
     profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
@@ -320,8 +320,8 @@ test('direct onboarding route cannot be accessed by unauthorised user', async ({
   await page.goto('/mybishbash/onboarding');
 
   await expect(page.getByTestId('sync-screen')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'MyBishBash' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Build your phone strategy' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'myBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toHaveCount(0);
 });
 
 test('direct product route cannot be accessed by unauthorised user', async ({ page }) => {
