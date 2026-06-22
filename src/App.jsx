@@ -165,6 +165,7 @@ import {
   TesterToolsSheet,
   TestPilotProvider,
   fetchTesterStatus,
+  useTestPilot,
 } from "./testing/TestPilot";
 import "./testing/TestPilot/testPilot.css";
 import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
@@ -5960,7 +5961,7 @@ function App() {
   }
 
   async function handleResetSharedState() {
-    const confirmed = window.confirm("Clear all MyBishBash data from this device? This will remove your cards, packs, settings and local history. This cannot be undone. Your cloud account is not deleted.");
+    const confirmed = window.confirm("Clear all myBishBash data from this device? This will remove your cards, packs, settings and local history. This cannot be undone. Your cloud account is not deleted.");
     if (!confirmed) return;
 
     setSyncStatus("needs-connection");
@@ -6040,7 +6041,7 @@ function App() {
   }
 
   async function handleLogOut() {
-    const confirmed = window.confirm("Log out of this MyBishBash profile?");
+    const confirmed = window.confirm("Log out of this myBishBash profile?");
     if (!confirmed) return;
     setSyncStatus("loading");
     try {
@@ -6779,15 +6780,8 @@ function App() {
               ) : null}
               {activeTab === "settings" ? (
                 <SettingsPanel
-                  mood={mood}
-                  onSelectMood={setMood}
                   homeScreenVersions={homeScreenVersions}
-                  launcherBehaviorSettings={launcherBehaviorSettings}
-                  onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
-                  onSaveVersionBehavior={handleSaveVersionBehavior}
-                  globalInterruptionMode={globalInterruptionMode}
-                  onSetGlobalInterruptionMode={handleSetGlobalInterruptionMode}
-          session={session}
+                  session={session}
                   onLogOut={handleLogOut}
                   onDeleteAccount={handleDeleteAccount}
                   onRefreshSession={handleRefreshSession}
@@ -6801,10 +6795,6 @@ function App() {
                   onUpdateNotificationsPerDay={updateNotificationsPerDay}
                   actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
-                  interruptionPacks={interruptionPacks}
-                  onOpenInterruptionPack={setSelectedPackDetail}
-                  launcherContext={NORMAL_LAUNCHER_CONTEXT}
-                  onLogLauncherEvent={logLauncherEvent}
                   morningSummaryDebug={morningSummaryDebug}
                   onShowMorningSummaryNow={showMorningSummaryNow}
                   onGenerateMorningSummaryForToday={showMorningSummaryForToday}
@@ -7673,11 +7663,11 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
       </button>
       {accountMenuOpen ? (
         <div className="account-menu" data-testid="account-menu">
-          <button type="button" onClick={() => handleNavigate("/settings")}>My Account</button>
+          <button type="button" onClick={() => handleNavigate("/settings")}>Account</button>
           <button type="button" onClick={() => handleNavigate("/settings")}>Notifications</button>
           <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/invite`; }}>Premium</button>
           <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/about`; }}>Help</button>
-          <button type="button" onClick={() => { setAccountMenuOpen(false); onLogOut?.(); }}>Sign Out</button>
+          <button type="button" onClick={() => { setAccountMenuOpen(false); onLogOut?.(); }}>Sign out</button>
           <button type="button" className="account-menu-close" onClick={() => setAccountMenuOpen(false)}>Close</button>
         </div>
       ) : null}
@@ -10186,14 +10176,7 @@ function AppManagementScreen({
 }
 
 function SettingsPanel({
-  mood,
-  onSelectMood,
   homeScreenVersions,
-  launcherBehaviorSettings,
-  onUpdateHomeScreenIcon,
-  onSaveVersionBehavior,
-  globalInterruptionMode,
-  onSetGlobalInterruptionMode,
   session,
   onLogOut,
   onDeleteAccount,
@@ -10208,15 +10191,10 @@ function SettingsPanel({
   onUpdateNotificationsPerDay,
   actionCards,
   onRestoreActionCards,
-  interruptionPacks,
-  onOpenInterruptionPack,
-  launcherContext,
-  onLogLauncherEvent,
   morningSummaryDebug,
   onShowMorningSummaryNow,
   onGenerateMorningSummaryForToday,
   onGenerateMorningSummaryForYesterday,
-  onFakeLauncherLaunch,
   timingWindowsPrefs = DEFAULT_WINDOW_DEFS,
   onSaveTimingWindowsPrefs,
 }) {
@@ -10225,26 +10203,6 @@ function SettingsPanel({
   const [windowSaveStatus, setWindowSaveStatus] = useState(null); // null | "saved" | { error: string }
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
-  const [previewVersionId, setPreviewVersionId] = useState("mybishbash");
-
-  const isInsideFakeLauncher =
-    launcherContext &&
-    isKnownLauncher(launcherContext);
-
-  const isSelectedCurrentLauncher =
-    isInsideFakeLauncher && previewVersionId === launcherContext;
-  const shortcutContexts = {
-    safari: "Reminders during everyday phone use",
-    instagram: "Pause before social scrolling",
-    youtube: "Pause before video scrolling",
-    chrome: "Pause before open-ended browsing",
-    reddit: "Pause before thread-hopping",
-    linkedin: "Pause before professional comparison",
-    whatsapp: "Pause before reactive messaging",
-    "bbc-news": "Pause before checking the news",
-    duolingo: "Pause before streak-checking",
-    mybishbash: "Main MyBishBash home",
-  };
   const settingsTesterStatus = { is_tester: isTester };
   const supportedShortcutNames = getAvailableLaunchersForUser({
     launchers: Object.values(homeScreenVersions).filter((version) => version.id !== "mybishbash"),
@@ -10253,265 +10211,259 @@ function SettingsPanel({
   })
     .map((version) => version.name ?? version.displayName ?? version.id)
     .join(", ");
-  const installableHomeScreenVersions = Object.values(homeScreenVersions).filter(
-    (version) =>
-      version.id === "mybishbash" ||
-      isLauncherVisibleInContext(version, { testerStatus: settingsTesterStatus, context: LAUNCHER_CONTEXTS.SETTINGS }),
-  );
-  const selectedPreviewVersion = installableHomeScreenVersions.some((version) => version.id === previewVersionId)
-    ? previewVersionId
-    : "mybishbash";
+  const notificationCopy = notificationSettings?.enabled
+    ? `On, up to ${notificationSettings?.notificationsPerDay ?? 3} per day`
+    : "Off";
 
   return (
     <section className="panel-section">
       <div className="section-heading solo">
         <div>
           <h2>Settings</h2>
-          <p>Personal touches and a quick peek at how MyBishBash works.</p>
+          <p>Manage your account, cards and myBishBash preferences.</p>
         </div>
       </div>
-      <div className="settings-card settings-compact">
-        <button
-          type="button"
-          className="settings-toggle"
-          onClick={() => setIsOpen((current) => !current)}
-          aria-expanded={isOpen}
-        >
-          <span>How it works</span>
-          <span>{isOpen ? "−" : "+"}</span>
-        </button>
-        {isOpen ? (
-          <div className="settings-dropdown">
-            <p>Each time the app opens, it picks one random eligible MyBishBash from everything you&apos;ve created or activated.</p>
-            <ul className="settings-list">
-              <li>it is not paused</li>
-              <li>it has not already been marked done</li>
-              <li>it is not cooling down from Not done or I&apos;ll do it now</li>
-              <li>the current time matches its selected windows</li>
-            </ul>
-          </div>
-        ) : null}
-      </div>
-      <div className="settings-card">
+
+      <section className="settings-section" aria-labelledby="settings-account-heading">
         <div className="settings-version-heading">
-          <p>Mood</p>
-          <span>Choose the overall feeling of MyBishBash.</span>
+          <h3 id="settings-account-heading">Account</h3>
+          <span>Signed in as {session?.user?.email ?? "Unknown"}</span>
         </div>
-        <div className="theme-showcase settings-theme-showcase" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-          {THEMES.map((theme) => (
+        <div className="settings-card settings-compact account-delete-card" data-testid="delete-account-settings-card">
+          <div className="settings-version-heading">
+            <p>Delete account</p>
+            <span>This permanently deletes your myBishBash account, cards, settings and saved app data. This cannot be undone.</span>
+          </div>
+          <button type="button" className="pack-button secondary danger-soft-button" onClick={() => setIsDeleteAccountModalOpen(true)}>
+            Delete account
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-notifications-heading">
+        <div className="settings-version-heading">
+          <h3 id="settings-notifications-heading">Notifications</h3>
+          <span>Small myBishBash nudges from your saved cards.</span>
+        </div>
+        <div className="settings-card">
+          <label className="timing-option settings-checkbox-row" style={{ marginBottom: "12px" }}>
+            <input
+              type="checkbox"
+              checked={Boolean(notificationSettings?.enabled)}
+              onChange={(event) => {
+                if (event.target.checked) {
+                  void onEnableNotifications();
+                } else {
+                  void onDisableNotifications();
+                }
+              }}
+            />
+            <span>{notificationCopy}</span>
+          </label>
+          <label className="field" style={{ marginBottom: 0 }}>
+            <span>Cards per day</span>
+            <input
+              type="number"
+              min="1"
+              max="6"
+              className="settings-input"
+              value={notificationSettings?.notificationsPerDay ?? 3}
+              onChange={(event) => void onUpdateNotificationsPerDay(event.target.value)}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-cards-timing-heading">
+        <div className="settings-version-heading">
+          <h3 id="settings-cards-timing-heading">Cards & Timing</h3>
+          <span>Choose when cards are most likely to appear.</span>
+        </div>
+        <div className="settings-card" data-testid="timing-windows-settings-card">
+          <div className="settings-version-heading">
+            <p>Card times</p>
+            <span>Morning, afternoon and evening windows help myBishBash show cards at the right time.</span>
+          </div>
+          <div className="tw-rows">
+            {draftWindowDefs.map((def, idx) => {
+              const isNightWrapping = def.start > def.end || (def.id === "night" && def.start >= 22);
+              return (
+                <div key={def.id} className="tw-row" data-testid={`tw-row-${def.id}`}>
+                  <span className="tw-label">{def.label || def.id}</span>
+                  <label className="tw-time-label">
+                    <span className="tw-time-hint">from</span>
+                    <input
+                      type="time"
+                      step="3600"
+                      className="tw-time-input settings-input"
+                      value={hourToTimeString(def.start)}
+                      data-testid={`tw-start-${def.id}`}
+                      onChange={(e) => {
+                        const h = timeStringToHour(e.target.value);
+                        if (h === null) return;
+                        const next = draftWindowDefs.map((d, i) =>
+                          i === idx ? { ...d, start: h } : d,
+                        );
+                        setDraftWindowDefs(next);
+                        setWindowSaveStatus(null);
+                      }}
+                    />
+                  </label>
+                  <label className="tw-time-label">
+                    <span className="tw-time-hint">to</span>
+                    <input
+                      type="time"
+                      step="3600"
+                      className="tw-time-input settings-input"
+                      value={hourToTimeString(def.end)}
+                      data-testid={`tw-end-${def.id}`}
+                      onChange={(e) => {
+                        const h = timeStringToHour(e.target.value);
+                        if (h === null) return;
+                        const next = draftWindowDefs.map((d, i) =>
+                          i === idx ? { ...d, end: h } : d,
+                        );
+                        setDraftWindowDefs(next);
+                        setWindowSaveStatus(null);
+                      }}
+                    />
+                  </label>
+                  {isNightWrapping && (
+                    <span className="tw-wraps-hint">wraps midnight</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {windowSaveStatus && typeof windowSaveStatus === "object" && windowSaveStatus.error ? (
+            <p className="tw-error" role="alert" data-testid="tw-error">{windowSaveStatus.error}</p>
+          ) : null}
+          {windowSaveStatus === "saved" ? (
+            <p className="tw-saved" data-testid="tw-saved">Saved.</p>
+          ) : null}
+          <div className="tw-actions">
             <button
-              key={theme}
               type="button"
-              className={`theme-showcase-card theme-${getThemeClass(theme)} ${mood === theme ? "selected-mood" : ""}`}
-              onClick={() => onSelectMood(theme)}
-              style={{ textAlign: "left", cursor: "pointer", padding: "16px", border: mood === theme ? "2px solid currentColor" : "none", borderRadius: "16px" }}
+              className="settings-save-btn"
+              data-testid="tw-save-btn"
+              onClick={() => {
+                const { valid, error } = validateWindowDefsGapFree(draftWindowDefs);
+                if (!valid) {
+                  setWindowSaveStatus({ error });
+                  return;
+                }
+                onSaveTimingWindowsPrefs?.(draftWindowDefs);
+                setWindowSaveStatus("saved");
+                setTimeout(() => setWindowSaveStatus(null), 2500);
+              }}
             >
-              <strong style={{ display: "block", fontSize: "1.1em", marginBottom: "4px" }}>{theme}</strong>
-              <span style={{ fontSize: "0.9em", opacity: 0.9 }}>have you stretched?</span>
+              Save
             </button>
-          ))}
+            <button
+              type="button"
+              className="tw-reset-btn"
+              data-testid="tw-reset-btn"
+              onClick={() => {
+                setDraftWindowDefs(DEFAULT_WINDOW_DEFS);
+                setWindowSaveStatus(null);
+              }}
+            >
+              Reset to defaults
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="settings-card" data-testid="timing-windows-settings-card">
-        <div className="settings-version-heading">
-          <p>Time windows</p>
-          <span>Adjust when each part of the day begins. Cards only show during their chosen windows.</span>
-        </div>
-        <div className="tw-rows">
-          {draftWindowDefs.map((def, idx) => {
-            const isNightWrapping = def.start > def.end || (def.id === "night" && def.start >= 22);
-            return (
-              <div key={def.id} className="tw-row" data-testid={`tw-row-${def.id}`}>
-                <span className="tw-label">{def.label || def.id}</span>
-                <label className="tw-time-label">
-                  <span className="tw-time-hint">from</span>
-                  <input
-                    type="time"
-                    step="3600"
-                    className="tw-time-input settings-input"
-                    value={hourToTimeString(def.start)}
-                    data-testid={`tw-start-${def.id}`}
-                    onChange={(e) => {
-                      const h = timeStringToHour(e.target.value);
-                      if (h === null) return;
-                      const next = draftWindowDefs.map((d, i) =>
-                        i === idx ? { ...d, start: h } : d,
-                      );
-                      setDraftWindowDefs(next);
-                      setWindowSaveStatus(null);
-                    }}
-                  />
-                </label>
-                <label className="tw-time-label">
-                  <span className="tw-time-hint">to</span>
-                  <input
-                    type="time"
-                    step="3600"
-                    className="tw-time-input settings-input"
-                    value={hourToTimeString(def.end)}
-                    data-testid={`tw-end-${def.id}`}
-                    onChange={(e) => {
-                      const h = timeStringToHour(e.target.value);
-                      if (h === null) return;
-                      const next = draftWindowDefs.map((d, i) =>
-                        i === idx ? { ...d, end: h } : d,
-                      );
-                      setDraftWindowDefs(next);
-                      setWindowSaveStatus(null);
-                    }}
-                  />
-                </label>
-                {isNightWrapping && (
-                  <span className="tw-wraps-hint">wraps midnight</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {windowSaveStatus && typeof windowSaveStatus === "object" && windowSaveStatus.error ? (
-          <p className="tw-error" role="alert" data-testid="tw-error">{windowSaveStatus.error}</p>
-        ) : null}
-        {windowSaveStatus === "saved" ? (
-          <p className="tw-saved" data-testid="tw-saved">Saved.</p>
-        ) : null}
-        <div className="tw-actions">
+        <div className="settings-card settings-compact">
           <button
             type="button"
-            className="settings-save-btn"
-            data-testid="tw-save-btn"
-            onClick={() => {
-              const { valid, error } = validateWindowDefsGapFree(draftWindowDefs);
-              if (!valid) {
-                setWindowSaveStatus({ error });
-                return;
-              }
-              onSaveTimingWindowsPrefs?.(draftWindowDefs);
-              setWindowSaveStatus("saved");
-              setTimeout(() => setWindowSaveStatus(null), 2500);
-            }}
+            className="settings-toggle"
+            onClick={() => setIsOpen((current) => !current)}
+            aria-expanded={isOpen}
           >
-            Save
+            <span>How cards are chosen</span>
+            <span>{isOpen ? "−" : "+"}</span>
           </button>
-          <button
-            type="button"
-            className="tw-reset-btn"
-            data-testid="tw-reset-btn"
-            onClick={() => {
-              setDraftWindowDefs(DEFAULT_WINDOW_DEFS);
-              setWindowSaveStatus(null);
-            }}
-          >
-            Reset to defaults
+          {isOpen ? (
+            <div className="settings-dropdown">
+              <p>Each time the app opens, it chooses one eligible myBishBash from everything you have created or activated.</p>
+              <ul className="settings-list">
+                <li>it is not paused</li>
+                <li>it has not already been marked done</li>
+                <li>it is ready to appear again</li>
+                <li>the current time matches its selected part of the day</li>
+              </ul>
+            </div>
+          ) : null}
+        </div>
+        <div className="settings-card">
+          <div className="settings-version-heading">
+            <p>Restore deleted cards</p>
+            <span>Bring back action cards you previously deleted.</span>
+          </div>
+          <button type="button" className="pack-button secondary" onClick={() => setIsRestoreModalOpen(true)}>
+            View deleted cards
           </button>
         </div>
-      </div>
-      <div className="settings-card settings-compact">
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-apps-access-heading">
         <div className="settings-version-heading">
-          <p>Account</p>
-          <span>Logged in as {session?.user?.email ?? "Unknown"}</span>
+          <h3 id="settings-apps-access-heading">Apps / Access</h3>
+          <span>{supportedShortcutNames ? `App prompts are available for ${supportedShortcutNames}.` : "App prompts can be managed from Apps."}</span>
         </div>
-        <div className="sync-profile-row">
+        <div className="settings-card settings-action-row">
+          <a className="pack-button secondary" href={`${BASE_PATH}/apps`}>
+            Manage apps
+          </a>
+          <a className="pack-button secondary" href={`${BASE_PATH}/invite`}>
+            Access options
+          </a>
+        </div>
+        <div className="settings-card settings-compact">
+          <div className="settings-version-heading">
+            <p>Update app</p>
+            <span>Reload the latest myBishBash without deleting your account, cards or preferences.</span>
+          </div>
+          <button type="button" className="pack-button secondary" onClick={onRefreshAppShell}>
+            Refresh app
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-help-heading">
+        <div className="settings-version-heading">
+          <h3 id="settings-help-heading">Help</h3>
+          <span>Find product information, privacy details and support guidance.</span>
+        </div>
+        <div className="settings-card settings-action-row">
+          <a className="pack-button secondary" href={`${BASE_PATH}/about`}>
+            Help
+          </a>
+        </div>
+      </section>
+
+      {isTester ? (
+        <TesterToolsSettingsCard
+          session={session}
+          onRefreshSession={onRefreshSession}
+          onResetSharedState={onResetSharedState}
+          morningSummaryDebug={morningSummaryDebug}
+          onShowMorningSummaryNow={onShowMorningSummaryNow}
+          onGenerateMorningSummaryForToday={onGenerateMorningSummaryForToday}
+          onGenerateMorningSummaryForYesterday={onGenerateMorningSummaryForYesterday}
+        />
+      ) : null}
+
+      <section className="settings-section" aria-labelledby="settings-sign-out-heading">
+        <div className="settings-version-heading">
+          <h3 id="settings-sign-out-heading">Sign out</h3>
+          <span>Leave this myBishBash account on this device.</span>
+        </div>
+        <div className="settings-card settings-compact">
           <button type="button" className="pack-button secondary" onClick={onLogOut}>
-            Log out
-          </button>
-          <button type="button" className="pack-button secondary" onClick={onRefreshSession}>
-            Refresh login session
+            Sign out
           </button>
         </div>
-        <AuthDiagnostics session={session} />
-      </div>
-      <div className="settings-card settings-compact account-delete-card" data-testid="delete-account-settings-card">
-        <div className="settings-version-heading">
-          <p>Delete account</p>
-          <span>This permanently deletes your MyBishBash account, cards, settings and saved app data. This cannot be undone.</span>
-        </div>
-        <button type="button" className="pack-button secondary danger-soft-button" onClick={() => setIsDeleteAccountModalOpen(true)}>
-          Delete account
-        </button>
-      </div>
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Notifications</p>
-          <span>Small MyBishBash nudges from your saved cards.</span>
-        </div>
-        <label className="timing-option settings-checkbox-row" style={{ marginBottom: "12px" }}>
-          <input
-            type="checkbox"
-            checked={Boolean(notificationSettings?.enabled)}
-            onChange={(event) => {
-              if (event.target.checked) {
-                void onEnableNotifications();
-              } else {
-                void onDisableNotifications();
-              }
-            }}
-          />
-          <span>{notificationSettings?.enabled ? "On" : "Off"}</span>
-        </label>
-        <label className="field" style={{ marginBottom: "12px" }}>
-          <span>Per day</span>
-          <input
-            type="number"
-            min="1"
-            max="6"
-            className="settings-input"
-            value={notificationSettings?.notificationsPerDay ?? 3}
-            onChange={(event) => void onUpdateNotificationsPerDay(event.target.value)}
-          />
-        </label>
-        <p className="tiny-note" style={{ margin: 0 }}>
-          Status: {notificationStatus || "unknown"}
-        </p>
-      </div>
-      {isTester && (
-        <div className="settings-card">
-          <div className="settings-version-heading">
-            <p>Morning Summary debug</p>
-            <span>Force yesterday’s reflection and inspect the raw events used by the summary.</span>
-          </div>
-          <div className="sync-profile-row morning-summary-debug-actions">
-            <button type="button" className="pack-button secondary" onClick={onShowMorningSummaryNow}>
-              Show Morning Summary Now
-            </button>
-            <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForToday}>
-              Generate Summary for Today
-            </button>
-            <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForYesterday}>
-              Generate Summary for Yesterday
-            </button>
-          </div>
-          <MorningSummaryDebugLog summary={morningSummaryDebug} />
-        </div>
-      )}
-      <div className="settings-card settings-compact">
-        <div className="settings-version-heading">
-          <p>Refresh MyBishBash</p>
-          <span>Reload the latest app without deleting login, cards, preferences, or logs.</span>
-        </div>
-        <button type="button" className="pack-button secondary" onClick={onRefreshAppShell}>
-          Refresh MyBishBash
-        </button>
-      </div>
-      <div className="settings-card">
-        <div className="settings-version-heading">
-          <p>Restore deleted actions</p>
-          <span>Bring back action cards you previously deleted.</span>
-        </div>
-        <button type="button" className="pack-button secondary" onClick={() => setIsRestoreModalOpen(true)}>
-          View deleted cards
-        </button>
-      </div>
-      {isTester && (
-        <div className="settings-card">
-          <div className="settings-version-heading">
-            <p>Clear device data</p>
-            <span>Removes all cards, packs, settings and history from this device. Your cloud account is not deleted.</span>
-          </div>
-          <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
-            Clear all data from this device
-          </button>
-        </div>
-      )}
+      </section>
 
       {isRestoreModalOpen ? (
         <RestoreActionCardsModal
@@ -10527,6 +10479,84 @@ function SettingsPanel({
           onClose={() => setIsDeleteAccountModalOpen(false)}
         />
       ) : null}
+    </section>
+  );
+}
+
+function TesterToolsSettingsCard({
+  session,
+  onRefreshSession,
+  onResetSharedState,
+  morningSummaryDebug,
+  onShowMorningSummaryNow,
+  onGenerateMorningSummaryForToday,
+  onGenerateMorningSummaryForYesterday,
+}) {
+  const { openPanel } = useTestPilot();
+
+  return (
+    <section className="settings-section tester-tools-section" aria-labelledby="settings-tester-tools-heading" data-testid="tester-tools-settings-section">
+      <div className="settings-version-heading">
+        <h3 id="settings-tester-tools-heading">Tester Tools</h3>
+        <span>Tools for checking, reporting and resetting this test device.</span>
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Reports and diagnostics</p>
+          <span>Send feedback, review submitted reports, or inspect the context included with tester reports.</span>
+        </div>
+        <div className="settings-action-row">
+          <button type="button" className="pack-button secondary" onClick={() => openPanel("issue")}>
+            Report an issue
+          </button>
+          <button type="button" className="pack-button secondary" onClick={() => openPanel("feedback")}>
+            Send feedback
+          </button>
+          <button type="button" className="pack-button secondary" onClick={() => openPanel("reports")}>
+            Tester reports
+          </button>
+          <button type="button" className="pack-button secondary" onClick={() => openPanel("diagnostics")}>
+            Diagnostics
+          </button>
+        </div>
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Morning Summary diagnostics</p>
+          <span>Force summary states and inspect the events used by the summary.</span>
+        </div>
+        <div className="sync-profile-row morning-summary-debug-actions">
+          <button type="button" className="pack-button secondary" onClick={onShowMorningSummaryNow}>
+            Show Morning Summary Now
+          </button>
+          <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForToday}>
+            Generate Summary for Today
+          </button>
+          <button type="button" className="pack-button secondary" onClick={onGenerateMorningSummaryForYesterday}>
+            Generate Summary for Yesterday
+          </button>
+        </div>
+        <MorningSummaryDebugLog summary={morningSummaryDebug} />
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Account diagnostics</p>
+          <span>Refresh the current auth session and inspect tester-only account state.</span>
+        </div>
+        <button type="button" className="pack-button secondary" onClick={onRefreshSession}>
+          Refresh login session
+        </button>
+        <AuthDiagnostics session={session} />
+      </div>
+      <div className="settings-card">
+        <div className="settings-version-heading">
+          <p>Clear device data</p>
+          <span>Removes all cards, packs, settings and history from this device. Your cloud account is not deleted.</span>
+        </div>
+        <button type="button" className="pack-button secondary danger-soft-button" onClick={onResetSharedState}>
+          Clear all data from this device
+        </button>
+      </div>
     </section>
   );
 }
@@ -10565,9 +10595,9 @@ function DeleteAccountModal({ email, onDelete, onClose }) {
             Close
           </button>
         </div>
-        <h3 id="delete-account-title">Delete your MyBishBash account?</h3>
+        <h3 id="delete-account-title">Delete your myBishBash account?</h3>
         <p className="pack-editor-copy">
-          This permanently deletes your MyBishBash account, cards, settings and saved app data. This cannot be undone.
+          This permanently deletes your myBishBash account, cards, settings and saved app data. This cannot be undone.
         </p>
         {email ? <p className="tiny-note">Signed in as {email}</p> : null}
         <label className="field">

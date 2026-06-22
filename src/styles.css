@@ -4501,13 +4501,25 @@ textarea {
   margin-top: 10px;
 }
 
+.settings-section {
+  display: grid;
+  gap: 12px;
+}
+
 .settings-version-heading {
   display: grid;
   gap: 6px;
 }
 
-.settings-version-heading p {
+.settings-version-heading p,
+.settings-version-heading h3 {
   margin: 0;
+}
+
+.settings-version-heading h3 {
+  color: var(--charcoal);
+  font-size: 1.06rem;
+  font-weight: 750;
 }
 
 .settings-version-heading span {
@@ -4645,6 +4657,21 @@ textarea {
 
 .account-delete-card {
   border: 1px solid rgba(140, 79, 67, 0.18);
+}
+
+.settings-action-row {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-action-row .pack-button {
+  margin-top: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
+.tester-tools-section {
+  padding-top: 2px;
 }
 
 .danger-button {

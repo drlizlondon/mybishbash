@@ -371,7 +371,7 @@ test('settings entered after shell app controls keeps main navigation working', 
   await assertInteractionCleanup(page);
 
   await page.getByTestId('settings-gear').click();
-  await page.getByRole('button', { name: 'My Account' }).click();
+  await page.getByTestId('account-menu').getByRole('button', { name: 'Account' }).click();
   await expectAppRoute(page, '/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(page.getByTestId('bottom-nav-apps')).toBeVisible();

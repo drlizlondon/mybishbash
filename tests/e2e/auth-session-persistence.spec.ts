@@ -222,10 +222,10 @@ test('log out signs the user out globally across main app and shell routes', asy
 
   await goToSettings(page);
   page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('Log out of this MyBishBash profile?');
+    expect(dialog.message()).toContain('Log out of this myBishBash profile?');
     await dialog.accept();
   });
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
 
   await expectSessionMissing(page);
   await expect(page.getByTestId('sync-screen')).toBeVisible({ timeout: 10000 });
@@ -241,9 +241,9 @@ test('delete account confirmation requires DELETE and cancel keeps the session',
   await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10000 });
   await goToSettings(page);
 
-  await expect(page.getByTestId('delete-account-settings-card')).toContainText('This permanently deletes your MyBishBash account, cards, settings and saved app data. This cannot be undone.');
+  await expect(page.getByTestId('delete-account-settings-card')).toContainText('This permanently deletes your myBishBash account, cards, settings and saved app data. This cannot be undone.');
   await page.getByTestId('delete-account-settings-card').getByRole('button', { name: 'Delete account' }).click();
-  await expect(page.getByRole('dialog', { name: 'Delete your MyBishBash account?' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Delete your myBishBash account?' })).toBeVisible();
   await expect(page.getByTestId('delete-account-final-button')).toBeDisabled();
 
   await page.getByTestId('delete-account-confirmation-input').fill('delete');
@@ -253,7 +253,7 @@ test('delete account confirmation requires DELETE and cancel keeps the session',
   await expect(page.getByTestId('delete-account-final-button')).toBeEnabled();
 
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByRole('dialog', { name: 'Delete your MyBishBash account?' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Delete your myBishBash account?' })).toHaveCount(0);
   await expectSessionPresent(page);
 });
 
@@ -290,7 +290,7 @@ test('failed account deletion shows an error and keeps the user signed in', asyn
   await page.getByTestId('delete-account-final-button').click();
 
   await expect(page.getByRole('alert')).toContainText('We could not delete your account just now. Please try again in a moment.');
-  await expect(page.getByRole('dialog', { name: 'Delete your MyBishBash account?' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Delete your myBishBash account?' })).toBeVisible();
   await expectSessionPresent(page);
   await expect(page.getByTestId('app-shell')).toBeVisible();
 });
