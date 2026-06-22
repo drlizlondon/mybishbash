@@ -113,7 +113,7 @@ export const FAKE_APP_LAUNCHERS = [
     installPath: "/mybishbash/install/chrome/",
     launchPath: "/intercept/chrome",
     manifestPath: "/mybishbash/launchers/chrome/manifest.webmanifest",
-    iconSrc: PLACEHOLDER_ICON_SRC,
+    iconSrc: "/mybishbash/icons/chrome-cover.png",
     customIconSrc: "",
     nativeAppUrl: "googlechromes://www.google.com",
     webFallbackUrl: "https://www.google.com",
@@ -648,7 +648,11 @@ export function buildManifestForLauncher(launcher, origin = "https://drlizlondon
   const launchPath = launcher.launchPath.startsWith("/") ? launcher.launchPath : `/${launcher.launchPath}`;
   const startUrl = `${origin}/mybishbash${launchPath}`;
   const iconSrc = launcher.customIconSrc || launcher.iconSrc;
-  const iconType = /\.jpe?g(?:$|\?)/i.test(iconSrc) ? "image/jpeg" : "image/png";
+  const iconType = /\.svg(?:$|\?)/i.test(iconSrc)
+    ? "image/svg+xml"
+    : /\.jpe?g(?:$|\?)/i.test(iconSrc)
+      ? "image/jpeg"
+      : "image/png";
 
   return {
     name: launcher.displayName,

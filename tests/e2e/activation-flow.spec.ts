@@ -280,8 +280,8 @@ test('Home first app task disappears immediately after enabling an app', async (
   await page.getByRole('button', { name: 'Choose your first app' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
   await page.getByTestId('apps-option-instagram').getByRole('button', { name: 'Add' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/apps\/instagram$/);
-  await page.getByTestId('apps-enable-instagram').click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
+  await page.goto('/mybishbash/apps/instagram?installed=1');
   await page.getByTestId('bottom-nav-home').click();
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByText('Choose your first app')).toHaveCount(0);

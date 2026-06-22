@@ -106,21 +106,35 @@
     });
   }
 
+  const copySetupLinkButton = document.querySelector("[data-copy-setup-link]");
+  const copySetupStatus = document.querySelector("[data-copy-setup-status]");
+  if (copySetupLinkButton) {
+    copySetupLinkButton.addEventListener("click", async () => {
+      const setupUrl = buildSetupUrl({ appBasePath, launcherId: version.id });
+      const copied = await copyTextToClipboard(setupUrl);
+      if (copySetupStatus) {
+        copySetupStatus.textContent = copied ? "Setup link copied." : setupUrl;
+      }
+    });
+  }
+
   const completeButton = document.querySelector("[data-install-complete]");
   if (completeButton) {
     completeButton.addEventListener("click", () => {
+      const existingPendingSetup = loadOnboardingPendingSetup(ONBOARDING_PENDING_KEY);
       if (version.id !== "mybishbash") {
-        const existingPendingSetup = loadOnboardingPendingSetup(ONBOARDING_PENDING_KEY);
         storeInstalledLauncherShell(version);
-        window.localStorage.setItem(
-          ONBOARDING_PENDING_KEY,
-          JSON.stringify({
-            appId: version.id,
-            status: "confirmed",
-            useInterruptionCard: Boolean(existingPendingSetup?.useInterruptionCard),
-            updatedAt: new Date().toISOString(),
-          }),
-        );
+        if (existingPendingSetup?.appId === version.id) {
+          window.localStorage.setItem(
+            ONBOARDING_PENDING_KEY,
+            JSON.stringify({
+              appId: version.id,
+              status: "confirmed",
+              useInterruptionCard: Boolean(existingPendingSetup?.useInterruptionCard),
+              updatedAt: new Date().toISOString(),
+            }),
+          );
+        }
       }
       const pendingInstallEvents = loadPendingEvents();
       pendingInstallEvents.push({
@@ -132,7 +146,7 @@
         opened_from: "install_complete_button",
       });
       window.localStorage.setItem("mybishbash.pending-launcher-install.v1", JSON.stringify(pendingInstallEvents.slice(-20)));
-      window.location.assign(`${window.location.origin}${appBasePath}/onboarding`);
+      window.location.assign(resolveInstallCompleteUrl({ appBasePath, launcherId: version.id, pendingSetup: existingPendingSetup }));
     });
   }
 
@@ -188,6 +202,50 @@ function buildLauncherPayload({ appBasePath = "/mybishbash", previewNamespace = 
     appBasePath,
     previewNamespace,
   };
+}
+
+function buildSetupUrl({ appBasePath = "/mybishbash", launcherId = "instagram" } = {}) {
+  const cleanBasePath = appBasePath || "/mybishbash";
+  const cleanLauncherId = launcherId || "instagram";
+  return `${window.location.origin}${cleanBasePath}/install/${cleanLauncherId}/`;
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    if (window.navigator?.clipboard?.writeText) {
+      await window.navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy textarea copy path.
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
+function resolveInstallCompleteUrl({ appBasePath = "/mybishbash", launcherId = "instagram", pendingSetup = null } = {}) {
+  const cleanBasePath = appBasePath || "/mybishbash";
+  const cleanLauncherId = launcherId || "instagram";
+  if (cleanLauncherId === "mybishbash") {
+    return `${window.location.origin}${cleanBasePath}/home`;
+  }
+  if (pendingSetup?.appId === cleanLauncherId) {
+    return `${window.location.origin}${cleanBasePath}/home?launcherInstalled=${encodeURIComponent(cleanLauncherId)}`;
+  }
+  return `${window.location.origin}${cleanBasePath}/apps/${encodeURIComponent(cleanLauncherId)}?installed=1`;
 }
 
 async function loadRegistry(normalAppLauncher, appBasePath = "/mybishbash") {

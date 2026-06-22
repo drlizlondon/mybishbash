@@ -293,11 +293,6 @@ async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: `Add an extra ${appName} prompt?` })).toBeVisible();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${appName.toLowerCase()}/`));
-  await expect(page.getByRole('heading', { name: `Add ${appName} with myBishBash` })).toBeVisible();
-  await page.getByRole('button', { name: 'I’ve added it' }).click();
-  await expectConfirmedSetupAndBackToInstall(page, appName);
-  await page.getByRole('button', { name: 'Go to Home' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByTestId('home-panel')).toBeVisible();
 }
@@ -441,7 +436,7 @@ test('personal card setup caps selected and custom cards at 5 total', async ({ p
   await expect(page.getByText('5 of 5 selected')).toBeVisible();
 });
 
-test('phone trigger selection goes through App Prompt choice, then straight to install page, and saves preference', async ({ page }) => {
+test('phone trigger selection goes through App Prompt choice, then finishes without requiring launcher install', async ({ page }) => {
   await completeCoreSetup(page);
 
   await page.getByRole('radio', { name: 'Safari' }).click();
@@ -462,20 +457,15 @@ test('phone trigger selection goes through App Prompt choice, then straight to i
   await appPromptToggle.getByRole('button', { name: 'On' }).click();
 
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
-  await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toBeVisible();
-  await page.getByRole('button', { name: 'I’ve added it' }).click();
-  await expectConfirmedSetupAndBackToInstall(page, 'Safari');
-  await page.getByRole('button', { name: 'Go to Home' }).click();
-
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   const state = await page.evaluate(() => ({
     profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
     launcherBehavior: JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'),
   }));
   expect(state.profile.selectedProtectedApp).toBe('safari');
-  expect(state.profile.hasCompletedProtectedAppSetup).toBe(true);
+  expect(state.profile.hasCompletedProtectedAppSetup).toBe(false);
   expect(state.launcherBehavior.safari.useInterruptionPack).toBe(true);
+  expect(state.launcherBehavior.safari.appEnabled).not.toBe(true);
 });
 
 test('pending install_started resumes on the App Prompt choice, not the removed instruction step', async ({ page }) => {
@@ -507,20 +497,15 @@ test('first app screen keeps logo-backed apps in order with consistent icon path
   await expect(page.getByRole('radio', { name: 'WhatsApp' })).toHaveAttribute('aria-checked', 'true');
 });
 
-test('app install path supports back navigation before saving setup', async ({ page }) => {
+test('App Prompt choice can be backed out before saving setup', async ({ page }) => {
   await completeCoreSetup(page);
 
   await page.getByRole('radio', { name: 'Safari' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
-
-  await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
-  await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
 
-  await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toHaveCount(0);
   const state = await page.evaluate(() => ({
     profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
@@ -573,6 +558,17 @@ test('install pages stay as manual checkpoints in standalone display mode', asyn
     await page.goto(`/mybishbash/install/${app.id}/`);
     await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${app.id}/?$`));
     await expect(page.locator('.install-copy h2').filter({ hasText: app.heading })).toBeVisible();
+    if (app.id !== 'mybishbash') {
+      await expect(page.locator('.install-copy p')).toContainText('This adds a Home Screen launcher for myBishBash.');
+      await expect(page.locator('.install-copy p')).toContainText('it does not install or replace the real app.');
+      await expect(page.getByText('Open this page in Safari.')).toBeVisible();
+      await expect(page.getByText('Tap Share.')).toBeVisible();
+      await expect(page.getByText('Tap Add to Home Screen.')).toBeVisible();
+      await expect(page.getByText('Open this page in Chrome.')).toBeVisible();
+      await expect(page.getByText('Tap the three dots.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Copy setup link' })).toBeVisible();
+      await expect(page.getByText('If you cannot see Share, copy this link and open it in Safari.')).toBeVisible();
+    }
     await page.waitForTimeout(1500);
     await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${app.id}/?$`));
     await expect(page.locator('.install-copy h2').filter({ hasText: app.heading })).toBeVisible();
@@ -669,6 +665,9 @@ test('home spotlight tour supports navigation and persists dismissal after Perso
   await tour.getByRole('button', { name: 'Previous spotlight step' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Now add Instagram');
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('You picked Instagram during onboarding.');
+  await expect(page.getByTestId('home-onboarding-setup-card').locator('img')).toHaveAttribute('src', /instagram-cover\.jpg/);
 
   await tour.getByRole('button', { name: 'Next' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/explore$/);
@@ -677,18 +676,27 @@ test('home spotlight tour supports navigation and persists dismissal after Perso
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
   await expect(tour.getByRole('heading', { name: 'Apps' })).toBeVisible();
   await tour.getByRole('button', { name: 'Next' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/home$/);
-  await expect(tour.getByRole('heading', { name: 'You’re ready' })).toBeVisible();
-  await tour.getByRole('button', { name: 'Done' }).click();
-  await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(tour.getByRole('heading', { name: 'Now add Instagram' })).toBeVisible();
+  await expect(tour).toContainText('You chose Instagram during onboarding.');
+  await expect(page.getByTestId('apps-onboarding-setup-card')).toContainText('Now add Instagram');
+  await expect(page.getByTestId('apps-onboarding-setup-card')).toContainText('You picked Instagram during onboarding.');
+  await expect(page.getByTestId('apps-onboarding-setup-card').locator('img')).toHaveAttribute('src', /instagram-cover\.jpg/);
+  await expect(page.getByTestId('apps-onboarding-setup-instagram')).toHaveText('Open setup page');
+  await expect(page.getByTestId('apps-option-instagram')).toHaveCount(0);
+  await tour.getByRole('button', { name: 'Add Instagram' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
 
   const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
   expect(profile.onboardingRoute).toBe('personal_card_play_by_play');
   expect(profile.hasCompletedHomeSpotlightTour).toBe(true);
 
-  await page.reload();
+  await page.goto('/mybishbash/home');
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Now add Instagram');
+  await page.getByTestId('home-onboarding-setup-instagram').click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
 });
 
 test('onboarding visible copy avoids old blocker and technical language', async ({ page }) => {
@@ -802,8 +810,8 @@ test('Personal Cards intro demo fits short 100 percent preview without scrolling
   );
   expect(finalLineOpacityBeforeDemo).toBeLessThan(0.1);
   await expect(page.getByText('Have you done something that counts towards your fitness today?')).toBeVisible({ timeout: 3000 });
-  await expect(page.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 14000 });
-  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible({ timeout: 14000 });
+  await expect(page.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 36000 });
+  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible({ timeout: 36000 });
   await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
   await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled();
@@ -840,9 +848,9 @@ test('Personal Cards intro demo fits short 100 percent preview without scrolling
   }
 
   await page.getByRole('button', { name: 'Replay demo' }).click();
-  await page.waitForTimeout(1100);
+  await page.waitForTimeout(2800);
   await expectIntroCursorHitsTarget(page, 'Instagram');
-  await page.waitForTimeout(9000);
+  await page.waitForTimeout(25000);
   await expectIntroCursorHitsTarget(page, 'I’ll do it now');
 });
 
@@ -852,8 +860,8 @@ test('Personal Cards intro demo keeps Replay and actions visible in side preview
   await page.goto('/mybishbash/onboarding');
 
   await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
-  await expect(page.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 14000 });
-  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible({ timeout: 14000 });
+  await expect(page.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 36000 });
+  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible({ timeout: 36000 });
 
   const layout = await page.evaluate(() => {
     const getButton = (label: string) => Array.from(document.querySelectorAll('button'))

@@ -385,8 +385,13 @@ function OnboardingContent({
 
   function continueToProtectedAppSetup() {
     saveProtectedAppInterruptionPreference(selectedProtectedAppId, getSelectedProtectedAppInterruptionEnabled());
-    writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled(), "ready");
-    openProtectedAppInstall();
+    clearPendingProtectedAppSetup();
+    onCompleteProtectedAppSetup?.({
+      appId: selectedProtectedAppId,
+      completed: false,
+      useInterruptionCard: getSelectedProtectedAppInterruptionEnabled(),
+    });
+    onGoHome?.();
   }
 
   function selectProtectedApp(appId) {

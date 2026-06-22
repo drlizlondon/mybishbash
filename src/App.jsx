@@ -263,6 +263,14 @@ function isStandaloneDisplayMode() {
   return Boolean(window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true || window.Capacitor);
 }
 
+function getLauncherSetupUrl(launcherId) {
+  if (typeof window === "undefined") {
+    return `${BASE_PATH || "/mybishbash"}/install/${launcherId}/`;
+  }
+  const basePath = BASE_PATH || PRODUCTION_BASE_PATH;
+  return new URL(`${basePath}/install/${launcherId}/`, window.location.origin).toString();
+}
+
 function consumeSignupHandoffFromUrl() {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
@@ -1629,9 +1637,22 @@ function resetDemoOnboardingState() {
   }));
 }
 
+function applyLocalNormalPreviewFlag() {
+  if (typeof window === "undefined" || !import.meta.env.DEV) return;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("normalPreview") !== "1") return;
+  window.localStorage.setItem("MYBISHBASH_E2E_MODE", "true");
+  window.localStorage.setItem("MYBISHBASH_E2E_TESTER_MODE", "false");
+  window.localStorage.setItem("MYBISHBASH_DEMO_MODE", "true");
+  params.delete("normalPreview");
+  const nextSearch = params.toString();
+  window.history.replaceState({}, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`);
+}
+
 function App() {
   if (typeof window !== "undefined") {
     consumeSignupHandoffFromUrl();
+    applyLocalNormalPreviewFlag();
 
     if (shouldStartDemoOnboarding()) {
       resetDemoOnboardingState();
@@ -1727,6 +1748,7 @@ function App() {
   const [libraryFocusMode, setLibraryFocusMode] = useState(null);
   const [shellSettingsVersionId, setShellSettingsVersionId] = useState(null);
   const [homeSpotlightActionSignal, setHomeSpotlightActionSignal] = useState(null);
+  const [launcherSetupInterstitialVersion, setLauncherSetupInterstitialVersion] = useState(null);
   const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
   const [notificationStatus, setNotificationStatus] = useState(() => getNotificationPermission());
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
@@ -1993,10 +2015,27 @@ function App() {
         return {
           ...app,
           label: app.label ?? version?.realAppLabel ?? version?.name ?? version?.displayName ?? app.id,
-          iconSrc: app.iconSrc ?? (version ? resolveLauncherIconSrc(version) : ""),
+          iconSrc: version ? resolveLauncherIconSrc(version) : app.iconSrc ?? "",
         };
       });
   }, [homeScreenVersions, profile.onboardingShortcutSetup]);
+  const onboardingSelectedAppSetup = useMemo(() => {
+    if (!profile.selectedProtectedApp || !isKnownLauncher(profile.selectedProtectedApp)) return null;
+    const selectedStatus = protectedAppStatuses.find((status) => status.version.id === profile.selectedProtectedApp);
+    if (selectedStatus?.protectedOn) return null;
+    const version =
+      selectedStatus?.version ??
+      homeScreenVersions[profile.selectedProtectedApp] ??
+      DEFAULT_HOME_SCREEN_VERSIONS[profile.selectedProtectedApp] ??
+      getLauncherConfig(profile.selectedProtectedApp);
+    if (!version) return null;
+    return {
+      id: version.id,
+      label: version.realAppLabel ?? version.name ?? version.displayName ?? version.id,
+      iconSrc: resolveLauncherIconSrc(version),
+      version,
+    };
+  }, [homeScreenVersions, profile.selectedProtectedApp, protectedAppStatuses]);
   const activationChecklistItems = useMemo(() => {
     const items = [];
     const displayMode = getAppDisplayMode();
@@ -2203,7 +2242,6 @@ function App() {
   );
 
   function getFakeLauncherShellContextId() {
-    if (testerStatus?.is_tester !== true) return null;
     const installedLauncherId = getInstalledLauncherShellId();
     if (!installedLauncherId || installedLauncherId === NORMAL_LAUNCHER_CONTEXT) return null;
     return installedLauncherId;
@@ -3867,6 +3905,20 @@ function App() {
     const url = `${BASE_PATH}${normalized === "/" ? "" : normalized}`;
     window.history[replace ? "replaceState" : "pushState"]({}, "", url);
     setRoutePath(normalized);
+  }
+
+  function openLauncherSetupFromApp(versionOrId) {
+    const versionId = typeof versionOrId === "string" ? versionOrId : versionOrId?.id;
+    if (!versionId || !isKnownLauncher(versionId)) return;
+    const version =
+      typeof versionOrId === "object" && versionOrId?.id
+        ? versionOrId
+        : homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId] ?? getLauncherConfig(versionId);
+    if (isStandaloneDisplayMode()) {
+      setLauncherSetupInterstitialVersion(version);
+      return;
+    }
+    window.location.href = getLauncherSetupUrl(versionId);
   }
 
   function renderInterceptionDecision(versionId, activation, { source = "route" } = {}) {
@@ -5918,6 +5970,30 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const installedLauncherId =
+      route.kind === "apps" && route.versionId && params.get("installed") === "1"
+        ? route.versionId
+        : params.get("launcherInstalled");
+    if (!isKnownLauncher(installedLauncherId)) return;
+    handleSaveVersionBehavior(installedLauncherId, {
+      appEnabled: true,
+      useInterruptionPack: false,
+      interruptionPaused: false,
+    });
+    params.delete("installed");
+    params.delete("launcherInstalled");
+    const remainingSearch = params.toString();
+    const cleanPath = route.kind === "apps" && route.versionId ? `/apps/${route.versionId}` : route.path;
+    window.history.replaceState(
+      {},
+      "",
+      `${BASE_PATH}${cleanPath}${remainingSearch ? `?${remainingSearch}` : ""}`,
+    );
+  }, [route.kind, route.path, route.versionId]);
+
   function handleSaveTimingWindowsPrefs(defs) {
     if (!isValidWindowDefs(defs)) return;
     saveTimingWindowsPrefs(defs);
@@ -6676,6 +6752,7 @@ function App() {
                   timezone={profile.timezone}
                   homeScreenVersions={homeScreenVersions}
                   pendingOnboardingShortcuts={pendingOnboardingShortcuts}
+                  onboardingSelectedAppSetup={onboardingSelectedAppSetup}
                   activationChecklistItems={activationChecklistItems}
                   saveConfirmation={homeSaveConfirmation}
                   onCreate={openCardComposerFromCurrentRoute}
@@ -6683,6 +6760,7 @@ function App() {
                     window.location.href = `${BASE_PATH}/download`;
                   }}
                   onOpenApps={() => navigateTo("/apps")}
+                  onOpenLauncherSetup={openLauncherSetupFromApp}
                   onOpenTodayCards={() => {
                     signalHomeSpotlightAction("today-cards");
                     setLibraryFocusMode("today-personal");
@@ -6718,12 +6796,14 @@ function App() {
                   onOpenInstallGuide={() => {
                     window.location.href = `${BASE_PATH}/download`;
                   }}
+                  onOpenLauncherSetup={openLauncherSetupFromApp}
                   onPauseApp={handleSetAppPause}
                   onClearAppPause={handleClearAppPause}
                   onLogLauncherEvent={logLauncherEvent}
                   selectedVersionId={route.versionId}
                   appPauseRevision={appPauseRevision}
                   pendingOnboardingShortcuts={pendingOnboardingShortcuts}
+                  onboardingSelectedAppSetup={onboardingSelectedAppSetup}
                   isTester={testerStatus?.is_tester === true}
                   isShellContext={isShellAppSettingsRoute}
                   canUseMultipleApps={canUseMultipleApps}
@@ -6865,12 +6945,24 @@ function App() {
           {shouldShowHomeSpotlightTour ? (
             <HomeSpotlightTour
               actionSignal={homeSpotlightActionSignal}
+              firstApp={
+                profile.selectedProtectedApp && isKnownLauncher(profile.selectedProtectedApp)
+                  ? homeScreenVersions[profile.selectedProtectedApp] ?? DEFAULT_HOME_SCREEN_VERSIONS[profile.selectedProtectedApp] ?? getLauncherConfig(profile.selectedProtectedApp)
+                  : null
+              }
               locationKey={route.path}
               onComplete={completeHomeSpotlightTour}
               onNavigate={(path) => {
                 if (path === "/library") setLibraryFocusMode(null);
                 navigateTo(path);
               }}
+              onOpenLauncherSetup={openLauncherSetupFromApp}
+            />
+          ) : null}
+          {launcherSetupInterstitialVersion ? (
+            <LauncherSetupInterstitial
+              version={launcherSetupInterstitialVersion}
+              onClose={() => setLauncherSetupInterstitialVersion(null)}
             />
           ) : null}
         </div>
@@ -7708,7 +7800,10 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
   );
 }
 
-const HOME_SPOTLIGHT_STEPS = [
+function getHomeSpotlightSteps(firstApp = null) {
+  const firstAppId = firstApp?.id && isKnownLauncher(firstApp.id) ? firstApp.id : "";
+  const firstAppName = firstApp?.realAppLabel ?? firstApp?.name ?? firstApp?.displayName ?? "your first app";
+  return [
   {
     id: "home",
     path: "/home",
@@ -7735,18 +7830,23 @@ const HOME_SPOTLIGHT_STEPS = [
   },
   {
     id: "ready",
-    path: "/home",
-    selector: null,
-    title: "You’re ready",
-    body: "MyBishBash is set up around what matters to you.",
-    button: "Done",
+    path: "/apps",
+    selector: firstAppId ? `[data-testid="apps-option-${firstAppId}"], [data-testid="protected-app-${firstAppId}"]` : '[data-testid="apps-panel"]',
+    title: firstAppId ? `Now add ${firstAppName}` : "Now add your first app",
+    body: firstAppId
+      ? `You chose ${firstAppName} during onboarding. Add its Home Screen launcher so myBishBash can appear before ${firstAppName}.`
+      : "Add your first Home Screen launcher so myBishBash can appear before an app you already open.",
+    button: firstAppId ? `Add ${firstAppName}` : "Open Apps",
+    action: firstAppId ? "openLauncherSetup" : "openApps",
+    launcherId: firstAppId,
   },
-];
+  ];
+}
 
-function HomeSpotlightTour({ actionSignal, locationKey = "", onComplete, onNavigate }) {
+function HomeSpotlightTour({ actionSignal, firstApp = null, locationKey = "", onComplete, onNavigate, onOpenLauncherSetup }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState(null);
-  const visibleSteps = HOME_SPOTLIGHT_STEPS;
+  const visibleSteps = useMemo(() => getHomeSpotlightSteps(firstApp), [firstApp]);
   const step = visibleSteps[Math.min(stepIndex, visibleSteps.length - 1)] ?? visibleSteps[0];
   const isFinalStep = stepIndex >= visibleSteps.length - 1;
 
@@ -7795,8 +7895,16 @@ function HomeSpotlightTour({ actionSignal, locationKey = "", onComplete, onNavig
   if (!step) return null;
 
   function finish() {
-    onNavigate?.("/home");
     onComplete?.();
+    if (step?.action === "openLauncherSetup" && step.launcherId) {
+      onOpenLauncherSetup?.(step.launcherId);
+      return;
+    }
+    if (step?.action === "openApps") {
+      onNavigate?.("/apps");
+      return;
+    }
+    onNavigate?.("/home");
   }
 
   function next() {
@@ -7857,7 +7965,7 @@ function HomeSpotlightTour({ actionSignal, locationKey = "", onComplete, onNavig
             ←
           </button>
           <button type="button" className="home-spotlight-next" onClick={next}>
-            {isFinalStep ? "Done" : step.button}
+            {step.button}
           </button>
         </div>
         {!isFinalStep ? (
@@ -7883,11 +7991,13 @@ function HomePanel({
   timezone,
   homeScreenVersions = {},
   pendingOnboardingShortcuts = [],
+  onboardingSelectedAppSetup = null,
   activationChecklistItems = [],
   saveConfirmation = "",
   onCreate,
   onOpenDownload,
   onOpenApps,
+  onOpenLauncherSetup,
   onOpenTodayCards,
   onOpenCard,
 }) {
@@ -7917,7 +8027,11 @@ function HomePanel({
   const emptyCommitmentTitle = homeState.hasCompletedCommitmentToday ? "You’re clear for now." : "You’re clear for now.";
   const logoSrc = `${BASE_PATH || ""}/icons/mybishbash-cover.png`;
   const greeting = getGreeting(new Date(), timezone);
-  const hasMeaningfulSetup = activationChecklistItems.length === 0 || cards.length > 0 || pendingOnboardingShortcuts.length > 0;
+  const hasMeaningfulSetup =
+    activationChecklistItems.length === 0 ||
+    cards.length > 0 ||
+    pendingOnboardingShortcuts.length > 0 ||
+    Boolean(onboardingSelectedAppSetup);
 
   const openProgressCard = () => {
     onOpenTodayCards?.();
@@ -7944,6 +8058,15 @@ function HomePanel({
     if (item.action === "apps") {
       onOpenApps();
     }
+  };
+
+  const openOnboardingLauncherSetup = () => {
+    if (!onboardingSelectedAppSetup?.id) return;
+    if (isStandaloneDisplayMode()) {
+      onOpenLauncherSetup?.(onboardingSelectedAppSetup.id);
+      return;
+    }
+    window.location.href = getLauncherSetupUrl(onboardingSelectedAppSetup.id);
   };
 
   return (
@@ -8008,6 +8131,27 @@ function HomePanel({
               <strong>{pendingOnboardingShortcuts.length} app{pendingOnboardingShortcuts.length === 1 ? "" : "s"} waiting in Apps</strong>
               <span>Finish adding MyBishBash shortcuts when you are ready.</span>
             </button>
+          ) : null}
+
+          {onboardingSelectedAppSetup ? (
+            <section className="home-onboarding-setup-card" data-testid="home-onboarding-setup-card" aria-labelledby="home-onboarding-setup-title">
+              {onboardingSelectedAppSetup.iconSrc ? (
+                <img src={onboardingSelectedAppSetup.iconSrc} alt="" className="home-screen-version-icon" />
+              ) : (
+                <span className="home-screen-version-icon" aria-hidden="true" />
+              )}
+              <span className="home-card-label">First app</span>
+              <h2 id="home-onboarding-setup-title">Now add {onboardingSelectedAppSetup.label}</h2>
+              <p>You picked {onboardingSelectedAppSetup.label} during onboarding. Open its setup page to add the Home Screen launcher.</p>
+              <button
+                type="button"
+                className="pack-button"
+                data-testid={`home-onboarding-setup-${onboardingSelectedAppSetup.id}`}
+                onClick={openOnboardingLauncherSetup}
+              >
+                Open setup page
+              </button>
+            </section>
           ) : null}
 
           <button
@@ -9594,6 +9738,7 @@ function validateWindowDefsGapFree(defs) {
 function AppsPanel({
   protectedAppStatuses,
   pendingOnboardingShortcuts = [],
+  onboardingSelectedAppSetup = null,
   onSaveVersionBehavior,
   onUpdateHomeScreenIcon,
   onOpenDestinationApp,
@@ -9606,6 +9751,7 @@ function AppsPanel({
   onLogLauncherEvent,
   onClaimAccessCode,
   onOpenInstallGuide,
+  onOpenLauncherSetup,
   selectedVersionId = null,
   appPauseRevision = 0,
   isTester = false,
@@ -9615,6 +9761,7 @@ function AppsPanel({
 }) {
   const [showAccessScreen, setShowAccessScreen] = useState(false);
   const [showCodeScreen, setShowCodeScreen] = useState(false);
+  const [setupInterstitialVersion, setSetupInterstitialVersion] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -9644,6 +9791,22 @@ function AppsPanel({
     : null;
   const enabledStatuses = liveProtectedAppStatuses.filter((status) => status.protectedOn);
   const canAddAnotherApp = canUseMultipleApps || enabledStatuses.length < 1;
+
+  function openLauncherSetup(version) {
+    if (!version?.id) return;
+    if (isStandaloneDisplayMode()) {
+      setSetupInterstitialVersion(version);
+      return;
+    }
+    onOpenLauncherSetup?.(version.id);
+  }
+
+  const setupInterstitial = setupInterstitialVersion ? (
+    <LauncherSetupInterstitial
+      version={setupInterstitialVersion}
+      onClose={() => setSetupInterstitialVersion(null)}
+    />
+  ) : null;
 
   if (showCodeScreen) {
     return (
@@ -9689,8 +9852,10 @@ function AppsPanel({
           isTester={isTester}
           isShellContext={isShellContext}
           onOpenMyBishBash={onOpenMyBishBash}
+          onOpenLauncherSetup={openLauncherSetup}
           nowMs={nowMs}
         />
+        {setupInterstitial}
       </section>
     );
   }
@@ -9735,11 +9900,71 @@ function AppsPanel({
                 )}
                 <div className="home-screen-version-copy">
                   <strong>{app.label}</strong>
-                  <p>Ready when you want to finish adding it.</p>
+                  <p>Add {app.label} with myBishBash.</p>
+                  <div className="home-screen-version-actions apps-row-actions">
+                    <form
+                      className="launcher-setup-form"
+                      action={getLauncherSetupUrl(app.id)}
+                      method="get"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (isStandaloneDisplayMode()) {
+                          openLauncherSetup(homeScreenVersions[app.id] ?? DEFAULT_HOME_SCREEN_VERSIONS[app.id] ?? getLauncherConfig(app.id));
+                          return;
+                        }
+                        window.location.href = getLauncherSetupUrl(app.id);
+                      }}
+                    >
+                      <button
+                        type="submit"
+                        className="pack-button secondary"
+                        data-testid={`apps-pending-setup-${app.id}`}
+                        data-launcher-setup-id={app.id}
+                      >
+                        Open setup page
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </article>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {onboardingSelectedAppSetup ? (
+        <div className="settings-card apps-launcher-setup-card" data-testid="apps-onboarding-setup-card">
+          {onboardingSelectedAppSetup.iconSrc ? (
+            <img src={onboardingSelectedAppSetup.iconSrc} alt="" className="home-screen-version-icon apps-launcher-setup-icon" />
+          ) : (
+            <span className="home-screen-version-icon apps-launcher-setup-icon" aria-hidden="true" />
+          )}
+          <div className="settings-version-heading">
+            <p>Now add {onboardingSelectedAppSetup.label}</p>
+            <span>You picked {onboardingSelectedAppSetup.label} during onboarding. Open its setup page to add the Home Screen launcher.</span>
+          </div>
+          <form
+            className="launcher-setup-form"
+            action={getLauncherSetupUrl(onboardingSelectedAppSetup.id)}
+            method="get"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (isStandaloneDisplayMode()) {
+                openLauncherSetup(onboardingSelectedAppSetup.version);
+                return;
+              }
+              window.location.href = getLauncherSetupUrl(onboardingSelectedAppSetup.id);
+            }}
+          >
+            <button
+              type="submit"
+              className="pack-button"
+              data-testid={`apps-onboarding-setup-${onboardingSelectedAppSetup.id}`}
+              data-launcher-setup-id={onboardingSelectedAppSetup.id}
+            >
+              Open setup page
+            </button>
+          </form>
         </div>
       ) : null}
 
@@ -9769,11 +9994,14 @@ function AppsPanel({
         <MoreAppsOptions
           protectedAppStatuses={liveProtectedAppStatuses}
           canAddAnotherApp={canAddAnotherApp}
+          excludedAppIds={onboardingSelectedAppSetup ? [onboardingSelectedAppSetup.id] : []}
           onManageApp={onManageApp}
           onShowAccess={() => setShowAccessScreen(true)}
           onHaveCode={() => setShowCodeScreen(true)}
+          onAddApp={openLauncherSetup}
         />
       </div>
+      {setupInterstitial}
     </section>
   );
 }
@@ -9840,9 +10068,10 @@ function EnabledAppRow({ status, onManageApp, onPauseApp, onClearAppPause }) {
   );
 }
 
-function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onManageApp, onShowAccess, onHaveCode }) {
+function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, excludedAppIds = [], onBack, onManageApp, onShowAccess, onHaveCode, onAddApp }) {
   const statusById = new Map(protectedAppStatuses.map((status) => [status.version.id, status]));
-  const availableOptionIds = APPS_OPTION_IDS.filter((id) => !statusById.get(id)?.protectedOn);
+  const excludedIds = new Set(excludedAppIds);
+  const availableOptionIds = APPS_OPTION_IDS.filter((id) => !excludedIds.has(id) && !statusById.get(id)?.protectedOn);
   return (
     <div className="apps-more-options" data-testid="apps-more-options">
       <div className="settings-version-heading">
@@ -9877,7 +10106,7 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onMan
                         onShowAccess?.();
                         return;
                       }
-                      onManageApp?.(id);
+                      onAddApp?.(version);
                     }}
                   >
                     {locked ? "Unlock" : "Add"}
@@ -9900,6 +10129,59 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onMan
         {onBack ? <button type="button" className="text-button apps-code-link" onClick={onBack}>
           Back
         </button> : null}
+      </div>
+    </div>
+  );
+}
+
+function LauncherSetupInterstitial({ version, onClose }) {
+  const appName = version.realAppLabel ?? version.name ?? version.displayName ?? version.id;
+  const setupUrl = getLauncherSetupUrl(version.id);
+  const [copyStatus, setCopyStatus] = useState("");
+
+  async function copySetupLink() {
+    try {
+      await window.navigator?.clipboard?.writeText(setupUrl);
+      setCopyStatus("Setup link copied.");
+    } catch {
+      setCopyStatus(setupUrl);
+    }
+  }
+
+  function openSetupPage() {
+    const opened = window.open(setupUrl, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.assign(setupUrl);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop apps-setup-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="composer apps-setup-interstitial"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="apps-setup-title"
+        onClick={(event) => event.stopPropagation()}
+        data-testid="apps-setup-interstitial"
+      >
+        <div className="settings-version-heading">
+          <p id="apps-setup-title">Open in Safari to add this launcher</p>
+          <span>Add {appName} with myBishBash from a browser so the Home Screen controls are available.</span>
+        </div>
+        <div className="apps-setup-actions">
+          <button type="button" className="pack-button" onClick={openSetupPage}>
+            Open setup page
+          </button>
+          <button type="button" className="pack-button secondary" onClick={copySetupLink}>
+            Copy setup link
+          </button>
+          <button type="button" className="text-button apps-code-link" onClick={onClose}>
+            I’ll do this later
+          </button>
+        </div>
+        <p className="tiny-note" data-testid="apps-setup-link">{setupUrl}</p>
+        {copyStatus ? <p className="tiny-note" role="status">{copyStatus}</p> : null}
       </div>
     </div>
   );
@@ -10023,6 +10305,7 @@ function AppManagementScreen({
   onUpdateHomeScreenIcon,
   onProtectedLaunch,
   onOpenDestinationApp,
+  onOpenLauncherSetup,
   onPauseApp,
   onClearAppPause,
   onLogLauncherEvent,
@@ -10041,7 +10324,6 @@ function AppManagementScreen({
   const pauseStatus = protectedOn && paused
     ? `Paused until ${pauseUntil || pauseRemaining || "soon"}`
     : enabledStatus;
-
   return (
     <div className="apps-manage-screen" data-testid={`protected-app-${version.id}`}>
       {!isShellContext ? (
@@ -10057,19 +10339,34 @@ function AppManagementScreen({
         </div>
       </div>
       {!protectedOn ? (
-        <div className="settings-card">
+        <div className="settings-card apps-launcher-setup-card" data-testid={`apps-launcher-setup-${version.id}`}>
+          <img src={resolveLauncherIconSrc(version)} alt="" className="home-screen-version-icon apps-launcher-setup-icon" />
           <div className="settings-version-heading">
-            <p>Add myBishBash to {appName}</p>
-            <span>Turn on this app. App Prompts can be added separately.</span>
+            <p>Add {appName} with myBishBash</p>
+            <span>This opens the {appName} setup page so you can add its Home Screen launcher.</span>
           </div>
-          <button
-            type="button"
-            className="pack-button"
-            data-testid={`apps-enable-${version.id}`}
-            onClick={() => onSaveVersionBehavior(version.id, { appEnabled: true })}
+          <form
+            className="launcher-setup-form"
+            action={getLauncherSetupUrl(version.id)}
+            method="get"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (isStandaloneDisplayMode()) {
+                onOpenLauncherSetup?.(version);
+                return;
+              }
+              window.location.href = getLauncherSetupUrl(version.id);
+            }}
           >
-            Enable {appName}
-          </button>
+            <button
+              type="submit"
+              className="pack-button"
+              data-testid={`apps-enable-${version.id}`}
+              data-launcher-setup-id={version.id}
+            >
+              Open setup page
+            </button>
+          </form>
         </div>
       ) : null}
       <div className="settings-card">

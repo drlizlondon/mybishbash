@@ -801,7 +801,8 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
 
   await page.getByTestId('bottom-nav-apps').click();
   await page.getByTestId('apps-option-action-instagram').click();
-  await expect(page).toHaveURL(/\/mybishbash\/apps\/instagram$/);
+  await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
+  await page.goto('/mybishbash/apps/instagram?installed=1');
   await page.getByTestId('apps-test-shortcut-instagram').click();
   // No active pause → card flow → empty caught-up screen
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();

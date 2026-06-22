@@ -9,7 +9,7 @@
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/mybishbash/icons/mybishbash-cover.png",
+      "src": "/mybishbash/icons/chrome-cover.png",
       "sizes": "180x180",
       "type": "image/png"
     }

@@ -99,7 +99,7 @@
       "installPath": "/mybishbash/install/chrome/",
       "launchPath": "/intercept/chrome",
       "manifestPath": "/mybishbash/launchers/chrome/manifest.webmanifest",
-      "iconSrc": "/mybishbash/icons/mybishbash-cover.png",
+      "iconSrc": "/mybishbash/icons/chrome-cover.png",
       "customIconSrc": "",
       "nativeAppUrl": "googlechromes://www.google.com",
       "webFallbackUrl": "https://www.google.com",

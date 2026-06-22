@@ -506,6 +506,58 @@ test('apps-add-another-hides-enabled-apps — active apps do not duplicate in Ad
   await expect(page.getByTestId('apps-option-safari')).toBeVisible();
 });
 
+test('apps-add-launcher-in-standalone-shows-safari-setup-interstitial', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('apps-standalone-add', 'Standalone add card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: [],
+    testerMode: false,
+  });
+  await page.addInitScript(() => {
+    const nativeMatchMedia = window.matchMedia?.bind(window);
+    window.matchMedia = (query: string) => {
+      if (query === '(display-mode: standalone)') {
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        } as MediaQueryList;
+      }
+      return nativeMatchMedia?.(query) ?? ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      } as MediaQueryList);
+    };
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true,
+    });
+  });
+  await page.goto('/mybishbash/apps');
+
+  await page.getByTestId('apps-option-action-instagram').click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps$/);
+  await expect(page.getByTestId('apps-setup-interstitial')).toBeVisible();
+  await expect(page.getByText('Open in Safari to add this launcher')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open setup page' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy setup link' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'I’ll do this later' })).toBeVisible();
+  await expect(page.getByTestId('apps-setup-link')).toContainText('/mybishbash/install/instagram/');
+  await page.getByRole('button', { name: 'Copy setup link' }).click();
+  await expect(page.getByTestId('apps-setup-interstitial')).toContainText('/mybishbash/install/instagram/');
+});
+
 test('apps-free-access-gate — free user cannot silently enable a second app', async ({ page }) => {
   await seedState(page, {
     cards: [personalCard('apps-free-gate', 'Free gate card')],
@@ -563,8 +615,7 @@ test('apps-code-flow — logged-in user can unlock more apps and continue to App
 
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
   await page.getByTestId('apps-option-action-whatsapp').click();
-  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
-  await expect(page.getByTestId('apps-enable-whatsapp')).toHaveText('Enable WhatsApp');
+  await expect(page).toHaveURL(/\/mybishbash\/install\/whatsapp\/$/);
   await expect(page.getByTestId('apps-access-screen')).toHaveCount(0);
 });
 
@@ -579,9 +630,8 @@ test('apps-full-access — full-access user can enable multiple apps', async ({ 
   await page.goto('/mybishbash/apps');
 
   await page.getByTestId('apps-option-action-whatsapp').click();
-  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
-  await expect(page.getByTestId('apps-enable-whatsapp')).toHaveText('Enable WhatsApp');
-  await page.getByTestId('apps-enable-whatsapp').click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/whatsapp\/$/);
+  await page.goto('/mybishbash/apps/whatsapp?installed=1');
   await expect(page.getByTestId('apps-pause-status-whatsapp')).toContainText('myBishBash enabled');
   await expect(page.getByTestId('apps-interruptions-toggle-whatsapp')).not.toBeChecked();
   await expect(page.getByText('Who are you hoping to contact?')).toHaveCount(0);
@@ -630,13 +680,17 @@ test('apps-disabled-app-detail — unavailable app detail does not claim enabled
 
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('myBishBash is not enabled for Safari yet');
   await expect(page.getByTestId('protected-app-safari')).not.toContainText('myBishBash enabled');
-  await expect(page.getByTestId('apps-enable-safari')).toHaveText('Enable Safari');
+  await expect(page.getByTestId('apps-launcher-setup-safari')).toContainText('Add Safari with myBishBash');
+  await expect(page.getByTestId('apps-launcher-setup-safari').locator('img')).toHaveAttribute('src', /apple-touch-icon\.png/);
+  await expect(page.getByTestId('apps-enable-safari')).toHaveText('Open setup page');
   await expect(page.getByText('Prompt Preview')).toHaveCount(0);
   await expect(page.getByText('Example prompt')).toHaveCount(0);
   await expect(page.getByText('Add shortcut')).toHaveCount(0);
   await expect(page.getByText('Home-screen shortcut coming soon.')).toHaveCount(0);
 
   await page.getByTestId('apps-enable-safari').click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/safari\/$/);
+  await page.goto('/mybishbash/apps/safari?installed=1');
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('myBishBash enabled');
   await expect(page.getByTestId('apps-interruptions-toggle-safari')).not.toBeChecked();
   await expect(page.getByText('Why are you opening Safari right now?')).toHaveCount(0);
@@ -647,6 +701,63 @@ test('apps-disabled-app-detail — unavailable app detail does not claim enabled
   });
   expect(behavior.appEnabled).toBe(true);
   expect(behavior.useInterruptionPack).toBe(false);
+});
+
+test('home onboarding setup uses Safari handoff in standalone PWA mode', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('home-setup-card', 'Home setup card')],
+    appIds: ['youtube', 'instagram', 'safari'],
+    enabledAppIds: [],
+    testerMode: false,
+  });
+  await page.addInitScript(() => {
+    const nativeMatchMedia = window.matchMedia?.bind(window);
+    window.matchMedia = (query: string) => {
+      if (query === '(display-mode: standalone)') {
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        } as MediaQueryList;
+      }
+      return nativeMatchMedia?.(query) ?? ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      } as MediaQueryList);
+    };
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true,
+    });
+    window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({
+      name: 'Pause Tester',
+      timezone: 'Europe/London',
+      selectedProtectedApp: 'youtube',
+      hasCompletedProtectedAppSetup: false,
+      hasCompletedHomeSpotlightTour: true,
+    }));
+  });
+
+  await page.goto('/mybishbash/home');
+
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Now add YouTube');
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('You picked YouTube during onboarding.');
+  await page.getByTestId('home-onboarding-setup-youtube').click();
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('apps-setup-interstitial')).toBeVisible();
+  await expect(page.getByText('Open in Safari to add this launcher')).toBeVisible();
+  await expect(page.getByTestId('apps-setup-link')).toContainText('/mybishbash/install/youtube/');
 });
 
 test('apps-app-prompts-toggle — prompts off does not disable the app', async ({ page }) => {

@@ -2,8 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { createReadStream, existsSync, statSync, writeFileSync } from "node:fs";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +75,77 @@ function legacyBishbashBaseAliasPlugin() {
   };
 }
 
+const DEV_PUBLIC_BASE_PREFIXES = [
+  "/icons/",
+  "/install/",
+  "/launchers/",
+  "/bbc-news/",
+  "/chrome/",
+  "/duolingo/",
+  "/instagram/",
+  "/linkedin/",
+  "/mybishbash/",
+  "/reddit/",
+  "/safari/",
+  "/whatsapp/",
+  "/youtube/",
+];
+
+const DEV_CONTENT_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+};
+
+function devBasePublicFilesPlugin() {
+  return {
+    name: "dev-base-public-files",
+    apply: "serve",
+    configureServer(server) {
+      const publicDir = resolve(__dirname, "public");
+      server.middlewares.use((req, res, next) => {
+        const rawUrl = req.url?.split("?")[0] ?? "";
+        if (!rawUrl.startsWith("/mybishbash/")) {
+          next();
+          return;
+        }
+
+        const publicPath = rawUrl.replace(/^\/mybishbash(?=\/|$)/, "") || "/";
+        if (!DEV_PUBLIC_BASE_PREFIXES.some((prefix) => publicPath === prefix.slice(0, -1) || publicPath.startsWith(prefix))) {
+          next();
+          return;
+        }
+
+        const decodedPath = decodeURIComponent(publicPath);
+        const relativePath = decodedPath.replace(/^\/+/, "");
+        const candidate = normalize(join(publicDir, relativePath));
+        if (!candidate.startsWith(publicDir)) {
+          next();
+          return;
+        }
+
+        const filePath = existsSync(candidate) && statSync(candidate).isDirectory()
+          ? join(candidate, "index.html")
+          : candidate;
+        if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+          next();
+          return;
+        }
+
+        res.statusCode = 200;
+        res.setHeader("Content-Type", DEV_CONTENT_TYPES[extname(filePath)] ?? "application/octet-stream");
+        createReadStream(filePath).pipe(res);
+      });
+    },
+  };
+}
+
 function appVersionPlugin() {
   return {
     name: "mybishbash-version",
@@ -107,7 +178,7 @@ function getGitSha() {
 
 export default defineConfig({
   base: "/mybishbash/",
-  plugins: [legacyBishbashBaseAliasPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },

@@ -253,8 +253,8 @@ assert.match(
 );
 assert.match(
   appSource,
-  /installableHomeScreenVersions = Object\.values\(homeScreenVersions\)\.filter\([\s\S]{0,300}isLauncherVisibleInContext\(version, \{ testerStatus: settingsTesterStatus, context: LAUNCHER_CONTEXTS\.SETTINGS \}\)/,
-  "Settings install links must use launcher availability so unreleased apps stay hidden",
+  /const visibleVersions = getAvailableLaunchersForUser\(\{\s*launchers: candidates,\s*testerStatus,\s*context: LAUNCHER_CONTEXTS\.SETTINGS,\s*\}\);/,
+  "Apps install links must use launcher availability so unreleased apps stay hidden",
 );
 
 // ── Custom rows in the merged HQ list ────────────────────────────────────────

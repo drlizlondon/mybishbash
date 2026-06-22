@@ -80,8 +80,16 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
   );
   assert.match(
     installHtml,
-    new RegExp(`Use it instead of the original [\\s\\S]{0,120}${escapeRegExp(launcher.displayName)}[\\s\\S]{0,120} icon`),
+    new RegExp(`does not install or replace the real app`),
   );
+  assert.match(installHtml, /Open this page in Safari/);
+  assert.match(installHtml, /Tap Share/);
+  assert.match(installHtml, /Tap Add to Home Screen/);
+  assert.match(installHtml, /Open this page in Chrome/);
+  assert.match(installHtml, /Tap the three dots/);
+  assert.match(installHtml, /Tap Add to Home screen or Install app/);
+  assert.match(installHtml, /Copy setup link/);
+  assert.match(installHtml, /If you cannot see Share, copy this link and open it in Safari/);
 }
 
 const normalLaunchEvent = { event_type: "app_opened", route: "/home" };
@@ -153,6 +161,17 @@ assert.equal(
   true,
   "WhatsApp QA candidates should keep web.whatsapp.com documented as a weak iPhone comparison case",
 );
+
+const chrome = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "chrome");
+assert.equal(chrome.iconSrc, "/mybishbash/icons/chrome-cover.png", "Chrome must use its own logo, not the myBishBash placeholder");
+const chromeManifestPath = resolve(root, "public", "launchers", "chrome", "manifest.webmanifest");
+const chromeInstallPath = resolve(root, "public", "install", "chrome", "index.html");
+assert.equal(existsSync(chromeManifestPath), true, "Chrome manifest file missing");
+assert.equal(existsSync(chromeInstallPath), true, "Chrome install page missing");
+const chromeManifest = JSON.parse(readFileSync(chromeManifestPath, "utf8"));
+assert.equal(chromeManifest.icons?.[0]?.src, "/mybishbash/icons/chrome-cover.png");
+assert.equal(chromeManifest.icons?.[0]?.type, "image/png");
+assert.match(readFileSync(chromeInstallPath, "utf8"), /icons\/chrome-cover\.png/);
 
 const whatsappManifestPath = resolve(root, "public", "launchers", "whatsapp", "manifest.webmanifest");
 const whatsappInstallPath = resolve(root, "public", "install", "whatsapp", "index.html");
@@ -230,13 +249,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /installableHomeScreenVersions = Object\.values\(homeScreenVersions\)\.filter\([\s\S]{0,300}version\.id === "mybishbash" \|\|\s*isLauncherVisibleInContext\(version, \{ testerStatus: settingsTesterStatus, context: LAUNCHER_CONTEXTS\.SETTINGS \}\)/,
-  "Settings install options must come from the central availability selector",
+  /const visibleVersions = getAvailableLaunchersForUser\(\{\s*launchers: candidates,\s*testerStatus,\s*context: LAUNCHER_CONTEXTS\.SETTINGS,\s*\}\);/,
+  "Apps install options must come from the central availability selector",
 );
 assert.match(
   appSource,
-  /const selectedPreviewVersion = installableHomeScreenVersions\.some/,
-  "Settings preview must fall back when the selected launcher is disabled",
+  /const appsOptionVersions = candidates\.filter\(\(version\) =>\s*APPS_OPTION_IDS\.includes\(version\.id\) && !visibleVersionIds\.has\(version\.id\)/,
+  "Apps setup must keep supported add options available even before public launcher release",
 );
 
 console.log(`Validated ${FAKE_APP_LAUNCHERS.length} launchers.`);

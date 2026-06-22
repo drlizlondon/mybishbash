@@ -117,5 +117,23 @@ const normalPayload = context.buildLauncherPayload({
 });
 assert.equal(normalPayload.launcherContext, "mybishbash");
 assert.equal(normalPayload.targetRoute, "/home");
+assert.equal(
+  context.buildSetupUrl({ appBasePath: "/mybishbash-preview", launcherId: "instagram" }),
+  "https://drlizlondon.github.io/mybishbash-preview/install/instagram/",
+);
+assert.equal(
+  context.resolveInstallCompleteUrl({ appBasePath: "/mybishbash-preview", launcherId: "instagram" }),
+  "https://drlizlondon.github.io/mybishbash-preview/apps/instagram?installed=1",
+);
+assert.equal(
+  context.resolveInstallCompleteUrl({
+    appBasePath: "/mybishbash-preview",
+    launcherId: "instagram",
+    pendingSetup: { appId: "instagram" },
+  }),
+  "https://drlizlondon.github.io/mybishbash-preview/home?launcherInstalled=instagram",
+);
+assert.match(installScript, /copyTextToClipboard/);
+assert.match(installScript, /installed=1/);
 
 console.log("Launcher install resolver validated.");
