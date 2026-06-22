@@ -7928,6 +7928,14 @@ body {
   line-height: 1.25;
 }
 
+.apps-locked-row {
+  opacity: 0.86;
+}
+
+.apps-locked-row .home-screen-version-title span {
+  color: rgba(141, 74, 57, 0.76);
+}
+
 .apps-row-actions,
 .apps-pause-buttons,
 .apps-more-actions {
@@ -7957,6 +7965,11 @@ body {
   background: transparent;
   color: rgba(47, 42, 40, 0.66);
   box-shadow: none;
+}
+
+.apps-row-actions .text-button {
+  min-height: 36px;
+  margin: 0;
 }
 
 .apps-code-link,
@@ -8947,7 +8960,7 @@ body {
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 18px) 0 calc(env(safe-area-inset-bottom) + 14px);
+  padding: calc(max(env(safe-area-inset-top), 16px) + 22px) 0 calc(env(safe-area-inset-bottom) + 14px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
@@ -9120,7 +9133,7 @@ body {
   display: grid;
   align-content: start;
   gap: 14px;
-  padding: 2px 2px 18px;
+  padding: 2px 2px 96px;
 }
 
 .onboarding-actions {
@@ -11116,8 +11129,13 @@ body {
 
 .onboarding-area-chip,
 .onboarding-personal-card-suggestion {
-  min-height: 54px;
-  padding: 11px 12px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: flex-start;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 104px;
+  padding: 12px 12px;
 }
 
 /* Onboarding product-grade polish */
@@ -11134,7 +11152,7 @@ body {
 .onboarding-shell {
   width: min(calc(100% - 32px), 390px);
   gap: 12px;
-  padding: calc(env(safe-area-inset-top) + 12px) 0 max(10px, env(safe-area-inset-bottom));
+  padding: calc(max(env(safe-area-inset-top), 16px) + 22px) 0 max(10px, env(safe-area-inset-bottom));
 }
 
 .onboarding-brand {
@@ -11583,14 +11601,19 @@ body {
 }
 
 .onboarding-idea-card {
-  min-height: 56px;
+  min-height: 58px;
   padding: 13px 14px;
 }
 
 .onboarding-area-chip,
 .onboarding-personal-card-suggestion {
-  min-height: 52px;
-  padding: 11px 12px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: flex-start;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 104px;
+  padding: 12px 12px;
 }
 
 .onboarding-idea-card strong,
@@ -11599,12 +11622,22 @@ body {
   color: rgba(23, 21, 20, 0.9);
   font-family: var(--onboarding-font-sans);
   font-size: 0.9rem;
-  font-weight: 680;
-  line-height: 1.25;
+  font-weight: 560;
+  line-height: 1.32;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
 }
 
 .onboarding-personal-card-suggestion strong {
-  font-size: 0.82rem;
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.26;
+}
+
+.onboarding-personal-card-suggestion .onboarding-idea-check,
+.onboarding-write-own-card .onboarding-idea-check {
+  margin-top: 1px;
 }
 
 .onboarding-idea-card.selected,
@@ -11618,11 +11651,23 @@ body {
 }
 
 .onboarding-idea-check {
-  width: 20px;
-  height: 20px;
-  background: #d0644b;
-  color: #fffaf6;
-  font-size: 12px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1.5px solid rgba(74, 57, 45, 0.24);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.58);
+  color: #bf5d45;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.onboarding-idea-card.selected .onboarding-idea-check {
+  border-color: rgba(208, 100, 75, 0.46);
+  background: rgba(208, 100, 75, 0.1);
 }
 
 .onboarding-custom-card label,
@@ -11668,7 +11713,7 @@ body {
 }
 
 .onboarding-protected-setup-step .onboarding-step-body {
-  padding-bottom: 112px;
+  padding-bottom: 120px;
 }
 
 .onboarding-protected-setup-step .onboarding-protected-setup-card {
@@ -11708,7 +11753,7 @@ body {
 
 .onboarding-protected-setup-step .onboarding-protected-setup-card > p,
 .onboarding-protected-setup-step .onboarding-install-return-note {
-  display: none;
+  display: block;
 }
 
 .onboarding-protected-setup-step .onboarding-install-guidance {

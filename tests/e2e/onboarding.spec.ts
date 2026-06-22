@@ -136,8 +136,12 @@ async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: `Add an extra ${appName} prompt?` })).toBeVisible();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: `Add ${appName} to your Home Screen` })).toBeVisible();
+  await page.getByRole('button', { name: 'Open install page' }).click();
   await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${appName.toLowerCase()}/`));
   await page.getByRole('button', { name: 'I’ve added it' }).click();
+  await expect(page.getByRole('link', { name: 'Return to myBishBash' })).toBeVisible();
+  await page.getByRole('link', { name: 'Return to myBishBash' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
   await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
   await page.getByRole('button', { name: 'Go to Home' }).click();
@@ -190,10 +194,14 @@ test('personal card suggestions appear directly without category selection', asy
   await expect(page.getByRole('button', { name: 'Have you done something that counts towards your fitness today?' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Have you got your bag ready for tomorrow?' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Have you taken your medication?' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Write my own' })).toBeVisible();
+  await expect(suggestions.locator('.onboarding-idea-check')).toHaveCount(11);
+  await expect(suggestions.filter({ hasText: 'Have you done something that counts towards your fitness today?' }).locator('.onboarding-idea-check')).toBeVisible();
 
   const visibleSuggestions = await suggestions.allTextContents();
   expect(visibleSuggestions).toHaveLength(11);
+  const writeOwn = page.getByRole('button', { name: 'Write my own' });
+  await writeOwn.scrollIntoViewIfNeeded();
+  await expect(writeOwn).toBeVisible();
   const visibility = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('[data-testid="onboarding-personal-card-suggestion"]'));
     const actions = document.querySelector('.onboarding-actions');
@@ -294,9 +302,18 @@ test('phone trigger selection goes through App Prompt choice, then install instr
   await appPromptToggle.getByRole('button', { name: 'On' }).click();
 
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
+  await expect(page.getByText('Add this version to your Home Screen. Use it instead of the original app icon when you want myBishBash to appear first.')).toBeVisible();
+  await expect(page.getByText('iPhone: tap Share, then Add to Home Screen.')).toBeVisible();
+  await expect(page.getByText('Android: open the menu, then Add to Home screen or Install app.')).toBeVisible();
+  await page.getByRole('button', { name: 'Open install page' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
   await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toBeVisible();
   await page.getByRole('button', { name: 'I’ve added it' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
+  await expect(page.getByText('Open your new Safari icon from your Home Screen')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Return to myBishBash' })).toBeVisible();
+  await page.getByRole('link', { name: 'Return to myBishBash' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
   await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
   await page.getByRole('button', { name: 'Go to Home' }).click();
@@ -311,7 +328,7 @@ test('phone trigger selection goes through App Prompt choice, then install instr
   expect(state.launcherBehavior.safari.useInterruptionPack).toBe(true);
 });
 
-test('pending install_started resumes before the removed install instruction step', async ({ page }) => {
+test('pending install_started resumes on the install instruction step', async ({ page }) => {
   await seedFirstRun(page);
   await page.addInitScript(() => {
     window.localStorage.setItem('mybishbash.onboarding-protected-app-setup-pending.v1', JSON.stringify({
@@ -323,10 +340,10 @@ test('pending install_started resumes before the removed install instruction ste
   });
   await page.goto('/mybishbash/onboarding');
 
-  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open install page' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toHaveCount(0);
 });
 
 test('first app screen keeps logo-backed apps in order with consistent icon paths', async ({ page }) => {
@@ -345,6 +362,8 @@ test('app install path supports back navigation before saving setup', async ({ p
   await page.getByRole('radio', { name: 'Safari' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open install page' }).click();
 
   await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
   await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toBeVisible();
@@ -352,7 +371,7 @@ test('app install path supports back navigation before saving setup', async ({ p
   await page.getByRole('button', { name: 'Back' }).click();
 
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
   const state = await page.evaluate(() => ({
     profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
     launcherBehavior: JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'),

@@ -175,7 +175,7 @@ export default function Onboarding(props) {
   return (
     <ContentEditProvider
       initialContent={onboardingContent}
-      storageKey="mybishbash.onboardingContentDraft.v3"
+      storageKey="mybishbash.onboardingContentDraft.v4"
       saveEndpoint="/__save-onboarding-content"
       saveLabel="src/content/onboardingContent.js"
       isContentCompatible={(value) => Boolean(value?.steps?.learn?.title && value?.done?.primary)}
@@ -208,7 +208,7 @@ function OnboardingContent({
     pendingProtectedAppSetup?.status === "confirmed"
       ? STEPS.indexOf("protected-setup")
       : pendingProtectedAppSetup?.status === "install_started" || pendingProtectedAppSetup?.status === "ready"
-        ? STEPS.indexOf("protected-demo")
+        ? STEPS.indexOf("protected-setup")
         : 0
   ));
   const [demoComplete, setDemoComplete] = useState(false);
@@ -352,7 +352,9 @@ function OnboardingContent({
 
   function continueToProtectedAppSetup() {
     saveProtectedAppInterruptionPreference(selectedProtectedAppId, getSelectedProtectedAppInterruptionEnabled());
-    openProtectedAppInstall();
+    writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled(), "ready");
+    setProtectedAppSetupPhase("ready");
+    setStepIndex(STEPS.indexOf("protected-setup"));
   }
 
   function selectProtectedApp(appId) {
@@ -513,16 +515,32 @@ function OnboardingContent({
             </OnboardingStep>
           ) : null}
 
-          {currentStep === "protected-setup" && protectedAppSetupPhase === "confirmed" ? (
+          {currentStep === "protected-setup" ? (
             <OnboardingStep
               className="onboarding-protected-setup-step"
-              title={<EditableText path="steps.protectedSetup.confirmedTitle">You’re set up</EditableText>}
-              body={(content.steps?.protectedSetup?.confirmedBody ?? "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.").replaceAll("{appName}", selectedProtectedAppName)}
-              primaryLabel={<EditableText path="steps.protectedSetup.continueHome">Go to Home</EditableText>}
+              title={
+                protectedAppSetupPhase === "confirmed"
+                  ? <EditableText path="steps.protectedSetup.confirmedTitle">You’re set up</EditableText>
+                  : <>Add {selectedProtectedAppName} to your Home Screen</>
+              }
+              body={
+                protectedAppSetupPhase === "confirmed"
+                  ? (content.steps?.protectedSetup?.confirmedBody ?? "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.").replaceAll("{appName}", selectedProtectedAppName)
+                  : "Add this version to your Home Screen. Use it instead of the original app icon when you want myBishBash to appear first."
+              }
+              primaryLabel={
+                protectedAppSetupPhase === "confirmed"
+                  ? <EditableText path="steps.protectedSetup.continueHome">Go to Home</EditableText>
+                  : "Open install page"
+              }
               onPrimary={() => {
-                finishProtectedAppSetup({ completed: true });
+                if (protectedAppSetupPhase === "confirmed") {
+                  finishProtectedAppSetup({ completed: true });
+                  return;
+                }
+                openProtectedAppInstall();
               }}
-              secondaryLabel={null}
+              secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
               onBack={goBack}
@@ -679,8 +697,8 @@ function ReminderIdeaGrid({
               aria-pressed={selected}
               data-testid="onboarding-personal-card-suggestion"
             >
+              <span className="onboarding-idea-check" aria-hidden="true">{selected ? "✓" : ""}</span>
               <strong>{option.text}</strong>
-              {selected ? <span className="onboarding-idea-check" aria-hidden="true">✓</span> : null}
             </button>
           );
         })}
@@ -692,8 +710,8 @@ function ReminderIdeaGrid({
             onClick={() => onToggleCustom(card.id)}
             aria-pressed="true"
           >
-            <strong>{card.text}</strong>
             <span className="onboarding-idea-check" aria-hidden="true">✓</span>
+            <strong>{card.text}</strong>
           </button>
         ))}
         {customCardOpen ? (
@@ -714,6 +732,7 @@ function ReminderIdeaGrid({
           </div>
         ) : (
           <button type="button" className="onboarding-idea-card onboarding-write-own-card" onClick={onOpenCustom}>
+            <span className="onboarding-idea-check" aria-hidden="true" />
             <strong>{writeOwnLabel}</strong>
           </button>
         )}
@@ -801,11 +820,10 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
   const appName = getLauncherName(app);
   const isConfirmed = phase === "confirmed";
   const steps = content.steps?.protectedSetup?.steps ?? [
-    `Tap Add ${appName} Launcher.`,
-    "Tap Share.",
-    "Tap Add to Home Screen.",
-    "Keep the suggested name.",
-    "Return to myBishBash to continue.",
+    "iPhone: tap Share, then Add to Home Screen.",
+    "Android: open the menu, then Add to Home screen or Install app.",
+    "Use the new icon when you want myBishBash to appear first.",
+    "Return here and tap I’ve added it.",
   ];
   const moveLauncherSuffix = (
     content.steps?.protectedSetup?.moveLauncherSuffix ??

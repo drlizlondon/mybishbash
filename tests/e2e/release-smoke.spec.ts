@@ -800,7 +800,6 @@ test('mobile viewport keeps bottom nav and fake launcher destination behaviour w
   await expect(page.getByTestId('home-panel')).toBeVisible();
 
   await page.getByTestId('bottom-nav-apps').click();
-  await page.getByRole('button', { name: 'See Options' }).click();
   await page.getByTestId('apps-option-action-instagram').click();
   await expect(page).toHaveURL(/\/mybishbash\/apps\/instagram$/);
   await page.getByTestId('apps-test-shortcut-instagram').click();

@@ -9602,7 +9602,6 @@ function AppsPanel({
   canUseMultipleApps = false,
   onOpenMyBishBash,
 }) {
-  const [showOptions, setShowOptions] = useState(false);
   const [showAccessScreen, setShowAccessScreen] = useState(false);
   const [showCodeScreen, setShowCodeScreen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -9705,7 +9704,7 @@ function AppsPanel({
       <div className="section-heading solo">
         <div>
           <h2>Apps</h2>
-          <p>Where MyBishBash is currently helping you.</p>
+          <p>Where myBishBash is currently helping you.</p>
         </div>
       </div>
 
@@ -9713,7 +9712,7 @@ function AppsPanel({
         <div className="settings-card" data-testid="apps-shortcut-setup-reminder">
           <div className="settings-version-heading">
             <p>Apps ready to add</p>
-            <span>Turn on MyBishBash when you are ready.</span>
+            <span>Turn on myBishBash when you are ready.</span>
           </div>
           <div className="home-screen-version-list">
             {pendingOnboardingShortcuts.map((app) => (
@@ -9735,14 +9734,14 @@ function AppsPanel({
 
       <div className="settings-card" data-testid="apps-list">
         <div className="settings-version-heading">
-          <p>Apps</p>
-          <span>Manage each app MyBishBash can support.</span>
+          <p>Your app</p>
+          <span>Enabled app shells you can manage.</span>
         </div>
-        {liveProtectedAppStatuses.length === 0 ? (
-          <p className="tiny-note">No apps available yet.</p>
+        {enabledStatuses.length === 0 ? (
+          <p className="tiny-note">No added apps yet.</p>
         ) : (
           <div className="home-screen-version-list">
-            {liveProtectedAppStatuses.map((status) => (
+            {enabledStatuses.map((status) => (
               <EnabledAppRow
                 key={status.version.id}
                 status={status}
@@ -9756,29 +9755,13 @@ function AppsPanel({
       </div>
 
       <div className="settings-card" data-testid="apps-add-more">
-        {showOptions ? (
-          <MoreAppsOptions
-            protectedAppStatuses={liveProtectedAppStatuses}
-            canAddAnotherApp={canAddAnotherApp}
-            onBack={() => setShowOptions(false)}
-            onManageApp={onManageApp}
-            onShowAccess={() => setShowAccessScreen(true)}
-            onHaveCode={() => setShowCodeScreen(true)}
-          />
-        ) : (
-          <>
-            <div className="settings-version-heading">
-              <p>Add Another App</p>
-              <span>Bring MyBishBash to more of the apps you use.</span>
-            </div>
-            <button type="button" className="pack-button" onClick={() => setShowOptions(true)}>
-              See Options
-            </button>
-            <button type="button" className="text-button apps-code-link" onClick={() => setShowCodeScreen(true)}>
-              Have a code?
-            </button>
-          </>
-        )}
+        <MoreAppsOptions
+          protectedAppStatuses={liveProtectedAppStatuses}
+          canAddAnotherApp={canAddAnotherApp}
+          onManageApp={onManageApp}
+          onShowAccess={() => setShowAccessScreen(true)}
+          onHaveCode={() => setShowCodeScreen(true)}
+        />
       </div>
     </section>
   );
@@ -9852,8 +9835,8 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onMan
   return (
     <div className="apps-more-options" data-testid="apps-more-options">
       <div className="settings-version-heading">
-        <p>Add Another App</p>
-        <span>Bring MyBishBash to more of the apps you use.</span>
+        <p>More apps</p>
+        <span>Bring myBishBash to more of the apps you use.</span>
       </div>
       <div className="home-screen-version-list">
         {availableOptionIds.length === 0 ? (
@@ -9864,13 +9847,14 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onMan
           const version = status?.version ?? DEFAULT_HOME_SCREEN_VERSIONS[id] ?? getLauncherConfig(id);
           if (!version) return null;
           const appName = version.realAppLabel ?? version.name ?? version.displayName ?? id;
+          const locked = !canAddAnotherApp;
           return (
-            <article className="home-screen-version-card apps-enabled-row" key={id} data-testid={`apps-option-${id}`}>
+            <article className={`home-screen-version-card apps-enabled-row ${locked ? "apps-locked-row" : ""}`} key={id} data-testid={`apps-option-${id}`}>
               <img src={resolveLauncherIconSrc(version)} alt={`${appName} icon`} className="home-screen-version-icon" />
               <div className="home-screen-version-copy">
                 <div className="home-screen-version-title">
                   <strong>{appName}</strong>
-                  <span>Available</span>
+                  <span>{locked ? "Locked" : "Available"}</span>
                 </div>
                 <div className="home-screen-version-actions apps-row-actions">
                   <button
@@ -9885,8 +9869,13 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onMan
                       onManageApp?.(id);
                     }}
                   >
-                    Add
+                    {locked ? "Unlock" : "Add"}
                   </button>
+                  {locked ? (
+                    <button type="button" className="text-button apps-code-link" onClick={onHaveCode}>
+                      Use code
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </article>
@@ -9897,9 +9886,9 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, onBack, onMan
         <button type="button" className="text-button apps-code-link" onClick={onHaveCode}>
           Have a code?
         </button>
-        <button type="button" className="text-button apps-code-link" onClick={onBack}>
+        {onBack ? <button type="button" className="text-button apps-code-link" onClick={onBack}>
           Back
-        </button>
+        </button> : null}
       </div>
     </div>
   );
@@ -9913,8 +9902,8 @@ function AppsAccessScreen({ onUnlock, onHaveCode, onBack }) {
       </button>
       <div className="settings-card apps-manage-hero">
         <div className="settings-version-heading">
-          <p>Add MyBishBash to more apps</p>
-          <span>Use MyBishBash with more of the apps you open every day.</span>
+          <p>Add myBishBash to more apps</p>
+          <span>Use myBishBash with more of the apps you open every day.</span>
         </div>
       </div>
       <div className="settings-card settings-compact">
@@ -9966,8 +9955,8 @@ function AppsCodeScreen({ onClaimAccessCode, onBack, onContinue, onOpenInstallGu
           <p>{isSuccess ? "You now have access to more apps." : "Have a code?"}</p>
           <span>
             {isSuccess
-              ? "You can add MyBishBash to more of the apps you use."
-              : "Enter your access code to add MyBishBash to more apps."}
+              ? "You can add myBishBash to more of the apps you use."
+              : "Enter your access code to add myBishBash to more apps."}
           </span>
         </div>
       </div>
@@ -9978,7 +9967,7 @@ function AppsCodeScreen({ onClaimAccessCode, onBack, onContinue, onOpenInstallGu
             Continue to Apps
           </button>
           <button type="button" className="pack-button secondary" onClick={onOpenInstallGuide}>
-            Add MyBishBash to your Home Screen
+            Add myBishBash to your Home Screen
           </button>
         </div>
       ) : (
@@ -10036,8 +10025,8 @@ function AppManagementScreen({
   const promptPreview = getDefaultAppPrompt(version.id, appName);
   const pauseUntil = formatPauseUntil(status.pauseExpiry, nowMs);
   const enabledStatus = protectedOn
-    ? "MyBishBash enabled"
-    : `MyBishBash is not enabled for ${appName} yet`;
+    ? "myBishBash enabled"
+    : `myBishBash is not enabled for ${appName} yet`;
   const pauseStatus = protectedOn && paused
     ? `Paused until ${pauseUntil || pauseRemaining || "soon"}`
     : enabledStatus;
@@ -10059,7 +10048,7 @@ function AppManagementScreen({
       {!protectedOn ? (
         <div className="settings-card">
           <div className="settings-version-heading">
-            <p>Add MyBishBash to {appName}</p>
+            <p>Add myBishBash to {appName}</p>
             <span>Turn on this app. App Prompts can be added separately.</span>
           </div>
           <button
@@ -10097,7 +10086,7 @@ function AppManagementScreen({
       {protectedOn ? (
       <div className="settings-card">
         <div className="settings-version-heading">
-          <p>Pause MyBishBash</p>
+          <p>Pause myBishBash</p>
           <span>Pause only affects {appName}.</span>
         </div>
         {paused ? (

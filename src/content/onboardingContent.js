@@ -85,10 +85,10 @@ export const onboardingContent = {
       "addLauncherBody": "Add this version to your Home Screen. Use it instead of the original {appName} icon when you want myBishBash to appear first.",
       "returnNote": "Once it is added, return to myBishBash to continue.",
       "steps": [
-        "Tap Share.",
-        "Tap Add to Home Screen.",
-        "Keep the suggested name.",
-        "Return to myBishBash to continue."
+        "iPhone: tap Share, then Add to Home Screen.",
+        "Android: open the menu, then Add to Home screen or Install app.",
+        "Use the new icon when you want myBishBash to appear first.",
+        "Return here and tap I’ve added it."
       ]
     },
     "skip": {
