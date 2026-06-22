@@ -10473,7 +10473,7 @@ body {
 }
 
 .onboarding-tutorial-demo {
-  --onboarding-demo-duration: 11000ms;
+  --onboarding-demo-duration: 12000ms;
   position: relative;
   width: min(100%, 330px);
   min-height: 332px;
@@ -10610,10 +10610,6 @@ body {
 }
 
 .onboarding-demo-click-ripple {
-  display: none;
-}
-
-.onboarding-tutorial-demo .onboarding-demo-continue-card {
   display: none;
 }
 
@@ -10872,41 +10868,41 @@ body {
 }
 
 @keyframes onboarding-phone-screen-cycle {
-  0%, 11%, 50%, 62% {
+  0%, 12%, 68%, 74% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  14%, 46%, 65%, 100% {
+  16%, 64%, 77%, 100% {
     opacity: 0;
     transform: translateY(-8px) scale(0.96);
   }
 }
 
 @keyframes onboarding-phone-app-pulse-instagram {
-  0%, 6% {
+  0%, 7% {
     transform: translateY(0) scale(1);
     box-shadow: none;
   }
-  8% {
+  9% {
     transform: translateY(-2px) scale(1.06);
     filter: drop-shadow(0 12px 18px rgba(201, 96, 70, 0.18));
   }
-  11%, 100% {
+  12%, 100% {
     transform: translateY(0) scale(1);
     filter: none;
   }
 }
 
 @keyframes onboarding-phone-app-pulse-whatsapp {
-  0%, 55% {
+  0%, 69% {
     transform: translateY(0) scale(1);
     filter: none;
   }
-  57% {
+  71% {
     transform: translateY(-2px) scale(1.06);
     filter: drop-shadow(0 12px 18px rgba(201, 96, 70, 0.18));
   }
-  60%, 100% {
+  73%, 100% {
     transform: translateY(0) scale(1);
     filter: none;
   }
@@ -10928,30 +10924,30 @@ body {
 }
 
 @keyframes onboarding-app-open-instagram-cycle {
-  0%, 11% {
+  0%, 12% {
     opacity: 0;
     transform: translateY(10px) scale(0.96);
   }
-  13%, 15% {
+  14%, 17% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  17%, 100% {
+  20%, 100% {
     opacity: 0;
     transform: translateY(-10px) scale(0.9);
   }
 }
 
 @keyframes onboarding-app-open-whatsapp-cycle {
-  0%, 47% {
+  0%, 70% {
     opacity: 0;
     transform: translateY(10px) scale(0.96);
   }
-  49%, 51% {
+  72%, 74% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  53%, 100% {
+  76%, 100% {
     opacity: 0;
     transform: translateY(-10px) scale(0.9);
   }
@@ -10973,57 +10969,57 @@ body {
 }
 
 @keyframes onboarding-cursor-cycle {
-  0%, 4% {
+  0%, 6% {
     opacity: 0;
     transform: translate(-84px, -36px) scale(0.9);
   }
-  6% {
+  8% {
     opacity: 1;
     transform: translate(-74px, -28px) scale(1);
   }
-  8%, 9% {
+  9%, 11% {
     opacity: 1;
     transform: translate(-62px, -20px) scale(0.94);
   }
-  11%, 17% {
+  13%, 34% {
     opacity: 0;
     transform: translate(-62px, -20px) scale(0.86);
   }
-  22% {
+  36% {
     opacity: 1;
-    transform: translate(-18px, 34px) scale(1);
+    transform: translate(-18px, 14px) scale(1);
   }
-  24%, 25% {
+  37%, 39% {
     opacity: 1;
-    transform: translate(0, 42px) scale(0.94);
+    transform: translate(0, 22px) scale(0.94);
   }
-  27%, 50% {
+  41%, 68% {
     opacity: 0;
-    transform: translate(0, 42px) scale(0.86);
+    transform: translate(0, 22px) scale(0.86);
   }
-  54% {
+  70% {
     opacity: 1;
     transform: translate(0, -28px) scale(1);
   }
-  57%, 59% {
+  71%, 73% {
     opacity: 1;
     transform: translate(8px, -20px) scale(0.94);
   }
-  61%, 72% {
+  75%, 78% {
     opacity: 0;
     transform: translate(8px, -20px) scale(0.86);
   }
-  75% {
+  80% {
     opacity: 1;
-    transform: translate(-18px, 64px) scale(1);
+    transform: translate(-18px, 41px) scale(1);
   }
-  78%, 79% {
+  82%, 86% {
     opacity: 1;
-    transform: translate(0, 72px) scale(0.94);
+    transform: translate(0, 49px) scale(0.94);
   }
-  81%, 100% {
+  88%, 100% {
     opacity: 0;
-    transform: translate(0, 72px) scale(0.86);
+    transform: translate(0, 49px) scale(0.86);
   }
 }
 
@@ -11107,30 +11103,30 @@ body {
 }
 
 @keyframes onboarding-real-card-instagram-cycle {
-  0%, 13% {
+  0%, 18% {
     opacity: 0;
     transform: translate(-50%, -44%) scale(0.96);
   }
-  15%, 31% {
+  20%, 48% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  36%, 100% {
+  53%, 100% {
     opacity: 0;
     transform: translate(-50%, -56%) scale(0.96);
   }
 }
 
 @keyframes onboarding-real-card-whatsapp-cycle {
-  0%, 62% {
+  0%, 76% {
     opacity: 0;
     transform: translate(-50%, -44%) scale(0.96);
   }
-  64%, 79% {
+  78%, 87% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  84%, 100% {
+  90%, 100% {
     opacity: 0;
     transform: translate(-50%, -56%) scale(0.96);
   }
@@ -11152,24 +11148,24 @@ body {
 }
 
 @keyframes onboarding-done-button-cycle {
-  0%, 23%, 29%, 100% {
+  0%, 36%, 42%, 100% {
     box-shadow: 0 8px 18px rgba(47, 42, 40, 0.045);
     transform: none;
   }
-  25%, 27% {
+  37%, 40% {
     box-shadow: 0 0 0 6px rgba(214, 106, 80, 0.14);
     transform: translateY(-1px);
   }
 }
 
 @keyframes onboarding-do-now-button-cycle {
-  0%, 75%, 81%, 100% {
+  0%, 80%, 87%, 100% {
     background: rgba(255, 255, 255, 0.84);
     color: rgba(47, 42, 40, 0.84);
     box-shadow: 0 8px 18px rgba(47, 42, 40, 0.045);
     transform: none;
   }
-  77%, 79% {
+  82%, 86% {
     background: rgba(208, 100, 75, 0.9);
     color: #fffaf6;
     box-shadow: 0 0 0 6px rgba(214, 106, 80, 0.14);
@@ -11178,30 +11174,30 @@ body {
 }
 
 @keyframes onboarding-continue-card-instagram-cycle {
-  0%, 23% {
+  0%, 53% {
     opacity: 0;
     transform: translate(-50%, -44%) scale(0.96);
   }
-  25%, 29% {
+  55%, 60% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  31%, 100% {
+  63%, 100% {
     opacity: 0;
     transform: translate(-50%, -56%) scale(0.96);
   }
 }
 
 @keyframes onboarding-continue-card-whatsapp-cycle {
-  0%, 59% {
+  0%, 88% {
     opacity: 0;
     transform: translate(-50%, -44%) scale(0.96);
   }
-  61%, 65% {
+  90%, 94% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  67%, 100% {
+  96%, 100% {
     opacity: 0;
     transform: translate(-50%, -56%) scale(0.96);
   }
@@ -11223,45 +11219,45 @@ body {
 }
 
 @keyframes onboarding-continue-button-cycle {
-  0%, 24%, 60%, 92% {
+  0%, 54%, 89%, 100% {
     box-shadow: 0 14px 30px rgba(201, 96, 70, 0.18);
     transform: none;
   }
-  26%, 28%, 62%, 64%, 94%, 95% {
+  57%, 60%, 91%, 94% {
     box-shadow: 0 14px 30px rgba(201, 96, 70, 0.22), 0 0 0 7px rgba(214, 106, 80, 0.12);
     transform: translateY(-1px);
   }
-  30%, 66%, 97%, 100% {
+  63%, 96% {
     box-shadow: 0 14px 30px rgba(201, 96, 70, 0.18);
     transform: none;
   }
 }
 
 @keyframes onboarding-app-finished-instagram-cycle {
-  0%, 34% {
+  0%, 62% {
     opacity: 0;
     transform: translateY(14px) scale(0.72);
   }
-  37%, 43% {
+  64%, 66% {
     opacity: 1;
     transform: translateY(0) scale(1.08);
   }
-  46%, 100% {
+  68%, 100% {
     opacity: 0;
     transform: translateY(-12px) scale(0.94);
   }
 }
 
 @keyframes onboarding-app-finished-whatsapp-cycle {
-  0%, 84% {
+  0%, 94% {
     opacity: 0;
     transform: translateY(14px) scale(0.72);
   }
-  87%, 91% {
+  95%, 97% {
     opacity: 1;
     transform: translateY(0) scale(1.08);
   }
-  93%, 100% {
+  98%, 100% {
     opacity: 0;
     transform: translateY(-12px) scale(0.94);
   }
@@ -11283,11 +11279,11 @@ body {
 }
 
 @keyframes onboarding-demo-final-line-cycle {
-  0%, 92% {
+  0%, 98% {
     opacity: 0;
     transform: translate(-50%, -42%) scale(0.98);
   }
-  96%, 100% {
+  99%, 100% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
@@ -11932,6 +11928,167 @@ body {
   font-size: var(--onboarding-title-compact);
 }
 
+@media (max-height: 720px) {
+  .onboarding-shell {
+    width: min(calc(100% - 32px), 390px);
+    padding: calc(max(env(safe-area-inset-top), 8px) + 10px) 0 calc(env(safe-area-inset-bottom) + 8px);
+    gap: 8px;
+  }
+
+  .onboarding-brand {
+    min-height: 30px;
+  }
+
+  .onboarding-logo {
+    width: 24px;
+    height: 24px;
+  }
+
+  .onboarding-brand h1 {
+    font-size: 0.92rem;
+  }
+
+  .onboarding-flow-card {
+    grid-template-rows: 8px minmax(0, 1fr);
+  }
+
+  .onboarding-step {
+    gap: 8px;
+  }
+
+  .onboarding-step-top {
+    min-height: 0;
+  }
+
+  .onboarding-learn-step .onboarding-step-top {
+    display: none;
+  }
+
+  .onboarding-step-copy {
+    gap: 6px;
+  }
+
+  .onboarding-learn-step .onboarding-step-copy h2 {
+    max-width: 18ch;
+    font-size: clamp(1.24rem, 5.2vw, 1.48rem);
+    line-height: 1.03;
+  }
+
+  .onboarding-learn-step .onboarding-step-copy p {
+    max-width: 29ch;
+    font-size: clamp(0.78rem, 3.2vw, 0.88rem);
+    line-height: 1.25;
+  }
+
+  .onboarding-learn-step .onboarding-step-body {
+    overflow: visible;
+    align-content: center;
+    padding: 0 2px;
+  }
+
+  .onboarding-learn-step .onboarding-tutorial-demo {
+    min-height: 198px;
+    margin: -8px auto -18px;
+    transform: scale(0.86);
+    transform-origin: center;
+  }
+
+  .onboarding-learn-step .onboarding-demo-replay {
+    bottom: -12px;
+  }
+
+  .onboarding-actions {
+    gap: 6px;
+    padding-top: 6px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .onboarding-actions .save-button,
+  .onboarding-shortcut-actions .save-button {
+    min-height: 44px;
+  }
+
+  .onboarding-actions .secondary-button,
+  .onboarding-shortcut-actions .secondary-button {
+    min-height: 32px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-height: 640px) {
+  .onboarding-shell {
+    width: min(calc(100% - 28px), 390px);
+    padding: calc(max(env(safe-area-inset-top), 6px) + 8px) 0 calc(env(safe-area-inset-bottom) + 6px);
+    gap: 6px;
+  }
+
+  .onboarding-brand {
+    min-height: 26px;
+    gap: 6px;
+  }
+
+  .onboarding-logo {
+    width: 22px;
+    height: 22px;
+  }
+
+  .onboarding-brand h1 {
+    font-size: 0.86rem;
+  }
+
+  .onboarding-flow-card {
+    grid-template-rows: 6px minmax(0, 1fr);
+  }
+
+  .onboarding-step {
+    gap: 6px;
+  }
+
+  .onboarding-learn-step .onboarding-step-copy {
+    gap: 4px;
+  }
+
+  .onboarding-learn-step .onboarding-step-copy h2 {
+    max-width: 19ch;
+    font-size: clamp(1.08rem, 4.8vw, 1.28rem);
+    line-height: 1;
+  }
+
+  .onboarding-learn-step .onboarding-step-copy p {
+    max-width: 31ch;
+    font-size: clamp(0.7rem, 3vw, 0.8rem);
+    line-height: 1.18;
+  }
+
+  .onboarding-learn-step .onboarding-tutorial-demo {
+    min-height: 154px;
+    margin: -18px auto -34px;
+    transform: scale(0.72);
+  }
+
+  .onboarding-learn-step .onboarding-demo-replay {
+    bottom: -8px;
+  }
+
+  .onboarding-actions {
+    gap: 4px;
+    padding-top: 4px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  .onboarding-actions .save-button,
+  .onboarding-shortcut-actions .save-button {
+    min-height: 38px;
+    font-size: 0.94rem;
+  }
+
+  .onboarding-actions .secondary-button,
+  .onboarding-shortcut-actions .secondary-button {
+    min-height: 28px;
+    font-size: 0.76rem;
+  }
+}
+
 .onboarding-demo-actions span,
 .onboarding-demo-phone .onboarding-demo-actions span:last-child {
   min-height: 32px;
@@ -12279,6 +12436,33 @@ body:has(.onboarding-screen) .edit-panel {
   opacity: 1 !important;
   transform: none !important;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28) !important;
+}
+
+body:has(.onboarding-screen) .edit-panel-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+body:has(.onboarding-screen) .edit-panel.is-moving {
+  outline: 2px solid rgba(208, 100, 75, 0.56);
+  outline-offset: 3px;
+}
+
+body:has(.onboarding-screen).edit-panel-moving,
+body:has(.onboarding-screen).edit-panel-moving * {
+  cursor: move !important;
+}
+
+body:has(.onboarding-screen) .edit-panel.is-moving .edit-panel-handle {
+  cursor: move;
+  border-color: rgba(208, 100, 75, 0.42);
+  background: rgba(208, 100, 75, 0.16);
+  color: rgba(255, 250, 247, 0.92);
+}
+
+body:has(.onboarding-screen) .edit-panel-handle:active {
+  cursor: grabbing;
 }
 
 body:has(.onboarding-screen) .edit-panel.edit-panel-positioned {

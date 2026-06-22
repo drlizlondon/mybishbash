@@ -5,7 +5,7 @@ import { onboardingContent } from "./content/onboardingContent";
 import { getGreeting } from "./utils";
 import { BrandMark } from "./components/BrandMark";
 
-const ONBOARDING_DEMO_CTA_UNLOCK_MS = 11000;
+const ONBOARDING_DEMO_CTA_UNLOCK_MS = 3000;
 const PERSONAL_ONBOARDING_LOCATION_LABEL = "Every app you choose";
 const COMMITMENT_DEMO_TIMINGS = {
   firstTap: 1300,
@@ -536,7 +536,7 @@ function OnboardingContent({
                   </section>
                 </div>
                 <EditableText as="p" path="steps.personalSuccess.nextLine" className="onboarding-personal-success-next">
-                  Next, let’s see how Commitment Cards help you keep promises to yourself.
+                  Next, let’s see how Commitment Cards help you keep commitments to yourself.
                 </EditableText>
               </div>
             </OnboardingStep>
@@ -843,7 +843,7 @@ function CommitmentCardOnboardingDemo({ onFinished }) {
               <BrandMark />
             </span>
             <h3>Nice work.</h3>
-            <p>Commitment Cards help you follow through on things that matter to you.</p>
+            <p>Commitment Cards help you keep commitments to yourself.</p>
           </div>
         ) : null}
 

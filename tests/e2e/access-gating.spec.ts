@@ -278,10 +278,10 @@ test('shared device logout clears prior account state before a new signup starts
   });
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('Log out of this MyBishBash profile?');
+    expect(dialog.message()).toContain('Log out of this myBishBash profile?');
     await dialog.accept();
   });
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
 
   await expect(page.getByTestId('sync-screen')).toBeVisible();
   await page.goto('/mybishbash/invite');

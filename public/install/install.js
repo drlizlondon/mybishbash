@@ -23,11 +23,6 @@
     storeInstalledLauncherShell(launcher);
   }
 
-  if (isStandalone && launcher.launchPath) {
-    window.location.replace(`${appBasePath}${launcher.launchPath}`);
-    return;
-  }
-
   const stored = loadStoredVersions();
   const storedLauncher = stored[launcher.id] || {};
   const version = { ...launcher, ...storedLauncher };

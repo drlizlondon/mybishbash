@@ -48,7 +48,7 @@ export const onboardingContent = {
       "personalBody": "help you remember.",
       "commitmentLabel": "Commitment Cards",
       "commitmentBody": "help you follow through.",
-      "nextLine": "Next, let’s see how Commitment Cards help you keep promises to yourself.",
+      "nextLine": "Next, let’s see how Commitment Cards help you keep commitments to yourself.",
       "primary": "Continue"
     },
     "commitmentDemo": {

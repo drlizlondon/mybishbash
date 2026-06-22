@@ -97,17 +97,13 @@ async function startStrategySetup(page: Page, path = '/mybishbash/onboarding') {
   await expect(page.getByText('myBishBash uses those moments')).toBeVisible();
   const tutorialDemo = page.getByTestId('onboarding-tutorial-demo');
   await expect(tutorialDemo.getByText('Example Personal Card')).toHaveCount(0);
-  await expect(tutorialDemo.getByText('Have you done something that counts towards your fitness today?')).toBeVisible({ timeout: 7000 });
-  await expect(tutorialDemo.getByText('Instagram opens')).toBeVisible({ timeout: 7000 });
-  await expect(tutorialDemo.getByText('WhatsApp opens')).toBeVisible({ timeout: 13000 });
-  await expect(tutorialDemo.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 13000 });
   await expect(page.getByText('For the things you genuinely mean to do, but don’t always remember.')).toHaveCount(0);
   const firstScreenText = await page.locator('.onboarding-step').innerText();
   expect(firstScreenText).not.toMatch(/\bcues?\b/i);
   expect(firstScreenText).not.toMatch(/\bforget(?:ting)?\b/i);
   expect(firstScreenText).not.toMatch(/\bpersonal reminder\b/i);
   await expect(page.getByRole('heading', { name: 'Before your apps open' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 13000 });
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
   await page.getByRole('button', { name: 'Set up my Personal Cards', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Let’s start with a few things you’d like to remember more often.' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'What would you like to remember?' })).toHaveCount(0);
@@ -138,7 +134,7 @@ async function expectPersonalCardsSuccessThenContinue(page: Page) {
   await expect(page.getByText('help you remember.')).toBeVisible();
   await expect(page.getByText('Commitment Cards', { exact: true })).toBeVisible();
   await expect(page.getByText('help you follow through.')).toBeVisible();
-  await expect(page.getByText('Next, let’s see how Commitment Cards help you keep promises to yourself.')).toBeVisible();
+  await expect(page.getByText('Next, let’s see how Commitment Cards help you keep commitments to yourself.')).toBeVisible();
   await expect(page.locator('.onboarding-personal-success-mark')).toHaveCount(0);
   await expect(page.getByTestId('personal-card-onboarding-preview')).toHaveCount(0);
   await expect(page.getByText('Have you taken your vitamins?')).toHaveCount(0);
@@ -159,7 +155,7 @@ async function expectCommitmentDemoThenContinue(page: Page) {
   await expect(page.getByText('Later that evening...')).toBeVisible({ timeout: 6000 });
   await expect(page.getByText('How did it go?')).toBeVisible({ timeout: 7000 });
   await expect(page.getByTestId('onboarding-commitment-success')).toContainText('Nice work.', { timeout: 9000 });
-  await expect(page.getByTestId('onboarding-commitment-success')).toContainText('Commitment Cards help you follow through on things that matter to you.');
+  await expect(page.getByTestId('onboarding-commitment-success')).toContainText('Commitment Cards help you keep commitments to yourself.');
   await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 }
@@ -240,6 +236,42 @@ async function expectCommitmentCursorOnTarget(page: Page, stageClass: string, ta
   expect(geometry.pointerTip!.y).toBeLessThanOrEqual(geometry.target!.bottom + 4);
 }
 
+async function expectIntroCursorHitsTarget(page: Page, targetLabel: string) {
+  await expect(page.locator('.onboarding-demo-cursor')).toHaveCount(1);
+  const geometry = await page.evaluate((label) => {
+    const normalize = (value: string | null | undefined) => String(value ?? "").trim().replace(/[’‘]/g, "'");
+    const cursor = document.querySelector('.onboarding-demo-cursor');
+    const targets = Array.from(document.querySelectorAll('.onboarding-tutorial-demo button, .onboarding-demo-phone-app'));
+    const target = targets.find((element) => normalize(element.textContent) === normalize(label));
+    const cursorRect = cursor?.getBoundingClientRect();
+    const targetRect = target?.getBoundingClientRect();
+    const pointerTip = cursorRect
+      ? {
+          x: Math.round(cursorRect.left + 2),
+          y: Math.round(cursorRect.top + 5),
+        }
+      : null;
+    return {
+      pointerTip,
+      target: targetRect
+        ? {
+            bottom: Math.round(targetRect.bottom),
+            left: Math.round(targetRect.left),
+            right: Math.round(targetRect.right),
+            top: Math.round(targetRect.top),
+          }
+        : null,
+    };
+  }, targetLabel);
+
+  expect(geometry.pointerTip).not.toBeNull();
+  expect(geometry.target).not.toBeNull();
+  expect(geometry.pointerTip!.x).toBeGreaterThanOrEqual(geometry.target!.left - 4);
+  expect(geometry.pointerTip!.x).toBeLessThanOrEqual(geometry.target!.right + 4);
+  expect(geometry.pointerTip!.y).toBeGreaterThanOrEqual(geometry.target!.top - 4);
+  expect(geometry.pointerTip!.y).toBeLessThanOrEqual(geometry.target!.bottom + 4);
+}
+
 async function expectConfirmedSetupAndBackToInstall(page: Page, appName: string) {
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
   await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
@@ -273,7 +305,7 @@ async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
 test('signup route lands new users in Personal Cards onboarding', async ({ page }) => {
   await startOnboardingFromLandingSignup(page);
   await expect(page.getByText('myBishBash uses those moments')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 13000 });
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
 });
 
 test('Personal Cards onboarding saves selected cards without starter packs or commitments', async ({ page }) => {
@@ -498,6 +530,55 @@ test('app install path supports back navigation before saving setup', async ({ p
   expect(state.launcherBehavior.safari?.useInterruptionPack).toBe(false);
 });
 
+test('install pages stay as manual checkpoints in standalone display mode', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeMatchMedia = window.matchMedia?.bind(window);
+    window.matchMedia = (query: string) => {
+      if (query === '(display-mode: standalone)') {
+        return {
+          addEventListener: () => {},
+          addListener: () => {},
+          dispatchEvent: () => false,
+          matches: true,
+          media: query,
+          onchange: null,
+          removeEventListener: () => {},
+          removeListener: () => {},
+        } as MediaQueryList;
+      }
+      return nativeMatchMedia?.(query) ?? ({
+        addEventListener: () => {},
+        addListener: () => {},
+        dispatchEvent: () => false,
+        matches: false,
+        media: query,
+        onchange: null,
+        removeEventListener: () => {},
+        removeListener: () => {},
+      } as MediaQueryList);
+    };
+    Object.defineProperty(window.navigator, 'standalone', {
+      configurable: true,
+      value: true,
+    });
+  });
+
+  for (const app of [
+    { id: 'instagram', heading: 'Add Instagram with myBishBash' },
+    { id: 'safari', heading: 'Add Safari with myBishBash' },
+    { id: 'youtube', heading: 'Add YouTube with myBishBash' },
+    { id: 'whatsapp', heading: 'Add WhatsApp with myBishBash' },
+    { id: 'mybishbash', heading: 'myBishBash' },
+  ]) {
+    await page.goto(`/mybishbash/install/${app.id}/`);
+    await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${app.id}/?$`));
+    await expect(page.locator('.install-copy h2').filter({ hasText: app.heading })).toBeVisible();
+    await page.waitForTimeout(1500);
+    await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${app.id}/?$`));
+    await expect(page.locator('.install-copy h2').filter({ hasText: app.heading })).toBeVisible();
+  }
+});
+
 test('onboarding back buttons move through the previous logical setup step', async ({ page }) => {
   await startStrategySetup(page);
 
@@ -505,7 +586,7 @@ test('onboarding back buttons move through the previous logical setup step', asy
   await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 13000 });
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
   await page.getByRole('button', { name: 'Set up my Personal Cards', exact: true }).click();
   await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -536,7 +617,7 @@ test('skipping personal cards continues to Commitment Cards instead of ending on
   await seedFirstRun(page);
   await page.goto('/mybishbash/onboarding');
 
-  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 13000 });
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
   await page.getByRole('button', { name: 'I’ll do this later' }).click();
   await expect(page.getByRole('heading', { name: 'See how Commitment Cards work' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'You can set up your phone later.' })).toHaveCount(0);
@@ -646,7 +727,7 @@ test('Personal Cards success transition is compact across phone widths', async (
     await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
     await expect(page.getByText('help you remember.')).toBeVisible();
     await expect(page.getByText('help you follow through.')).toBeVisible();
-    await expect(page.getByText('Next, let’s see how Commitment Cards help you keep promises to yourself.')).toBeVisible();
+    await expect(page.getByText('Next, let’s see how Commitment Cards help you keep commitments to yourself.')).toBeVisible();
     await expect(page.locator('.onboarding-personal-success-mark')).toHaveCount(0);
     await expect(page.getByTestId('personal-card-onboarding-preview')).toHaveCount(0);
     await expect(page.getByText('Have you taken your vitamins?')).toHaveCount(0);
@@ -708,6 +789,138 @@ test('Commitment Cards demo can replay and keeps option buttons fully visible', 
   await page.getByRole('button', { name: 'Replay demo' }).click();
   await expect(page.getByTestId('onboarding-commitment-demo')).toContainText('I will put my phone down during dinner tonight.');
   await expectCommitmentDemoCardVisible(page, ['I’ll do it', 'Not today']);
+});
+
+test('Personal Cards intro demo fits short 100 percent preview without scrolling', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.setViewportSize({ width: 390, height: 562 });
+  await page.goto('/mybishbash/onboarding');
+
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
+  const finalLineOpacityBeforeDemo = await page.locator('.onboarding-demo-final-line').evaluate((node) =>
+    Number(window.getComputedStyle(node).opacity),
+  );
+  expect(finalLineOpacityBeforeDemo).toBeLessThan(0.1);
+  await expect(page.getByText('Have you done something that counts towards your fitness today?')).toBeVisible({ timeout: 3000 });
+  await expect(page.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 14000 });
+  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible({ timeout: 14000 });
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'I’ll do this later' })).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const getButton = (label: string) => Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === label);
+    const getBounds = (element: Element | undefined) => {
+      const rect = element?.getBoundingClientRect();
+      return rect
+        ? {
+            bottom: Math.round(rect.bottom),
+            top: Math.round(rect.top),
+          }
+        : null;
+    };
+    return {
+      primary: getBounds(getButton('Set up my Personal Cards')),
+      replay: getBounds(getButton('Replay demo')),
+      secondary: getBounds(getButton('I’ll do this later')),
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  for (const [label, bounds] of Object.entries({
+    primary: layout.primary,
+    replay: layout.replay,
+    secondary: layout.secondary,
+  })) {
+    expect(bounds, `${label} bounds`).not.toBeNull();
+    expect(bounds!.top, `${label} top`).toBeGreaterThanOrEqual(0);
+    expect(bounds!.bottom, `${label} bottom`).toBeLessThanOrEqual(layout.viewportHeight);
+  }
+
+  await page.getByRole('button', { name: 'Replay demo' }).click();
+  await page.waitForTimeout(1100);
+  await expectIntroCursorHitsTarget(page, 'Instagram');
+  await page.waitForTimeout(9000);
+  await expectIntroCursorHitsTarget(page, 'I’ll do it now');
+});
+
+test('Personal Cards intro demo keeps Replay and actions visible in side preview height', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.setViewportSize({ width: 491, height: 611 });
+  await page.goto('/mybishbash/onboarding');
+
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
+  await expect(page.getByText('For the things you genuinely mean to do.')).toBeVisible({ timeout: 14000 });
+  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible({ timeout: 14000 });
+
+  const layout = await page.evaluate(() => {
+    const getButton = (label: string) => Array.from(document.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === label);
+    const getBounds = (element: Element | undefined) => {
+      const rect = element?.getBoundingClientRect();
+      return rect
+        ? {
+            bottom: Math.round(rect.bottom),
+            top: Math.round(rect.top),
+          }
+        : null;
+    };
+    return {
+      primary: getBounds(getButton('Set up my Personal Cards')),
+      replay: getBounds(getButton('Replay demo')),
+      secondary: getBounds(getButton('I’ll do this later')),
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  for (const [label, bounds] of Object.entries({
+    primary: layout.primary,
+    replay: layout.replay,
+    secondary: layout.secondary,
+  })) {
+    expect(bounds, `${label} bounds`).not.toBeNull();
+    expect(bounds!.top, `${label} top`).toBeGreaterThanOrEqual(0);
+    expect(bounds!.bottom, `${label} bottom`).toBeLessThanOrEqual(layout.viewportHeight);
+  }
+});
+
+test('local onboarding editor panel can be moved and stays available across onboarding pages', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.goto('/mybishbash/onboarding');
+
+  const panel = page.locator('.edit-panel');
+  const handle = page.getByRole('button', { name: 'Move editor' });
+  await expect(panel).toBeVisible();
+  await expect(handle).toBeVisible();
+
+  const before = await panel.boundingBox();
+  expect(before).not.toBeNull();
+  await handle.click();
+  await expect(page.getByRole('button', { name: 'Lock editor' })).toBeVisible();
+  await page.mouse.move(120, 220);
+  const after = await panel.boundingBox();
+  expect(after).not.toBeNull();
+  expect(Math.round(after!.x)).not.toBe(Math.round(before!.x));
+  expect(Math.round(after!.y)).not.toBe(Math.round(before!.y));
+
+  await page.keyboard.press('ArrowRight');
+  const nudged = await panel.boundingBox();
+  expect(nudged).not.toBeNull();
+  expect(Math.round(nudged!.x)).toBeGreaterThan(Math.round(after!.x));
+
+  await page.getByRole('button', { name: 'Lock editor' }).click();
+  await expect(page.getByRole('button', { name: 'Move editor' })).toBeVisible();
+
+  await handle.click();
+  await expect(page.getByRole('button', { name: 'Lock editor' })).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(page.getByRole('button', { name: 'Move editor' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Set up my Personal Cards', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Let’s start with a few things you’d like to remember more often.' })).toBeVisible();
+  await expect(handle).toBeVisible();
 });
 
 test('onboarding headlines fit mobile without mid-word splitting', async ({ page }) => {
