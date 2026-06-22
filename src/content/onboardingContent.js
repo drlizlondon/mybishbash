@@ -31,7 +31,7 @@ export const onboardingContent = {
       "title": "Let’s start with a few things you’d like to remember more often.",
       "body": "Choose up to 5. You can edit them or write your own.",
       "primary": "Continue",
-      "secondary": "Skip reminders",
+      "secondary": "Skip personal cards",
       "selectedLabel": "selected",
       "limitMessage": "You can choose up to five.",
       "deselectMessage": "Deselect one card first.",
@@ -40,6 +40,22 @@ export const onboardingContent = {
       "writeOwn": "Write my own",
       "customPlaceholder": "Write your own reminder…",
       "addCustom": "Add"
+    },
+    "personalSuccess": {
+      "title": "Great. Your Personal Cards are ready.",
+      "body": "You’ll now start seeing reminders about the things that matter to you before the apps you choose.",
+      "personalLabel": "Personal Cards",
+      "personalBody": "help you remember.",
+      "commitmentLabel": "Commitment Cards",
+      "commitmentBody": "help you follow through.",
+      "nextLine": "Next, let’s see how Commitment Cards help you keep promises to yourself.",
+      "primary": "Continue"
+    },
+    "commitmentDemo": {
+      "title": "See how Commitment Cards work",
+      "body": "A Commitment Card helps you follow through without setting anything up right now.",
+      "note": "You won’t make one now. You can create Commitment Cards later in the app.",
+      "primary": "Continue"
     },
     "protectedApp": {
       "title": "Where should myBishBash appear first?",
@@ -74,7 +90,7 @@ export const onboardingContent = {
       "continueHome": "Go to Home",
       "saved": "I’ve added it",
       "secondary": "Choose an app later",
-      "markedSaved": "Marked as saved",
+      "markedSaved": "Marked as installed",
       "homeScreenLauncher": "Home Screen icon",
       "launcherReadySuffix": "launcher ready",
       "moveLauncherPrefix": "Move the myBishBash",
@@ -88,7 +104,7 @@ export const onboardingContent = {
         "iPhone: tap Share, then Add to Home Screen.",
         "Android: open the menu, then Add to Home screen or Install app.",
         "Use the new icon when you want myBishBash to appear first.",
-        "Return here and tap I’ve added it."
+        "Tap I’ve added it on the install page to continue."
       ]
     },
     "skip": {

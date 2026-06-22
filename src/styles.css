@@ -9361,6 +9361,110 @@ body {
   line-height: 1.22;
 }
 
+.onboarding-personal-success-step {
+  gap: 10px;
+}
+
+.onboarding-personal-success-step .onboarding-step-body {
+  padding-top: 0;
+  padding-bottom: 72px;
+}
+
+.onboarding-personal-success-step .onboarding-step-copy {
+  max-width: 500px;
+  margin-inline: auto;
+  gap: 10px;
+}
+
+.onboarding-personal-success-step .onboarding-step-copy h2 {
+  max-width: 16ch;
+  font-size: clamp(1.72rem, 7vw, 2.48rem);
+  font-weight: 820;
+  line-height: 1.07;
+}
+
+.onboarding-personal-success-step .onboarding-step-copy p {
+  max-width: 34ch;
+  font-size: clamp(0.9rem, 3.45vw, 0.98rem);
+  line-height: 1.42;
+}
+
+.onboarding-personal-success-bridge {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(100%, 360px);
+  margin-inline: auto;
+}
+
+.onboarding-personal-success-flow {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  width: min(100%, 300px);
+}
+
+.onboarding-success-concept {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+}
+
+.onboarding-success-concept span {
+  color: rgba(112, 88, 68, 0.72);
+  font-size: clamp(0.76rem, 3vw, 0.84rem);
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.18;
+  text-transform: none;
+}
+
+.onboarding-success-concept strong {
+  color: #b15f4e;
+  font-size: clamp(1rem, 4vw, 1.18rem);
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.18;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
+.onboarding-success-arrow {
+  position: relative;
+  display: block;
+  width: 2px;
+  height: 15px;
+  border-radius: 999px;
+  background: rgba(214, 106, 80, 0.22);
+}
+
+.onboarding-success-arrow::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid rgba(214, 106, 80, 0.42);
+  border-bottom: 1.5px solid rgba(214, 106, 80, 0.42);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.onboarding-personal-success-next {
+  max-width: 31ch;
+  margin: 0;
+  color: rgba(71, 62, 58, 0.76);
+  font-size: clamp(0.86rem, 3.45vw, 0.94rem);
+  font-weight: 620;
+  line-height: 1.38;
+  text-align: center;
+}
+
 .onboarding-idea-card.selected {
   transform: translateY(-1px);
   border-color: rgba(214, 106, 80, 0.34);
@@ -9627,6 +9731,278 @@ body {
 .onboarding-commitment-complete-step .onboarding-step-copy {
   padding-top: clamp(52px, 13svh, 104px);
   gap: 14px;
+}
+
+.onboarding-commitment-demo-step {
+  gap: 12px;
+}
+
+.onboarding-commitment-demo-step .onboarding-step-copy {
+  gap: 8px;
+}
+
+.onboarding-commitment-demo-note {
+  width: min(100%, 340px);
+  margin: 0 auto;
+  color: rgba(71, 62, 58, 0.74);
+  font-size: clamp(0.82rem, 3.3vw, 0.9rem);
+  font-weight: 620;
+  line-height: 1.34;
+  text-align: center;
+}
+
+.onboarding-commitment-demo-shell {
+  width: min(100%, 380px);
+  margin: 0 auto;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.onboarding-commitment-demo-phone {
+  position: relative;
+  width: min(100%, 336px);
+  min-height: clamp(300px, 43svh, 390px);
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  border-radius: 26px;
+  padding: 10px;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.6), transparent 34%),
+    linear-gradient(180deg, rgba(255, 249, 245, 0.94), rgba(244, 237, 230, 0.92));
+  box-shadow:
+    0 18px 46px rgba(47, 42, 40, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.onboarding-commitment-demo-card,
+.onboarding-commitment-success-card,
+.onboarding-commitment-transition-card {
+  width: min(100%, 292px);
+  min-height: min(300px, 100%);
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 1px solid rgba(62, 53, 49, 0.08);
+  border-radius: 24px;
+  padding: 18px 16px;
+  background: rgba(255, 252, 249, 0.96);
+  box-shadow:
+    0 20px 44px rgba(47, 42, 40, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  text-align: center;
+  animation: onboarding-demo-card-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.onboarding-commitment-demo-card h3,
+.onboarding-commitment-success-card h3 {
+  margin: 0;
+  color: rgba(24, 23, 22, 0.96);
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(1.22rem, 5.4vw, 1.72rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.onboarding-commitment-demo-body {
+  width: 100%;
+}
+
+.onboarding-commitment-demo-prompt,
+.onboarding-commitment-success-card p {
+  margin: 0;
+  max-width: 25ch;
+  color: rgba(81, 72, 67, 0.86);
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+
+.onboarding-commitment-reason-block {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+.onboarding-commitment-reason-block span {
+  color: #9a5145;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.onboarding-commitment-reason-block p,
+.onboarding-commitment-reason-block strong {
+  margin: 0;
+  color: rgba(61, 52, 48, 0.88);
+  font-size: 0.88rem;
+  line-height: 1.28;
+}
+
+.onboarding-commitment-reason-block blockquote {
+  margin: 0;
+  border-left: 3px solid rgba(217, 108, 82, 0.65);
+  border-radius: 0 14px 14px 0;
+  padding: 8px 10px;
+  background: rgba(217, 108, 82, 0.08);
+  color: rgba(29, 27, 26, 0.94);
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: 0.98rem;
+  line-height: 1.24;
+}
+
+.onboarding-commitment-demo-actions {
+  width: 100%;
+  display: grid;
+  gap: 7px;
+}
+
+.onboarding-commitment-demo-button {
+  position: relative;
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.82);
+  color: rgba(38, 34, 32, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(38, 34, 32, 0.12);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 740;
+  pointer-events: none;
+}
+
+.onboarding-commitment-demo-button.primary {
+  background: linear-gradient(180deg, #d96c52 0%, #cf6046 100%);
+  color: #fff9f5;
+  box-shadow: 0 12px 26px rgba(201, 96, 70, 0.18);
+}
+
+.stage-commitment-tap .onboarding-commitment-demo-button.cursor-target,
+.stage-motivation-tap .onboarding-commitment-demo-button.cursor-target,
+.stage-review-tap .onboarding-commitment-demo-button.cursor-target {
+  transform: translateY(1px) scale(0.985);
+}
+
+.onboarding-commitment-transition-card {
+  min-height: 230px;
+}
+
+.onboarding-commitment-transition-card span {
+  color: rgba(41, 37, 35, 0.9);
+  font-family: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+  font-size: clamp(1.55rem, 6.4vw, 2rem);
+  line-height: 1.1;
+}
+
+.onboarding-commitment-success-card {
+  min-height: 250px;
+}
+
+.onboarding-commitment-demo-replay {
+  min-height: 32px;
+  border: 1px solid rgba(74, 57, 45, 0.08);
+  border-radius: 999px;
+  padding: 0 13px;
+  background: rgba(255, 255, 255, 0.42);
+  color: rgba(74, 65, 59, 0.68);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.onboarding-auto-cursor {
+  position: absolute;
+  z-index: 3;
+  width: 30px;
+  height: 34px;
+  background: transparent;
+  filter: drop-shadow(0 9px 14px rgba(47, 42, 40, 0.24));
+  transform: translate(-5px, -5px);
+  transition:
+    left 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms ease,
+    opacity 180ms ease;
+}
+
+.onboarding-auto-cursor::before {
+  content: "";
+  position: absolute;
+  inset: 5px 4px 0 2px;
+  background: #151515;
+  clip-path: polygon(0 0, 0 78%, 23% 61%, 39% 100%, 57% 93%, 41% 55%, 72% 55%);
+}
+
+.onboarding-auto-cursor::after {
+  content: "";
+  position: absolute;
+  inset: 4px 3px 0 1px;
+  background: rgba(255, 250, 247, 0.88);
+  clip-path: polygon(0 0, 0 78%, 23% 61%, 39% 100%, 57% 93%, 41% 55%, 72% 55%, 64% 50%, 36% 50%, 53% 91%, 42% 95%, 26% 54%, 6% 69%, 6% 11%, 62% 50%, 72% 55%);
+}
+
+.onboarding-auto-cursor span {
+  display: none;
+}
+
+.onboarding-auto-cursor.commitment {
+  left: 72%;
+  top: 68%;
+}
+
+.onboarding-auto-cursor.commitment-tap {
+  left: 50%;
+  top: 76%;
+  transform: translate(-5px, -5px) scale(0.9);
+}
+
+.onboarding-auto-cursor.motivation {
+  left: 30%;
+  top: 66%;
+}
+
+.onboarding-auto-cursor.motivation-tap {
+  left: 50%;
+  top: 70%;
+  transform: translate(-5px, -5px) scale(0.9);
+}
+
+.onboarding-auto-cursor.review {
+  left: 72%;
+  top: 64%;
+}
+
+.onboarding-auto-cursor.review-tap {
+  left: 50%;
+  top: 60%;
+  transform: translate(-5px, -5px) scale(0.9);
+}
+
+@keyframes onboarding-demo-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-commitment-demo-card,
+  .onboarding-commitment-success-card,
+  .onboarding-commitment-transition-card,
+  .onboarding-auto-cursor {
+    animation: none;
+    transition: none;
+  }
 }
 
 .onboarding-protected-app-grid {
@@ -10452,7 +10828,7 @@ body {
   left: 50%;
   width: min(238px, 82%);
   margin: 0;
-  padding: 42px 18px 18px;
+  padding: 18px;
   border: 1px solid rgba(120, 87, 65, 0.09);
   border-radius: 22px;
   background:
@@ -10467,19 +10843,6 @@ body {
   text-align: center;
   opacity: 0;
   animation: onboarding-demo-final-line-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.onboarding-demo-final-line::before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(208, 100, 75, 0.13);
-  box-shadow: inset 0 0 0 7px rgba(255, 253, 249, 0.82);
-  transform: translateX(-50%);
 }
 
 .onboarding-demo-replay {
@@ -11538,7 +11901,7 @@ body {
 
 .onboarding-demo-final-line {
   width: min(212px, 78%);
-  padding: 30px 14px 14px;
+  padding: 14px;
   font-family: var(--onboarding-font-sans);
   font-size: clamp(0.98rem, 3.85vw, 1.12rem);
   font-weight: 650;

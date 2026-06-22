@@ -5764,6 +5764,26 @@ function App() {
     }));
   }
 
+  function skipPersonalCardSetupForNow({ sourceStep = "personal_cards" } = {}) {
+    const now = new Date().toISOString();
+    void logEvent({
+      event_type: "onboarding_step_skipped",
+      source_type: "onboarding",
+      card_source: "personal",
+      action_taken: "skipped_personal_card_setup",
+      metadata: { source_step: sourceStep },
+    });
+    setProfile((current) => ({
+      ...current,
+      plan: current.plan ?? "free",
+      onboardingRoute: "personal_card_play_by_play",
+      onboardingCompletedAt: now,
+      onboardingCompletedSection: "personal_cards",
+      onboardingSkipped: true,
+      hasCompletedPersonalCardSetup: false,
+    }));
+  }
+
   function finishOnboarding(destination = "home", launcherId = profile.onboardingLauncherId ?? "instagram") {
     const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
     saveSetupComplete(true);
@@ -6860,6 +6880,7 @@ function App() {
       {screen === "onboarding" ? (
         <Onboarding
           onSkip={skipInstagramOnboarding}
+          onSkipPersonalSetup={skipPersonalCardSetupForNow}
           onSaveSetup={saveOnboardingSetup}
           onSavePersonalSetup={savePersonalOnboardingSetup}
           onCommitmentDemoComplete={completeCommitmentCardDemo}

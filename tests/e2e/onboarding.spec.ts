@@ -127,6 +127,131 @@ async function completeCoreSetup(page: Page, path = '/mybishbash/onboarding') {
   await expect(page.getByText('2 of 5 selected')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expectPersonalCardsSuccessThenContinue(page);
+  await expectCommitmentDemoThenContinue(page);
+}
+
+async function expectPersonalCardsSuccessThenContinue(page: Page) {
+  await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
+  await expect(page.getByText('You’ll now start seeing reminders about the things that matter to you before the apps you choose.')).toBeVisible();
+  await expect(page.getByText('Personal Cards', { exact: true })).toBeVisible();
+  await expect(page.getByText('help you remember.')).toBeVisible();
+  await expect(page.getByText('Commitment Cards', { exact: true })).toBeVisible();
+  await expect(page.getByText('help you follow through.')).toBeVisible();
+  await expect(page.getByText('Next, let’s see how Commitment Cards help you keep promises to yourself.')).toBeVisible();
+  await expect(page.locator('.onboarding-personal-success-mark')).toHaveCount(0);
+  await expect(page.getByTestId('personal-card-onboarding-preview')).toHaveCount(0);
+  await expect(page.getByText('Have you taken your vitamins?')).toHaveCount(0);
+  await expect(page.getByText('Have you eaten a vegetable today?')).toHaveCount(0);
+  await expect(page.getByText('When')).toHaveCount(0);
+  await expect(page.getByText('Where')).toHaveCount(0);
+  await expect(page.getByText('myBishBash Home')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+}
+
+async function expectCommitmentDemoThenContinue(page: Page) {
+  await expect(page.getByRole('heading', { name: 'See how Commitment Cards work' })).toBeVisible();
+  await expect(page.getByText('You won’t make one now. You can create Commitment Cards later in the app.')).toBeVisible();
+  await expect(page.getByTestId('onboarding-commitment-demo')).toContainText('I will put my phone down during dinner tonight.');
+  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible();
+  await expect(page.getByText('You wrote this because:')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText('I want to be more present with my family.')).toBeVisible();
+  await expect(page.getByText('Later that evening...')).toBeVisible({ timeout: 6000 });
+  await expect(page.getByText('How did it go?')).toBeVisible({ timeout: 7000 });
+  await expect(page.getByTestId('onboarding-commitment-success')).toContainText('Nice work.', { timeout: 9000 });
+  await expect(page.getByTestId('onboarding-commitment-success')).toContainText('Commitment Cards help you follow through on things that matter to you.');
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+}
+
+async function expectCommitmentDemoCardVisible(page: Page, expectedActions: string[]) {
+  const layout = await page.evaluate((actions) => {
+    const card = document.querySelector('.onboarding-commitment-demo-card');
+    const phone = document.querySelector('.onboarding-commitment-demo-phone');
+    const cardRect = card?.getBoundingClientRect();
+    const phoneRect = phone?.getBoundingClientRect();
+    const actionRects = actions.map((label) => {
+      const button = Array.from(document.querySelectorAll('.onboarding-commitment-demo-button'))
+        .find((candidate) => candidate.textContent?.trim() === label);
+      const rect = button?.getBoundingClientRect();
+      return {
+        bottom: rect ? Math.round(rect.bottom) : null,
+        label,
+        top: rect ? Math.round(rect.top) : null,
+      };
+    });
+    return {
+      actions: actionRects,
+      cardBottom: cardRect ? Math.round(cardRect.bottom) : null,
+      cardTop: cardRect ? Math.round(cardRect.top) : null,
+      phoneBottom: phoneRect ? Math.round(phoneRect.bottom) : null,
+      phoneTop: phoneRect ? Math.round(phoneRect.top) : null,
+      viewportHeight: window.innerHeight,
+    };
+  }, expectedActions);
+
+  expect(layout.cardTop).not.toBeNull();
+  expect(layout.cardBottom).not.toBeNull();
+  expect(layout.phoneTop).not.toBeNull();
+  expect(layout.phoneBottom).not.toBeNull();
+  expect(layout.cardTop!).toBeGreaterThanOrEqual(layout.phoneTop! - 1);
+  expect(layout.cardBottom!).toBeLessThanOrEqual(layout.viewportHeight);
+  for (const action of layout.actions) {
+    expect(action.top, `${action.label} top`).not.toBeNull();
+    expect(action.bottom, `${action.label} bottom`).not.toBeNull();
+    expect(action.top!).toBeGreaterThanOrEqual(layout.cardTop!);
+    expect(action.bottom!).toBeLessThanOrEqual(layout.cardBottom!);
+    expect(action.bottom!).toBeLessThanOrEqual(layout.viewportHeight);
+  }
+}
+
+async function expectCommitmentCursorOnTarget(page: Page, stageClass: string, targetLabel: string) {
+  await expect(page.locator(`.onboarding-auto-cursor.${stageClass}`)).toHaveCount(1);
+  const geometry = await page.evaluate((label) => {
+    const cursor = document.querySelector('.onboarding-auto-cursor');
+    const target = Array.from(document.querySelectorAll('.onboarding-commitment-demo-button.cursor-target'))
+      .find((button) => button.textContent?.trim() === label);
+    const cursorRect = cursor?.getBoundingClientRect();
+    const targetRect = target?.getBoundingClientRect();
+    const pointerTip = cursorRect
+      ? {
+          x: Math.round(cursorRect.left + 2),
+          y: Math.round(cursorRect.top + 5),
+        }
+      : null;
+    return {
+      pointerTip,
+      target: targetRect
+        ? {
+            bottom: Math.round(targetRect.bottom),
+            left: Math.round(targetRect.left),
+            right: Math.round(targetRect.right),
+            top: Math.round(targetRect.top),
+          }
+        : null,
+    };
+  }, targetLabel);
+
+  expect(geometry.pointerTip).not.toBeNull();
+  expect(geometry.target).not.toBeNull();
+  expect(geometry.pointerTip!.x).toBeGreaterThanOrEqual(geometry.target!.left - 4);
+  expect(geometry.pointerTip!.x).toBeLessThanOrEqual(geometry.target!.right + 4);
+  expect(geometry.pointerTip!.y).toBeGreaterThanOrEqual(geometry.target!.top - 4);
+  expect(geometry.pointerTip!.y).toBeLessThanOrEqual(geometry.target!.bottom + 4);
+}
+
+async function expectConfirmedSetupAndBackToInstall(page: Page, appName: string) {
+  await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
+  await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
+  await expect(page.getByText('Marked as installed')).toBeVisible();
+  await expect(page.getByText('Marked as saved')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${appName.toLowerCase()}/`));
+  await expect(page.getByRole('heading', { name: `Add ${appName} with myBishBash` })).toBeVisible();
+  await page.getByRole('button', { name: 'I’ve added it' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
+  await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
 }
 
 async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
@@ -136,14 +261,10 @@ async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: `Add an extra ${appName} prompt?` })).toBeVisible();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.getByRole('heading', { name: `Add ${appName} to your Home Screen` })).toBeVisible();
-  await page.getByRole('button', { name: 'Open install page' }).click();
   await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${appName.toLowerCase()}/`));
+  await expect(page.getByRole('heading', { name: `Add ${appName} with myBishBash` })).toBeVisible();
   await page.getByRole('button', { name: 'I’ve added it' }).click();
-  await expect(page.getByRole('link', { name: 'Return to myBishBash' })).toBeVisible();
-  await page.getByRole('link', { name: 'Return to myBishBash' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
+  await expectConfirmedSetupAndBackToInstall(page, appName);
   await page.getByRole('button', { name: 'Go to Home' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByTestId('home-panel')).toBeVisible();
@@ -174,6 +295,9 @@ test('Personal Cards onboarding saves selected cards without starter packs or co
   expect(state.profile.selectedStrategyAreaIds).toEqual([]);
   expect(state.profile.onboardingStarterPackId).toBeNull();
   expect(state.profile.onboardingStarterCommitmentId).toBeNull();
+  expect(state.profile.onboardingAppContext.label).toBe('Every app you choose');
+  expect(state.profile.onboardingAppContext.place).toBe('apps');
+  expect(state.profile.hasSeenCommitmentCardDemo).toBe(true);
   expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Have you taken your vitamins?' && !card.sourcePackId)).toBe(true);
   expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Have you done something that counts towards your fitness today?' && !card.sourcePackId)).toBe(true);
   expect(state.cards.some((card: Record<string, unknown>) => card.sourcePackId)).toBe(false);
@@ -194,6 +318,8 @@ test('personal card suggestions appear directly without category selection', asy
   await expect(page.getByRole('button', { name: 'Have you done something that counts towards your fitness today?' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Have you got your bag ready for tomorrow?' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Have you taken your medication?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Have you eaten a vegetable today?' })).toBeVisible();
+  await expect(page.getByText('Have you eaten something nourishing today?')).toHaveCount(0);
   await expect(suggestions.locator('.onboarding-idea-check')).toHaveCount(11);
   await expect(suggestions.filter({ hasText: 'Have you done something that counts towards your fitness today?' }).locator('.onboarding-idea-check')).toBeVisible();
 
@@ -234,6 +360,8 @@ test('faith/reflection onboarding does not create or launch a starter Commitment
   await startStrategySetup(page);
   await page.getByRole('button', { name: 'Have you reflected on something you’re grateful for?' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
+  await expectPersonalCardsSuccessThenContinue(page);
+  await expectCommitmentDemoThenContinue(page);
   await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toBeVisible();
   await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
@@ -281,7 +409,7 @@ test('personal card setup caps selected and custom cards at 5 total', async ({ p
   await expect(page.getByText('5 of 5 selected')).toBeVisible();
 });
 
-test('phone trigger selection goes through App Prompt choice, then install instructions, and saves preference', async ({ page }) => {
+test('phone trigger selection goes through App Prompt choice, then straight to install page, and saves preference', async ({ page }) => {
   await completeCoreSetup(page);
 
   await page.getByRole('radio', { name: 'Safari' }).click();
@@ -302,20 +430,10 @@ test('phone trigger selection goes through App Prompt choice, then install instr
   await appPromptToggle.getByRole('button', { name: 'On' }).click();
 
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
-  await expect(page.getByText('Add this version to your Home Screen. Use it instead of the original app icon when you want myBishBash to appear first.')).toBeVisible();
-  await expect(page.getByText('iPhone: tap Share, then Add to Home Screen.')).toBeVisible();
-  await expect(page.getByText('Android: open the menu, then Add to Home screen or Install app.')).toBeVisible();
-  await page.getByRole('button', { name: 'Open install page' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
   await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toBeVisible();
   await page.getByRole('button', { name: 'I’ve added it' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
-  await expect(page.getByText('Open your new Safari icon from your Home Screen')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Return to myBishBash' })).toBeVisible();
-  await page.getByRole('link', { name: 'Return to myBishBash' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
+  await expectConfirmedSetupAndBackToInstall(page, 'Safari');
   await page.getByRole('button', { name: 'Go to Home' }).click();
 
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
@@ -328,7 +446,7 @@ test('phone trigger selection goes through App Prompt choice, then install instr
   expect(state.launcherBehavior.safari.useInterruptionPack).toBe(true);
 });
 
-test('pending install_started resumes on the install instruction step', async ({ page }) => {
+test('pending install_started resumes on the App Prompt choice, not the removed instruction step', async ({ page }) => {
   await seedFirstRun(page);
   await page.addInitScript(() => {
     window.localStorage.setItem('mybishbash.onboarding-protected-app-setup-pending.v1', JSON.stringify({
@@ -340,10 +458,11 @@ test('pending install_started resumes on the install instruction step', async ({
   });
   await page.goto('/mybishbash/onboarding');
 
-  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open install page' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open install page' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toHaveCount(0);
 });
 
 test('first app screen keeps logo-backed apps in order with consistent icon paths', async ({ page }) => {
@@ -362,8 +481,6 @@ test('app install path supports back navigation before saving setup', async ({ p
   await page.getByRole('radio', { name: 'Safari' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
-  await page.getByRole('button', { name: 'Open install page' }).click();
 
   await expect(page).toHaveURL(/\/mybishbash\/install\/safari\//);
   await expect(page.getByRole('heading', { name: 'Add Safari with myBishBash' })).toBeVisible();
@@ -371,13 +488,89 @@ test('app install path supports back navigation before saving setup', async ({ p
   await page.getByRole('button', { name: 'Back' }).click();
 
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add an extra Safari prompt?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toHaveCount(0);
   const state = await page.evaluate(() => ({
     profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
     launcherBehavior: JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'),
   }));
   expect(state.profile.selectedProtectedApp).toBeUndefined();
   expect(state.launcherBehavior.safari?.useInterruptionPack).toBe(false);
+});
+
+test('onboarding back buttons move through the previous logical setup step', async ({ page }) => {
+  await startStrategySetup(page);
+
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
+
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 13000 });
+  await page.getByRole('button', { name: 'Set up my Personal Cards', exact: true }).click();
+  await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'Let’s start with a few things you’d like to remember more often.' })).toBeVisible();
+  await expect(page.getByText('1 of 5 selected')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'See how Commitment Cards work' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expectCommitmentDemoThenContinue(page);
+  await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Add an extra Instagram prompt?' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
+});
+
+test('skipping personal cards continues to Commitment Cards instead of ending onboarding', async ({ page }) => {
+  await seedFirstRun(page);
+  await page.goto('/mybishbash/onboarding');
+
+  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 13000 });
+  await page.getByRole('button', { name: 'I’ll do this later' }).click();
+  await expect(page.getByRole('heading', { name: 'See how Commitment Cards work' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'You can set up your phone later.' })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
+
+  let state = await page.evaluate(() => ({
+    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
+    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
+  }));
+  expect(state.profile.hasCompletedPersonalCardSetup).toBe(false);
+  expect(state.profile.onboardingSkipped).toBe(true);
+  expect(state.setupComplete).toBe('false');
+
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
+
+  await startStrategySetup(page);
+
+  await page.getByRole('button', { name: 'Skip personal cards' }).click();
+  await expect(page.getByRole('heading', { name: 'See how Commitment Cards work' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'You can set up your phone later.' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Let’s start with a few things you’d like to remember more often.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open install page' })).toHaveCount(0);
+
+  state = await page.evaluate(() => ({
+    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
+    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
+  }));
+  expect(state.cards).toEqual([]);
+  expect(state.setupComplete).toBe('false');
 });
 
 test('home spotlight tour supports navigation and persists dismissal after Personal Cards onboarding', async ({ page }) => {
@@ -421,7 +614,7 @@ test('onboarding visible copy avoids old blocker and technical language', async 
   await startStrategySetup(page);
   await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
 
   const text = await page.locator('body').innerText();
   expect(text).not.toMatch(/\bPWA\b/i);
@@ -433,8 +626,88 @@ test('onboarding visible copy avoids old blocker and technical language', async 
   expect(text).not.toMatch(/\bApp-specific check-ins\b/i);
   expect(text).not.toContain('Add a strategy pack');
   expect(text).not.toContain('Make one commitment');
+  expect(text).not.toContain('How’s it going?');
   expect(text).not.toContain('Before your apps open');
   expect(text).not.toContain('Do the thing you’ve been putting off.');
+});
+
+test('Personal Cards success transition is compact across phone widths', async ({ page }) => {
+  for (const viewport of [
+    { width: 360, height: 740 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+    { width: 768, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await startStrategySetup(page);
+    await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+
+    await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
+    await expect(page.getByText('help you remember.')).toBeVisible();
+    await expect(page.getByText('help you follow through.')).toBeVisible();
+    await expect(page.getByText('Next, let’s see how Commitment Cards help you keep promises to yourself.')).toBeVisible();
+    await expect(page.locator('.onboarding-personal-success-mark')).toHaveCount(0);
+    await expect(page.getByTestId('personal-card-onboarding-preview')).toHaveCount(0);
+    await expect(page.getByText('Have you taken your vitamins?')).toHaveCount(0);
+
+    const layout = await page.evaluate(() => {
+      const heading = document.querySelector('.onboarding-personal-success-step h2');
+      const action = Array.from(document.querySelectorAll('.onboarding-actions button'))
+        .find((button) => button.textContent?.trim() === 'Continue');
+      const bridge = document.querySelector('.onboarding-personal-success-bridge');
+      const headingStyle = heading ? window.getComputedStyle(heading) : null;
+      const actionRect = action?.getBoundingClientRect();
+      const bridgeRect = bridge?.getBoundingClientRect();
+      return {
+        actionBottom: actionRect ? Math.round(actionRect.bottom) : null,
+        actionTop: actionRect ? Math.round(actionRect.top) : null,
+        bridgeBottom: bridgeRect ? Math.round(bridgeRect.bottom) : null,
+        headingHyphens: headingStyle?.hyphens ?? null,
+        headingWordBreak: headingStyle?.wordBreak ?? null,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(layout.headingWordBreak).not.toBe('break-all');
+    expect(layout.headingHyphens).toBe('none');
+    expect(layout.actionTop).not.toBeNull();
+    expect(layout.actionBottom).not.toBeNull();
+    expect(layout.bridgeBottom).not.toBeNull();
+    expect(layout.actionTop!).toBeGreaterThan(layout.bridgeBottom!);
+    expect(layout.actionBottom!).toBeLessThanOrEqual(layout.viewportHeight);
+  }
+});
+
+test('Commitment Cards demo can replay and keeps option buttons fully visible', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await startStrategySetup(page);
+  await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expectPersonalCardsSuccessThenContinue(page);
+
+  await expect(page.getByRole('heading', { name: 'See how Commitment Cards work' })).toBeVisible();
+  await expect(page.getByText('You won’t make one now. You can create Commitment Cards later in the app.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Replay demo' })).toBeVisible();
+  await expect(page.getByTestId('onboarding-commitment-demo')).toContainText('I will put my phone down during dinner tonight.');
+  await expectCommitmentDemoCardVisible(page, ['I’ll do it', 'Not today']);
+  await page.waitForTimeout(1450);
+  await expectCommitmentCursorOnTarget(page, 'commitment-tap', 'Not today');
+
+  await expect(page.getByText('You wrote this because:')).toBeVisible({ timeout: 5000 });
+  await expectCommitmentDemoCardVisible(page, ['I’ll do it', 'Leave it for another day']);
+  await page.waitForTimeout(1400);
+  await expectCommitmentCursorOnTarget(page, 'motivation-tap', 'I’ll do it');
+
+  await expect(page.getByText('How did it go?')).toBeVisible({ timeout: 7000 });
+  await expectCommitmentDemoCardVisible(page, ['I did it', 'Nearly', 'Not this time']);
+  await page.waitForTimeout(1500);
+  await expectCommitmentCursorOnTarget(page, 'review-tap', 'I did it');
+
+  await expect(page.getByTestId('onboarding-commitment-success')).toContainText('Nice work.', { timeout: 9000 });
+  await page.getByRole('button', { name: 'Replay demo' }).click();
+  await expect(page.getByTestId('onboarding-commitment-demo')).toContainText('I will put my phone down during dinner tonight.');
+  await expectCommitmentDemoCardVisible(page, ['I’ll do it', 'Not today']);
 });
 
 test('onboarding headlines fit mobile without mid-word splitting', async ({ page }) => {
@@ -445,7 +718,9 @@ test('onboarding headlines fit mobile without mid-word splitting', async ({ page
   const checks: Array<{ action?: () => Promise<void>; heading: string }> = [
     { heading: 'Start with your Personal Cards' },
     { action: () => page.getByRole('button', { name: 'Set up my Personal Cards' }).click(), heading: 'Let’s start with a few things you’d like to remember more often.' },
-    { action: async () => { await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Where should myBishBash appear first?' },
+    { action: async () => { await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click(); await page.getByRole('button', { name: 'Continue' }).click(); }, heading: 'Great. Your Personal Cards are ready.' },
+    { action: async () => { await page.getByRole('button', { name: 'Continue', exact: true }).click(); }, heading: 'See how Commitment Cards work' },
+    { action: async () => { await expectCommitmentDemoThenContinue(page); }, heading: 'Where should myBishBash appear first?' },
     { action: async () => { await page.getByRole('button', { name: 'Continue', exact: true }).click(); }, heading: 'Add an extra Instagram prompt?' },
   ];
 

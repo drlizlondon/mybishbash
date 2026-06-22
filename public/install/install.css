@@ -173,49 +173,6 @@ body {
   box-shadow: none;
 }
 
-.install-success {
-  width: 100%;
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid rgba(232, 118, 97, 0.18);
-  border-radius: 22px;
-  background: rgba(255, 250, 247, 0.9);
-  text-align: left;
-}
-
-.install-success[hidden] {
-  display: none;
-}
-
-.install-success strong {
-  display: block;
-  margin-bottom: 6px;
-  color: #2A2A28;
-  font-size: 16px;
-}
-
-.install-success p {
-  margin: 0;
-  color: #6F6660;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.install-return-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  margin-top: 14px;
-  border-radius: 999px;
-  padding: 0 18px;
-  background: #2A2A28;
-  color: #FFF9F5;
-  font-size: 14px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
 .install-real-app {
   position: fixed;
   bottom: calc(env(safe-area-inset-bottom, 24px) + 24px);

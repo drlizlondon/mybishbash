@@ -137,13 +137,7 @@
         opened_from: "install_complete_button",
       });
       window.localStorage.setItem("mybishbash.pending-launcher-install.v1", JSON.stringify(pendingInstallEvents.slice(-20)));
-      const successPanel = document.querySelector("[data-install-success]");
-      if (successPanel) {
-        successPanel.removeAttribute("hidden");
-        ensureReturnButton(successPanel, `${window.location.origin}${appBasePath}/onboarding`);
-      }
-      completeButton.setAttribute("disabled", "true");
-      completeButton.textContent = "Added";
+      window.location.assign(`${window.location.origin}${appBasePath}/onboarding`);
     });
   }
 
@@ -262,16 +256,6 @@ function loadOnboardingPendingSetup(key) {
   } catch {
     return null;
   }
-}
-
-function ensureReturnButton(successPanel, href) {
-  if (!successPanel || successPanel.querySelector("[data-install-return]")) return;
-  const returnLink = document.createElement("a");
-  returnLink.href = href;
-  returnLink.className = "install-return-button";
-  returnLink.setAttribute("data-install-return", "");
-  returnLink.textContent = "Return to myBishBash";
-  successPanel.appendChild(returnLink);
 }
 
 function queryAll(selector) {

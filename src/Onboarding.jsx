@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./landing.css";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
@@ -6,6 +6,16 @@ import { getGreeting } from "./utils";
 import { BrandMark } from "./components/BrandMark";
 
 const ONBOARDING_DEMO_CTA_UNLOCK_MS = 11000;
+const PERSONAL_ONBOARDING_LOCATION_LABEL = "Every app you choose";
+const COMMITMENT_DEMO_TIMINGS = {
+  firstTap: 1300,
+  motivation: 2100,
+  secondTap: 3300,
+  transition: 4600,
+  review: 6000,
+  reviewTap: 7400,
+  success: 8500,
+};
 
 export const DEFAULT_INTERRUPTER_CARDS = [
   "Do I actually want to open Instagram right now?",
@@ -40,7 +50,7 @@ const STARTER_PERSONAL_CARD_TEXTS = [
   "Have you stretched today?",
   "Have you taken your medication?",
   "Have you read something today?",
-  "Have you eaten something nourishing today?",
+  "Have you eaten a vegetable today?",
   "Have you done one small thing for your home today?",
 ];
 
@@ -187,16 +197,12 @@ export default function Onboarding(props) {
 
 function OnboardingContent({
   onSavePersonalSetup,
+  onSkipPersonalSetup,
   onCommitmentDemoComplete,
   onCompleteProtectedAppSetup,
   onSaveProtectedAppPreference,
   onGoHome,
   onSkip,
-  renderCommitmentDemoCard,
-  renderCommitmentMotivationDemoCard,
-  renderCommitmentCheckInDemoCard,
-  renderCommitmentEncouragementDemoCard,
-  renderCommitmentReviewDemoCard,
   availableLaunchers = [],
 }) {
   const pendingProtectedAppSetup = readPendingProtectedAppSetup();
@@ -208,12 +214,15 @@ function OnboardingContent({
     pendingProtectedAppSetup?.status === "confirmed"
       ? STEPS.indexOf("protected-setup")
       : pendingProtectedAppSetup?.status === "install_started" || pendingProtectedAppSetup?.status === "ready"
-        ? STEPS.indexOf("protected-setup")
+        ? STEPS.indexOf("protected-demo")
         : 0
   ));
   const [demoComplete, setDemoComplete] = useState(false);
   const [demoReplayKey, setDemoReplayKey] = useState(0);
+  const [commitmentDemoFinished, setCommitmentDemoFinished] = useState(false);
+  const [commitmentReturnStep, setCommitmentReturnStep] = useState("personal-success");
   const [skipRequested, setSkipRequested] = useState(false);
+  const [skipReturnStep, setSkipReturnStep] = useState("learn");
   const [selectedCardIds, setSelectedCardIds] = useState([]);
   const [customCardText, setCustomCardText] = useState("");
   const [customCardOpen, setCustomCardOpen] = useState(false);
@@ -228,6 +237,9 @@ function OnboardingContent({
   );
   const [protectedAppInterruptionPrefs, setProtectedAppInterruptionPrefs] = useState(initialProtectedAppInterruptionPrefs);
   const protectedAppInterruptionPrefsRef = useRef(initialProtectedAppInterruptionPrefs);
+  const markCommitmentDemoFinished = useCallback(() => {
+    setCommitmentDemoFinished(true);
+  }, []);
 
   const orderedPersonalCardOptions = PERSONAL_CARD_OPTIONS;
   const selectedCards = PERSONAL_CARD_OPTIONS.filter((option) => selectedCardIds.includes(option.id));
@@ -252,9 +264,12 @@ function OnboardingContent({
   function goBack() {
     const previousStepByCurrent = {
       intention: "learn",
-      "protected-app": "intention",
+      "personal-success": "intention",
+      "commitment-demo": commitmentReturnStep,
+      "protected-app": "commitment-demo",
       "protected-demo": "protected-app",
       "protected-setup": "protected-demo",
+      skip: skipReturnStep,
     };
     const previousStep = previousStepByCurrent[currentStep];
     if (previousStep) {
@@ -265,7 +280,15 @@ function OnboardingContent({
   }
 
   function showSkipSummary() {
+    setSkipReturnStep(currentStep);
     setStepIndex(STEPS.indexOf("skip"));
+  }
+
+  function skipPersonalCardsForNow() {
+    onSkipPersonalSetup?.({ sourceStep: currentStep });
+    setCommitmentReturnStep(currentStep);
+    setCommitmentDemoFinished(false);
+    setStepIndex(STEPS.indexOf("commitment-demo"));
   }
 
   function toggleSelectedCard(cardId) {
@@ -333,12 +356,12 @@ function OnboardingContent({
       shortcutSetup: null,
       appContext: {
         id: HOME_ONBOARDING_LOCATION_ID,
-        label: "myBishBash Home",
+        label: PERSONAL_ONBOARDING_LOCATION_LABEL,
         launcherId: null,
         selectedLauncherIds: [],
         onboardingSection: "personal_cards",
         timingWindows: DEFAULT_ONBOARDING_TIMING_WINDOWS,
-        place: "home",
+        place: "apps",
       },
       timingWindows: DEFAULT_ONBOARDING_TIMING_WINDOWS,
     });
@@ -346,15 +369,24 @@ function OnboardingContent({
 
   function saveAndContinue() {
     savePersonalCard();
-    onCommitmentDemoComplete?.({ skipped: true });
+    setStepIndex(STEPS.indexOf("personal-success"));
+  }
+
+  function continueToCommitmentDemo() {
+    setCommitmentReturnStep("personal-success");
+    setCommitmentDemoFinished(false);
+    setStepIndex(STEPS.indexOf("commitment-demo"));
+  }
+
+  function finishCommitmentDemo() {
+    onCommitmentDemoComplete?.({ skipped: false });
     setStepIndex(STEPS.indexOf("protected-app"));
   }
 
   function continueToProtectedAppSetup() {
     saveProtectedAppInterruptionPreference(selectedProtectedAppId, getSelectedProtectedAppInterruptionEnabled());
     writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled(), "ready");
-    setProtectedAppSetupPhase("ready");
-    setStepIndex(STEPS.indexOf("protected-setup"));
+    openProtectedAppInstall();
   }
 
   function selectProtectedApp(appId) {
@@ -384,6 +416,12 @@ function OnboardingContent({
     const installUrl = getLauncherInstallUrl(selectedProtectedApp);
     writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled(), "install_started");
     setProtectedAppSetupPhase("install_started");
+    window.location.assign(installUrl);
+  }
+
+  function goBackToProtectedAppInstall() {
+    const installUrl = getLauncherInstallUrl(selectedProtectedApp);
+    writePendingProtectedAppSetup(selectedProtectedApp?.id, getSelectedProtectedAppInterruptionEnabled(), "confirmed");
     window.location.assign(installUrl);
   }
 
@@ -424,7 +462,7 @@ function OnboardingContent({
               primaryDisabled={!demoComplete}
               secondaryPath="steps.learn.secondary"
               secondaryLabel="I’ll do this later"
-              onSecondary={showSkipSummary}
+              onSecondary={skipPersonalCardsForNow}
             >
               <TutorialDemoIntro
                 key={demoReplayKey}
@@ -446,8 +484,8 @@ function OnboardingContent({
               onPrimary={saveAndContinue}
               primaryDisabled={selectedCardTexts.length === 0}
               secondaryPath="steps.intention.secondary"
-              secondaryLabel="Skip reminders"
-              onSecondary={showSkipSummary}
+              secondaryLabel="Skip personal cards"
+              onSecondary={skipPersonalCardsForNow}
               canGoBack={canGoBack}
               onBack={goBack}
             >
@@ -469,6 +507,58 @@ function OnboardingContent({
                 customPlaceholder={content.steps?.intention?.customPlaceholder ?? "Write your own reminder…"}
                 addCustomLabel={content.steps?.intention?.addCustom ?? "Add"}
               />
+            </OnboardingStep>
+          ) : null}
+
+          {currentStep === "personal-success" ? (
+            <OnboardingStep
+              className="onboarding-personal-success-step"
+              titlePath="steps.personalSuccess.title"
+              title="Great. Your Personal Cards are ready."
+              bodyPath="steps.personalSuccess.body"
+              body="You’ll now start seeing reminders about the things that matter to you before the apps you choose."
+              primaryPath="steps.personalSuccess.primary"
+              primaryLabel="Continue"
+              onPrimary={continueToCommitmentDemo}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            >
+              <div className="onboarding-personal-success-bridge">
+                <div className="onboarding-personal-success-flow" aria-label="Personal Cards and Commitment Cards">
+                  <section className="onboarding-success-concept">
+                    <EditableText as="span" path="steps.personalSuccess.personalLabel">Personal Cards</EditableText>
+                    <EditableText as="strong" path="steps.personalSuccess.personalBody">help you remember.</EditableText>
+                  </section>
+                  <span className="onboarding-success-arrow" aria-hidden="true" />
+                  <section className="onboarding-success-concept">
+                    <EditableText as="span" path="steps.personalSuccess.commitmentLabel">Commitment Cards</EditableText>
+                    <EditableText as="strong" path="steps.personalSuccess.commitmentBody">help you follow through.</EditableText>
+                  </section>
+                </div>
+                <EditableText as="p" path="steps.personalSuccess.nextLine" className="onboarding-personal-success-next">
+                  Next, let’s see how Commitment Cards help you keep promises to yourself.
+                </EditableText>
+              </div>
+            </OnboardingStep>
+          ) : null}
+
+          {currentStep === "commitment-demo" ? (
+            <OnboardingStep
+              className="onboarding-commitment-demo-step"
+              titlePath="steps.commitmentDemo.title"
+              title="See how Commitment Cards work"
+              bodyPath="steps.commitmentDemo.body"
+              body="A Commitment Card helps you follow through without setting anything up right now."
+              primaryPath={commitmentDemoFinished ? "steps.commitmentDemo.primary" : null}
+              primaryLabel={commitmentDemoFinished ? "Continue" : null}
+              onPrimary={finishCommitmentDemo}
+              canGoBack={canGoBack}
+              onBack={goBack}
+            >
+              <EditableText as="p" path="steps.commitmentDemo.note" className="onboarding-commitment-demo-note">
+                You won’t make one now. You can create Commitment Cards later in the app.
+              </EditableText>
+              <CommitmentCardOnboardingDemo onFinished={markCommitmentDemoFinished} />
             </OnboardingStep>
           ) : null}
 
@@ -543,7 +633,7 @@ function OnboardingContent({
               secondaryLabel={protectedAppSetupPhase === "confirmed" ? null : "I’ll do this later"}
               onSecondary={() => finishProtectedAppSetup({ completed: false })}
               canGoBack={canGoBack}
-              onBack={goBack}
+              onBack={protectedAppSetupPhase === "confirmed" ? goBackToProtectedAppInstall : goBack}
             >
               <ProtectedAppSetupCard
                 app={selectedProtectedApp}
@@ -557,14 +647,14 @@ function OnboardingContent({
               titlePath="steps.skip.title"
               title="You can set up your first card later."
               bodyPath="steps.skip.body"
-              body="Personal Cards live in myBishBash. When you are ready, create one reminder and let your phone bring you back to what matters."
+              body="Personal Cards live in myBishBash. When you are ready, create one card and let your phone bring you back to what matters."
               primaryPath="steps.skip.primary"
               primaryLabel="Go to Home"
               onPrimary={onSkip}
               canGoBack={!skipRequested}
               onBack={goBack}
             >
-              <OnboardingDemoCard text="What matters most today?" timing="When you need the nudge" place="myBishBash Home" />
+              <OnboardingDemoCard text="What matters most today?" timing="When you need the nudge" place={PERSONAL_ONBOARDING_LOCATION_LABEL} />
             </OnboardingStep>
           ) : null}
         </section>
@@ -577,6 +667,8 @@ function OnboardingContent({
 const STEPS = [
   "learn",
   "intention",
+  "personal-success",
+  "commitment-demo",
   "protected-app",
   "protected-demo",
   "protected-setup",
@@ -657,6 +749,148 @@ function CommitmentTimePassage({
         </button>
       </div>
     </div>
+  );
+}
+
+function CommitmentCardOnboardingDemo({ onFinished }) {
+  const [stage, setStage] = useState("commitment");
+  const [replayKey, setReplayKey] = useState(0);
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    finishedRef.current = false;
+    setStage("commitment");
+    const timers = [
+      window.setTimeout(() => setStage("commitment-tap"), COMMITMENT_DEMO_TIMINGS.firstTap),
+      window.setTimeout(() => setStage("motivation"), COMMITMENT_DEMO_TIMINGS.motivation),
+      window.setTimeout(() => setStage("motivation-tap"), COMMITMENT_DEMO_TIMINGS.secondTap),
+      window.setTimeout(() => setStage("transition"), COMMITMENT_DEMO_TIMINGS.transition),
+      window.setTimeout(() => setStage("review"), COMMITMENT_DEMO_TIMINGS.review),
+      window.setTimeout(() => setStage("review-tap"), COMMITMENT_DEMO_TIMINGS.reviewTap),
+      window.setTimeout(() => {
+        setStage("success");
+        if (!finishedRef.current) {
+          finishedRef.current = true;
+          onFinished?.();
+        }
+      }, COMMITMENT_DEMO_TIMINGS.success),
+    ];
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [onFinished, replayKey]);
+
+  const commitmentText = "I will put my phone down during dinner tonight.";
+  const reason = "I want to be more present with my family.";
+  const isCommitment = stage === "commitment" || stage === "commitment-tap";
+  const isMotivation = stage === "motivation" || stage === "motivation-tap";
+  const isTransition = stage === "transition";
+  const isReview = stage === "review" || stage === "review-tap";
+  const isSuccess = stage === "success";
+
+  return (
+    <div className={`onboarding-commitment-demo-shell stage-${stage}`} data-testid="onboarding-commitment-demo">
+      <div className="onboarding-commitment-demo-phone">
+        {isCommitment ? (
+          <DemoCommitmentCard
+            kicker="Commitment Card"
+            title={commitmentText}
+            actions={[
+              { label: "I’ll do it", variant: "primary" },
+              { label: "Not today", variant: "secondary", isTarget: true },
+            ]}
+          />
+        ) : null}
+
+        {isMotivation ? (
+          <DemoCommitmentCard
+            kicker="Message from yourself"
+            body={
+              <div className="onboarding-commitment-reason-block">
+                <span>Why this matters</span>
+                <p>You wrote this because:</p>
+                <blockquote>{reason}</blockquote>
+                <strong>Would you like to reconsider?</strong>
+              </div>
+            }
+            actions={[
+              { label: "I’ll do it", variant: "primary", isTarget: true },
+              { label: "Leave it for another day", variant: "secondary" },
+            ]}
+          />
+        ) : null}
+
+        {isTransition ? (
+          <div className="onboarding-commitment-transition-card" data-testid="onboarding-commitment-transition">
+            <span>Later that evening...</span>
+          </div>
+        ) : null}
+
+        {isReview ? (
+          <DemoCommitmentCard
+            kicker="Review"
+            title={commitmentText}
+            prompt="How did it go?"
+            actions={[
+              { label: "I did it", variant: "primary", isTarget: true },
+              { label: "Nearly", variant: "secondary" },
+              { label: "Not this time", variant: "secondary" },
+            ]}
+          />
+        ) : null}
+
+        {isSuccess ? (
+          <div className="onboarding-commitment-success-card" data-testid="onboarding-commitment-success">
+            <span className="onboarding-demo-card-heart" aria-hidden="true">
+              <BrandMark />
+            </span>
+            <h3>Nice work.</h3>
+            <p>Commitment Cards help you follow through on things that matter to you.</p>
+          </div>
+        ) : null}
+
+        {!isSuccess && !isTransition ? <AutoClickCursor stage={stage} /> : null}
+      </div>
+      <button
+        type="button"
+        className="onboarding-commitment-demo-replay"
+        onClick={() => setReplayKey((current) => current + 1)}
+      >
+        Replay demo
+      </button>
+    </div>
+  );
+}
+
+function DemoCommitmentCard({ kicker, title, prompt, body, actions }) {
+  return (
+    <article className="onboarding-commitment-demo-card">
+      <p className="onboarding-demo-card-greeting">{kicker}</p>
+      <span className="onboarding-demo-card-heart" aria-hidden="true">
+        <BrandMark />
+      </span>
+      {title ? <h3>{title}</h3> : null}
+      {body ? <div className="onboarding-commitment-demo-body">{body}</div> : null}
+      {prompt ? <p className="onboarding-commitment-demo-prompt">{prompt}</p> : null}
+      <div className="onboarding-commitment-demo-actions">
+        {actions.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            className={`onboarding-commitment-demo-button ${action.variant} ${action.isTarget ? "cursor-target" : ""}`.trim()}
+            tabIndex={-1}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function AutoClickCursor({ stage }) {
+  return (
+    <span className={`onboarding-auto-cursor ${stage}`} aria-hidden="true">
+      <span />
+    </span>
   );
 }
 
@@ -823,7 +1057,7 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
     "iPhone: tap Share, then Add to Home Screen.",
     "Android: open the menu, then Add to Home screen or Install app.",
     "Use the new icon when you want myBishBash to appear first.",
-    "Return here and tap I’ve added it.",
+    "Tap I’ve added it on the install page to continue.",
   ];
   const moveLauncherSuffix = (
     content.steps?.protectedSetup?.moveLauncherSuffix ??
@@ -834,14 +1068,12 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
       <div className="onboarding-protected-setup-heading">
         <OnboardingAppIcon launcher={app} />
         <div>
-          <p>{isConfirmed ? (content.steps?.protectedSetup?.markedSaved ?? "Marked as saved") : (content.steps?.protectedSetup?.homeScreenLauncher ?? "Home Screen launcher")}</p>
+          <p>{isConfirmed ? (content.steps?.protectedSetup?.markedSaved ?? "Marked as installed") : (content.steps?.protectedSetup?.homeScreenLauncher ?? "Home Screen launcher")}</p>
           <h3>{appName}</h3>
         </div>
       </div>
       {isConfirmed ? (
         <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
-          <strong>{content.steps?.protectedSetup?.confirmedTitle ?? "You’re set up"}</strong>
-          <p>{(content.steps?.protectedSetup?.confirmedBody ?? "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.").replaceAll("{appName}", appName)}</p>
           <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the myBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {moveLauncherSuffix}</p>
         </div>
       ) : (
@@ -919,9 +1151,6 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
       <div className="onboarding-demo-cursor" aria-hidden="true" />
       <span className="onboarding-demo-click-ripple" aria-hidden="true" />
       <article className="onboarding-demo-real-card onboarding-demo-real-card-instagram">
-        <span className="onboarding-demo-card-heart" aria-hidden="true">
-          <BrandMark />
-        </span>
         <EditableText as="h3" path="tutorialDemo.vitaminTitle">Have you done something that counts towards your fitness today?</EditableText>
         <i aria-hidden="true" />
         {content.tutorialDemo?.vitaminBody ? <EditableText as="p" path="tutorialDemo.vitaminBody">Before Instagram opens.</EditableText> : null}
@@ -932,9 +1161,6 @@ function TutorialDemoIntro({ isComplete = false, onReplay }) {
         </div>
       </article>
       <article className="onboarding-demo-real-card onboarding-demo-real-card-whatsapp">
-        <span className="onboarding-demo-card-heart" aria-hidden="true">
-          <BrandMark />
-        </span>
         <EditableText as="h3" path="tutorialDemo.sunscreenTitle">Have you put your sunscreen on today?</EditableText>
         <i aria-hidden="true" />
         <EditableText as="p" path="tutorialDemo.sunscreenBody">Your phone becomes a trigger for what you chose.</EditableText>
@@ -993,22 +1219,24 @@ function OnboardingDemoCard({ text, timing, place }) {
   );
 }
 
-function PersonalCardPreview({ text, timing, place, compact = false, highlight = null }) {
+function PersonalCardPreview({ text, timing, place, compact = false, highlight = null, showDetails = true }) {
   const { content } = useContentEdit();
   return (
     <article className={`onboarding-personal-preview ${compact ? "compact" : ""}`} data-testid="personal-card-onboarding-preview">
       <p>{content.personalPreview?.label ?? "Personal Card"}</p>
       <h3 className={highlight === "text" ? "is-highlighted" : ""}>{text}</h3>
-      <dl>
-        <div className={highlight === "timing" ? "is-highlighted" : ""}>
-          <dt>{content.personalPreview?.when ?? "When"}</dt>
-          <dd>{timing}</dd>
-        </div>
-        <div className={highlight === "place" ? "is-highlighted" : ""}>
-          <dt>{content.personalPreview?.where ?? "Where"}</dt>
-          <dd>{place}</dd>
-        </div>
-      </dl>
+      {showDetails ? (
+        <dl>
+          <div className={highlight === "timing" ? "is-highlighted" : ""}>
+            <dt>{content.personalPreview?.when ?? "When"}</dt>
+            <dd>{timing}</dd>
+          </div>
+          <div className={highlight === "place" ? "is-highlighted" : ""}>
+            <dt>{content.personalPreview?.where ?? "Where"}</dt>
+            <dd>{place}</dd>
+          </div>
+        </dl>
+      ) : null}
     </article>
   );
 }
