@@ -263,12 +263,24 @@ function isStandaloneDisplayMode() {
   return Boolean(window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true || window.Capacitor);
 }
 
+function shouldUseSafariSetupHandoff() {
+  if (typeof window === "undefined") return false;
+  const userAgent = window.navigator.userAgent || "";
+  const isIos = /iPad|iPhone|iPod/.test(userAgent) || window.navigator.standalone === true;
+  return isStandaloneDisplayMode() && isIos;
+}
+
 function getLauncherSetupUrl(launcherId) {
   if (typeof window === "undefined") {
     return `${BASE_PATH || "/mybishbash"}/install/${launcherId}/`;
   }
   const basePath = BASE_PATH || PRODUCTION_BASE_PATH;
   return new URL(`${basePath}/install/${launcherId}/`, window.location.origin).toString();
+}
+
+function getLauncherBrowserSetupUrl(launcherId) {
+  const setupUrl = getLauncherSetupUrl(launcherId);
+  return shouldUseSafariSetupHandoff() ? `x-safari-${setupUrl}` : setupUrl;
 }
 
 function consumeSignupHandoffFromUrl() {
@@ -10149,9 +10161,21 @@ function LauncherSetupInterstitial({ version, onClose }) {
   }
 
   function openSetupPage() {
-    const opened = window.open(setupUrl, "_blank", "noopener,noreferrer");
+    const browserSetupUrl = getLauncherBrowserSetupUrl(version.id);
+    const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
+    if (typeof captureNavigation === "function") {
+      const handled = captureNavigation(browserSetupUrl, { source: "launcher_setup_interstitial", launcherId: version.id });
+      if (handled) return;
+    }
+
+    if (browserSetupUrl.startsWith("x-safari-")) {
+      window.location.assign(browserSetupUrl);
+      return;
+    }
+
+    const opened = window.open(browserSetupUrl, "_blank", "noopener,noreferrer");
     if (!opened) {
-      window.location.assign(setupUrl);
+      window.location.assign(browserSetupUrl);
     }
   }
 

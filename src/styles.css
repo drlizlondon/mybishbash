@@ -10650,15 +10650,15 @@ body {
 }
 
 .onboarding-demo-app-instagram {
-  animation: onboarding-app-open-instagram-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: none;
 }
 
 .onboarding-demo-app-whatsapp {
-  animation: onboarding-app-open-whatsapp-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: none;
 }
 
 .onboarding-demo-app-safari {
-  animation: onboarding-app-open-safari-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: none;
 }
 
 .onboarding-demo-app .onboarding-app-icon-fallback,
@@ -10851,15 +10851,15 @@ body {
 }
 
 .onboarding-demo-continue-card-instagram {
-  animation: onboarding-continue-card-instagram-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: none;
 }
 
 .onboarding-demo-continue-card-whatsapp {
-  animation: onboarding-continue-card-whatsapp-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: none;
 }
 
 .onboarding-demo-continue-card-safari {
-  animation: onboarding-continue-card-safari-cycle var(--onboarding-demo-duration) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: none;
 }
 
 .onboarding-demo-continue-card span {
@@ -10953,41 +10953,41 @@ body {
 }
 
 @keyframes onboarding-phone-screen-cycle {
-  0%, 12%, 72%, 77% {
+  0%, 10%, 49%, 60%, 91%, 94% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  16%, 70%, 80%, 100% {
+  13%, 46%, 63%, 88%, 96%, 100% {
     opacity: 0;
     transform: translateY(-8px) scale(0.96);
   }
 }
 
 @keyframes onboarding-phone-app-pulse-instagram {
-  0%, 7% {
+  0%, 5.5% {
     transform: translateY(0) scale(1);
     box-shadow: none;
   }
-  9% {
+  7% {
     transform: translateY(-2px) scale(1.06);
     filter: drop-shadow(0 12px 18px rgba(201, 96, 70, 0.18));
   }
-  12%, 100% {
+  9.5%, 100% {
     transform: translateY(0) scale(1);
     filter: none;
   }
 }
 
 @keyframes onboarding-phone-app-pulse-whatsapp {
-  0%, 73% {
+  0%, 54% {
     transform: translateY(0) scale(1);
     filter: none;
   }
-  75% {
+  56% {
     transform: translateY(-2px) scale(1.06);
     filter: drop-shadow(0 12px 18px rgba(201, 96, 70, 0.18));
   }
-  77%, 100% {
+  58.5%, 100% {
     transform: translateY(0) scale(1);
     filter: none;
   }
@@ -11054,55 +11054,55 @@ body {
 }
 
 @keyframes onboarding-cursor-cycle {
-  0%, 6% {
+  0%, 4.5% {
     opacity: 0;
     transform: translate(-84px, -36px) scale(0.9);
   }
-  8% {
+  6% {
     opacity: 1;
     transform: translate(-74px, -28px) scale(1);
   }
-  9%, 11% {
+  7%, 9% {
     opacity: 1;
     transform: translate(-62px, -20px) scale(0.94);
   }
-  13%, 42% {
+  10.5%, 30% {
     opacity: 0;
     transform: translate(-62px, -20px) scale(0.86);
   }
-  44% {
+  31.5% {
     opacity: 1;
     transform: translate(-18px, 14px) scale(1);
   }
-  45%, 47% {
+  33%, 35% {
     opacity: 1;
     transform: translate(0, 22px) scale(0.94);
   }
-  49%, 60% {
+  36.5%, 53% {
     opacity: 0;
     transform: translate(0, 22px) scale(0.86);
   }
-  62% {
+  54.5% {
     opacity: 1;
-    transform: translate(0, -28px) scale(1);
+    transform: translate(-18px, -28px) scale(1);
   }
-  63%, 65% {
+  56%, 58% {
     opacity: 1;
     transform: translate(8px, -20px) scale(0.94);
   }
-  67%, 89% {
+  59.5%, 75% {
     opacity: 0;
     transform: translate(8px, -20px) scale(0.86);
   }
-  91% {
+  76.5% {
     opacity: 1;
     transform: translate(-18px, 41px) scale(1);
   }
-  92%, 94% {
+  78%, 80% {
     opacity: 1;
     transform: translate(0, 49px) scale(0.94);
   }
-  96%, 100% {
+  81.5%, 100% {
     opacity: 0;
     transform: translate(0, 49px) scale(0.86);
   }
@@ -11188,30 +11188,30 @@ body {
 }
 
 @keyframes onboarding-real-card-instagram-cycle {
-  0%, 18% {
+  0%, 11% {
     opacity: 0;
     transform: translate(-50%, -44%) scale(0.96);
   }
-  21%, 50% {
+  14%, 37% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  54%, 100% {
+  41%, 100% {
     opacity: 0;
     transform: translate(-50%, -56%) scale(0.96);
   }
 }
 
 @keyframes onboarding-real-card-whatsapp-cycle {
-  0%, 83% {
+  0%, 60% {
     opacity: 0;
     transform: translate(-50%, -44%) scale(0.96);
   }
-  85%, 92% {
+  63%, 82% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  94%, 100% {
+  85%, 100% {
     opacity: 0;
     transform: translate(-50%, -56%) scale(0.96);
   }
@@ -11233,24 +11233,24 @@ body {
 }
 
 @keyframes onboarding-done-button-cycle {
-  0%, 44%, 49%, 100% {
+  0%, 32%, 36%, 100% {
     box-shadow: 0 8px 18px rgba(47, 42, 40, 0.045);
     transform: none;
   }
-  45%, 48% {
+  33%, 35% {
     box-shadow: 0 0 0 6px rgba(214, 106, 80, 0.14);
     transform: translateY(-1px);
   }
 }
 
 @keyframes onboarding-do-now-button-cycle {
-  0%, 91%, 96%, 100% {
+  0%, 77%, 81%, 100% {
     background: rgba(255, 255, 255, 0.84);
     color: rgba(47, 42, 40, 0.84);
     box-shadow: 0 8px 18px rgba(47, 42, 40, 0.045);
     transform: none;
   }
-  92%, 95% {
+  78%, 80% {
     background: rgba(208, 100, 75, 0.9);
     color: #fffaf6;
     box-shadow: 0 0 0 6px rgba(214, 106, 80, 0.14);
@@ -11319,30 +11319,30 @@ body {
 }
 
 @keyframes onboarding-app-finished-instagram-cycle {
-  0%, 64% {
+  0%, 40% {
     opacity: 0;
     transform: translateY(14px) scale(0.72);
   }
-  66%, 70% {
+  43%, 47% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  72%, 100% {
+  50%, 100% {
     opacity: 0;
     transform: translateY(-12px) scale(0.94);
   }
 }
 
 @keyframes onboarding-app-finished-whatsapp-cycle {
-  0%, 96.4% {
+  0%, 84% {
     opacity: 0;
     transform: translateY(14px) scale(0.72);
   }
-  97%, 99.2% {
+  87%, 90% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  99.45%, 100% {
+  92%, 100% {
     opacity: 0;
     transform: translateY(-12px) scale(0.94);
   }
@@ -11364,11 +11364,11 @@ body {
 }
 
 @keyframes onboarding-demo-final-line-cycle {
-  0%, 99.6% {
+  0%, 94% {
     opacity: 0;
     transform: translate(-50%, -42%) scale(0.98);
   }
-  99.85%, 100% {
+  96%, 100% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }

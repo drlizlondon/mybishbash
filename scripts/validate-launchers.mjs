@@ -7,6 +7,7 @@ import {
   buildManifestForLauncher,
   mergeLauncherConfig,
   mergeLauncherConfigs,
+  resolveLauncherIconSrc,
   sanitizeLauncherUrl,
 } from "../src/lib/launcherRegistry.js";
 
@@ -55,6 +56,26 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
   for (const field of requiredFields) {
     assert.notEqual(launcher[field], undefined, `${launcher.id} missing ${field}`);
   }
+
+  const resolvedIconSrc = resolveLauncherIconSrc(launcher);
+  assert.equal(resolvedIconSrc, launcher.iconSrc, `${launcher.id} should use its registry icon as the resolved logo`);
+  if (resolvedIconSrc.startsWith("/mybishbash/")) {
+    const iconFilePath = resolve(root, "public", resolvedIconSrc.replace(/^\/mybishbash\//, ""));
+    assert.equal(existsSync(iconFilePath), true, `${launcher.id} icon file missing: ${resolvedIconSrc}`);
+  }
+
+  const generatedManifestPath = resolve(root, "public", "launchers", launcher.id, "manifest.webmanifest");
+  const generatedInstallPath = resolve(root, "public", "install", launcher.id, "index.html");
+  assert.equal(existsSync(generatedManifestPath), true, `${launcher.id} generated manifest file missing`);
+  assert.equal(existsSync(generatedInstallPath), true, `${launcher.id} generated install page missing`);
+
+  const generatedManifest = JSON.parse(readFileSync(generatedManifestPath, "utf8"));
+  assert.equal(generatedManifest.icons?.[0]?.src, resolvedIconSrc, `${launcher.id} manifest should use the registry logo`);
+  assert.match(
+    readFileSync(generatedInstallPath, "utf8"),
+    new RegExp(`src="${escapeRegExp(resolvedIconSrc)}"`),
+    `${launcher.id} install page should use the registry logo`,
+  );
 
   if (!launcher.enabled) continue;
 

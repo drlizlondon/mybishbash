@@ -242,7 +242,11 @@ async function expectIntroCursorHitsTarget(page: Page, targetLabel: string) {
     const normalize = (value: string | null | undefined) => String(value ?? "").trim().replace(/[’‘]/g, "'");
     const cursor = document.querySelector('.onboarding-demo-cursor');
     const targets = Array.from(document.querySelectorAll('.onboarding-tutorial-demo button, .onboarding-demo-phone-app'));
-    const target = targets.find((element) => normalize(element.textContent) === normalize(label));
+    const target = targets.find((element) => {
+      if (normalize(element.textContent) !== normalize(label)) return false;
+      const container = element.closest('.onboarding-demo-real-card, .onboarding-demo-phone-screen') ?? element;
+      return Number(window.getComputedStyle(container).opacity) > 0.2;
+    });
     const cursorRect = cursor?.getBoundingClientRect();
     const targetRect = target?.getBoundingClientRect();
     const pointerTip = cursorRect
@@ -850,7 +854,11 @@ test('Personal Cards intro demo fits short 100 percent preview without scrolling
   await page.getByRole('button', { name: 'Replay demo' }).click();
   await page.waitForTimeout(2800);
   await expectIntroCursorHitsTarget(page, 'Instagram');
-  await page.waitForTimeout(25000);
+  await page.waitForTimeout(7200);
+  await expectIntroCursorHitsTarget(page, 'Done');
+  await page.waitForTimeout(6600);
+  await expectIntroCursorHitsTarget(page, 'WhatsApp');
+  await page.waitForTimeout(6600);
   await expectIntroCursorHitsTarget(page, 'I’ll do it now');
 });
 

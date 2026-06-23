@@ -554,6 +554,16 @@ test('apps-add-launcher-in-standalone-shows-safari-setup-interstitial', async ({
   await expect(page.getByRole('button', { name: 'Copy setup link' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'I’ll do this later' })).toBeVisible();
   await expect(page.getByTestId('apps-setup-link')).toContainText('/mybishbash/install/instagram/');
+  await page.getByRole('button', { name: 'Open setup page' }).click();
+  expect(await getNavigationAttempts(page)).toEqual([
+    expect.objectContaining({
+      href: expect.stringMatching(/^x-safari-http:\/\/(?:localhost|127\.0\.0\.1):\d+\/mybishbash\/install\/instagram\/$/),
+      metadata: expect.objectContaining({
+        launcherId: 'instagram',
+        source: 'launcher_setup_interstitial',
+      }),
+    }),
+  ]);
   await page.getByRole('button', { name: 'Copy setup link' }).click();
   await expect(page.getByTestId('apps-setup-interstitial')).toContainText('/mybishbash/install/instagram/');
 });
@@ -758,6 +768,16 @@ test('home onboarding setup uses Safari handoff in standalone PWA mode', async (
   await expect(page.getByTestId('apps-setup-interstitial')).toBeVisible();
   await expect(page.getByText('Open in Safari to add this launcher')).toBeVisible();
   await expect(page.getByTestId('apps-setup-link')).toContainText('/mybishbash/install/youtube/');
+  await page.getByTestId('apps-setup-interstitial').getByRole('button', { name: 'Open setup page' }).click();
+  expect(await getNavigationAttempts(page)).toEqual([
+    expect.objectContaining({
+      href: expect.stringMatching(/^x-safari-http:\/\/(?:localhost|127\.0\.0\.1):\d+\/mybishbash\/install\/youtube\/$/),
+      metadata: expect.objectContaining({
+        launcherId: 'youtube',
+        source: 'launcher_setup_interstitial',
+      }),
+    }),
+  ]);
 });
 
 test('apps-app-prompts-toggle — prompts off does not disable the app', async ({ page }) => {
