@@ -49,15 +49,15 @@ function buildInstallHtml(launcher) {
       <header class="install-brand">
         <img class="install-brand-logo" src="/mybishbash/icons/mybishbash-logo-mark.png" alt="" />
         <h1>myBishBash</h1>
-        <p>phone triggers for the habits and commitments you want to keep</p>
+        <p>reminders, commitments and prompts before the apps you already open</p>
       </header>
       <section class="install-card">
-        <a data-launch-link class="install-icon-link" href="/mybishbash${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} launcher">
+        <a data-launch-link class="install-icon-link" href="/mybishbash${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} with myBishBash">
           <img data-install-icon class="install-icon" src="${launcher.iconSrc}" alt="${escapeHtml(launcher.displayName)} icon" />
         </a>
         <div class="install-copy">
-          <h2>Add <span data-version-name>${escapeHtml(launcher.displayName)}</span> with myBishBash</h2>
-          <p>This adds a Home Screen launcher for myBishBash. It is a shortcut you can use before opening <span data-version-name-inline>${escapeHtml(launcher.displayName)}</span>; it does not install or replace the real app.</p>
+          <h2>Set up <span data-version-name>${escapeHtml(launcher.displayName)}</span> with myBishBash</h2>
+          <p>When you open <span data-version-name-inline>${escapeHtml(launcher.displayName)}</span> this way, myBishBash can appear first with the reminders, commitments and prompts you chose.</p>
         </div>
         <div class="install-steps" data-install-instructions>
           <section>
@@ -86,7 +86,7 @@ function buildInstallHtml(launcher) {
         </div>
         <div class="install-actions">
           <button type="button" class="install-back-button" data-install-back>Back</button>
-          <button type="button" class="install-complete-button" data-install-complete>I’ve added it</button>
+          <button type="button" class="install-complete-button" data-install-complete>I’ve set it up</button>
         </div>
       </section>
     </main>

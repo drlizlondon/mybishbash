@@ -279,10 +279,20 @@ test('Home first app task disappears immediately after enabling an app', async (
   await expect(page.getByText('Choose your first app')).toBeVisible();
   await page.getByRole('button', { name: 'Choose your first app' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
-  await page.getByTestId('apps-option-instagram').getByRole('button', { name: 'Add' }).click();
+  await page.getByTestId('apps-option-instagram').getByRole('button', { name: 'Open setup page' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
   await page.goto('/mybishbash/apps/instagram?installed=1');
+  await expect(page.getByTestId('apps-pause-status-instagram')).toContainText('Pending setup');
   await page.getByTestId('bottom-nav-home').click();
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByText('Choose your first app')).toBeVisible();
+
+  await page.goto('/mybishbash/intercept/instagram');
+  await expect(page.getByTestId('card-overlay-empty').or(page.getByTestId('continue-to-app-card')).or(page.getByTestId('card-overlay-personal'))).toBeVisible({ timeout: 10000 });
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/mybishbash/home');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByText('Choose your first app')).toHaveCount(0);
 });

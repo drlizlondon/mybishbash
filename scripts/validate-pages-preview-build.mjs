@@ -44,15 +44,15 @@ for (const launcherId of supportedLauncherIds) {
   const installHtml = readFileSync(`dist/install/${launcherId}/index.html`, "utf8");
   assert.match(installHtml, new RegExp(`href="${escapeRegExp(previewBasePath)}launchers/${escapeRegExp(launcherId)}/manifest\\.webmanifest"`));
   assert.match(installHtml, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
-  assert.match(installHtml, /This adds a Home Screen launcher for myBishBash/);
-  assert.match(installHtml, /it does not install or replace the real app/);
+  assert.match(installHtml, /Set up <span data-version-name>.+<\/span> with myBishBash/);
+  assert.match(installHtml, /myBishBash can appear first with the reminders, commitments and prompts you chose/);
   assert.match(installHtml, /Copy setup link/);
   assert.doesNotMatch(installHtml, /launcherContext|shared MyBishBash state/);
 
   const legacyShell = readFileSync(`dist/${launcherId}/index.html`, "utf8");
   assert.match(legacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
-  assert.match(legacyShell, /This adds a Home Screen launcher for myBishBash/);
-  assert.match(legacyShell, /it does not install or replace the real app/);
+  assert.match(legacyShell, /Set up <span data-version-name>.+<\/span> with myBishBash/);
+  assert.match(legacyShell, /myBishBash can appear first with the reminders, commitments and prompts you chose/);
   assert.doesNotMatch(legacyShell, /launcherContext|shared MyBishBash state/);
 }
 

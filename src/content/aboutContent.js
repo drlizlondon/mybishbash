@@ -37,7 +37,7 @@ export const aboutContent = {
     ["App Prompts", "Choose the question you want to see before opening an app."],
     ["Do something else", "If you decide not to open the app, MyBishBash shows quick action cards you picked."],
     ["Continue to app", "When you still want to open the app, you can continue without shame or friction."],
-    ["App shortcuts", "Add a Home Screen shortcut for Instagram first, then add more apps later when you are ready."],
+    ["Apps", "Use myBishBash with Instagram first, then add more apps later when you are ready."],
   ],
   early: {
     eyebrow: "Early access",
@@ -46,7 +46,7 @@ export const aboutContent = {
       "MyBishBash is currently in a limited early-access release while we refine the experience with first users.",
       "We are focused on building something calm, trustworthy and genuinely useful, rather than optimising for endless engagement.",
     ],
-    badges: ["App Prompts", "Action cards", "Instagram shortcut", "Home Screen setup", "Future app shortcuts"],
+    badges: ["App Prompts", "Action cards", "Instagram with myBishBash", "Home Screen setup", "More apps"],
   },
   privacy: {
     eyebrow: "Privacy",

@@ -82,29 +82,29 @@ export const onboardingContent = {
     },
     "protectedSetup": {
       "confirmedSuffix": "",
-      "installPrefix": "Add",
+      "installPrefix": "Set up",
       "installSuffix": "with myBishBash",
-      "confirmedTitle": "You’re set up",
-      "confirmedBody": "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.",
-      "confirmedBodySuffix": "is now ready to use with myBishBash.",
+      "confirmedTitle": "{appName} with myBishBash is nearly ready.",
+      "confirmedBody": "Open {appName} with myBishBash once from your Home Screen to finish setup.",
+      "confirmedBodySuffix": "with myBishBash is nearly ready.",
       "continueHome": "Go to Home",
-      "saved": "I’ve added it",
+      "saved": "I’ve set it up",
       "secondary": "Choose an app later",
-      "markedSaved": "Marked as installed",
+      "markedSaved": "Marked as pending setup",
       "homeScreenLauncher": "Home Screen icon",
-      "launcherReadySuffix": "launcher ready",
+      "launcherReadySuffix": "setup ready",
       "moveLauncherPrefix": "Move the myBishBash",
-      "moveLauncherMiddle": "launcher to where",
+      "moveLauncherMiddle": "icon to where",
       "moveLauncherSuffix": "normally sits on your Home Screen. Put the original {appName} app in a folder so you open myBishBash first.",
       "addLauncherPrefix": "Add the",
-      "addLauncherSuffix": "launcher to your Home Screen.",
-      "addLauncherBody": "Add this version to your Home Screen. Use it instead of the original {appName} icon when you want myBishBash to appear first.",
-      "returnNote": "Once it is added, return to myBishBash to continue.",
+      "addLauncherSuffix": "Home Screen icon.",
+      "addLauncherBody": "Add this Home Screen icon. Use it instead of the original {appName} icon when you want myBishBash to appear first.",
+      "returnNote": "Once it is set up, return to myBishBash to continue.",
       "steps": [
         "iPhone: tap Share, then Add to Home Screen.",
         "Android: open the menu, then Add to Home screen or Install app.",
         "Use the new icon when you want myBishBash to appear first.",
-        "Tap I’ve added it on the install page to continue."
+        "Tap I’ve set it up on the setup page to continue."
       ]
     },
     "skip": {
@@ -148,6 +148,6 @@ export const onboardingContent = {
     "where": "Where"
   },
   "done": {
-    "primary": "Open shortcut"
+    "primary": "Open setup"
   }
 };

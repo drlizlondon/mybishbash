@@ -615,18 +615,18 @@ function OnboardingContent({
               className="onboarding-protected-setup-step"
               title={
                 protectedAppSetupPhase === "confirmed"
-                  ? <EditableText path="steps.protectedSetup.confirmedTitle">You’re set up</EditableText>
-                  : <>Add {selectedProtectedAppName} to your Home Screen</>
+                  ? (content.steps?.protectedSetup?.confirmedTitle ?? "{appName} with myBishBash is nearly ready.").replaceAll("{appName}", selectedProtectedAppName)
+                  : <>Set up {selectedProtectedAppName} with myBishBash</>
               }
               body={
                 protectedAppSetupPhase === "confirmed"
-                  ? (content.steps?.protectedSetup?.confirmedBody ?? "Use your new {appName} icon when you want myBishBash to appear before {appName}. You can change this later in Apps.").replaceAll("{appName}", selectedProtectedAppName)
-                  : "Add this version to your Home Screen. Use it instead of the original app icon when you want myBishBash to appear first."
+                  ? (content.steps?.protectedSetup?.confirmedBody ?? "Open {appName} with myBishBash once from your Home Screen to finish setup.").replaceAll("{appName}", selectedProtectedAppName)
+                  : "When you open this app this way, myBishBash can appear first with the reminders, commitments and prompts you chose."
               }
               primaryLabel={
                 protectedAppSetupPhase === "confirmed"
                   ? <EditableText path="steps.protectedSetup.continueHome">Go to Home</EditableText>
-                  : "Open install page"
+                  : "Open setup page"
               }
               onPrimary={() => {
                 if (protectedAppSetupPhase === "confirmed") {
@@ -1062,7 +1062,7 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
     "iPhone: tap Share, then Add to Home Screen.",
     "Android: open the menu, then Add to Home screen or Install app.",
     "Use the new icon when you want myBishBash to appear first.",
-    "Tap I’ve added it on the install page to continue.",
+    "Tap I’ve set it up on the setup page to continue.",
   ];
   const moveLauncherSuffix = (
     content.steps?.protectedSetup?.moveLauncherSuffix ??
@@ -1073,17 +1073,17 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
       <div className="onboarding-protected-setup-heading">
         <OnboardingAppIcon launcher={app} />
         <div>
-          <p>{isConfirmed ? (content.steps?.protectedSetup?.markedSaved ?? "Marked as installed") : (content.steps?.protectedSetup?.homeScreenLauncher ?? "Home Screen launcher")}</p>
+          <p>{isConfirmed ? (content.steps?.protectedSetup?.markedSaved ?? "Marked as pending setup") : (content.steps?.protectedSetup?.homeScreenLauncher ?? "Home Screen icon")}</p>
           <h3>{appName}</h3>
         </div>
       </div>
       {isConfirmed ? (
         <div className="onboarding-protected-confirmation" data-testid="onboarding-protected-app-confirmation">
-          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the myBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "launcher to where"} {appName} {moveLauncherSuffix}</p>
+          <p>{content.steps?.protectedSetup?.moveLauncherPrefix ?? "Move the myBishBash"} {appName} {content.steps?.protectedSetup?.moveLauncherMiddle ?? "icon to where"} {appName} {moveLauncherSuffix}</p>
         </div>
       ) : (
         <>
-          <p>{(content.steps?.protectedSetup?.addLauncherBody ?? "Add this version to your Home Screen. Use it instead of the original {appName} icon when you want myBishBash to appear first.").replaceAll("{appName}", appName)}</p>
+          <p>{(content.steps?.protectedSetup?.addLauncherBody ?? "Add this Home Screen icon. Use it instead of the original {appName} icon when you want myBishBash to appear first.").replaceAll("{appName}", appName)}</p>
           <div className="onboarding-install-guidance" data-testid="onboarding-install-guidance">
             <ol className="onboarding-install-steps">
               {steps.map((step, index) => (
@@ -1094,7 +1094,7 @@ function ProtectedAppSetupCard({ app, phase = "ready" }) {
               ))}
             </ol>
           </div>
-          <EditableText as="p" className="onboarding-install-return-note" path="steps.protectedSetup.returnNote">Once it is added, return to myBishBash to continue.</EditableText>
+          <EditableText as="p" className="onboarding-install-return-note" path="steps.protectedSetup.returnNote">Once it is set up, return to myBishBash to continue.</EditableText>
         </>
       )}
     </article>

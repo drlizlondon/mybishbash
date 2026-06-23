@@ -278,16 +278,16 @@ async function expectIntroCursorHitsTarget(page: Page, targetLabel: string) {
 
 async function expectConfirmedSetupAndBackToInstall(page: Page, appName: string) {
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
-  await expect(page.getByText('Marked as installed')).toBeVisible();
+  await expect(page.getByRole('heading', { name: `${appName} with myBishBash is nearly ready.` })).toBeVisible();
+  await expect(page.getByText('Marked as pending setup')).toBeVisible();
   await expect(page.getByText('Marked as saved')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${appName.toLowerCase()}/`));
-  await expect(page.getByRole('heading', { name: `Add ${appName} with myBishBash` })).toBeVisible();
-  await page.getByRole('button', { name: 'I’ve added it' }).click();
+  await expect(page.getByRole('heading', { name: `Set up ${appName} with myBishBash` })).toBeVisible();
+  await page.getByRole('button', { name: 'I’ve set it up' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
-  await expect(page.getByRole('heading', { name: 'You’re set up' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `${appName} with myBishBash is nearly ready.` })).toBeVisible();
 }
 
 async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
@@ -553,18 +553,18 @@ test('install pages stay as manual checkpoints in standalone display mode', asyn
   });
 
   for (const app of [
-    { id: 'instagram', heading: 'Add Instagram with myBishBash' },
-    { id: 'safari', heading: 'Add Safari with myBishBash' },
-    { id: 'youtube', heading: 'Add YouTube with myBishBash' },
-    { id: 'whatsapp', heading: 'Add WhatsApp with myBishBash' },
+    { id: 'instagram', heading: 'Set up Instagram with myBishBash' },
+    { id: 'safari', heading: 'Set up Safari with myBishBash' },
+    { id: 'youtube', heading: 'Set up YouTube with myBishBash' },
+    { id: 'whatsapp', heading: 'Set up WhatsApp with myBishBash' },
     { id: 'mybishbash', heading: 'myBishBash' },
   ]) {
     await page.goto(`/mybishbash/install/${app.id}/`);
     await expect(page).toHaveURL(new RegExp(`/mybishbash/install/${app.id}/?$`));
     await expect(page.locator('.install-copy h2').filter({ hasText: app.heading })).toBeVisible();
     if (app.id !== 'mybishbash') {
-      await expect(page.locator('.install-copy p')).toContainText('This adds a Home Screen launcher for myBishBash.');
-      await expect(page.locator('.install-copy p')).toContainText('it does not install or replace the real app.');
+      await expect(page.locator('.install-copy p')).toContainText(`When you open ${app.heading.replace('Set up ', '').replace(' with myBishBash', '')} this way`);
+      await expect(page.locator('.install-copy p')).toContainText('myBishBash can appear first with the reminders, commitments and prompts you chose.');
       await expect(page.getByText('Open this page in Safari.')).toBeVisible();
       await expect(page.getByText('Tap Share.')).toBeVisible();
       await expect(page.getByText('Tap Add to Home Screen.')).toBeVisible();
@@ -669,7 +669,7 @@ test('home spotlight tour supports navigation and persists dismissal after Perso
   await tour.getByRole('button', { name: 'Previous spotlight step' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
-  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Now add Instagram');
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Set up Instagram with myBishBash');
   await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('You picked Instagram during onboarding.');
   await expect(page.getByTestId('home-onboarding-setup-card').locator('img')).toHaveAttribute('src', /instagram-cover\.jpg/);
 
@@ -681,14 +681,14 @@ test('home spotlight tour supports navigation and persists dismissal after Perso
   await expect(tour.getByRole('heading', { name: 'Apps' })).toBeVisible();
   await tour.getByRole('button', { name: 'Next' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/apps$/);
-  await expect(tour.getByRole('heading', { name: 'Now add Instagram' })).toBeVisible();
+  await expect(tour.getByRole('heading', { name: 'Set up Instagram' })).toBeVisible();
   await expect(tour).toContainText('You chose Instagram during onboarding.');
-  await expect(page.getByTestId('apps-onboarding-setup-card')).toContainText('Now add Instagram');
-  await expect(page.getByTestId('apps-onboarding-setup-card')).toContainText('You picked Instagram during onboarding.');
+  await expect(page.getByTestId('apps-onboarding-setup-card')).toContainText('Instagram with myBishBash');
+  await expect(page.getByTestId('apps-onboarding-setup-card')).toContainText('Pending setup');
   await expect(page.getByTestId('apps-onboarding-setup-card').locator('img')).toHaveAttribute('src', /instagram-cover\.jpg/);
   await expect(page.getByTestId('apps-onboarding-setup-instagram')).toHaveText('Open setup page');
   await expect(page.getByTestId('apps-option-instagram')).toHaveCount(0);
-  await tour.getByRole('button', { name: 'Add Instagram' }).click();
+  await tour.getByRole('button', { name: 'Set up Instagram' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
 
   const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
@@ -698,7 +698,7 @@ test('home spotlight tour supports navigation and persists dismissal after Perso
   await page.goto('/mybishbash/home');
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByTestId('home-spotlight-tour')).toHaveCount(0);
-  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Now add Instagram');
+  await expect(page.getByTestId('home-onboarding-setup-card')).toContainText('Set up Instagram with myBishBash');
   await page.getByTestId('home-onboarding-setup-instagram').click();
   await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
 });
