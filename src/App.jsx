@@ -75,7 +75,7 @@ import {
   claimAccessCodeForCurrentUser,
   touchUserProfile,
 } from "./lib/mybishbashSync";
-import { ACCESS_TIERS, CAPABILITIES, getCapabilities, isAccessActive } from "./lib/accessCapabilities";
+import { ACCESS_TIERS, CAPABILITIES, getCapabilities, getEffectiveTier, isAccessActive } from "./lib/accessCapabilities";
 import ExplorePanel from "./ExplorePanel";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
@@ -222,7 +222,7 @@ const COMMITMENT_TIMING_OPTIONS = [
   { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
 ];
 const APPS_OPTION_IDS = ["whatsapp", "instagram", "youtube", "safari"];
-const APP_SHELL_TABS = ["home", "library", "log", "explore", "apps", "settings"];
+const APP_SHELL_TABS = ["home", "library", "log", "explore", "apps", "access", "settings"];
 const BOTTOM_NAV_ITEMS = [
   { id: "home", label: "Home", path: "/home", testId: "bottom-nav-home", Glyph: HomeGlyph },
   { id: "library", label: "Library", path: "/library", testId: "bottom-nav-library", Glyph: BookGlyph },
@@ -380,6 +380,55 @@ function loadExplicitLauncherBehaviorSettings() {
   } catch {
     return {};
   }
+}
+
+function isStripeCheckoutConfigured() {
+  return Boolean(import.meta.env.VITE_STRIPE_CHECKOUT_ENDPOINT);
+}
+
+async function startStripeCheckout(planId) {
+  if (!isStripeCheckoutConfigured()) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  // TODO: Replace this endpoint call with the Supabase checkout function once
+  // Stripe products and webhook handling are live.
+  const response = await fetch(import.meta.env.VITE_STRIPE_CHECKOUT_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ planId }),
+  });
+  if (!response.ok) {
+    return { ok: false, reason: "checkout_failed" };
+  }
+  const payload = await response.json();
+  if (payload?.url) {
+    window.location.assign(payload.url);
+    return { ok: true };
+  }
+  return { ok: false, reason: "missing_checkout_url" };
+}
+
+async function openStripeCustomerPortal() {
+  if (!import.meta.env.VITE_STRIPE_CUSTOMER_PORTAL_ENDPOINT) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  // TODO: Move this through a Supabase function that authenticates the user
+  // and creates a Stripe customer portal session.
+  const response = await fetch(import.meta.env.VITE_STRIPE_CUSTOMER_PORTAL_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+  });
+  if (!response.ok) {
+    return { ok: false, reason: "portal_failed" };
+  }
+  const payload = await response.json();
+  if (payload?.url) {
+    window.location.assign(payload.url);
+    return { ok: true };
+  }
+  return { ok: false, reason: "missing_portal_url" };
 }
 
 function buildE2ESession() {
@@ -649,6 +698,7 @@ function parseRoute(path) {
   if (appsMatch) {
     return { kind: "apps", path: "/apps", tab: "apps", versionId: null, fallbackFrom: normalized };
   }
+  if (normalized === "/access") return { kind: "access", path: normalized, tab: "access" };
   if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
   if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
   return { kind: "home", path: "/home", tab: "home", fallbackFrom: normalized };
@@ -1893,6 +1943,19 @@ function App() {
   }, [route.fallbackFrom, route.path, routePath]);
 
   const activeTab = getSafeAppTab(route.tab);
+  const isShellAppSettingsRoute =
+    activeTab === "apps" &&
+    route.versionId &&
+    route.versionId === shellSettingsVersionId &&
+    isKnownLauncher(route.versionId);
+  const canUsePremiumContent = useMemo(
+    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT),
+    [accessProfile],
+  );
+  const canUseMultipleApps = useMemo(
+    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_MULTIPLE_APPS),
+    [accessProfile],
+  );
   const activeInterceptionVersion = useMemo(
     () =>
       route.kind === "intercept"
@@ -2010,6 +2073,15 @@ function App() {
     () => protectedAppStatuses.filter((status) => status.paused),
     [protectedAppStatuses],
   );
+  const enabledProtectedAppStatuses = useMemo(
+    () => protectedAppStatuses.filter((status) => status.protectedOn),
+    [protectedAppStatuses],
+  );
+  const shouldShowFreeCoreReconciliation =
+    !canUseMultipleApps &&
+    ["home", "apps"].includes(activeTab) &&
+    !isShellAppSettingsRoute &&
+    enabledProtectedAppStatuses.length > 1;
   const hasConfiguredMyBishBashApp = useMemo(() => {
     if (protectedAppStatuses.some((status) => status.protectedOn)) return true;
     if (!profile.hasCompletedProtectedAppSetup || !profile.selectedProtectedApp) return false;
@@ -2130,7 +2202,7 @@ function App() {
     [actionCards],
   );
   const isHomeRoute = route.kind === "home";
-  const isAppTabRoute = ["home", "library", "log", "explore", "apps", "settings"].includes(route.kind);
+  const isAppTabRoute = ["home", "library", "log", "explore", "apps", "access", "settings"].includes(route.kind);
   const isLaunchingHomeOverlay = isHomeRoute && shouldLaunchOverlay && overlay == null;
   const isPreparingIntercept = route.kind === "intercept" && overlay == null;
   const isPreparingSpecificCard = route.kind === "card" && overlay == null;
@@ -6014,6 +6086,38 @@ function App() {
     }
   }
 
+  function keepOnlyActiveApp(versionIdToKeep) {
+    setLauncherBehaviorSettings((current) => {
+      const next = { ...current };
+      protectedAppStatuses.forEach(({ version, protectedOn }) => {
+        if (!protectedOn && version.id !== versionIdToKeep) return;
+        next[version.id] = {
+          ...(next[version.id] || {}),
+          appEnabled: version.id === versionIdToKeep,
+          setupState: version.id === versionIdToKeep ? "enabled" : next[version.id]?.setupState,
+        };
+      });
+      return next;
+    });
+    setExplicitLauncherBehaviorSettings((current) => {
+      const next = { ...current };
+      protectedAppStatuses.forEach(({ version, protectedOn }) => {
+        if (!protectedOn && version.id !== versionIdToKeep) return;
+        next[version.id] = {
+          ...(next[version.id] || {}),
+          appEnabled: version.id === versionIdToKeep,
+          setupState: version.id === versionIdToKeep ? "enabled" : next[version.id]?.setupState,
+        };
+      });
+      return next;
+    });
+  }
+
+  function switchActiveApp(versionIdToEnable) {
+    if (!isKnownLauncher(versionIdToEnable)) return;
+    keepOnlyActiveApp(versionIdToEnable);
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -6044,12 +6148,16 @@ function App() {
     if (!session?.user?.id && !e2eMode && !isDemoModeEnabled()) return;
     const currentBehavior = explicitLauncherBehaviorSettings[route.versionId] ?? {};
     if (currentBehavior.appEnabled === true && currentBehavior.setupState === "enabled") return;
+    const enabledAppIds = Object.entries(explicitLauncherBehaviorSettings)
+      .filter(([, behavior]) => behavior?.appEnabled === true)
+      .map(([versionId]) => versionId);
+    if (!canUseMultipleApps && enabledAppIds.length > 0 && !enabledAppIds.includes(route.versionId)) return;
     handleSaveVersionBehavior(route.versionId, {
       appEnabled: true,
       interruptionPaused: false,
       setupState: "enabled",
     });
-  }, [e2eMode, explicitLauncherBehaviorSettings, route.kind, route.versionId, session?.user?.id]);
+  }, [canUseMultipleApps, e2eMode, explicitLauncherBehaviorSettings, route.kind, route.versionId, session?.user?.id]);
 
   function handleSaveTimingWindowsPrefs(defs) {
     if (!isValidWindowDefs(defs)) return;
@@ -6595,14 +6703,6 @@ function App() {
     },
     [hiddenLibraryPacks, globalPacks],
   );
-  const canUsePremiumContent = useMemo(
-    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT),
-    [accessProfile],
-  );
-  const canUseMultipleApps = useMemo(
-    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_MULTIPLE_APPS),
-    [accessProfile],
-  );
   // Unlike visibleActionCards (intercept surface), the Library list keeps
   // hidden starters so they can be restored.
   const libraryDoInsteadItems = useMemo(
@@ -6767,12 +6867,6 @@ function App() {
     selectedLauncher: profile.onboardingLauncherId,
     setupComplete,
   };
-  const isShellAppSettingsRoute =
-    activeTab === "apps" &&
-    route.versionId &&
-    route.versionId === shellSettingsVersionId &&
-    isKnownLauncher(route.versionId);
-
   return (
     <TestPilotProvider
       config={TESTPILOT_CONFIG}
@@ -6805,34 +6899,50 @@ function App() {
 
             <main className="content">
               {activeTab === "home" ? (
-                <HomePanel
-                  cards={cards}
-                  events={events}
-                  timezone={profile.timezone}
-                  homeScreenVersions={homeScreenVersions}
-                  pendingOnboardingShortcuts={pendingOnboardingShortcuts}
-                  onboardingSelectedAppSetup={onboardingSelectedAppSetup}
-                  activationChecklistItems={activationChecklistItems}
-                  saveConfirmation={homeSaveConfirmation}
-                  onCreate={openCardComposerFromCurrentRoute}
-                  onOpenDownload={() => {
-                    window.location.href = `${BASE_PATH}/download`;
-                  }}
-                  onOpenApps={() => navigateTo("/apps")}
-                  onOpenLauncherSetup={openLauncherSetupFromApp}
-                  onOpenTodayCards={() => {
-                    signalHomeSpotlightAction("today-cards");
-                    setLibraryFocusMode("today-personal");
-                    navigateTo("/library");
-                  }}
-                  onOpenCard={openSpecificReveal}
-                />
+                shouldShowFreeCoreReconciliation ? (
+                  <FreeCoreReconciliationScreen
+                    enabledAppStatuses={enabledProtectedAppStatuses}
+                    onKeepApp={keepOnlyActiveApp}
+                    onUpgrade={() => navigateTo("/access")}
+                  />
+                ) : (
+                  <HomePanel
+                    cards={cards}
+                    events={events}
+                    timezone={profile.timezone}
+                    homeScreenVersions={homeScreenVersions}
+                    pendingOnboardingShortcuts={pendingOnboardingShortcuts}
+                    onboardingSelectedAppSetup={onboardingSelectedAppSetup}
+                    activationChecklistItems={activationChecklistItems}
+                    saveConfirmation={homeSaveConfirmation}
+                    onCreate={openCardComposerFromCurrentRoute}
+                    onOpenDownload={() => {
+                      window.location.href = `${BASE_PATH}/download`;
+                    }}
+                    onOpenApps={() => navigateTo("/apps")}
+                    onOpenLauncherSetup={openLauncherSetupFromApp}
+                    onOpenTodayCards={() => {
+                      signalHomeSpotlightAction("today-cards");
+                      setLibraryFocusMode("today-personal");
+                      navigateTo("/library");
+                    }}
+                    onOpenCard={openSpecificReveal}
+                  />
+                )
               ) : null}
 
               {activeTab === "apps" ? (
+                shouldShowFreeCoreReconciliation ? (
+                  <FreeCoreReconciliationScreen
+                    enabledAppStatuses={enabledProtectedAppStatuses}
+                    onKeepApp={keepOnlyActiveApp}
+                    onUpgrade={() => navigateTo("/access")}
+                  />
+                ) : (
                 <AppsPanel
                   protectedAppStatuses={protectedAppStatuses}
                   onSaveVersionBehavior={handleSaveVersionBehavior}
+                  onSwitchActiveApp={switchActiveApp}
                   onUpdateHomeScreenIcon={handleUpdateHomeScreenIcon}
                   onOpenDestinationApp={(versionId) =>
                     openDestinationApp(versionId, { source: "apps_direct_open_test", reason: "labelled_direct_open_test" })
@@ -6849,7 +6959,7 @@ function App() {
                     navigateTo("/apps");
                   }}
                   onOpenPremiumOptions={() => {
-                    window.location.href = `${BASE_PATH}/invite`;
+                    navigateTo("/access");
                   }}
                   onClaimAccessCode={handleClaimInAppAccessCode}
                   onOpenInstallGuide={() => {
@@ -6875,6 +6985,7 @@ function App() {
                     navigateTo("/apps");
                   }}
                 />
+                )
               ) : null}
 
               {activeTab === "library" ? (
@@ -6935,6 +7046,16 @@ function App() {
                   canUsePremiumContent={canUsePremiumContent}
                   onPremiumInterest={handlePremiumInterest}
                   onTakeCommitment={takeCommitmentTemplate}
+                />
+              ) : null}
+              {activeTab === "access" ? (
+                <AccessPanel
+                  accessProfile={accessProfile}
+                  canUseMultipleApps={canUseMultipleApps}
+                  onManageApps={() => navigateTo("/apps")}
+                  onEnterCode={() => {
+                    window.location.href = `${BASE_PATH}/invite`;
+                  }}
                 />
               ) : null}
               {activeTab === "settings" ? (
@@ -7836,8 +7957,9 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
       {accountMenuOpen ? (
         <div className="account-menu" data-testid="account-menu">
           <button type="button" onClick={() => handleNavigate("/settings")}>Account</button>
+          <button type="button" onClick={() => handleNavigate("/access")}>Access / Plan</button>
+          <button type="button" onClick={() => handleNavigate("/apps")}>Apps</button>
           <button type="button" onClick={() => handleNavigate("/settings")}>Notifications</button>
-          <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/invite`; }}>Premium</button>
           <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/about`; }}>Help</button>
           <button type="button" onClick={() => { setAccountMenuOpen(false); onLogOut?.(); }}>Sign out</button>
           <button type="button" className="account-menu-close" onClick={() => setAccountMenuOpen(false)}>Close</button>
@@ -9805,6 +9927,7 @@ function AppsPanel({
   onManageApp,
   onBackToApps,
   onOpenPremiumOptions,
+  onSwitchActiveApp,
   onPauseApp,
   onClearAppPause,
   onLogLauncherEvent,
@@ -9820,6 +9943,7 @@ function AppsPanel({
 }) {
   const [showAccessScreen, setShowAccessScreen] = useState(false);
   const [showCodeScreen, setShowCodeScreen] = useState(false);
+  const [switchTargetStatus, setSwitchTargetStatus] = useState(null);
   const [setupInterstitialVersion, setSetupInterstitialVersion] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -9851,6 +9975,7 @@ function AppsPanel({
   const enabledStatuses = liveProtectedAppStatuses.filter((status) => status.protectedOn);
   const pendingSetupStatuses = liveProtectedAppStatuses.filter((status) => status.pendingSetup && !status.protectedOn);
   const canAddAnotherApp = canUseMultipleApps || enabledStatuses.length < 1;
+  const activeAppForSwitch = enabledStatuses[0] ?? null;
 
   function openLauncherSetup(version) {
     if (!version?.id) return;
@@ -9885,13 +10010,35 @@ function AppsPanel({
     );
   }
 
+  if (switchTargetStatus) {
+    return (
+      <section className="panel-section" data-testid="apps-panel">
+        <AppSwitchAccessScreen
+          activeStatus={activeAppForSwitch}
+          targetStatus={switchTargetStatus}
+          onSwitch={() => {
+            onSwitchActiveApp?.(switchTargetStatus.version.id);
+            setSwitchTargetStatus(null);
+            onManageApp?.(switchTargetStatus.version.id);
+          }}
+          onUpgrade={onOpenPremiumOptions}
+          onBack={() => setSwitchTargetStatus(null)}
+        />
+      </section>
+    );
+  }
+
   if (selectedStatus) {
     if (!selectedStatus.protectedOn && !canAddAnotherApp) {
       return (
         <section className="panel-section" data-testid="apps-panel">
-          <AppsAccessScreen
-            onUnlock={onOpenPremiumOptions}
-            onHaveCode={() => setShowCodeScreen(true)}
+          <AppSwitchAccessScreen
+            activeStatus={activeAppForSwitch}
+            targetStatus={selectedStatus}
+            onSwitch={() => {
+              onSwitchActiveApp?.(selectedStatus.version.id);
+            }}
+            onUpgrade={onOpenPremiumOptions}
             onBack={onBackToApps}
           />
         </section>
@@ -10061,7 +10208,14 @@ function AppsPanel({
           onManageApp={onManageApp}
           onShowAccess={() => setShowAccessScreen(true)}
           onHaveCode={() => setShowCodeScreen(true)}
-          onAddApp={openLauncherSetup}
+          onAddApp={(version) => {
+            const status = liveProtectedAppStatuses.find((item) => item.version.id === version.id) ?? { version };
+            if (!canAddAnotherApp) {
+              setSwitchTargetStatus(status);
+              return;
+            }
+            openLauncherSetup(version);
+          }}
         />
       </div>
       {setupInterstitial}
@@ -10144,8 +10298,8 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, excludedAppId
   return (
     <div className="apps-more-options" data-testid="apps-more-options">
       <div className="settings-version-heading">
-        <p>Use myBishBash with more apps</p>
-        <span>Full Access lets you use myBishBash with multiple apps.</span>
+        <p>Add another app</p>
+        <span>Upgrade to keep myBishBash connected to more apps.</span>
       </div>
       <div className="home-screen-version-list">
         {availableOptionIds.length === 0 ? (
@@ -10163,10 +10317,10 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, excludedAppId
               <div className="home-screen-version-copy">
                 <div className="home-screen-version-title">
                   <strong>Set up {appName} with myBishBash</strong>
-                  <span>{locked ? "Full Access" : "Not set up"}</span>
+                  <span>{locked ? "Upgrade" : "Not set up"}</span>
                 </div>
                 {locked ? (
-                  <p className="tiny-note">Free includes one app. Full Access lets you use myBishBash with multiple apps.</p>
+                  <p className="tiny-note">Free Core includes myBishBash and one connected app shortcut.</p>
                 ) : null}
                 <div className="home-screen-version-actions apps-row-actions">
                   <button
@@ -10174,14 +10328,10 @@ function MoreAppsOptions({ protectedAppStatuses, canAddAnotherApp, excludedAppId
                     className="pack-button secondary"
                     data-testid={`apps-option-action-${id}`}
                     onClick={() => {
-                      if (!status?.protectedOn && !canAddAnotherApp) {
-                        onShowAccess?.();
-                        return;
-                      }
                       onAddApp?.(version);
                     }}
                   >
-                    {locked ? "Unlock Full Access" : "Open setup page"}
+                    {locked ? "Choose" : "Open setup page"}
                   </button>
                   {locked ? (
                     <button type="button" className="text-button apps-code-link" onClick={onHaveCode}>
@@ -10279,16 +10429,207 @@ function AppsAccessScreen({ onUnlock, onHaveCode, onBack }) {
       </button>
       <div className="settings-card apps-manage-hero">
         <div className="settings-version-heading">
-          <p>Use myBishBash with more apps</p>
-          <span>Free includes one app. Full Access lets you use myBishBash with multiple apps.</span>
+          <p>Upgrade</p>
+          <span>Upgrade to keep myBishBash connected to more apps.</span>
         </div>
       </div>
       <div className="settings-card settings-compact">
         <button type="button" className="pack-button" onClick={onUnlock}>
-          Unlock Full Access
+          Upgrade
         </button>
         <button type="button" className="text-button apps-code-link" onClick={onHaveCode}>
           Have a code?
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getAccessPlanLabel(accessProfile, canUseMultipleApps) {
+  const tier = getEffectiveTier(accessProfile ?? {});
+  if (canUseMultipleApps || tier === ACCESS_TIERS.FOUNDING_ACCESS) return "Founding Access";
+  return "Free Core";
+}
+
+function AccessPanel({ accessProfile, canUseMultipleApps, onManageApps, onEnterCode }) {
+  const [checkoutStatus, setCheckoutStatus] = useState("");
+  const planLabel = getAccessPlanLabel(accessProfile, canUseMultipleApps);
+  const isFoundingAccess = canUseMultipleApps;
+  const checkoutConfigured = isStripeCheckoutConfigured();
+  const upgradePlans = [
+    { id: "founder", label: "Founder" },
+    { id: "annual", label: "Annual" },
+    { id: "weekly", label: "Weekly" },
+  ];
+
+  async function handleCheckout(planId) {
+    const result = await startStripeCheckout(planId);
+    if (!result.ok && result.reason === "not_configured") {
+      setCheckoutStatus("Upgrade checkout is not live yet.");
+      return;
+    }
+    if (!result.ok) {
+      setCheckoutStatus("Upgrade checkout is not available right now.");
+    }
+  }
+
+  async function handleBilling() {
+    const result = await openStripeCustomerPortal();
+    if (!result.ok && result.reason === "not_configured") {
+      setCheckoutStatus("Billing management is not live yet.");
+      return;
+    }
+    if (!result.ok) {
+      setCheckoutStatus("Billing management is not available right now.");
+    }
+  }
+
+  return (
+    <section className="panel-section" data-testid="access-page">
+      <div className="section-heading solo">
+        <div>
+          <h2>Access / Plan</h2>
+          <p>Current plan: {planLabel}</p>
+        </div>
+      </div>
+
+      <div className="settings-card apps-manage-hero">
+        <div className="settings-version-heading">
+          <p>{isFoundingAccess ? "Founding Access" : "Free Core"}</p>
+          {isFoundingAccess ? (
+            <>
+              <span>Your account includes all currently available app shortcuts.</span>
+              <span>You can manage connected apps from Apps.</span>
+            </>
+          ) : (
+            <>
+              <span>Free Core includes myBishBash and one connected app shortcut.</span>
+              <span>Upgrade to keep myBishBash connected to more apps.</span>
+            </>
+          )}
+        </div>
+        <div className="home-screen-version-actions apps-row-actions">
+          {isFoundingAccess ? (
+            <>
+              <button type="button" className="pack-button" onClick={onManageApps}>
+                Manage apps
+              </button>
+              <button type="button" className="pack-button secondary" onClick={handleBilling}>
+                Manage billing
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="pack-button" onClick={() => void handleCheckout("founder")}>
+                Upgrade
+              </button>
+              <button type="button" className="pack-button secondary" onClick={onEnterCode}>
+                Enter access code
+              </button>
+              <button type="button" className="text-button apps-code-link" onClick={onManageApps}>
+                Manage apps
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="settings-card" data-testid="stripe-upgrade-section">
+        <div className="settings-version-heading">
+          <p>Upgrade options</p>
+          <span>
+            {checkoutConfigured
+              ? "Choose the access option that fits how you want to use myBishBash."
+              : "Upgrade checkout is not live yet."}
+          </span>
+        </div>
+        <div className="home-screen-version-actions apps-row-actions">
+          {upgradePlans.map((plan) => (
+            <button
+              key={plan.id}
+              type="button"
+              className="pack-button secondary"
+              data-testid={`stripe-plan-${plan.id}`}
+              onClick={() => void handleCheckout(plan.id)}
+            >
+              {plan.label}
+            </button>
+          ))}
+        </div>
+        {checkoutStatus ? <p className="tiny-note" role="status">{checkoutStatus}</p> : null}
+      </div>
+    </section>
+  );
+}
+
+function FreeCoreReconciliationScreen({ enabledAppStatuses, onKeepApp, onUpgrade }) {
+  return (
+    <section className="panel-section" data-testid="free-core-reconciliation">
+      <div className="settings-card apps-manage-hero">
+        <div className="settings-version-heading">
+          <p>Your access has changed.</p>
+          <span>Free Core lets you keep one connected app active. Choose the app you want to keep.</span>
+        </div>
+      </div>
+      <div className="settings-card">
+        <div className="home-screen-version-list">
+          {enabledAppStatuses.map((status) => {
+            const version = status.version;
+            const appName = version.realAppLabel ?? version.name ?? version.displayName ?? version.id;
+            return (
+              <article className="home-screen-version-card apps-enabled-row" key={version.id} data-testid={`reconcile-app-${version.id}`}>
+                <img src={resolveLauncherIconSrc(version)} alt={`${appName} icon`} className="home-screen-version-icon" />
+                <div className="home-screen-version-copy">
+                  <div className="home-screen-version-title">
+                    <strong>{appName} with myBishBash</strong>
+                    <span>Active now</span>
+                  </div>
+                  <p>Other connected apps will stay inactive while on Free Core.</p>
+                  <div className="home-screen-version-actions apps-row-actions">
+                    <button type="button" className="pack-button" onClick={() => onKeepApp?.(version.id)}>
+                      Keep {appName}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+      <div className="settings-card settings-compact">
+        <button type="button" className="pack-button secondary" onClick={onUpgrade}>
+          Upgrade to keep all apps active
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AppSwitchAccessScreen({ activeStatus, targetStatus, onSwitch, onUpgrade, onBack }) {
+  const currentName = activeStatus?.version?.realAppLabel ?? activeStatus?.version?.name ?? "your current app";
+  const targetVersion = targetStatus?.version ?? {};
+  const targetName = targetVersion.realAppLabel ?? targetVersion.name ?? targetVersion.displayName ?? "this app";
+  return (
+    <div className="apps-manage-screen" data-testid="apps-switch-access-screen">
+      <button type="button" className="text-button apps-back-button" onClick={onBack}>
+        ← Apps
+      </button>
+      <div className="settings-card apps-manage-hero">
+        <div className="settings-version-heading">
+          <p>Choose your active app</p>
+          <span>Free Core lets you keep one connected app active.</span>
+        </div>
+      </div>
+      <div className="settings-card settings-compact">
+        <div className="settings-version-heading">
+          <p>Switch to {targetName}?</p>
+          <span>{currentName} will be inactive while on Free Core. Its setup and settings are kept.</span>
+        </div>
+        <button type="button" className="pack-button" data-testid={`apps-switch-to-${targetVersion.id}`} onClick={onSwitch}>
+          Switch active app
+        </button>
+        <button type="button" className="pack-button secondary" onClick={onUpgrade}>
+          Upgrade to keep multiple apps active
         </button>
       </div>
     </div>
@@ -10823,7 +11164,7 @@ function SettingsPanel({
           <a className="pack-button secondary" href={`${BASE_PATH}/apps`}>
             Manage apps
           </a>
-          <a className="pack-button secondary" href={`${BASE_PATH}/invite`}>
+          <a className="pack-button secondary" href={`${BASE_PATH}/access`}>
             Access options
           </a>
         </div>

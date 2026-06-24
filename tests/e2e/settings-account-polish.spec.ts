@@ -71,7 +71,7 @@ test('normal user settings stay polished and hide tester-only controls on mobile
   await expect(page.getByRole('heading', { name: 'Cards & Timing' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Apps / Access' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Manage apps' })).toHaveAttribute('href', '/mybishbash/apps');
-  await expect(page.getByRole('link', { name: 'Access options' })).toHaveAttribute('href', '/mybishbash/invite');
+  await expect(page.getByRole('link', { name: 'Access options' })).toHaveAttribute('href', '/mybishbash/access');
   await expect(page.getByRole('heading', { name: 'Help' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Help' })).toHaveAttribute('href', '/mybishbash/about');
   await expect(page.getByRole('heading', { name: 'Sign out' })).toBeVisible();

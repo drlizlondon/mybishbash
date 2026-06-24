@@ -398,7 +398,7 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
   await expect(page.getByTestId('apps-list')).toBeVisible();
   await expect(page.getByTestId('apps-list')).toContainText('Your apps');
   await expect(page.getByTestId('apps-list')).toContainText('No apps set up yet.');
-  await expect(page.getByTestId('apps-add-more')).toContainText('Use myBishBash with more apps');
+  await expect(page.getByTestId('apps-add-more')).toContainText('Add another app');
   await expect(page.getByText('MyBishBash installed')).toHaveCount(0);
   await expect(page.getByTestId('create-card-button')).toHaveCount(0);
   await expect(page.getByTestId('apps-option-safari')).toContainText('Not set up');
@@ -423,6 +423,12 @@ test('account-menu-opens-above-app-controls — account menu is the top layer', 
   await page.getByTestId('settings-gear').click();
   const menu = page.getByTestId('account-menu');
   await expect(menu).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Account' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Access / Plan' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Apps' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Notifications' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Help' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Sign out' })).toBeVisible();
 
   const menuButtonsAreTopLayer = await menu.evaluate((element) => {
     const buttons = Array.from(element.querySelectorAll('button'));
@@ -433,6 +439,49 @@ test('account-menu-opens-above-app-controls — account menu is the top layer', 
     });
   });
   expect(menuButtonsAreTopLayer).toBe(true);
+});
+
+test('access-route-free-core — /access renders plan content and Stripe placeholder', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('access-free', 'Access free card')],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+    accessTier: 'free_core',
+  });
+  await page.goto('/mybishbash/access');
+
+  await expect(page.getByTestId('access-page')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Access / Plan' })).toBeVisible();
+  await expect(page.getByText('Current plan: Free Core')).toBeVisible();
+  await expect(page.getByText('Free Core includes myBishBash and one connected app shortcut.')).toBeVisible();
+  await expect(page.getByText('Upgrade to keep myBishBash connected to more apps.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upgrade' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enter access code' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Manage apps' })).toBeVisible();
+  await expect(page.getByTestId('stripe-upgrade-section')).toContainText('Founder');
+  await expect(page.getByTestId('stripe-upgrade-section')).toContainText('Annual');
+  await expect(page.getByTestId('stripe-upgrade-section')).toContainText('Weekly');
+  await expect(page.getByTestId('stripe-upgrade-section')).toContainText('Upgrade checkout is not live yet.');
+
+  await page.getByTestId('stripe-plan-weekly').click();
+  await expect(page.getByRole('status')).toHaveText('Upgrade checkout is not live yet.');
+});
+
+test('access-route-founding — paid access shows Apps and billing actions', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('access-founding', 'Access founding card')],
+    enabledAppIds: ['safari', 'youtube'],
+    testerMode: false,
+    accessTier: 'founding_access',
+  });
+  await page.goto('/mybishbash/access');
+
+  await expect(page.getByTestId('access-page')).toBeVisible();
+  await expect(page.getByText('Current plan: Founding Access')).toBeVisible();
+  await expect(page.getByText('Your account includes all currently available app shortcuts.')).toBeVisible();
+  await expect(page.getByText('You can manage connected apps from Apps.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Manage apps' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Manage billing' })).toBeVisible();
 });
 
 test('main Apps control centre shows all apps while preserving enabled state', async ({ page }) => {
@@ -447,11 +496,11 @@ test('main Apps control centre shows all apps while preserving enabled state', a
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toContainText('Safari with myBishBash');
   await expect(page.getByTestId('protected-app-safari')).toContainText('Enabled');
-  await expect(page.getByTestId('apps-option-youtube')).toContainText('Free includes one app.');
-  await expect(page.getByTestId('apps-option-youtube')).toContainText('Full Access');
+  await expect(page.getByTestId('apps-option-youtube')).toContainText('Free Core includes myBishBash and one connected app shortcut.');
+  await expect(page.getByTestId('apps-option-youtube')).toContainText('Upgrade');
   await expect(page.getByTestId('apps-option-youtube').getByRole('button', { name: 'Settings' })).toHaveCount(0);
 
-  await seedState(page, { cards: [personalCard('apps-count-two', 'Apps count two')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari', 'youtube'], testerMode: false });
+  await seedState(page, { cards: [personalCard('apps-count-two', 'Apps count two')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari', 'youtube'], testerMode: false, accessTier: 'founding_access' });
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toBeVisible();
   await expect(page.getByTestId('protected-app-youtube')).toBeVisible();
@@ -477,8 +526,8 @@ test('apps-more-options — shows simple consumer app options and code link', as
   await seedState(page, { cards: [personalCard('apps-pack', 'Apps pack card')] });
   await page.goto('/mybishbash/apps');
 
-  await expect(page.getByTestId('apps-more-options')).toContainText('Use myBishBash with more apps');
-  await expect(page.getByTestId('apps-more-options')).toContainText('Full Access lets you use myBishBash with multiple apps.');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Add another app');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Upgrade to keep myBishBash connected to more apps.');
   await expect(page.getByTestId('apps-more-options')).toContainText('WhatsApp');
   await expect(page.getByTestId('apps-more-options')).toContainText('Instagram');
   await expect(page.getByTestId('apps-more-options')).toContainText('YouTube');
@@ -501,8 +550,8 @@ test('apps-add-another-hides-enabled-apps — active apps do not duplicate in Ad
   await expect(page.getByTestId('protected-app-instagram')).toHaveCount(0);
   await expect(page.getByTestId('protected-app-youtube')).toHaveCount(0);
   await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
-  await expect(page.getByTestId('apps-more-options')).toContainText('Use myBishBash with more apps');
-  await expect(page.getByTestId('apps-more-options')).toContainText('Full Access lets you use myBishBash with multiple apps.');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Add another app');
+  await expect(page.getByTestId('apps-more-options')).toContainText('Upgrade to keep myBishBash connected to more apps.');
   await expect(page.getByTestId('apps-option-whatsapp')).toHaveCount(0);
   await expect(page.getByTestId('apps-option-instagram')).toBeVisible();
   await expect(page.getByTestId('apps-option-youtube')).toBeVisible();
@@ -582,17 +631,16 @@ test('apps-free-access-gate — free user cannot silently enable a second app', 
   await page.goto('/mybishbash/apps');
 
   await expect(page.getByTestId('protected-app-safari')).toContainText('Enabled');
-  await expect(page.getByTestId('apps-option-whatsapp')).toContainText('Free includes one app.');
-  await expect(page.getByTestId('apps-option-action-whatsapp')).toHaveText('Unlock Full Access');
+  await expect(page.getByTestId('apps-option-whatsapp')).toContainText('Free Core includes myBishBash and one connected app shortcut.');
+  await expect(page.getByTestId('apps-option-action-whatsapp')).toHaveText('Choose');
   await expect(page.getByTestId('apps-option-whatsapp').getByRole('button', { name: 'Have a code?' })).toBeVisible();
   await expect(page.getByTestId('apps-option-whatsapp').getByRole('button', { name: 'Settings' })).toHaveCount(0);
   await page.getByTestId('apps-option-action-whatsapp').click();
 
-  await expect(page.getByTestId('apps-access-screen')).toBeVisible();
-  await expect(page.getByText('Use myBishBash with more apps')).toBeVisible();
-  await expect(page.getByText('Free includes one app. Full Access lets you use myBishBash with multiple apps.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Unlock Full Access' })).toBeVisible();
-  await expect(page.getByTestId('apps-access-screen').getByRole('button', { name: 'Have a code?' })).toBeVisible();
+  await expect(page.getByTestId('apps-switch-access-screen')).toBeVisible();
+  await expect(page.getByText('Free Core lets you keep one connected app active.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Switch active app' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upgrade to keep multiple apps active' })).toBeVisible();
   await expect(page.getByText('slot')).toHaveCount(0);
   await expect(page.getByText('entitlement')).toHaveCount(0);
   await expect(page.getByText('limit reached')).toHaveCount(0);
@@ -603,6 +651,88 @@ test('apps-free-access-gate — free user cannot silently enable a second app', 
   });
   expect(behavior.appEnabled).toBe(false);
   expect(behavior.useInterruptionPack).toBe(false);
+
+  await page.getByRole('button', { name: 'Upgrade to keep multiple apps active' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/access$/);
+});
+
+test('free-core-reconciliation — multiple active apps must be reduced to one without deleting settings', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('reconcile-card', 'Reconcile card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari', 'youtube'],
+    testerMode: false,
+    accessTier: 'free_core',
+  });
+  await page.addInitScript(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    settings.safari = {
+      ...settings.safari,
+      useInterruptionPack: true,
+      interruptionPackId: 'safari-custom-pack',
+      setupHistory: ['kept'],
+    };
+    settings.youtube = {
+      ...settings.youtube,
+      useInterruptionPack: true,
+      interruptionPackId: 'youtube-custom-pack',
+      promptSettings: { tone: 'calm' },
+      setupHistory: ['preserved'],
+    };
+    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(settings));
+  });
+
+  await page.goto('/mybishbash/home');
+  await expect(page.getByTestId('free-core-reconciliation')).toBeVisible();
+  await expect(page.getByText('Your access has changed.')).toBeVisible();
+  await expect(page.getByText('Free Core lets you keep one connected app active. Choose the app you want to keep.')).toBeVisible();
+  await expect(page.getByTestId('reconcile-app-safari')).toBeVisible();
+  await expect(page.getByTestId('reconcile-app-youtube')).toBeVisible();
+  await expect(page.getByTestId('reconcile-app-safari')).toContainText('inactive while on Free Core');
+  await page.getByRole('button', { name: 'Keep YouTube' }).click();
+
+  await expect(page.getByTestId('free-core-reconciliation')).toHaveCount(0);
+  const settingsAfter = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'));
+  expect(settingsAfter.youtube.appEnabled).toBe(true);
+  expect(settingsAfter.youtube.useInterruptionPack).toBe(true);
+  expect(settingsAfter.youtube.interruptionPackId).toBe('youtube-custom-pack');
+  expect(settingsAfter.youtube.promptSettings).toEqual({ tone: 'calm' });
+  expect(settingsAfter.youtube.setupHistory).toEqual(['preserved']);
+  expect(settingsAfter.safari.appEnabled).toBe(false);
+  expect(settingsAfter.safari.useInterruptionPack).toBe(true);
+  expect(settingsAfter.safari.interruptionPackId).toBe('safari-custom-pack');
+  expect(settingsAfter.safari.setupHistory).toEqual(['kept']);
+});
+
+test('apps-free-core-switch — switching active app preserves disabled app setup', async ({ page }) => {
+  await seedState(page, {
+    cards: [personalCard('switch-card', 'Switch card')],
+    appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    enabledAppIds: ['safari'],
+    testerMode: false,
+    accessTier: 'free_core',
+  });
+  await page.addInitScript(() => {
+    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
+    settings.safari = { ...settings.safari, useInterruptionPack: true, interruptionPackId: 'safari-pack' };
+    settings.whatsapp = { ...settings.whatsapp, useInterruptionPack: true, interruptionPackId: 'whatsapp-pack', setupHistory: ['ready'] };
+    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(settings));
+  });
+
+  await page.goto('/mybishbash/apps');
+  await page.getByTestId('apps-option-action-whatsapp').click();
+  await expect(page.getByTestId('apps-switch-access-screen')).toBeVisible();
+  await page.getByRole('button', { name: 'Switch active app' }).click();
+  await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
+
+  const settingsAfter = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'));
+  expect(settingsAfter.whatsapp.appEnabled).toBe(true);
+  expect(settingsAfter.whatsapp.useInterruptionPack).toBe(true);
+  expect(settingsAfter.whatsapp.interruptionPackId).toBe('whatsapp-pack');
+  expect(settingsAfter.whatsapp.setupHistory).toEqual(['ready']);
+  expect(settingsAfter.safari.appEnabled).toBe(false);
+  expect(settingsAfter.safari.useInterruptionPack).toBe(true);
+  expect(settingsAfter.safari.interruptionPackId).toBe('safari-pack');
 });
 
 test('apps-code-flow — logged-in user can unlock more apps and continue to Apps', async ({ page }) => {
@@ -958,6 +1088,7 @@ test('fake-shell-dashboard shortcut opens only the source app settings with rout
     cards: [personalCard('apps5', 'Manage this app card')],
     appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
     enabledAppIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    accessTier: 'founding_access',
   });
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -1011,6 +1142,7 @@ test('WhatsApp shell only shows WhatsApp controls', async ({ page }) => {
     cards: [personalCard('apps-whatsapp-shell', 'WhatsApp shell card')],
     appIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
     enabledAppIds: ['safari', 'whatsapp', 'instagram', 'youtube'],
+    accessTier: 'founding_access',
   });
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -1040,6 +1172,7 @@ test('main app cards do not inherit stale app context after Manage all apps', as
     cards: [personalCard('today-shell-leak', 'Today shell leak card')],
     appIds: ['whatsapp', 'instagram'],
     enabledAppIds: ['whatsapp', 'instagram'],
+    accessTier: 'founding_access',
   });
   await page.addInitScript(() => {
     window.localStorage.setItem(
