@@ -356,10 +356,9 @@ test('personal card suggestions appear directly without category selection', asy
 
   const visibleSuggestions = await suggestions.allTextContents();
   expect(visibleSuggestions).toHaveLength(11);
-  const writeOwn = page.getByRole('button', { name: 'Write my own' });
-  await writeOwn.scrollIntoViewIfNeeded();
-  await expect(writeOwn).toBeVisible();
-  const visibility = await page.evaluate(() => {
+  const lastSuggestion = suggestions.last();
+  await lastSuggestion.scrollIntoViewIfNeeded();
+  const suggestionVisibility = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('[data-testid="onboarding-personal-card-suggestion"]'));
     const actions = document.querySelector('.onboarding-actions');
     const lastCard = cards.at(-1);
@@ -371,8 +370,27 @@ test('personal card suggestions appear directly without category selection', asy
       actionTop: Math.round(actionBox.top),
     };
   });
-  expect(visibility).not.toBeNull();
-  expect(visibility!.lastCardBottom).toBeLessThanOrEqual(visibility!.actionTop);
+  expect(suggestionVisibility).not.toBeNull();
+  expect(suggestionVisibility!.lastCardBottom).toBeLessThanOrEqual(suggestionVisibility!.actionTop);
+
+  const writeOwn = page.getByRole('button', { name: 'Write my own' });
+  await writeOwn.scrollIntoViewIfNeeded();
+  await expect(writeOwn).toBeVisible();
+  const writeOwnLayout = await writeOwn.evaluate((button) => {
+    const grid = document.querySelector('.onboarding-personal-card-grid');
+    const actions = document.querySelector('.onboarding-actions');
+    const buttonBox = button.getBoundingClientRect();
+    const gridBox = grid?.getBoundingClientRect();
+    const actionBox = actions?.getBoundingClientRect();
+    return {
+      buttonWidth: Math.round(buttonBox.width),
+      gridWidth: Math.round(gridBox?.width ?? 0),
+      actionTop: Math.round(actionBox.top),
+      buttonBottom: Math.round(buttonBox.bottom),
+    };
+  });
+  expect(writeOwnLayout.buttonWidth).toBeGreaterThanOrEqual(writeOwnLayout.gridWidth - 2);
+  expect(writeOwnLayout.buttonBottom).toBeLessThanOrEqual(writeOwnLayout.actionTop);
   for (const weakCopy of [
     'Have you done something productive today?',
     'Have you looked after yourself today?',
@@ -430,8 +448,20 @@ test('personal card setup caps selected and custom cards at 5 total', async ({ p
   await expect(page.getByText('4 of 5 selected')).toBeVisible();
 
   await page.getByRole('button', { name: 'Write my own' }).click();
-  await page.getByPlaceholder('Write your own reminder…').fill('Have you packed tomorrow’s lunch?');
-  await page.locator('.onboarding-custom-card').getByRole('button', { name: 'Add' }).click();
+  await expect(page.getByPlaceholder('Write your own reminder')).toBeVisible();
+  await expect(page.locator('.onboarding-custom-card').getByRole('button', { name: 'Cancel' })).toBeVisible();
+  const composerLayout = await page.locator('.onboarding-custom-card').evaluate((composer) => {
+    const grid = document.querySelector('.onboarding-personal-card-grid');
+    const composerBox = composer.getBoundingClientRect();
+    const gridBox = grid?.getBoundingClientRect();
+    return {
+      composerWidth: Math.round(composerBox.width),
+      gridWidth: Math.round(gridBox?.width ?? 0),
+    };
+  });
+  expect(composerLayout.composerWidth).toBeGreaterThanOrEqual(composerLayout.gridWidth - 2);
+  await page.getByPlaceholder('Write your own reminder').fill('Have you packed tomorrow’s lunch?');
+  await page.locator('.onboarding-custom-card').getByRole('button', { name: 'Add card' }).click();
   await expect(page.getByText('5 of 5 selected')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Have you packed tomorrow’s lunch?' })).toBeVisible();
 

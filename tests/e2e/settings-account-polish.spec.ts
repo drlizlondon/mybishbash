@@ -67,7 +67,9 @@ test('normal user settings stay polished and hide tester-only controls on mobile
 
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Notifications' })).toHaveCount(0);
+  await expect(page.getByText('Small myBishBash nudges from your saved cards.')).toHaveCount(0);
+  await expect(page.getByText('Cards per day')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Cards & Timing' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Apps / Access' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Manage apps' })).toHaveAttribute('href', '/mybishbash/apps');

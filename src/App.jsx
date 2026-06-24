@@ -7991,7 +7991,6 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
           <button type="button" onClick={() => handleNavigate("/settings")}>Account</button>
           <button type="button" onClick={() => handleNavigate("/access")}>Access / Plan</button>
           <button type="button" onClick={() => handleNavigate("/apps")}>Apps</button>
-          <button type="button" onClick={() => handleNavigate("/settings")}>Notifications</button>
           <button type="button" onClick={() => { setAccountMenuOpen(false); window.location.href = `${BASE_PATH}/about`; }}>Help</button>
           <button type="button" onClick={() => { setAccountMenuOpen(false); onLogOut?.(); }}>Sign out</button>
           <button type="button" className="account-menu-close" onClick={() => setAccountMenuOpen(false)}>Close</button>
@@ -10517,7 +10516,7 @@ function AccessPanel({ accessProfile, canUseMultipleApps, onManageApps, onEnterC
   }
 
   return (
-    <section className="panel-section" data-testid="access-page">
+    <section className="panel-section access-panel-section" data-testid="access-page">
       <div className="section-heading solo">
         <div>
           <h2>Access / Plan</h2>
@@ -10525,7 +10524,7 @@ function AccessPanel({ accessProfile, canUseMultipleApps, onManageApps, onEnterC
         </div>
       </div>
 
-      <div className="settings-card apps-manage-hero">
+      <div className="settings-card apps-manage-hero access-plan-card">
         <div className="settings-version-heading">
           <p>{isFoundingAccess ? "Founding Access" : "Free Core"}</p>
           {isFoundingAccess ? (
@@ -10540,7 +10539,7 @@ function AccessPanel({ accessProfile, canUseMultipleApps, onManageApps, onEnterC
             </>
           )}
         </div>
-        <div className="home-screen-version-actions apps-row-actions">
+        <div className="home-screen-version-actions apps-row-actions access-plan-actions">
           {isFoundingAccess ? (
             <>
               <button type="button" className="pack-button" onClick={onManageApps}>
@@ -10575,7 +10574,7 @@ function AccessPanel({ accessProfile, canUseMultipleApps, onManageApps, onEnterC
               : "Upgrade checkout is not live yet."}
           </span>
         </div>
-        <div className="home-screen-version-actions apps-row-actions">
+        <div className="home-screen-version-actions apps-row-actions access-plan-actions">
           {upgradePlans.map((plan) => (
             <button
               key={plan.id}
@@ -10993,10 +10992,6 @@ function SettingsPanel({
   })
     .map((version) => version.name ?? version.displayName ?? version.id)
     .join(", ");
-  const notificationCopy = notificationSettings?.enabled
-    ? `On, up to ${notificationSettings?.notificationsPerDay ?? 3} per day`
-    : "Off";
-
   return (
     <section className="panel-section">
       <div className="section-heading solo">
@@ -11019,40 +11014,6 @@ function SettingsPanel({
           <button type="button" className="pack-button secondary danger-soft-button" onClick={() => setIsDeleteAccountModalOpen(true)}>
             Delete account
           </button>
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="settings-notifications-heading">
-        <div className="settings-version-heading">
-          <h3 id="settings-notifications-heading">Notifications</h3>
-          <span>Small myBishBash nudges from your saved cards.</span>
-        </div>
-        <div className="settings-card">
-          <label className="timing-option settings-checkbox-row" style={{ marginBottom: "12px" }}>
-            <input
-              type="checkbox"
-              checked={Boolean(notificationSettings?.enabled)}
-              onChange={(event) => {
-                if (event.target.checked) {
-                  void onEnableNotifications();
-                } else {
-                  void onDisableNotifications();
-                }
-              }}
-            />
-            <span>{notificationCopy}</span>
-          </label>
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>Cards per day</span>
-            <input
-              type="number"
-              min="1"
-              max="6"
-              className="settings-input"
-              value={notificationSettings?.notificationsPerDay ?? 3}
-              onChange={(event) => void onUpdateNotificationsPerDay(event.target.value)}
-            />
-          </label>
         </div>
       </section>
 

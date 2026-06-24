@@ -313,6 +313,12 @@ function OnboardingContent({
     setCardSelectionMessage("");
   }
 
+  function closeCustomCardInput() {
+    setCustomCardOpen(false);
+    setCustomCardText("");
+    setCardSelectionMessage("");
+  }
+
   function addCustomCard() {
     const text = customCardText.trim();
     if (!text) return;
@@ -505,12 +511,13 @@ function OnboardingContent({
                 onToggle={toggleSelectedCard}
                 onToggleCustom={toggleCustomCard}
                 onOpenCustom={openCustomCardInput}
+                onCancelCustom={closeCustomCardInput}
                 onCustomTextChange={setCustomCardText}
                 onAddCustom={addCustomCard}
                 selectedLabel={content.steps?.intention?.selectedLabel ?? "selected"}
                 writeOwnLabel={content.steps?.intention?.writeOwn ?? "Write my own"}
-                customPlaceholder={content.steps?.intention?.customPlaceholder ?? "Write your own reminder…"}
-                addCustomLabel={content.steps?.intention?.addCustom ?? "Add"}
+                customPlaceholder={content.steps?.intention?.customPlaceholder ?? "Write your own reminder"}
+                addCustomLabel={content.steps?.intention?.addCustom ?? "Add card"}
               />
             </OnboardingStep>
           ) : null}
@@ -911,11 +918,12 @@ function ReminderIdeaGrid({
   onToggle,
   onToggleCustom,
   onOpenCustom,
+  onCancelCustom,
   onCustomTextChange,
   onAddCustom,
   writeOwnLabel = "Write my own",
-  customPlaceholder = "Write your own reminder…",
-  addCustomLabel = "Add",
+  customPlaceholder = "Write your own reminder",
+  addCustomLabel = "Add card",
 }) {
   const cleanCustomText = customCardText.trim();
   return (
@@ -953,29 +961,34 @@ function ReminderIdeaGrid({
             <strong>{card.text}</strong>
           </button>
         ))}
-        {customCardOpen ? (
-          <div className="onboarding-custom-card">
-            <label>
-              <span>{writeOwnLabel}</span>
-              <input
-                type="text"
-                value={customCardText}
-                onChange={(event) => onCustomTextChange(event.target.value)}
-                placeholder={customPlaceholder}
-                maxLength={96}
-              />
-            </label>
-            <button type="button" onClick={onAddCustom} disabled={!cleanCustomText}>
+      </div>
+      {customCardOpen ? (
+        <div className="onboarding-custom-card">
+          <label>
+            <span>{writeOwnLabel}</span>
+            <textarea
+              value={customCardText}
+              onChange={(event) => onCustomTextChange(event.target.value)}
+              placeholder={customPlaceholder}
+              maxLength={96}
+              rows={3}
+            />
+          </label>
+          <div className="onboarding-custom-card-actions">
+            <button type="button" className="onboarding-custom-card-add" onClick={onAddCustom} disabled={!cleanCustomText}>
               {addCustomLabel}
             </button>
+            <button type="button" className="onboarding-custom-card-cancel" onClick={onCancelCustom}>
+              Cancel
+            </button>
           </div>
-        ) : (
-          <button type="button" className="onboarding-idea-card onboarding-write-own-card" onClick={onOpenCustom}>
-            <span className="onboarding-idea-check" aria-hidden="true" />
-            <strong>{writeOwnLabel}</strong>
-          </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <button type="button" className="onboarding-idea-card onboarding-write-own-card" onClick={onOpenCustom}>
+          <span className="onboarding-idea-check" aria-hidden="true" />
+          <strong>{writeOwnLabel}</strong>
+        </button>
+      )}
     </div>
   );
 }

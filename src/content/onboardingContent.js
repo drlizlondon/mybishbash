@@ -38,8 +38,8 @@ export const onboardingContent = {
       "duplicateMessage": "That card is already selected.",
       "tooLongMessage": "Keep it a bit shorter.",
       "writeOwn": "Write my own",
-      "customPlaceholder": "Write your own reminder…",
-      "addCustom": "Add"
+      "customPlaceholder": "Write your own reminder",
+      "addCustom": "Add card"
     },
     "personalSuccess": {
       "title": "Great. Your Personal Cards are ready.",

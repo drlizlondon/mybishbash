@@ -8053,6 +8053,47 @@ body {
   box-shadow: 0 8px 18px rgba(47, 42, 40, 0.12);
 }
 
+.access-panel-section {
+  width: 100%;
+  max-width: 100%;
+  padding-bottom: calc(132px + env(safe-area-inset-bottom));
+}
+
+.access-plan-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-card.apps-manage-hero.access-plan-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.access-plan-card .settings-version-heading {
+  min-width: 0;
+}
+
+.app-shell.app-mood .access-plan-card .settings-version-heading span,
+.access-plan-card .settings-version-heading span {
+  display: block;
+  width: 100%;
+}
+
+.access-plan-actions {
+  width: 100%;
+  min-width: 0;
+}
+
+.access-plan-actions .pack-button,
+.access-plan-actions .text-button {
+  flex: 1 1 136px;
+  min-width: min(100%, 136px);
+  justify-content: center;
+  text-align: center;
+}
+
 .apps-row-actions .apps-pause-row-button {
   border-color: transparent;
   background: transparent;
@@ -12310,9 +12351,65 @@ body {
   font-weight: 680;
 }
 
-.onboarding-custom-card input {
+.onboarding-custom-card input,
+.onboarding-custom-card textarea {
   border-radius: var(--onboarding-radius-control);
   font-family: var(--onboarding-font-sans);
+}
+
+.onboarding-reminder-picker {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.onboarding-write-own-card {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 56px;
+  color: #9a5145;
+}
+
+.onboarding-custom-card {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+}
+
+.onboarding-custom-card textarea {
+  width: 100%;
+  min-height: 92px;
+  border: 1px solid rgba(120, 87, 65, 0.14);
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(21, 21, 21, 0.92);
+  font: inherit;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.onboarding-custom-card-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.onboarding-custom-card-actions button {
+  min-height: 44px;
+  border-radius: var(--onboarding-radius-control);
+}
+
+.onboarding-custom-card-cancel {
+  border: 1px solid rgba(120, 87, 65, 0.14);
+  background: rgba(255, 255, 255, 0.64);
+  color: rgba(74, 65, 59, 0.76);
 }
 
 .onboarding-protected-app-grid {

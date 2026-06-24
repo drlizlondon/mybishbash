@@ -508,7 +508,7 @@ test('account-menu-opens-above-app-controls — account menu is the top layer', 
   await expect(menu.getByRole('button', { name: 'Account' })).toBeVisible();
   await expect(menu.getByRole('button', { name: 'Access / Plan' })).toBeVisible();
   await expect(menu.getByRole('button', { name: 'Apps' })).toBeVisible();
-  await expect(menu.getByRole('button', { name: 'Notifications' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Notifications' })).toHaveCount(0);
   await expect(menu.getByRole('button', { name: 'Help' })).toBeVisible();
   await expect(menu.getByRole('button', { name: 'Sign out' })).toBeVisible();
 
@@ -550,6 +550,7 @@ test('access-route-free-core — /access renders plan content and Stripe placeho
 });
 
 test('access-route-founding — paid access shows Apps and billing actions', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await seedState(page, {
     cards: [personalCard('access-founding', 'Access founding card')],
     enabledAppIds: ['safari', 'youtube'],
@@ -564,6 +565,26 @@ test('access-route-founding — paid access shows Apps and billing actions', asy
   await expect(page.getByText('You can manage connected apps from Apps.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Manage apps' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Manage billing' })).toBeVisible();
+  await page.getByRole('button', { name: 'Manage billing' }).scrollIntoViewIfNeeded();
+
+  const layout = await page.evaluate(() => {
+    const pageEl = document.querySelector('[data-testid="access-page"]');
+    const copy = Array.from(document.querySelectorAll('.access-plan-card .settings-version-heading span'));
+    const nav = document.querySelector('.bottom-nav');
+    const billingButton = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Manage billing');
+    const pageBox = pageEl?.getBoundingClientRect();
+    const navBox = nav?.getBoundingClientRect();
+    const billingBox = billingButton?.getBoundingClientRect();
+    return {
+      pageWidth: Math.round(pageBox?.width ?? 0),
+      minCopyWidth: Math.round(Math.min(...copy.map((node) => node.getBoundingClientRect().width))),
+      billingBottom: Math.round(billingBox?.bottom ?? 0),
+      navTop: Math.round(navBox?.top ?? 0),
+    };
+  });
+  expect(layout.pageWidth).toBeGreaterThanOrEqual(340);
+  expect(layout.minCopyWidth).toBeGreaterThanOrEqual(300);
+  expect(layout.billingBottom).toBeLessThanOrEqual(layout.navTop);
 });
 
 test('main Apps control centre shows all apps while preserving enabled state', async ({ page }) => {
