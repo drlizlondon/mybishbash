@@ -12366,7 +12366,14 @@ body {
   padding-bottom: 18px;
 }
 
+.onboarding-personal-card-grid {
+  position: relative;
+  z-index: 0;
+}
+
 .onboarding-write-own-card {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
@@ -12377,6 +12384,8 @@ body {
 }
 
 .onboarding-custom-card {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 12px;
   width: 100%;
