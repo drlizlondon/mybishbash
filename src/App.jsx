@@ -1167,6 +1167,8 @@ function buildSharedState({
   setupComplete,
   mood,
   profile,
+  homeScreenVersions,
+  launcherBehaviorSettings,
   cardPacks,
   hiddenLibraryPacks,
   hiddenPackCardIdsCompat,
@@ -1180,6 +1182,8 @@ function buildSharedState({
     setupComplete,
     mood,
     profile,
+    homeScreenVersions,
+    launcherBehaviorSettings,
     cardPacks,
     hiddenLibraryPacks,
     dislikedPackCardIds: hiddenPackCardIdsCompat,
@@ -1198,6 +1202,14 @@ function normalizeSharedState(state, fallback) {
     setupComplete: typeof source.setupComplete === "boolean" ? source.setupComplete : fallback.setupComplete,
     mood: resolveTheme(source.mood ?? fallback.mood),
     profile: source.profile && typeof source.profile === "object" ? source.profile : fallback.profile,
+    homeScreenVersions:
+      source.homeScreenVersions && typeof source.homeScreenVersions === "object"
+        ? source.homeScreenVersions
+        : fallback.homeScreenVersions,
+    launcherBehaviorSettings:
+      source.launcherBehaviorSettings && typeof source.launcherBehaviorSettings === "object"
+        ? source.launcherBehaviorSettings
+        : fallback.launcherBehaviorSettings,
     cardPacks: Array.isArray(source.cardPacks) ? source.cardPacks : fallback.cardPacks,
     hiddenLibraryPacks: Array.isArray(source.hiddenLibraryPacks) ? source.hiddenLibraryPacks : fallback.hiddenLibraryPacks,
     hiddenPackCardIdsCompat: Array.isArray(source.dislikedPackCardIds)
@@ -2364,6 +2376,8 @@ function App() {
         setupComplete,
         mood,
         profile,
+        homeScreenVersions,
+        launcherBehaviorSettings,
         cardPacks,
         hiddenLibraryPacks,
         hiddenPackCardIdsCompat,
@@ -2376,6 +2390,8 @@ function App() {
       setupComplete,
       mood,
       profile,
+      homeScreenVersions,
+      launcherBehaviorSettings,
       cardPacks,
       hiddenLibraryPacks,
       hiddenPackCardIdsCompat,
@@ -2398,6 +2414,8 @@ function App() {
       setupComplete: initialState.setupComplete,
       mood: initialState.mood,
       profile: initialState.profile,
+      homeScreenVersions: initialState.homeScreenVersions,
+      launcherBehaviorSettings: initialState.launcherBehaviorSettings,
       cardPacks: initialState.cardPacks,
       hiddenLibraryPacks: initialState.hiddenLibraryPacks,
       hiddenPackCardIdsCompat: initialState.hiddenPackCardIdsCompat,
@@ -2432,6 +2450,20 @@ function App() {
           false,
       };
       return isSameJsonValue(currentProfile, nextProfile) ? currentProfile : nextProfile;
+    });
+    setHomeScreenVersions((current) => {
+      const merged = {
+        ...current,
+        ...(next.homeScreenVersions ?? {}),
+      };
+      return isSameJsonValue(current, merged) ? current : merged;
+    });
+    setLauncherBehaviorSettings((current) => {
+      const merged = {
+        ...current,
+        ...(next.launcherBehaviorSettings ?? {}),
+      };
+      return isSameJsonValue(current, merged) ? current : merged;
     });
     setCardPacks((currentPacks) => {
       const merged = mergeEntitiesById(currentPacks, next.cardPacks);

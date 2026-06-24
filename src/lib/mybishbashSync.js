@@ -28,6 +28,7 @@ const E2E_AUTH_SESSION_KEY = "MYBISHBASH_E2E_AUTH_SESSION";
 const E2E_FAIL_NEXT_ACCESS_PROFILE_KEY = "MYBISHBASH_E2E_FAIL_NEXT_ACCESS_PROFILE";
 const E2E_FAIL_DELETE_ACCOUNT_KEY = "MYBISHBASH_E2E_FAIL_DELETE_ACCOUNT";
 const E2E_SIGNUP_HANDOFFS_KEY = "MYBISHBASH_E2E_SIGNUP_HANDOFFS";
+const E2E_SHARED_STATE_KEY = "MYBISHBASH_E2E_SHARED_STATE";
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -135,7 +136,11 @@ export async function loadSharedState(userId) {
 }
 
 export async function saveSharedState(userId, state) {
-  if (isDemoMode() || isE2EAuthMockMode()) return;
+  if (isDemoMode()) return;
+  if (isE2EAuthMockMode()) {
+    window.localStorage.setItem(E2E_SHARED_STATE_KEY, JSON.stringify(state));
+    return;
+  }
   const client = requireSupabase();
 
   let firstMissingTableError = null;
@@ -345,6 +350,8 @@ function writeE2ESignupHandoffs(handoffs) {
 
 function readE2ELocalSharedState() {
   if (!isE2EAuthMockMode()) return null;
+  const savedSharedState = readE2ELocalJson(E2E_SHARED_STATE_KEY, null);
+  if (savedSharedState) return savedSharedState;
   if (window.localStorage.getItem("mybishbash.setup-complete.v1") !== "true") return null;
   return {
     version: 1,
@@ -357,6 +364,8 @@ function readE2ELocalSharedState() {
       plan: "free",
     }),
     cardPacks: readE2ELocalJson("mybishbash.card-packs.v1", []),
+    homeScreenVersions: readE2ELocalJson("mybishbash.home-screen-versions.v1", {}),
+    launcherBehaviorSettings: readE2ELocalJson("mybishbash.launcher-behavior-settings.v1", {}),
     hiddenLibraryPacks: readE2ELocalJson("mybishbash.hidden-library-packs.v1", []),
     dislikedPackCardIds: readE2ELocalJson("mybishbash.disliked-pack-card-ids.v1", []),
     globalInterruptionMode: window.localStorage.getItem("mybishbash.global-interruption-mode.v1") !== "false",

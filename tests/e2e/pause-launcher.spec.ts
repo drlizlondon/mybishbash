@@ -33,6 +33,10 @@ declare global {
 }
 
 const now = '2026-06-08T12:00:00.000Z';
+const AUTH_MOCK_KEY = 'MYBISHBASH_E2E_AUTH_MOCK';
+const AUTH_SESSION_KEY = 'MYBISHBASH_E2E_AUTH_SESSION';
+const E2E_SHARED_STATE_KEY = 'MYBISHBASH_E2E_SHARED_STATE';
+const SHARED_STATE_SEED_KEY = 'mybishbash.app-prompts-shared-state-seeded.v1';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,6 +67,36 @@ function launcherSettings(appIds: string[], enabledAppIds: string[] = []) {
     entries[id] = { appEnabled: enabledSet.has(id), useInterruptionPack: enabledSet.has(id), interruptionPaused: false, interruptionPackId: '' };
   }
   return entries;
+}
+
+function authSession(email = 'approved@example.com') {
+  const normalizedEmail = email.toLowerCase();
+  return {
+    user: {
+      id: `e2e-access-user:${normalizedEmail}`,
+      email: normalizedEmail,
+    },
+  };
+}
+
+function sharedState(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    cards: [],
+    setupComplete: true,
+    mood: 'Minimal',
+    profile: { name: 'Shared Tester', timezone: 'Europe/London' },
+    homeScreenVersions: {},
+    launcherBehaviorSettings: launcherSettings(['safari'], ['safari']),
+    cardPacks: [],
+    hiddenLibraryPacks: [],
+    dislikedPackCardIds: [],
+    globalInterruptionMode: true,
+    events: [],
+    actionCards: [],
+    updatedAt: now,
+    ...overrides,
+  };
 }
 
 /**
@@ -116,6 +150,54 @@ async function seedState(
       seededAppPauses: appPauses,
       seededTesterMode: testerMode,
       seededAccessTier: accessTier,
+    },
+  );
+}
+
+async function seedAuthenticatedSharedState(
+  page: Page,
+  {
+    localSettings = launcherSettings(['safari'], ['safari']),
+    cloudState = sharedState(),
+  }: {
+    localSettings?: Record<string, object>;
+    cloudState?: Record<string, unknown>;
+  } = {},
+) {
+  await page.addInitScript(
+    ({ keys, session, seededLocalSettings, seededCloudState }) => {
+      window.localStorage.setItem(keys.authMock, 'true');
+      window.localStorage.setItem(keys.authSession, JSON.stringify(session));
+      if (window.localStorage.getItem(keys.seed) !== 'true') {
+        window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+        window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'Shared Tester', timezone: 'Europe/London' }));
+        window.localStorage.setItem('mybishbash.cards.v1', '[]');
+        window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+        window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+        window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+        window.localStorage.setItem('mybishbash.card-packs.v1', '[]');
+        window.localStorage.setItem('mybishbash.action-cards.v1', '[]');
+        window.localStorage.setItem('mybishbash.home-screen-versions.v1', '{}');
+        window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(seededLocalSettings));
+        window.localStorage.setItem(keys.sharedState, JSON.stringify(seededCloudState));
+        window.localStorage.setItem(keys.seed, 'true');
+      }
+      window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
+      window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION = (href, metadata) => {
+        window.__MYBISHBASH_NAVIGATION_ATTEMPTS?.push({ href, metadata });
+        return true;
+      };
+    },
+    {
+      keys: {
+        authMock: AUTH_MOCK_KEY,
+        authSession: AUTH_SESSION_KEY,
+        sharedState: E2E_SHARED_STATE_KEY,
+        seed: SHARED_STATE_SEED_KEY,
+      },
+      session: authSession(),
+      seededLocalSettings: localSettings,
+      seededCloudState: cloudState,
     },
   );
 }
@@ -979,6 +1061,55 @@ test('apps-app-prompts-toggle — prompts off does not disable the app', async (
 
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toContainText('Enabled');
+});
+
+test('apps-app-prompts-toggle — prompts off survives reload and shared-state apply', async ({ page }) => {
+  const localPromptsOn = launcherSettings(['safari'], ['safari']);
+  const cloudPromptsOff = {
+    ...localPromptsOn,
+    safari: {
+      ...localPromptsOn.safari,
+      useInterruptionPack: false,
+    },
+  };
+  await seedAuthenticatedSharedState(page, {
+    localSettings: localPromptsOn,
+    cloudState: sharedState({ launcherBehaviorSettings: cloudPromptsOff }),
+  });
+
+  await page.goto('/mybishbash/apps/safari');
+  const promptsToggle = page.getByTestId('apps-interruptions-toggle-safari');
+  await expect(promptsToggle).toBeVisible({ timeout: 10000 });
+  await expect(promptsToggle).not.toBeChecked();
+
+  await promptsToggle.check();
+  await expect(promptsToggle).toBeChecked();
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) ?? '{}');
+    return state.launcherBehaviorSettings?.safari?.useInterruptionPack;
+  }, E2E_SHARED_STATE_KEY)).toBe(true);
+
+  await promptsToggle.uncheck();
+  await expect(promptsToggle).not.toBeChecked();
+  await expect.poll(async () => page.evaluate((key) => {
+    const state = JSON.parse(window.localStorage.getItem(key) ?? '{}');
+    return {
+      hasHomeScreenVersions: Boolean(state.homeScreenVersions),
+      useInterruptionPack: state.launcherBehaviorSettings?.safari?.useInterruptionPack,
+    };
+  }, E2E_SHARED_STATE_KEY)).toEqual({
+    hasHomeScreenVersions: true,
+    useInterruptionPack: false,
+  });
+
+  await page.evaluate((settings) => {
+    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(settings));
+  }, localPromptsOn);
+  await page.reload();
+
+  const reloadedToggle = page.getByTestId('apps-interruptions-toggle-safari');
+  await expect(reloadedToggle).toBeVisible({ timeout: 10000 });
+  await expect(reloadedToggle).not.toBeChecked();
 });
 
 test('home-no-global-fake-launchers — Home no longer shows all fake app shortcut buttons', async ({ page }) => {
