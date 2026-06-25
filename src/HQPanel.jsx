@@ -20,6 +20,7 @@ import {
   fetchAdminGlobalPacks,
   fetchAdminLauncherConfigs,
   fetchAdminLiveActivity,
+  fetchAdminPackAdoptionSummary,
   fetchAdminRole,
   fetchAdminUsers,
   fetchLauncherUsageSummary,
@@ -317,6 +318,7 @@ const HQContent = memo(function HQContent({
   const canEditLaunchers = ["owner", "admin"].includes(adminRole);
   const canHardDeleteLaunchers = adminRole === "owner";
   const [users, setUsers] = useState([]);
+  const [packAdoptionStats, setPackAdoptionStats] = useState([]);
   const [search, setSearch] = useState("");
   const [range, setRange] = useState("7d");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
@@ -341,12 +343,14 @@ const HQContent = memo(function HQContent({
     setLoadingStatic(true);
     setStatus("");
     try {
-      const [packsResult, usersResult] = await Promise.all([
+      const [packsResult, usersResult, packAdoptionResult] = await Promise.all([
         fetchAdminGlobalPacks(),
         fetchAdminUsers(),
+        fetchAdminPackAdoptionSummary(),
       ]);
       setAdminPacks(packsResult);
       setUsers(usersResult);
+      setPackAdoptionStats(packAdoptionResult);
       fetchAdminLauncherConfigs()
         .then(setLauncherConfigs)
         .catch((error) => console.warn("Could not load HQ launcher configs", error));
@@ -378,13 +382,14 @@ const HQContent = memo(function HQContent({
       launcherEvents: analytics.launcherEvents,
       users,
       adminPacks,
+      packAdoptionStats,
       libraryPacks,
       interruptionPacks,
       range,
       waitlist: analytics.waitlist,
       testerReports: analytics.testerReports,
     }),
-    [analytics.summary, analytics.recent, analytics.launcherEvents, analytics.waitlist, analytics.testerReports, users, adminPacks, libraryPacks, interruptionPacks, range],
+    [analytics.summary, analytics.recent, analytics.launcherEvents, analytics.waitlist, analytics.testerReports, users, adminPacks, packAdoptionStats, libraryPacks, interruptionPacks, range],
   );
 
   const mergedLaunchers = useMemo(() => mergeLauncherConfigs(launcherConfigs), [launcherConfigs]);
@@ -2314,7 +2319,8 @@ const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, 
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <MiniStat label="Active users" value={stats.activeUsers ?? 0} />
-        <MiniStat label="Activation rate" value={`${stats.activationRate ?? 0}%`} />
+        <MiniStat label="Users enabled" value={stats.usersEnabled ?? 0} />
+        <MiniStat label="Active user rate" value={`${stats.activeUserRate ?? 0}%`} />
         <MiniStat label="Interactions Generated" value={stats.interactionCount ?? 0} />
         <MiniStat label="Cards" value={entries.length} />
       </div>
@@ -2514,7 +2520,7 @@ const ChartTooltip = memo(function ChartTooltip({ active, payload, label }) {
   );
 });
 
-function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, libraryPacks, interruptionPacks, range, waitlist = [], testerReports = [] }) {
+function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, packAdoptionStats = [], libraryPacks, interruptionPacks, range, waitlist = [], testerReports = [] }) {
   const appEvents = normalizeEvents(recent);
   const launcherEvents = normalizeLauncherEvents(rawLauncherEvents);
   const events = [...appEvents, ...launcherEvents.map(mapLauncherEventToOperationalEvent)]
@@ -2581,7 +2587,7 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
   const notificationRows = eventFrequency.filter((row) => row.label.includes("notification"));
   const deviceRows = rowsFromCounts(countBy(events, (event) => event.metadata?.deviceType || event.metadata?.platform || "not_reported"));
   const userStats = buildUserStats(events, testerReports);
-  const packStats = buildPackStats(events, adminPacks, users.length);
+  const packStats = buildPackStats(events, adminPacks, users.length, packAdoptionStats);
   const activeUsersOverTime = bucketEvents(events, (bucket, event) => {
     if (event.user_id) bucket.usersSet.add(event.user_id);
   }, { usersSet: new Set() }).map((bucket) => ({ ...bucket, users: bucket.usersSet.size }));
@@ -2997,15 +3003,19 @@ function getUserActivityBadge(timestamp) {
   return { label: "inactive", className: "bg-slate-100 text-slate-600" };
 }
 
-function buildPackStats(events, packs, userCount) {
+function buildPackStats(events, packs, userCount, packAdoptionStats = []) {
   const stats = new Map();
+  const usersEnabledByPackId = new Map(
+    packAdoptionStats.map((row) => [row.pack_id, Number(row.users_enabled ?? 0)]),
+  );
   packs.forEach((pack) => {
     const packEvents = events.filter((event) => event.pack_id === pack.id || event.pack_id === pack.sourceKey);
     const activeUsers = new Set(packEvents.map((event) => event.user_id).filter(Boolean)).size;
     const activationCount = packEvents.filter((event) => event.event_type === "pack_activated").length;
     stats.set(pack.id, {
       activeUsers,
-      activationRate: percent(activeUsers, userCount),
+      usersEnabled: Math.max(usersEnabledByPackId.get(pack.id) ?? 0, usersEnabledByPackId.get(pack.sourceKey) ?? 0),
+      activeUserRate: percent(activeUsers, userCount),
       interactionCount: packEvents.length,
       trend: bucketEvents(packEvents, (bucket) => {
         bucket.value += 1;

@@ -1201,6 +1201,19 @@ export async function fetchAdminUsers() {
   return data ?? [];
 }
 
+export async function fetchAdminPackAdoptionSummary() {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_pack_adoption_summary");
+  if (error) {
+    if (["PGRST202", "42883", "42501"].includes(error.code)) {
+      console.warn("[HQ PACKS] Could not load saved pack adoption summary", error.message);
+      return [];
+    }
+    throw error;
+  }
+  return data ?? [];
+}
+
 // ── HQ access management (owner/admin only; every call is audit-logged) ─────
 
 export async function hqSetUserAccess({ email, grant, tier = "premium", expiresAt = null, reason = null, cohort = null }) {

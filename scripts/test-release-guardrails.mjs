@@ -19,6 +19,7 @@ const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import
 const generatedCoverModelSource = await readFile(new URL("../src/lib/generatedCover.js", import.meta.url), "utf8");
 const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const launcherEventsMigrationSource = await readFile(new URL("../supabase/migrations/202606130001_allow_authenticated_anonymous_launcher_events.sql", import.meta.url), "utf8");
+const hqPackAdoptionMigrationSource = await readFile(new URL("../supabase/migrations/202606250001_hq_pack_adoption_summary.sql", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -146,6 +147,10 @@ assertNoMatch("HQ auto cover copy does not imply goal or preview quote inputs", 
 assertMatch("HQ labels covers as Auto cover only", hqSource, />Auto cover<\/span>/);
 assertNoMatch("HQ does not steer authors toward manual cover uploads", hqSource, /Upload custom cover|Custom cover|No cover|Missing cover|Cover required/i);
 assertMatch("HQ pack form previews the generated cover live", hqSource, /data-testid="hq-generated-cover-preview"[\s\S]{0,120}<GeneratedPackCover pack=\{previewPack\}/);
+assertMatch("HQ pack telemetry users are labelled as active users", hqSource, /MiniStat label="Active users" value=\{stats\.activeUsers \?\? 0\}/);
+assertMatch("HQ pack adoption is labelled as users enabled", hqSource, /MiniStat label="Users enabled" value=\{stats\.usersEnabled \?\? 0\}/);
+assertMatch("HQ pack adoption loads from saved state RPC", syncSource, /fetchAdminPackAdoptionSummary[\s\S]{0,240}hq_pack_adoption_summary/);
+assertMatch("HQ pack adoption counts saved non-deleted pack cards", hqPackAdoptionMigrationSource, /state_json -> 'cards'[\s\S]{0,360}sourcePackId[\s\S]{0,240}deletedAt/);
 
 const generatedCoverTitleCases = [
   "COURAGE",
