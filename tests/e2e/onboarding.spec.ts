@@ -378,18 +378,22 @@ test('personal card suggestions appear directly without category selection', asy
   await expect(writeOwn).toBeVisible();
   const writeOwnLayout = await writeOwn.evaluate((button) => {
     const grid = document.querySelector('.onboarding-personal-card-grid');
+    const firstSuggestion = document.querySelector('[data-testid="onboarding-personal-card-suggestion"]');
     const actions = document.querySelector('.onboarding-actions');
     const buttonBox = button.getBoundingClientRect();
     const gridBox = grid?.getBoundingClientRect();
+    const suggestionBox = firstSuggestion?.getBoundingClientRect();
     const actionBox = actions?.getBoundingClientRect();
     return {
       buttonWidth: Math.round(buttonBox.width),
       gridWidth: Math.round(gridBox?.width ?? 0),
+      suggestionWidth: Math.round(suggestionBox?.width ?? 0),
       actionTop: Math.round(actionBox.top),
       buttonBottom: Math.round(buttonBox.bottom),
     };
   });
-  expect(writeOwnLayout.buttonWidth).toBeGreaterThanOrEqual(writeOwnLayout.gridWidth - 2);
+  expect(writeOwnLayout.buttonWidth).toBeLessThan(writeOwnLayout.gridWidth);
+  expect(writeOwnLayout.buttonWidth).toBeGreaterThanOrEqual(writeOwnLayout.suggestionWidth - 2);
   expect(writeOwnLayout.buttonBottom).toBeLessThanOrEqual(writeOwnLayout.actionTop);
   for (const weakCopy of [
     'Have you done something productive today?',
@@ -452,18 +456,29 @@ test('personal card setup caps selected and custom cards at 5 total', async ({ p
   await expect(page.locator('.onboarding-custom-card').getByRole('button', { name: 'Cancel' })).toBeVisible();
   const composerLayout = await page.locator('.onboarding-custom-card').evaluate((composer) => {
     const grid = document.querySelector('.onboarding-personal-card-grid');
+    const actions = document.querySelector('.onboarding-actions');
+    const input = composer.querySelector('textarea');
     const composerBox = composer.getBoundingClientRect();
     const gridBox = grid?.getBoundingClientRect();
+    const actionBox = actions?.getBoundingClientRect();
+    const inputBox = input?.getBoundingClientRect();
     return {
       composerWidth: Math.round(composerBox.width),
       gridWidth: Math.round(gridBox?.width ?? 0),
+      composerBottom: Math.round(composerBox.bottom),
+      actionTop: Math.round(actionBox?.top ?? 0),
+      inputHeight: Math.round(inputBox?.height ?? 0),
     };
   });
   expect(composerLayout.composerWidth).toBeGreaterThanOrEqual(composerLayout.gridWidth - 2);
+  expect(composerLayout.inputHeight).toBeGreaterThanOrEqual(120);
+  expect(composerLayout.composerBottom).toBeLessThanOrEqual(composerLayout.actionTop);
   await page.getByPlaceholder('Write your own reminder').fill('Have you packed tomorrow’s lunch?');
   await page.locator('.onboarding-custom-card').getByRole('button', { name: 'Add card' }).click();
   await expect(page.getByText('5 of 5 selected')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Have you packed tomorrow’s lunch?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Write my own' })).toHaveCount(0);
+  await expect(page.getByText('You’ve chosen 5 Personal Cards. Remove one to add another.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Have you stretched today?' }).click();
   await expect(page.getByText('You can choose up to five.')).toBeVisible();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./landing.css";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
 import { onboardingContent } from "./content/onboardingContent";
@@ -926,12 +926,28 @@ function ReminderIdeaGrid({
   addCustomLabel = "Add card",
 }) {
   const cleanCustomText = customCardText.trim();
+  const canAddAnotherCard = selectedCount < 5;
+  const showCustomComposer = customCardOpen && canAddAnotherCard;
+  const selectionMessage = message || (!canAddAnotherCard ? "You’ve chosen 5 Personal Cards. Remove one to add another." : "");
+  const customComposerRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!showCustomComposer) return;
+    const composer = customComposerRef.current;
+    const scrollParent = composer?.closest(".onboarding-step-body");
+    if (!composer || !scrollParent) return;
+    const composerBox = composer.getBoundingClientRect();
+    const parentBox = scrollParent.getBoundingClientRect();
+    const targetTop = scrollParent.scrollTop + composerBox.top - parentBox.top - 24;
+    scrollParent.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
+  }, [showCustomComposer]);
+
   return (
     <div className="onboarding-reminder-picker">
       <div className="onboarding-selection-count" aria-live="polite">
         <span>{selectedCount} of 5 {selectedLabel}</span>
       </div>
-      {message ? <p className="onboarding-selection-message" aria-live="polite">{message}</p> : null}
+      {selectionMessage ? <p className="onboarding-selection-message" aria-live="polite">{selectionMessage}</p> : null}
       <div className="onboarding-idea-grid onboarding-personal-card-grid" role="group" aria-label="Choose Personal Cards">
         {options.map((option) => {
           const selected = selectedIds.includes(option.id);
@@ -961,34 +977,44 @@ function ReminderIdeaGrid({
             <strong>{card.text}</strong>
           </button>
         ))}
-      </div>
-      {customCardOpen ? (
-        <div className="onboarding-custom-card">
-          <label>
-            <span>{writeOwnLabel}</span>
-            <textarea
-              value={customCardText}
-              onChange={(event) => onCustomTextChange(event.target.value)}
-              placeholder={customPlaceholder}
-              maxLength={96}
-              rows={3}
-            />
-          </label>
-          <div className="onboarding-custom-card-actions">
-            <button type="button" className="onboarding-custom-card-add" onClick={onAddCustom} disabled={!cleanCustomText}>
-              {addCustomLabel}
-            </button>
-            <button type="button" className="onboarding-custom-card-cancel" onClick={onCancelCustom}>
-              Cancel
-            </button>
+        {showCustomComposer ? (
+          <div className="onboarding-custom-card" ref={customComposerRef}>
+            <div className="onboarding-custom-card-heading">
+              <span className="onboarding-custom-card-icon" aria-hidden="true">+</span>
+              <div>
+                <strong>Write your own reminder</strong>
+                <span>Create a reminder that’s personal to you.</span>
+              </div>
+            </div>
+            <label>
+              <span className="sr-only">{writeOwnLabel}</span>
+              <textarea
+                value={customCardText}
+                onChange={(event) => onCustomTextChange(event.target.value)}
+                placeholder={customPlaceholder}
+                maxLength={96}
+                rows={4}
+              />
+            </label>
+            <div className="onboarding-custom-card-actions">
+              <button type="button" className="onboarding-custom-card-cancel" onClick={onCancelCustom}>
+                Cancel
+              </button>
+              <button type="button" className="onboarding-custom-card-add" onClick={onAddCustom} disabled={!cleanCustomText}>
+                {addCustomLabel}
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <button type="button" className="onboarding-idea-card onboarding-write-own-card" onClick={onOpenCustom}>
-          <span className="onboarding-idea-check" aria-hidden="true" />
-          <strong>{writeOwnLabel}</strong>
-        </button>
-      )}
+        ) : canAddAnotherCard ? (
+          <button type="button" className="onboarding-idea-card onboarding-write-own-card" onClick={onOpenCustom}>
+            <span className="onboarding-idea-check" aria-hidden="true">+</span>
+            <span>
+              <strong>{writeOwnLabel}</strong>
+              <small>Write your own reminder</small>
+            </span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

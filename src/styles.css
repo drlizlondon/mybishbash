@@ -8065,33 +8065,64 @@ body {
   gap: 14px;
   width: 100%;
   min-width: 0;
+  justify-items: stretch;
+  align-items: start;
 }
 
 .settings-card.apps-manage-hero.access-plan-card {
   grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
 
 .access-plan-card .settings-version-heading {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .app-shell.app-mood .access-plan-card .settings-version-heading span,
 .access-plan-card .settings-version-heading span {
   display: block;
   width: 100%;
+  max-width: 100%;
 }
 
 .access-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   width: 100%;
   min-width: 0;
+  grid-column: 1 / -1;
 }
 
 .access-plan-actions .pack-button,
 .access-plan-actions .text-button {
-  flex: 1 1 136px;
+  flex: 1 1 148px;
   min-width: min(100%, 136px);
   justify-content: center;
   text-align: center;
+}
+
+@media (max-width: 520px) {
+  .access-panel-section {
+    padding-bottom: calc(156px + env(safe-area-inset-bottom));
+  }
+
+  .access-plan-card {
+    padding-inline: 16px;
+  }
+
+  .access-plan-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .access-plan-actions .pack-button,
+  .access-plan-actions .text-button {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 .apps-row-actions .apps-pause-row-button {
@@ -12376,27 +12407,84 @@ body {
   z-index: 1;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   width: 100%;
-  min-height: 56px;
+  min-height: 104px;
+  padding: 12px 12px;
   color: #9a5145;
+}
+
+.onboarding-write-own-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--onboarding-muted);
+  font-family: var(--onboarding-font-sans);
+  font-size: 0.72rem;
+  font-weight: 580;
+  line-height: 1.25;
 }
 
 .onboarding-custom-card {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 12px;
+  grid-column: 1 / -1;
+  gap: 14px;
   width: 100%;
-  padding: 14px;
+  padding: 16px;
+  border-color: rgba(208, 100, 75, 0.48);
+  background: #fff4ee;
+  box-shadow: 0 0 0 2px rgba(208, 100, 75, 0.08);
+}
+
+.onboarding-custom-card-heading {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.onboarding-custom-card-heading strong,
+.onboarding-custom-card-heading span {
+  display: block;
+  font-family: var(--onboarding-font-sans);
+}
+
+.onboarding-custom-card-heading strong {
+  color: rgba(23, 21, 20, 0.92);
+  font-size: 0.98rem;
+  font-weight: 680;
+  line-height: 1.2;
+}
+
+.onboarding-custom-card-heading span {
+  margin-top: 4px;
+  color: var(--onboarding-muted);
+  font-size: var(--onboarding-small);
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.onboarding-custom-card-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid rgba(208, 100, 75, 0.44);
+  border-radius: 50%;
+  background: rgba(208, 100, 75, 0.1);
+  color: #bf5d45;
+  font-size: 18px;
+  font-weight: 560;
+  line-height: 1;
 }
 
 .onboarding-custom-card textarea {
   width: 100%;
-  min-height: 92px;
+  min-height: 136px;
   border: 1px solid rgba(120, 87, 65, 0.14);
-  padding: 13px;
+  padding: 14px;
   background: rgba(255, 255, 255, 0.72);
   color: rgba(21, 21, 21, 0.92);
   font: inherit;
@@ -12406,7 +12494,7 @@ body {
 
 .onboarding-custom-card-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
   gap: 10px;
 }
 
