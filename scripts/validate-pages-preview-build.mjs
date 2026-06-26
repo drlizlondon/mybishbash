@@ -37,7 +37,9 @@ assert.ok(supportedLauncherIds.length > 3, "preview validation should cover expa
 
 for (const launcherId of supportedLauncherIds) {
   const manifest = readJson(`dist/launchers/${launcherId}/manifest.webmanifest`);
-  assert.match(manifest.name, /myBishBash Test$/);
+  // Derive from the configured app name so this stays consistent with the
+  // prepare step regardless of the brand/env casing.
+  assert.match(manifest.name, new RegExp(`${escapeRegExp(previewAppName)}$`));
   assert.equal(manifest.start_url, `${previewRoot}/intercept/${launcherId}`);
   assert.equal(manifest.scope, `${previewRoot}/`);
 

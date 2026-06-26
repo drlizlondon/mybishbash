@@ -19,8 +19,8 @@ jobs:
       PAGES_PREVIEW_REPOSITORY: ${{ vars.PAGES_PREVIEW_REPOSITORY || 'drlizlondon/mybishbash-preview' }}
       PAGES_PREVIEW_ORIGIN: ${{ vars.PAGES_PREVIEW_ORIGIN || 'https://drlizlondon.github.io' }}
       PAGES_PREVIEW_BASE_PATH: ${{ vars.PAGES_PREVIEW_BASE_PATH || '/mybishbash-preview/' }}
-      PAGES_PREVIEW_APP_NAME: ${{ vars.PAGES_PREVIEW_APP_NAME || 'MyBishBash Test' }}
-      PAGES_PREVIEW_SHORT_NAME: ${{ vars.PAGES_PREVIEW_SHORT_NAME || 'BishBash Test' }}
+      PAGES_PREVIEW_APP_NAME: ${{ vars.PAGES_PREVIEW_APP_NAME || 'myBishBash Test' }}
+      PAGES_PREVIEW_SHORT_NAME: ${{ vars.PAGES_PREVIEW_SHORT_NAME || 'myBishBash Test' }}
     steps:
       - name: Checkout preview branch
         uses: actions/checkout@v4
