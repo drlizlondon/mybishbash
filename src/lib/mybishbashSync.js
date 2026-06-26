@@ -536,6 +536,8 @@ export async function fetchOwnAccessProfile(userId) {
     return {
       has_access: true,
       access_tier: grant.access_tier,
+      membership: grant.membership ?? (grant.access_tier === "premium" ? "premium" : "free"),
+      entitlement_overrides: grant.entitlement_overrides ?? null,
       access_expires_at: null,
       grant_reason: grant.grant_reason,
       cohort: grant.cohort,
@@ -548,7 +550,7 @@ export async function fetchOwnAccessProfile(userId) {
     const client = requireSupabase();
     const { data, error } = await client
       .from("user_profiles")
-      .select("has_access,access_tier,access_expires_at,is_tester")
+      .select("has_access,access_tier,membership,entitlement_overrides,access_expires_at,is_tester")
       .eq("user_id", userId)
       .maybeSingle();
     if (error) {
@@ -1216,15 +1218,31 @@ export async function fetchAdminPackAdoptionSummary() {
 
 // ── HQ access management (owner/admin only; every call is audit-logged) ─────
 
-export async function hqSetUserAccess({ email, grant, tier = "premium", expiresAt = null, reason = null, cohort = null }) {
+// Grant/revoke membership by email. Membership is commercial only
+// (free|founder|premium); is_tester is an orthogonal flag. entitlementOverrides
+// is an optional object merged over the membership defaults.
+export async function hqSetUserAccess({
+  email,
+  grant,
+  membership = "premium",
+  expiresAt = null,
+  reason = null,
+  cohort = null,
+  isTester = null,
+  testerGroup = null,
+  entitlementOverrides = null,
+}) {
   const client = requireSupabase();
   const { data, error } = await client.rpc("hq_set_user_access", {
     p_email: email,
     p_grant: grant,
-    p_tier: tier,
+    p_membership: membership,
     p_expires_at: expiresAt,
     p_reason: reason,
     p_cohort: cohort,
+    p_is_tester: isTester,
+    p_tester_group: testerGroup,
+    p_entitlement_overrides: entitlementOverrides,
   });
   if (error) throw error;
   return data;
@@ -1234,26 +1252,28 @@ export async function hqCreateAccessCode({
   code,
   label = null,
   maxUses = null,
-  grantsTier = "premium",
+  grantsMembership = "premium",
   grantReason = null,
   cohort = null,
   grantsDurationDays = null,
   expiresAt = null,
   grantsTester = false,
   testerGroup = null,
+  entitlementOverrides = null,
 }) {
   const client = requireSupabase();
   const { data, error } = await client.rpc("hq_create_access_code", {
     p_code: code,
     p_label: label,
     p_max_uses: maxUses,
-    p_grants_tier: grantsTier,
+    p_grants_membership: grantsMembership,
     p_grant_reason: grantReason,
     p_cohort: cohort,
     p_grants_duration_days: grantsDurationDays,
     p_expires_at: expiresAt,
     p_grants_tester: grantsTester,
     p_tester_group: testerGroup,
+    p_entitlement_overrides: entitlementOverrides,
   });
   if (error) throw error;
   return data;
@@ -1311,7 +1331,7 @@ export async function fetchAdminAnalytics() {
       .limit(500),
     client
       .from("launch_signups")
-      .select("id,email,country,created_at")
+      .select("id,email,country,source_code,created_at")
       .order("created_at", { ascending: false })
       .limit(1000),
     client

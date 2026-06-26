@@ -75,7 +75,7 @@ import {
   claimAccessCodeForCurrentUser,
   touchUserProfile,
 } from "./lib/mybishbashSync";
-import { ACCESS_TIERS, CAPABILITIES, getCapabilities, getEffectiveTier, isAccessActive } from "./lib/accessCapabilities";
+import { ACCESS_TIERS, getEffectiveTier, isAccessActive, resolveEntitlements, canAddUnder, isUnlimited } from "./lib/accessCapabilities";
 import ExplorePanel from "./ExplorePanel";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
@@ -1960,13 +1960,21 @@ function App() {
     route.versionId &&
     route.versionId === shellSettingsVersionId &&
     isKnownLauncher(route.versionId);
-  const canUsePremiumContent = useMemo(
-    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT),
-    [accessProfile],
+  // Single source of truth for limits/flags. null accessProfile resolves to the
+  // free tier, so premium installs fail CLOSED. Admin is orthogonal.
+  const entitlements = useMemo(
+    () => resolveEntitlements(accessProfile ?? {}, { isAdmin }),
+    [accessProfile, isAdmin],
   );
-  const canUseMultipleApps = useMemo(
-    () => getCapabilities(accessProfile ?? {}).has(CAPABILITIES.CAN_USE_MULTIPLE_APPS),
-    [accessProfile],
+  const canUsePremiumContent = entitlements.premiumPacksEnabled;
+  // "Unlimited apps" (paid). Free is still limited — its exact cap
+  // (maxConnectedApps) is enforced at add time via canAddAnotherApp.
+  const canUseMultipleApps = isUnlimited(entitlements.maxConnectedApps);
+  // Personal-card count for the maxPersonalCards entitlement (excludes pack
+  // cards, deleted cards, and commitments).
+  const personalCardCount = useMemo(
+    () => cards.filter((card) => !card.sourcePackId && !card.deletedAt && !isCommitmentCard(card)).length,
+    [cards],
   );
   const activeInterceptionVersion = useMemo(
     () =>
@@ -7008,6 +7016,7 @@ function App() {
                   isTester={testerStatus?.is_tester === true}
                   isShellContext={isShellAppSettingsRoute}
                   canUseMultipleApps={canUseMultipleApps}
+                  maxConnectedApps={entitlements.maxConnectedApps}
                   onOpenMyBishBash={() => {
                     setShellSettingsVersionId(null);
                     setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
@@ -7258,6 +7267,8 @@ function App() {
           initialCard={editingCard}
           initialKind={composerInitialKind}
           initialDraft={composerInitialDraft}
+          personalCardCount={personalCardCount}
+          maxPersonalCards={entitlements.maxPersonalCards}
           onClose={() => {
             setEditingId(null);
             setComposerInitialKind("personal");
@@ -7516,8 +7527,9 @@ function parseBulkCards(text) {
   return cards;
 }
 
-function Composer({ initialCard, initialKind = "personal", initialDraft = null, onClose, onSave }) {
+function Composer({ initialCard, initialKind = "personal", initialDraft = null, personalCardCount = 0, maxPersonalCards = null, onClose, onSave }) {
   const commitmentInputRef = useRef(null);
+  const isEditingExisting = Boolean(initialCard);
   const initialCardKind = initialCard ? (isCommitmentCard(initialCard) ? "commitment" : "personal") : initialKind;
   const [cardKind, setCardKind] = useState(initialCardKind);
   const [promptText, setPromptText] = useState(initialCard?.promptText ?? initialDraft?.promptText ?? "");
@@ -7538,6 +7550,14 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
   const bulkCardsCount = isBulkMode ? parseBulkCards(bulkText).length : 0;
   const trimmedCommitment = promptText.trim();
   const isCommitmentMode = cardKind === "commitment";
+  // Free-tier personal-card cap. Only applies to NEW personal cards (never to
+  // edits or commitments). null = unlimited.
+  const personalCardsAdding = isCommitmentMode ? 0 : isBulkMode ? Math.max(bulkCardsCount, 1) : 1;
+  const personalLimitReached =
+    !isEditingExisting &&
+    !isCommitmentMode &&
+    !isUnlimited(maxPersonalCards) &&
+    personalCardCount + personalCardsAdding > maxPersonalCards;
   const commitmentTimingConfig = getCommitmentTimingConfig(commitmentTimingMode);
   const commitmentCustomTimeMissing = commitmentTimingMode === "custom" && (!commitmentCustomStartTime || !commitmentCustomEndTime);
   const commitmentCheckInTimeMissing = commitmentCheckInEnabled && !commitmentCheckInTime;
@@ -7564,6 +7584,11 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
         frequency: "once_daily",
         timingWindows: commitmentTimingConfig.timingWindows,
       });
+      return;
+    }
+
+    if (personalLimitReached) {
+      setShowValidation(true);
       return;
     }
 
@@ -7921,10 +7946,16 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
                 ))}
               </div>
             </div>
+            {personalLimitReached ? (
+              <p className="composer-hint" data-testid="personal-card-limit-notice" style={{ color: "#b91c1c" }}>
+                You’ve reached your plan’s limit of {maxPersonalCards} personal cards. Upgrade to add more.
+              </p>
+            ) : null}
             <button
               type="submit"
               className="save-button"
               data-testid="save-card-button"
+              disabled={personalLimitReached}
             >
               Save MyBishBash
             </button>
@@ -9970,6 +10001,7 @@ function AppsPanel({
   isTester = false,
   isShellContext = false,
   canUseMultipleApps = false,
+  maxConnectedApps = 1,
   onOpenMyBishBash,
 }) {
   const [showAccessScreen, setShowAccessScreen] = useState(false);
@@ -10005,7 +10037,9 @@ function AppsPanel({
     : null;
   const enabledStatuses = liveProtectedAppStatuses.filter((status) => status.protectedOn);
   const pendingSetupStatuses = liveProtectedAppStatuses.filter((status) => status.pendingSetup && !status.protectedOn);
-  const canAddAnotherApp = canUseMultipleApps || enabledStatuses.length < 1;
+  // Entitlement-driven cap: free tier allows maxConnectedApps (e.g. 2), paid is
+  // unlimited (null → canAddUnder always true).
+  const canAddAnotherApp = canAddUnder(enabledStatuses.length, maxConnectedApps);
   const activeAppForSwitch = enabledStatuses[0] ?? null;
 
   function openLauncherSetup(version) {

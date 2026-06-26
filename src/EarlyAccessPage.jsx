@@ -10,6 +10,43 @@ const HOME_HREF = `${import.meta.env.BASE_URL || "/"}`
   .replace(/\/$/, "/");
 const BRAND_LOGO_SRC = `${HOME_HREF}icons/mybishbash-cover.png`;
 
+// Campaign/audience attribution code (e.g. bishsocial). Captured from the
+// signup link so we can see where interest comes from, persisted across
+// landing navigation, and editable as a fallback. Stored normalized server-side.
+const WAITLIST_SOURCE_STORAGE_KEY = "mybishbash.waitlist-source";
+const SOURCE_QUERY_KEYS = ["ref", "source", "code", "utm_source"];
+
+function readWaitlistSourceFromUrl() {
+  if (typeof window === "undefined") return "";
+  try {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of SOURCE_QUERY_KEYS) {
+      const value = params.get(key);
+      if (value && value.trim()) return value.trim();
+    }
+  } catch {
+    /* ignore malformed query strings */
+  }
+  return "";
+}
+
+function loadInitialWaitlistSource() {
+  const fromUrl = readWaitlistSourceFromUrl();
+  if (fromUrl) {
+    try {
+      window.localStorage.setItem(WAITLIST_SOURCE_STORAGE_KEY, fromUrl);
+    } catch {
+      /* storage may be unavailable */
+    }
+    return fromUrl;
+  }
+  try {
+    return window.localStorage.getItem(WAITLIST_SOURCE_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 const PINNED_COUNTRIES = ["United Kingdom", "United States of America"];
 const FALLBACK_COUNTRIES = [
   "Afghanistan",
@@ -469,8 +506,18 @@ function EarlyAccessPageContent() {
     age_range: "",
     wants_beta_testing: false,
     consent_launch_updates: false,
+    source_code: "",
   });
   const [status, setStatus] = useState("idle");
+
+  // Capture the attribution code from the link (?ref=/?source=/?code=) once on
+  // mount, without clobbering anything the visitor has typed.
+  useEffect(() => {
+    const captured = loadInitialWaitlistSource();
+    if (captured) {
+      setForm((current) => (current.source_code ? current : { ...current, source_code: captured }));
+    }
+  }, []);
   const [error, setError] = useState("");
   const submitLockRef = useRef(false);
 
@@ -521,6 +568,7 @@ function EarlyAccessPageContent() {
       main_distraction_app: mainDistractionApp || null,
       wants_beta_testing: form.wants_beta_testing,
       consent_launch_updates: form.consent_launch_updates,
+      source_code: form.source_code.trim() || null,
     };
 
     let submitResult = null;
@@ -713,6 +761,20 @@ function EarlyAccessPageContent() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="early-field">
+                  <FieldLabel htmlFor="early-source">
+                    Referral / campaign code <em>(optional)</em>
+                  </FieldLabel>
+                  <input
+                    id="early-source"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="e.g. bishsocial"
+                    value={form.source_code}
+                    onChange={(event) => updateField("source_code", event.target.value)}
+                  />
                 </div>
 
                 <label className="early-checkbox-row">

@@ -2,17 +2,23 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ACCESS_TIERS,
+  MEMBERSHIPS,
+  MEMBERSHIP_ENTITLEMENTS,
   CAPABILITIES,
   getCapabilities,
-  getEffectiveTier,
+  getMembership,
   hasCapability,
   isAccessActive,
+  resolveEntitlements,
+  isUnlimited,
+  canAddUnder,
+  isWithinLimit,
 } from "../src/lib/accessCapabilities.js";
 
 const NOW = new Date("2026-06-12T12:00:00Z");
 const PAST = "2026-01-01T00:00:00Z";
 const FUTURE = "2026-12-31T00:00:00Z";
+const opts = { now: NOW };
 
 // ── Active access mirrors public.has_active_access() ────────────────────────
 
@@ -23,52 +29,83 @@ assert.equal(isAccessActive({ has_access: true, access_expires_at: PAST }, NOW),
 assert.equal(isAccessActive({}, NOW), true, "legacy profile without access columns keeps working");
 assert.equal(isAccessActive({ has_access: true, access_expires_at: "not-a-date" }, NOW), true, "malformed expiry does not lock users out");
 
-// ── Effective tier: expired Founding Access degrades to Free Core ───────────
+// ── Effective membership: expired paid membership degrades to free ──────────
 
-assert.equal(getEffectiveTier({ access_tier: "founding_access", has_access: true }, NOW), ACCESS_TIERS.FOUNDING_ACCESS);
-assert.equal(getEffectiveTier({ access_tier: "founding_access", has_access: true, access_expires_at: FUTURE }, NOW), ACCESS_TIERS.FOUNDING_ACCESS);
-assert.equal(getEffectiveTier({ access_tier: "founding_access", has_access: true, access_expires_at: PAST }, NOW), ACCESS_TIERS.FREE_CORE, "expired Founding Access degrades to Free Core");
-assert.equal(getEffectiveTier({ access_tier: "free_core", has_access: true }, NOW), ACCESS_TIERS.FREE_CORE);
-assert.equal(getEffectiveTier({ access_tier: "premium", has_access: true }, NOW), ACCESS_TIERS.FOUNDING_ACCESS, "legacy premium maps to Founding Access");
-assert.equal(getEffectiveTier({ access_tier: "free", has_access: true }, NOW), ACCESS_TIERS.FREE_CORE, "legacy free maps to Free Core");
-assert.equal(getEffectiveTier({}, NOW), ACCESS_TIERS.FREE_CORE, "missing tier defaults to Free Core");
-assert.equal(getEffectiveTier({ access_tier: "nonsense" }, NOW), ACCESS_TIERS.FREE_CORE, "unknown tier values fail safe to Free Core");
+assert.equal(getMembership({ membership: "premium", has_access: true }, NOW), MEMBERSHIPS.PREMIUM);
+assert.equal(getMembership({ membership: "founder", has_access: true }, NOW), MEMBERSHIPS.FOUNDER);
+assert.equal(getMembership({ membership: "premium", has_access: true, access_expires_at: PAST }, NOW), MEMBERSHIPS.FREE, "expired premium degrades to free");
+assert.equal(getMembership({ membership: "founder", has_access: false }, NOW), MEMBERSHIPS.FREE, "revoked founder degrades to free");
+assert.equal(getMembership({ access_tier: "premium", has_access: true }, NOW), MEMBERSHIPS.PREMIUM, "legacy premium tier maps to premium membership");
+assert.equal(getMembership({}, NOW), MEMBERSHIPS.FREE, "missing membership defaults to free");
+assert.equal(getMembership({ membership: "nonsense" }, NOW), MEMBERSHIPS.FREE, "unknown membership fails safe to free");
 
-// ── Capability sets ──────────────────────────────────────────────────────────
+// ── Entitlements: membership defaults are the single source of truth ────────
 
-const freeCapabilities = getCapabilities({ access_tier: "free_core", has_access: true }, NOW);
-const foundingAccessCapabilities = getCapabilities({ access_tier: "founding_access", has_access: true }, NOW);
+const freeEnt = resolveEntitlements({ membership: "free", has_access: true }, opts);
+const founderEnt = resolveEntitlements({ membership: "founder", has_access: true }, opts);
+const premiumEnt = resolveEntitlements({ membership: "premium", has_access: true }, opts);
 
-// Free Core keeps the main MyBishBash experience. Multiple additional apps
-// and future premium content are Founding Access capabilities.
-for (const capability of [
-  CAPABILITIES.CAN_CONSUME_CONTENT,
-  CAPABILITIES.CAN_USE_COMMITMENTS,
-  CAPABILITIES.CAN_USE_ADVANCED_SCHEDULING,
-  CAPABILITIES.CAN_CREATE_CARDS,
-  CAPABILITIES.CAN_CREATE_PACKS,
-]) {
-  assert.equal(freeCapabilities.has(capability), true, `free tier keeps ${capability}`);
-}
+assert.equal(freeEnt.maxConnectedApps, 2, "free allows 2 connected apps");
+assert.equal(freeEnt.maxPersonalCards, 5, "free allows 5 personal cards");
+assert.equal(freeEnt.premiumPacksEnabled, false, "free has no premium packs");
+assert.equal(isUnlimited(founderEnt.maxConnectedApps), true, "founder apps unlimited");
+assert.equal(founderEnt.premiumPacksEnabled, true, "founder gets premium packs");
+assert.equal(premiumEnt.premiumPacksEnabled, true, "premium gets premium packs");
+assert.deepEqual(
+  { a: founderEnt.maxConnectedApps, b: founderEnt.premiumPacksEnabled },
+  { a: premiumEnt.maxConnectedApps, b: premiumEnt.premiumPacksEnabled },
+  "founder and premium share entitlements at launch",
+);
 
-assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), false, "free tier uses one additional app");
-assert.equal(foundingAccessCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), true, "Founding Access unlocks more apps");
-assert.equal(freeCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), false, "publishing is born premium-gated");
-assert.equal(foundingAccessCapabilities.has(CAPABILITIES.CAN_PUBLISH_PACKS), true, "Founding Access grants publishing");
+// Expired paid membership degrades to free entitlements.
+const expiredPremium = resolveEntitlements({ membership: "premium", has_access: true, access_expires_at: PAST }, opts);
+assert.equal(expiredPremium.premiumPacksEnabled, false, "expired premium loses premium packs");
+assert.equal(expiredPremium.maxConnectedApps, 2, "expired premium falls back to free app cap");
 
-for (const capability of freeCapabilities) {
-  assert.equal(foundingAccessCapabilities.has(capability), true, `Founding Access is a superset of Free Core (${capability})`);
-}
+// ── Tester and admin are orthogonal ──────────────────────────────────────────
 
+const freeTester = resolveEntitlements({ membership: "free", has_access: true, is_tester: true }, opts);
+assert.equal(freeTester.membership, MEMBERSHIPS.FREE, "tester does not change membership");
+assert.equal(freeTester.canUseExperimentalFeatures, true, "tester unlocks experimental features");
+assert.equal(freeTester.premiumPacksEnabled, false, "tester does not unlock premium packs");
+assert.equal(resolveEntitlements({ membership: "free", has_access: true }, opts).canUseExperimentalFeatures, false, "non-tester has no experimental access");
+assert.equal(resolveEntitlements({ membership: "premium", has_access: true }, { ...opts, isAdmin: true }).canAccessHq, true, "admin flag grants HQ access");
+assert.equal(premiumEnt.canAccessHq, false, "membership alone does not grant HQ access");
+
+// ── Per-account entitlement overrides merge over defaults ────────────────────
+
+const overridden = resolveEntitlements({ membership: "free", has_access: true, entitlement_overrides: { maxPersonalCards: 50, premiumPacksEnabled: true } }, opts);
+assert.equal(overridden.maxPersonalCards, 50, "override raises personal card cap");
+assert.equal(overridden.premiumPacksEnabled, true, "override can enable premium packs for a free user");
+assert.equal(overridden.maxConnectedApps, 2, "non-overridden keys keep membership default");
+const stringOverride = resolveEntitlements({ membership: "free", has_access: true, entitlement_overrides: '{"maxConnectedApps": null}' }, opts);
+assert.equal(isUnlimited(stringOverride.maxConnectedApps), true, "string JSON overrides parse and apply");
+
+// ── Numeric limit helpers ────────────────────────────────────────────────────
+
+assert.equal(canAddUnder(1, 2), true, "can add a 2nd item under a cap of 2");
+assert.equal(canAddUnder(2, 2), false, "cannot add a 3rd item under a cap of 2");
+assert.equal(canAddUnder(99, null), true, "unlimited never blocks");
+assert.equal(isWithinLimit(2, 2), true, "2 items within a cap of 2");
+assert.equal(isWithinLimit(3, 2), false, "3 items exceeds a cap of 2");
+
+// ── Capability shim still maps onto entitlements ─────────────────────────────
+
+const freeCapabilities = getCapabilities({ membership: "free", has_access: true }, opts);
+const paidCapabilities = getCapabilities({ membership: "premium", has_access: true }, opts);
+
+assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), true, "free (2 apps) is still 'multiple apps' under the shim");
+assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT), false, "free has no premium content");
+assert.equal(paidCapabilities.has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT), true, "paid unlocks premium content");
 assert.equal(
-  hasCapability({ access_tier: "founding_access", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_PUBLISH_PACKS, NOW),
+  hasCapability({ membership: "premium", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_USE_PREMIUM_CONTENT, opts),
   false,
-  "expired Founding Access loses Founding Access capabilities",
+  "expired premium loses premium content",
 );
 assert.equal(
-  hasCapability({ access_tier: "founding_access", has_access: true, access_expires_at: PAST }, CAPABILITIES.CAN_CREATE_PACKS, NOW),
+  hasCapability({ membership: "free", has_access: true, is_tester: true }, CAPABILITIES.CAN_USE_EXPERIMENTAL_FEATURES, opts),
   true,
-  "expired Founding Access keeps Free Core capabilities",
+  "tester capability flows through the shim",
 );
 
 // ── Source-shape guardrails ──────────────────────────────────────────────────

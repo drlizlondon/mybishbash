@@ -82,6 +82,8 @@ const NAV_ITEMS = [
   "retention",
   "tester_reports",
   "users",
+  "memberships",
+  "access_codes",
   "packs",
   "analytics",
   "events",
@@ -95,6 +97,8 @@ const NAV_LABELS = {
   retention: "User Retention",
   tester_reports: "Tester Reports",
   users: "User Timelines",
+  memberships: "Memberships",
+  access_codes: "Access Codes",
   packs: "Packs",
   analytics: "Advanced Analytics",
   events: "Events",
@@ -614,6 +618,8 @@ const HQContent = memo(function HQContent({
         {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
         {activeView === "tester_reports" ? <TesterReportsPage /> : null}
         {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
+        {activeView === "memberships" ? <MembershipsPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
+        {activeView === "access_codes" ? <AccessCodesPage onChanged={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
         {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
         {activeView === "events" ? (
           <EventsPage
@@ -818,9 +824,10 @@ const RecruitmentPage = memo(function RecruitmentPage({ telemetry }) {
       </section>
       <FunnelPanel funnel={telemetry.funnel} />
       <section className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-        <LiveActivityList events={telemetry.meaningfulEvents.slice(0, 8)} />
+        <DistributionPanel title="Waitlist by Source" rows={telemetry.waitlistSources} />
         <RetentionSnapshot telemetry={telemetry} />
       </section>
+      <LiveActivityList events={telemetry.meaningfulEvents.slice(0, 8)} />
     </div>
   );
 });
@@ -1711,7 +1718,9 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
         subtitle="Individual adoption paths: signup, onboarding, launcher install, interruptions, Do Something Else, and action-card completion."
       />
       {canManageAccess ? (
-        <AccessManagementPanel onAccessChanged={onUserUpdated} setStatus={setStatus} />
+        <p className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-slate-600">
+          Manage codes in <span className="font-semibold">Access Codes</span> and grant memberships in <span className="font-semibold">Memberships</span>. Per-user controls remain on each card below.
+        </p>
       ) : null}
       <div className="grid gap-2 md:grid-cols-[1fr_auto]">
         <input
@@ -1743,7 +1752,7 @@ const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, set
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{user.is_tester ? `Tester${user.tester_group ? ` · ${user.tester_group}` : ""}` : "Not tester"}</span>
                   <span className={`rounded-full px-2.5 py-1 ${user.has_access === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{user.has_access === false ? "No access" : "Access granted"}</span>
                   <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">
-                    {user.access_tier === "premium" ? "Premium" : "Free"}
+                    {formatMembership(user.membership ?? user.access_tier)}
                     {user.access_expires_at ? ` · until ${formatDate(user.access_expires_at)}` : ""}
                     {user.grant_reason ? ` · ${user.grant_reason}` : ""}
                   </span>
@@ -1840,13 +1849,16 @@ function describeAccessResult(result, email) {
 }
 
 const AccessUserControls = memo(function AccessUserControls({ user, setStatus, onAccessChanged }) {
+  const initialMembership = user.membership ?? (user.access_tier === "premium" ? "premium" : "free");
+  const [membership, setMembership] = useState(initialMembership);
   const [expiresAt, setExpiresAt] = useState(user.access_expires_at ? String(user.access_expires_at).slice(0, 10) : "");
   const [reason, setReason] = useState(user.grant_reason ?? "");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    setMembership(user.membership ?? (user.access_tier === "premium" ? "premium" : "free"));
     setExpiresAt(user.access_expires_at ? String(user.access_expires_at).slice(0, 10) : "");
     setReason(user.grant_reason ?? "");
-  }, [user.access_expires_at, user.grant_reason]);
+  }, [user.membership, user.access_tier, user.access_expires_at, user.grant_reason]);
 
   async function applyAccess(grant) {
     if (!user.email) {
@@ -1855,11 +1867,11 @@ const AccessUserControls = memo(function AccessUserControls({ user, setStatus, o
     }
     try {
       setBusy(true);
-      setStatus?.(grant ? "Granting access..." : "Revoking access...");
+      setStatus?.(grant ? "Granting membership..." : "Revoking access...");
       const result = await hqSetUserAccess({
         email: user.email,
         grant,
-        tier: "premium",
+        membership,
         expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
         reason: reason.trim() || null,
       });
@@ -1872,27 +1884,38 @@ const AccessUserControls = memo(function AccessUserControls({ user, setStatus, o
     }
   }
 
+  const currentMembership = user.membership ?? (user.access_tier === "premium" ? "premium" : "free");
+  const isActiveGrant = user.has_access !== false && currentMembership !== "free";
+
   return (
     <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Access</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Membership</p>
           <p className="text-xs text-slate-600">
-            {user.has_access === false ? "Revoked" : user.access_tier === "premium" ? "Premium" : "Free"}
+            {user.has_access === false ? "Revoked" : formatMembership(currentMembership)}
             {user.access_expires_at ? ` until ${formatDate(user.access_expires_at)}` : ""}
             {user.cohort ? ` · ${user.cohort}` : ""}
           </p>
         </div>
         <div className="flex gap-2">
           <button type="button" disabled={busy} onClick={() => applyAccess(true)} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
-            {user.access_tier === "premium" && user.has_access !== false ? "Update grant" : "Grant premium"}
+            {isActiveGrant ? "Update grant" : `Grant ${formatMembership(membership)}`}
           </button>
           <button type="button" disabled={busy} onClick={() => applyAccess(false)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700">
             Revoke
           </button>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <label className="text-xs text-slate-600">
+          Membership
+          <select value={membership} onChange={(event) => setMembership(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm">
+            {MEMBERSHIP_OPTIONS.map((option) => (
+              <option key={option} value={option}>{formatMembership(option)}</option>
+            ))}
+          </select>
+        </label>
         <label className="text-xs text-slate-600">
           Expires (blank = lifetime)
           <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
@@ -1906,22 +1929,169 @@ const AccessUserControls = memo(function AccessUserControls({ user, setStatus, o
   );
 });
 
+const MEMBERSHIP_OPTIONS = ["free", "founder", "premium"];
+
+function formatMembership(value) {
+  const membership = MEMBERSHIP_OPTIONS.includes(value)
+    ? value
+    : value === "premium"
+      ? "premium"
+      : "free";
+  return membership.charAt(0).toUpperCase() + membership.slice(1);
+}
+
+// Parse the optional entitlement-override JSON field. Returns { ok, value, error }.
+function parseEntitlementOverrides(raw) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return { ok: true, value: null };
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ok: true, value: parsed };
+    }
+    return { ok: false, error: "Entitlement overrides must be a JSON object." };
+  } catch {
+    return { ok: false, error: "Entitlement overrides must be valid JSON, e.g. {\"maxPersonalCards\": 50}." };
+  }
+}
+
 const EMPTY_CODE_FORM = {
   code: "",
   label: "",
   maxUses: "",
+  grantsMembership: "premium",
   grantReason: "",
   cohort: "",
   durationDays: "",
+  expiresAt: "",
   grantsTester: false,
   testerGroup: "",
+  entitlementOverrides: "",
 };
 
-const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChanged, setStatus }) {
+// ── Memberships / Entitlements: grant a membership by email (orthogonal tester)
+
+const MembershipsPage = memo(function MembershipsPage({ users, telemetry, onUserUpdated, setStatus, canManageAccess = false }) {
+  useRenderDiagnostics("MembershipsPage");
   const [email, setEmail] = useState("");
+  const [membership, setMembership] = useState("premium");
   const [expiresAt, setExpiresAt] = useState("");
   const [reason, setReason] = useState("");
   const [cohort, setCohort] = useState("");
+  const [grantTester, setGrantTester] = useState(false);
+  const [overrides, setOverrides] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submitAccess(grant) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setStatus?.("Enter an email address first.");
+      return;
+    }
+    const parsedOverrides = parseEntitlementOverrides(overrides);
+    if (!parsedOverrides.ok) {
+      setStatus?.(parsedOverrides.error);
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.(grant ? "Granting membership..." : "Revoking access...");
+      const result = await hqSetUserAccess({
+        email: trimmedEmail,
+        grant,
+        membership,
+        expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
+        reason: reason.trim() || null,
+        cohort: cohort.trim() || null,
+        isTester: grant ? grantTester : null,
+        entitlementOverrides: grant ? parsedOverrides.value : null,
+      });
+      await onUserUpdated?.();
+      setStatus?.(grant ? describeAccessResult(result, trimmedEmail) : `Access revoked for ${trimmedEmail}.`);
+      setEmail("");
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update membership.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const membershipCounts = useMemo(() => {
+    const counts = { free: 0, founder: 0, premium: 0, tester: 0 };
+    for (const user of users ?? []) {
+      const value = user.membership ?? (user.access_tier === "premium" ? "premium" : "free");
+      counts[value] = (counts[value] ?? 0) + 1;
+      if (user.is_tester) counts.tester += 1;
+    }
+    return counts;
+  }, [users]);
+
+  if (!canManageAccess) {
+    return <EmptyState title="Read-only role." body="Owner or admin role required to manage memberships." />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Memberships & Entitlements"
+        subtitle="Membership is commercial only (Free / Founder / Premium). Tester is an orthogonal beta flag. Entitlements are resolved from membership defaults plus optional overrides. Every change is audit-logged."
+      />
+      <div className="grid gap-2 sm:grid-cols-4">
+        <MiniStat label="Free" value={membershipCounts.free} />
+        <MiniStat label="Founder" value={membershipCounts.founder} />
+        <MiniStat label="Premium" value={membershipCounts.premium} />
+        <MiniStat label="Testers" value={membershipCounts.tester} />
+      </div>
+      <GlassPanel title="Grant Membership" subtitle="By email — applies immediately, or on signup if the account does not exist yet.">
+        <div className="grid gap-2">
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@example.com" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <div className="grid gap-2 sm:grid-cols-4">
+            <label className="text-xs text-slate-600">
+              Membership
+              <select value={membership} onChange={(event) => setMembership(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm">
+                {MEMBERSHIP_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{formatMembership(option)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-600">
+              Expires (blank = lifetime)
+              <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Reason
+              <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="press, founder, promo..." className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Cohort
+              <input value={cohort} onChange={(event) => setCohort(event.target.value)} placeholder="founding-2026" className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={grantTester} onChange={(event) => setGrantTester(event.target.checked)} />
+            Also enable tester mode (orthogonal to membership)
+          </label>
+          <label className="text-xs text-slate-600">
+            Entitlement overrides (optional JSON)
+            <textarea value={overrides} onChange={(event) => setOverrides(event.target.value)} placeholder={'{"maxPersonalCards": 50, "maxConnectedApps": null}'} rows={2} className="mt-1 w-full rounded-xl border border-violet-100 bg-white px-3 py-2 font-mono text-xs" />
+          </label>
+          <div className="flex gap-2">
+            <button type="button" disabled={busy} onClick={() => submitAccess(true)} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Grant {formatMembership(membership)}</button>
+            <button type="button" disabled={busy} onClick={() => submitAccess(false)} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-700">Revoke access</button>
+          </div>
+        </div>
+      </GlassPanel>
+      <p className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-slate-600">
+        Per-user membership, tester, and entitlement override controls remain on each card in <span className="font-semibold">User Timelines</span>.
+      </p>
+    </div>
+  );
+});
+
+// ── Access Codes: invite codes that grant a membership (and optionally tester)
+
+const AccessCodesPage = memo(function AccessCodesPage({ onChanged, setStatus, canManageAccess = false }) {
+  useRenderDiagnostics("AccessCodesPage");
   const [busy, setBusy] = useState(false);
   const [codes, setCodes] = useState([]);
   const [codeForm, setCodeForm] = useState(EMPTY_CODE_FORM);
@@ -1935,37 +2105,15 @@ const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChan
   }, [setStatus]);
   useEffect(() => { loadCodes(); }, [loadCodes]);
 
-  async function submitAccess(grant) {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      setStatus?.("Enter an email address first.");
-      return;
-    }
-    try {
-      setBusy(true);
-      setStatus?.(grant ? "Granting access..." : "Revoking access...");
-      const result = await hqSetUserAccess({
-        email: trimmedEmail,
-        grant,
-        tier: "premium",
-        expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
-        reason: reason.trim() || null,
-        cohort: cohort.trim() || null,
-      });
-      await onAccessChanged?.();
-      setStatus?.(grant ? describeAccessResult(result, trimmedEmail) : `Access revoked for ${trimmedEmail}.`);
-      setEmail("");
-    } catch (error) {
-      setStatus?.(error?.message ?? "Could not update access.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function submitCode() {
     const trimmedCode = codeForm.code.trim();
     if (!trimmedCode) {
       setStatus?.("Enter a code first.");
+      return;
+    }
+    const parsedOverrides = parseEntitlementOverrides(codeForm.entitlementOverrides);
+    if (!parsedOverrides.ok) {
+      setStatus?.(parsedOverrides.error);
       return;
     }
     try {
@@ -1975,14 +2123,18 @@ const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChan
         code: trimmedCode,
         label: codeForm.label.trim() || null,
         maxUses: codeForm.maxUses ? Number(codeForm.maxUses) : null,
+        grantsMembership: codeForm.grantsMembership,
         grantReason: codeForm.grantReason.trim() || null,
         cohort: codeForm.cohort.trim() || null,
         grantsDurationDays: codeForm.durationDays ? Number(codeForm.durationDays) : null,
+        expiresAt: accessExpiryToIso(codeForm.expiresAt),
         grantsTester: codeForm.grantsTester,
         testerGroup: codeForm.grantsTester ? (codeForm.testerGroup.trim() || null) : null,
+        entitlementOverrides: parsedOverrides.value,
       });
       setCodeForm(EMPTY_CODE_FORM);
       await loadCodes();
+      await onChanged?.();
       setStatus?.(`Access code ${trimmedCode.toUpperCase()} created.`);
     } catch (error) {
       setStatus?.(error?.message ?? "Could not create the access code.");
@@ -2008,37 +2160,34 @@ const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChan
     setCodeForm((previous) => ({ ...previous, [field]: value }));
   }
 
+  if (!canManageAccess) {
+    return <EmptyState title="Read-only role." body="Owner or admin role required to manage access codes." />;
+  }
+
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <GlassPanel title="Grant Access" subtitle="By email — applies immediately, or on signup if the account does not exist yet. Every change is audit-logged.">
-        <div className="grid gap-2">
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@example.com" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
-          <div className="grid gap-2 sm:grid-cols-3">
-            <label className="text-xs text-slate-600">
-              Expires (blank = lifetime)
-              <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs text-slate-600">
-              Reason
-              <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="press, founder, promo..." className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs text-slate-600">
-              Cohort
-              <input value={cohort} onChange={(event) => setCohort(event.target.value)} placeholder="founding-2026" className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
-            </label>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" disabled={busy} onClick={() => submitAccess(true)} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Grant premium</button>
-            <button type="button" disabled={busy} onClick={() => submitAccess(false)} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-700">Revoke access</button>
-          </div>
-        </div>
-      </GlassPanel>
-      <GlassPanel title="Access Codes" subtitle="Create and manage invite codes. Codes grant premium; duration stamps an expiry at claim time.">
+    <div className="space-y-5">
+      <SectionHeader
+        title="Access Codes"
+        subtitle="Invite codes are the door into the gated rollout. A code grants a membership (which may be Free — entry without premium), can flag tester, and may carry optional entitlement overrides. Codes are NOT premium codes."
+      />
+      <GlassPanel title="Create Access Code" subtitle="Duration stamps a membership expiry at claim time; code expiry stops the code being claimable.">
         <div className="grid gap-2 sm:grid-cols-2">
           <input value={codeForm.code} onChange={(event) => updateCodeForm("code", event.target.value)} placeholder="Code (e.g. PRESS-TIMES)" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
           <input value={codeForm.label} onChange={(event) => updateCodeForm("label", event.target.value)} placeholder="Label" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
-          <input value={codeForm.maxUses} onChange={(event) => updateCodeForm("maxUses", event.target.value)} placeholder="Max uses (blank = unlimited)" inputMode="numeric" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
-          <input value={codeForm.durationDays} onChange={(event) => updateCodeForm("durationDays", event.target.value)} placeholder="Duration days (blank = permanent)" inputMode="numeric" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <label className="text-xs text-slate-600">
+            Grants membership
+            <select value={codeForm.grantsMembership} onChange={(event) => updateCodeForm("grantsMembership", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm">
+              {MEMBERSHIP_OPTIONS.map((option) => (
+                <option key={option} value={option}>{formatMembership(option)}</option>
+              ))}
+            </select>
+          </label>
+          <input value={codeForm.maxUses} onChange={(event) => updateCodeForm("maxUses", event.target.value)} placeholder="Max uses (blank = unlimited)" inputMode="numeric" className="mt-auto h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.durationDays} onChange={(event) => updateCodeForm("durationDays", event.target.value)} placeholder="Membership duration days (blank = permanent)" inputMode="numeric" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <label className="text-xs text-slate-600">
+            Code expires (blank = never)
+            <input type="date" value={codeForm.expiresAt} onChange={(event) => updateCodeForm("expiresAt", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          </label>
           <input value={codeForm.grantReason} onChange={(event) => updateCodeForm("grantReason", event.target.value)} placeholder="Reason (press, promo...)" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
           <input value={codeForm.cohort} onChange={(event) => updateCodeForm("cohort", event.target.value)} placeholder="Cohort" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
         </div>
@@ -2049,8 +2198,14 @@ const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChan
         {codeForm.grantsTester ? (
           <input value={codeForm.testerGroup} onChange={(event) => updateCodeForm("testerGroup", event.target.value)} placeholder="Tester group" className="mt-2 h-10 w-full rounded-xl border border-orange-100 bg-white px-3 text-sm" />
         ) : null}
+        <label className="mt-2 block text-xs text-slate-600">
+          Entitlement overrides (optional JSON)
+          <textarea value={codeForm.entitlementOverrides} onChange={(event) => updateCodeForm("entitlementOverrides", event.target.value)} placeholder={'{"maxPersonalCards": 50}'} rows={2} className="mt-1 w-full rounded-xl border border-violet-100 bg-white px-3 py-2 font-mono text-xs" />
+        </label>
         <button type="button" disabled={busy} onClick={submitCode} className="mt-3 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Create code</button>
-        <div className="mt-4 space-y-2">
+      </GlassPanel>
+      <GlassPanel title="Existing Codes" subtitle={`${codes.length} code${codes.length === 1 ? "" : "s"}`}>
+        <div className="space-y-2">
           {codes.length === 0 ? <p className="text-xs text-slate-500">No access codes yet.</p> : null}
           {codes.map((code) => (
             <div key={code.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
@@ -2058,9 +2213,13 @@ const AccessManagementPanel = memo(function AccessManagementPanel({ onAccessChan
               <span className="text-slate-500">
                 {code.label || code.grant_reason || "—"}
                 {" · "}
+                {formatMembership(code.grants_membership ?? code.grants_tier)}
+                {" · "}
                 {code.use_count ?? 0}{code.max_uses ? `/${code.max_uses}` : ""} used
                 {code.grants_duration_days ? ` · ${code.grants_duration_days}d access` : ""}
+                {code.expires_at ? ` · code expires ${formatDate(code.expires_at)}` : ""}
                 {code.grants_tester ? " · tester" : ""}
+                {code.entitlement_overrides ? " · overrides" : ""}
               </span>
               <button type="button" disabled={busy} onClick={() => toggleCode(code)} className={`rounded-lg border px-2.5 py-1 font-semibold ${code.active ? "border-red-200 text-red-700" : "border-emerald-200 text-emerald-700"}`}>
                 {code.active ? "Deactivate" : "Reactivate"}
@@ -2609,6 +2768,7 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
     packStats,
     meaningfulEvents: events.filter(isMeaningfulEvent).map((event) => ({ ...event, displayLabel: getEventDisplayLabel(event) })),
     funnel: buildRecruitmentFunnel({ waitlist, users, events }),
+    waitlistSources: buildWaitlistSources(waitlist),
     retention: buildRetentionModel({ events, users }),
     instagramStats: {
       installViews: instagramInstallViews,
@@ -2670,6 +2830,18 @@ function buildLauncherStats(events) {
     installViewsByLauncher: rowsFromCounts(countBy(normalized.filter((event) => event.event_type === "launcher_install_viewed"), (event) => getEventLauncher(event) || "unknown")),
     mostUsedVersions: rowsFromCounts(countBy(events, (event) => event.launcher_name || event.launcher_id || "unknown")),
   };
+}
+
+// Waitlist attribution: count signups by source_code so HQ can see which
+// audiences/campaigns are driving interest. Signups without a code roll up to
+// "Direct / no code".
+function buildWaitlistSources(waitlist = []) {
+  const counts = new Map();
+  for (const signup of waitlist) {
+    const source = (signup.source_code ?? "").trim() || "Direct / no code";
+    counts.set(source, (counts.get(source) ?? 0) + 1);
+  }
+  return Array.from(counts, ([label, count]) => ({ label, count })).sort((left, right) => right.count - left.count);
 }
 
 function buildRecruitmentFunnel({ waitlist, users, events }) {
