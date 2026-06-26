@@ -5,8 +5,8 @@ import vm from "node:vm";
 
 const previewOrigin = normalizeOrigin(process.env.PAGES_PREVIEW_ORIGIN || "https://drlizlondon.github.io");
 const previewBasePath = normalizeBasePath(process.env.PAGES_PREVIEW_BASE_PATH || "/mybishbash-preview/");
-const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "MyBishBash Test";
-const previewShortName = process.env.PAGES_PREVIEW_SHORT_NAME || "MyBishBash Test";
+const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "myBishBash Test";
+const previewShortName = process.env.PAGES_PREVIEW_SHORT_NAME || "myBishBash Test";
 const previewRoot = `${previewOrigin}${previewBasePath.replace(/\/$/, "")}`;
 const expectedSourceSha = process.env.VITE_SOURCE_SHA || process.env.GITHUB_SHA || gitSourceSha();
 
@@ -37,7 +37,7 @@ assert.ok(supportedLauncherIds.length > 3, "preview validation should cover expa
 
 for (const launcherId of supportedLauncherIds) {
   const manifest = readJson(`dist/launchers/${launcherId}/manifest.webmanifest`);
-  assert.match(manifest.name, /MyBishBash Test$/);
+  assert.match(manifest.name, /myBishBash Test$/);
   assert.equal(manifest.start_url, `${previewRoot}/intercept/${launcherId}`);
   assert.equal(manifest.scope, `${previewRoot}/`);
 
@@ -47,13 +47,13 @@ for (const launcherId of supportedLauncherIds) {
   assert.match(installHtml, /Set up <span data-version-name>.+<\/span> with myBishBash/);
   assert.match(installHtml, /myBishBash can appear first with the reminders, commitments and prompts you chose/);
   assert.match(installHtml, /Copy setup link/);
-  assert.doesNotMatch(installHtml, /launcherContext|shared MyBishBash state/);
+  assert.doesNotMatch(installHtml, /launcherContext|shared myBishBash state/);
 
   const legacyShell = readFileSync(`dist/${launcherId}/index.html`, "utf8");
   assert.match(legacyShell, new RegExp(`href="${escapeRegExp(previewBasePath)}intercept/${escapeRegExp(launcherId)}"`));
   assert.match(legacyShell, /Set up <span data-version-name>.+<\/span> with myBishBash/);
   assert.match(legacyShell, /myBishBash can appear first with the reminders, commitments and prompts you chose/);
-  assert.doesNotMatch(legacyShell, /launcherContext|shared MyBishBash state/);
+  assert.doesNotMatch(legacyShell, /launcherContext|shared myBishBash state/);
 }
 
 const installScript = readFileSync("dist/install/install.js", "utf8");

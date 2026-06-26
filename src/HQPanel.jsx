@@ -66,7 +66,7 @@ const EMPTY_PACK_FORM = {
   // Explore cover metadata (docs/explore-architecture.md)
   goal: "",
   whyText: "",
-  sourceLabel: "MyBishBash",
+  sourceLabel: "myBishBash",
   contentType: "cards",
   isPremium: false,
   isFeatured: false,
@@ -252,7 +252,7 @@ export default function HQPanel({
     return (
       <div className="min-h-screen bg-slate-950 p-6 text-white">
         <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">MyBishBash HQ</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">myBishBash HQ</p>
           <h2 className="mt-3 text-2xl font-semibold">Checking access</h2>
           <p className="mt-2 text-sm text-slate-300">Confirming your HQ role.</p>
         </div>
@@ -264,7 +264,7 @@ export default function HQPanel({
     return (
       <div className="min-h-screen bg-slate-950 p-6 text-white">
         <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">MyBishBash HQ</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">myBishBash HQ</p>
           <h2 className="mt-3 text-2xl font-semibold">Not authorised</h2>
           <p className="mt-2 text-sm text-slate-300">You must be an admin to view this telemetry surface.</p>
           <button className="mt-6 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white" onClick={onBack}>
@@ -563,7 +563,7 @@ const HQContent = memo(function HQContent({
       sourceKey: pack.sourceKey ?? null,
       goal: pack.goal ?? "",
       whyText: pack.whyText ?? "",
-      sourceLabel: pack.sourceLabel ?? "MyBishBash",
+      sourceLabel: pack.sourceLabel ?? "myBishBash",
       contentType: pack.contentType ?? "cards",
       isPremium: Boolean(pack.isPremium),
       isFeatured: Boolean(pack.isFeatured),
@@ -652,7 +652,7 @@ const HQSidebar = memo(function HQSidebar({ activeView, onNavigate }) {
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-blue-100/80 bg-white/80 px-4 py-5 shadow-[18px_0_50px_rgba(15,23,42,0.04)] backdrop-blur-xl lg:block">
       <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-slate-950 to-blue-950 p-4 text-white shadow-xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">MyBishBash</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">myBishBash</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">HQ</h1>
         <p className="mt-2 text-xs text-blue-100">Behavioural adoption console</p>
       </div>
@@ -725,7 +725,7 @@ const TelemetryTopBar = memo(function TelemetryTopBar({
       <div className="mx-auto flex max-w-7xl flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold tracking-tight text-slate-950">MyBishBash HQ</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">myBishBash HQ</h2>
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
               <span className={`h-2 w-2 rounded-full ${livePaused ? "bg-slate-400" : "bg-emerald-500"}`} />
               {livePaused ? "Live Paused" : "Live On"}

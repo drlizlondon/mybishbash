@@ -389,7 +389,7 @@ test('pre-launch journey audit keeps bottom nav tappable', async ({ page }) => {
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await page.getByTestId('pause-app-button').click();
-  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Pause myBishBash?' })).toBeVisible();
   await assertInteractionCleanup(page, { allowModal: true });
   await page.getByTestId('pause-modal-close').click();
   await expect(page.locator('.modal-backdrop')).toHaveCount(0);

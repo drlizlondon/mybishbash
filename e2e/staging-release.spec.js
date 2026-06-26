@@ -39,7 +39,7 @@ const directAppSmokeTargets = {
   whatsapp: { label: 'WhatsApp', expected: /^https:\/\/api\.whatsapp\.com\/send/i },
 };
 
-test.describe('MyBishBash staging release E2E', () => {
+test.describe('myBishBash staging release E2E', () => {
   test.skip(Boolean(skipReason), skipReason ?? '');
   test.describe.configure({ mode: 'serial' });
   test.setTimeout(600000);
@@ -414,7 +414,7 @@ async function waitForAppEntry(page) {
       .or(page.getByTestId('card-overlay-interruption'))
       .or(page.getByTestId('card-overlay-personal'))
       .or(page.getByTestId('continue-to-app-card'))
-      .or(page.getByText(/Make MyBishBash/i))
+      .or(page.getByText(/Make myBishBash/i))
       .first(),
   ).toBeVisible({ timeout: 20000 });
 }
@@ -442,11 +442,11 @@ async function fillAuthForm(page, { email, password, accessCode }) {
 }
 
 async function expectHomeOrSafeApp(page) {
-  await expect(page.getByTestId('app-shell').or(page.getByTestId('sync-screen')).or(page.getByText(/Make MyBishBash/i))).toBeVisible({ timeout: 30000 });
+  await expect(page.getByTestId('app-shell').or(page.getByTestId('sync-screen')).or(page.getByText(/Make myBishBash/i))).toBeVisible({ timeout: 30000 });
 }
 
 async function expectHomeOnboardingOrSafeAuth(page, timeout = 10000) {
-  await expect(page.getByTestId('app-shell').or(page.getByTestId('sync-screen')).or(page.getByText(/Make MyBishBash|onboarding|check your email/i))).toBeVisible({ timeout });
+  await expect(page.getByTestId('app-shell').or(page.getByTestId('sync-screen')).or(page.getByText(/Make myBishBash|onboarding|check your email/i))).toBeVisible({ timeout });
 }
 
 async function expectNoCrashState(page) {

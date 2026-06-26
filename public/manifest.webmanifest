@@ -1,6 +1,6 @@
 {
-  "name": "MyBishBash",
-  "short_name": "MyBishBash",
+  "name": "myBishBash",
+  "short_name": "myBishBash",
   "id": "https://drlizlondon.github.io/mybishbash/",
   "description": "Private little reminders from yourself.",
   "start_url": "https://drlizlondon.github.io/mybishbash/home",

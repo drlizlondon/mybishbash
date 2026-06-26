@@ -429,6 +429,29 @@ body:has(.landing-page)::after {
   opacity: 0.9;
 }
 
+/* Real-screenshot variant: fill the phone frame with the captured app image,
+   matching the screenshot's aspect ratio so nothing is cropped. */
+.app-screen.app-screen-photo {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+  width: min(320px, 100%);
+  aspect-ratio: 430 / 932;
+  opacity: 1;
+}
+
+.app-preview-wrap .app-screen.app-screen-photo {
+  opacity: 1;
+}
+
+.app-screen-photo .app-screenshot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 .app-status {
   height: 28px;
   display: flex;
@@ -736,6 +759,20 @@ body:has(.landing-page)::after {
   box-shadow: 0 18px 60px rgba(0,0,0,0.28);
   color: #fff;
   backdrop-filter: blur(18px);
+}
+
+/* When the editor has been moved, bind its fixed position to the stored
+   coordinates. Without this the landing/early-access pages (which load
+   landing.css, not the app's onboarding-scoped styles) ignore the move. */
+.edit-panel.edit-panel-positioned {
+  top: var(--edit-panel-y, auto);
+  left: var(--edit-panel-x, auto);
+  right: auto;
+  bottom: auto;
+}
+
+.edit-panel.is-moving .edit-panel-handle {
+  cursor: grabbing;
 }
 
 .edit-panel-handle {

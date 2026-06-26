@@ -33,7 +33,7 @@ export default function MyReportsModal({ refreshKey = 0 }) {
               {thumb ? <img src={thumb} alt="" /> : null}
               <div>
                 <strong>{report.title || report.description}</strong>
-                <p>{report.launcher_context || "MyBishBash"} - {report.status} - {report.severity}</p>
+                <p>{report.launcher_context || "myBishBash"} - {report.status} - {report.severity}</p>
                 <small>{new Date(report.created_at).toLocaleString()}</small>
               </div>
             </article>

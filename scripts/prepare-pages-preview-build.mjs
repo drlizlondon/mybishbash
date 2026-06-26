@@ -8,8 +8,8 @@ const PRODUCTION_BASE_PATH = "/mybishbash/";
 
 const previewOrigin = normalizeOrigin(process.env.PAGES_PREVIEW_ORIGIN || PRODUCTION_ORIGIN);
 const previewBasePath = normalizeBasePath(process.env.PAGES_PREVIEW_BASE_PATH || "/mybishbash-preview/");
-const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "MyBishBash Test";
-const previewShortName = process.env.PAGES_PREVIEW_SHORT_NAME || "MyBishBash Test";
+const previewAppName = process.env.PAGES_PREVIEW_APP_NAME || "myBishBash Test";
+const previewShortName = process.env.PAGES_PREVIEW_SHORT_NAME || "myBishBash Test";
 const previewRoot = `${previewOrigin}${previewBasePath.replace(/\/$/, "")}`;
 const sourceSha = process.env.VITE_SOURCE_SHA || process.env.GITHUB_SHA || gitSourceSha();
 const previewVersion = process.env.VITE_APP_VERSION || (sourceSha ? `preview-${sourceSha}` : "preview-local");

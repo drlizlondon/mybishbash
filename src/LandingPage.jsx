@@ -12,7 +12,9 @@ const HOME_HREF = BASE;
 const INVITE_HREF = `${BASE}invite`;
 const ABOUT_HREF = `${BASE}about`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
-const LANDING_NAV_HREFS = [ABOUT_HREF, HOME_HREF, HOME_HREF, HOME_HREF, HOME_HREF];
+const LANDING_NAV_HREFS = [ABOUT_HREF, "#features"];
+// Footer links, in the same order as landingContent.footer.links.
+const FOOTER_LINK_HREFS = [`${BASE}privacy`, "mailto:support@mybishbash.app"];
 const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
 function BrandMark({ dark = false }) {
@@ -28,7 +30,7 @@ function Header() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <a className="site-logo" href={HOME_HREF} onClick={stopEditNavigation} aria-label="MyBishBash home">
+        <a className="site-logo" href={HOME_HREF} onClick={stopEditNavigation} aria-label="myBishBash home">
           <BrandMark />
           <EditableText path="brand.name" />
         </a>
@@ -47,59 +49,22 @@ function Header() {
   );
 }
 
-function AppPreview() {
-  const { content } = useContentEdit();
+// Real app Home screen, captured by scripts/capture-hero-screenshot.mjs into
+// public/screenshots/. Shown in the existing tilted phone frame.
+const HERO_SCREENSHOT_SRC = `${BASE}screenshots/hero-home.png`;
 
+function AppPreview() {
   return (
-    <div className="app-preview-wrap" aria-label="MyBishBash app homepage preview">
-      <div className="app-screen">
-        <div className="app-status">
-          <span>9:41</span>
-          <span>●●●</span>
-        </div>
-        <BrandMark dark />
-        <div className="app-heading">
-          <EditableText as="h2" path="app.greeting" />
-          <EditableText as="p" path="app.subtitle" />
-        </div>
-        <section className="intentions-card">
-          <EditableText as="p" className="app-card-label" path="app.intentionsLabel" />
-          <div className="intentions-list">
-            {content.app.intentions.map((item, index) => (
-              <div className="intention-row" key={item}>
-                <span />
-                <EditableText path={`app.intentions.${index}`} />
-                <i />
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="pause-card">
-          <div>
-            <EditableText as="h3" path="app.pauseTitle" />
-            <EditableText as="p" path="app.pauseCopy" />
-          </div>
-          <button type="button" aria-label="Continue">→</button>
-        </section>
-        <section className="moments-card">
-          <EditableText as="p" className="app-card-label" path="app.momentsLabel" />
-          <div className="moments-grid">
-            {content.app.moments.map((moment, index) => (
-              <div key={moment[0]}>
-                <EditableText as="span" path={`app.moments.${index}.0`} />
-                <EditableText as="strong" path={`app.moments.${index}.1`} />
-              </div>
-            ))}
-          </div>
-        </section>
-        <nav className="app-bottom-nav" aria-label="App preview navigation">
-          {content.app.nav.map((item, index) => (
-            <span key={item}>
-              <i />
-              <EditableText path={`app.nav.${index}`} />
-            </span>
-          ))}
-        </nav>
+    <div className="app-preview-wrap" aria-label="myBishBash app home screen">
+      <div className="app-screen app-screen-photo">
+        <img
+          className="app-screenshot"
+          src={HERO_SCREENSHOT_SRC}
+          alt="The myBishBash app showing a gentle nudge card with Done, I'll do it now, and Not done options"
+          width="430"
+          height="932"
+          loading="eager"
+        />
       </div>
     </div>
   );
@@ -157,7 +122,7 @@ function ProofStrip() {
   const { content } = useContentEdit();
 
   return (
-    <section className="proof-strip" aria-label="MyBishBash highlights">
+    <section className="proof-strip" aria-label="myBishBash highlights">
       <div className="container proof-grid">
         {content.proof.map((item, index) => (
           <article className="proof-item" key={item.title}>
@@ -193,7 +158,7 @@ function Footer() {
       </a>
       <nav aria-label="Footer navigation">
         {content.footer.links.map((link, index) => (
-          <a href={HOME_HREF} key={link} onClick={stopEditNavigation}>
+          <a href={FOOTER_LINK_HREFS[index] ?? HOME_HREF} key={link} onClick={stopEditNavigation}>
             <EditableText path={`footer.links.${index}`} />
           </a>
         ))}

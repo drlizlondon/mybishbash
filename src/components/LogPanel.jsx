@@ -22,15 +22,15 @@ function describeLogEvent(event) {
     return `You continued to ${event.app_name || "the app"} after pausing.`;
   }
   if (event.event_type === "bash_done") {
-    return `You completed: ${event.bash_title || "a MyBishBash"}`;
+    return `You completed: ${event.bash_title || "a myBishBash"}`;
   }
   if (event.event_type === "bash_do_now") {
-    return `You chose to do: ${event.bash_title || "a MyBishBash"}`;
+    return `You chose to do: ${event.bash_title || "a myBishBash"}`;
   }
   if (event.event_type === "bash_not_done") {
-    return `You left this MyBishBash for later: ${event.bash_title || "a MyBishBash"}`;
+    return `You left this myBishBash for later: ${event.bash_title || "a myBishBash"}`;
   }
-  return "A little MyBishBash moment was recorded.";
+  return "A little myBishBash moment was recorded.";
 }
 
 function getLogEventDisplayLabel(event) {
@@ -143,7 +143,7 @@ function EventDetailModal({ event, timezone, onClose }) {
             </div>
             {event.bash_title ? (
               <div>
-                <dt>MyBishBash</dt>
+                <dt>myBishBash</dt>
                 <dd>{event.bash_title}</dd>
               </div>
             ) : null}
@@ -204,7 +204,7 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
         <span className="log-heart" aria-hidden="true">
           <HeartGlyph />
         </span>
-        <h2>MyBishBash Log</h2>
+        <h2>myBishBash Log</h2>
         <p>{filter === "intercepts" ? "the little pauses before the pull." : "tiny choices. real change."}</p>
       </header>
 

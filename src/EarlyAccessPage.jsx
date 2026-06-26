@@ -617,7 +617,7 @@ function EarlyAccessPageContent() {
     <main className="early-page">
       <section className="early-shell" aria-labelledby="early-access-title">
         <header className="early-topbar">
-          <a className="early-logo" href={HOME_HREF} aria-label="MyBishBash home">
+          <a className="early-logo" href={HOME_HREF} aria-label="myBishBash home">
             <BrandMark />
             <EditableText as="span" path="brand" />
           </a>

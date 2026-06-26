@@ -6,7 +6,7 @@
  *    has no network AND no eligible cards are available.
  *  - When offline but local cards ARE available, the cards are still shown normally.
  *  - The offline screen's action buttons work: "Try again", "Open anyway",
- *    "Back to MyBishBash".
+ *    "Back to myBishBash".
  *  - First load offline with local cards skips the sync loading spinner.
  *
  * Playwright's `page.context().setOffline(true)` is used to simulate going
@@ -129,7 +129,7 @@ test('"Open anyway" button from offline overlay triggers destination navigation'
   expect(attempt.metadata).toMatchObject({ reason: 'user_pressed_open_anyway_offline' });
 });
 
-test('"Back to MyBishBash" from offline overlay navigates home', async ({ page }) => {
+test('"Back to myBishBash" from offline overlay navigates home', async ({ page }) => {
   await seedState(page, { cards: [] });
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible({ timeout: 10000 });
@@ -137,7 +137,7 @@ test('"Back to MyBishBash" from offline overlay navigates home', async ({ page }
   await page.context().setOffline(true);
   await expect(page.getByTestId('card-overlay-offline')).toBeVisible({ timeout: 5000 });
 
-  await page.getByText('Back to MyBishBash').click();
+  await page.getByText('Back to myBishBash').click();
 
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 });

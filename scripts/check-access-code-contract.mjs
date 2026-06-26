@@ -87,7 +87,7 @@ export async function main(argv = process.argv, env = process.env) {
     },
   });
 
-  console.log(`Checking MyBishBash access-code contract on ${projectHost(supabaseUrl)}`);
+  console.log(`Checking myBishBash access-code contract on ${projectHost(supabaseUrl)}`);
   console.log(`Code under test: ${requestedCode}`);
 
   const invalidResult = await validate(client, invalidCode);

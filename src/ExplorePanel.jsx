@@ -187,7 +187,7 @@ function ExplorePackDetail({
             {pack.isPremium ? <PremiumBadge /> : null}
           </div>
           <p className="explore-detail-meta">
-            {cardCount} {cardCount === 1 ? "card" : "cards"} · by {pack.sourceLabel || "MyBishBash"}
+            {cardCount} {cardCount === 1 ? "card" : "cards"} · by {pack.sourceLabel || "myBishBash"}
           </p>
           {pack.description ? <p className="explore-detail-description">{pack.description}</p> : null}
           {pack.whyText ? (

@@ -27,7 +27,7 @@ async function seedGateCode(page: Page, code = 'WELCOME') {
   }, { handoffKey: SIGNUP_HANDOFF_REFERENCE_KEY, handoffsKey: E2E_SIGNUP_HANDOFFS_KEY, accessCode: code });
 }
 
-test('landing Get MyBishBash opens the invite gate, not download', async ({ page }) => {
+test('landing Get myBishBash opens the invite gate, not download', async ({ page }) => {
   await page.goto('/mybishbash/');
 
   const primaryCta = page.locator('.hero-actions .button.primary');
@@ -35,7 +35,7 @@ test('landing Get MyBishBash opens the invite gate, not download', async ({ page
   await primaryCta.click();
   await expect(page).toHaveURL(/\/mybishbash\/invite$/);
   await expect(page.getByTestId('download-access-gate')).toBeVisible();
-  await expect(page.getByText('MyBishBash is currently invite-only.')).toBeVisible();
+  await expect(page.getByText('myBishBash is currently invite-only.')).toBeVisible();
 });
 
 test('WELCOME unlocks the existing download page', async ({ page }) => {
@@ -76,7 +76,7 @@ test('direct download without rollout access is blocked by invite gate', async (
   await page.goto('/mybishbash/download');
 
   await expect(page.getByTestId('download-access-gate')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Get MyBishBash' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Get myBishBash' })).toBeVisible();
   await expect(page.getByTestId('download-page')).toHaveCount(0);
 });
 

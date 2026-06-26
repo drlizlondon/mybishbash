@@ -2,17 +2,14 @@
 // The edit panel can also copy the current JSON as a manual fallback.
 export const landingContent = {
   "brand": {
-    "name": "MyBishBash"
+    "name": "myBishBash"
   },
   "nav": [
     "How it works",
-    "Features",
-    "For you",
-    "Pricing",
-    "Blog"
+    "Features"
   ],
   "ctas": {
-    "primary": "Get MyBishBash",
+    "primary": "Get myBishBash",
     "secondary": "See how it works"
   },
   "hero": {
@@ -20,7 +17,7 @@ export const landingContent = {
       "Your phone",
       "shapes your",
       "attention.",
-      "MyBishBash helps",
+      "myBishBash helps",
       "shape it intentionally."
     ],
     "copy": [
@@ -52,9 +49,9 @@ export const landingContent = {
     ],
     "nav": [
       "Home",
-      "Intentions",
-      "Interruptions",
-      "Logs",
+      "Explore",
+      "Library",
+      "Log",
       "Settings"
     ]
   },
@@ -76,12 +73,11 @@ export const landingContent = {
       "copy": "See your progress and reclaim your time."
     }
   ],
-  "statement": "MyBishBash won’t take your phone away. It helps you use it on purpose.",
+  "statement": "myBishBash won’t take your phone away. It helps you use it on purpose.",
   "footer": {
     "links": [
       "Privacy",
-      "Contact",
-      "Instagram"
+      "Contact"
     ]
   }
 };

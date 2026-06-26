@@ -1,22 +1,22 @@
-# MyBishBash Terms of Use
+# myBishBash Terms of Use
 
 Last updated: 18/05/2026
 
 ## Introduction
 
-Welcome to MyBishBash.
+Welcome to myBishBash.
 
-MyBishBash is an intentionality and identity reinforcement app designed to help users build a more supportive relationship with their phone usage.
+myBishBash is an intentionality and identity reinforcement app designed to help users build a more supportive relationship with their phone usage.
 
-By using MyBishBash, you agree to these Terms of Use.
+By using myBishBash, you agree to these Terms of Use.
 
 ---
 
-# Using MyBishBash
+# Using myBishBash
 
-You agree to use MyBishBash responsibly and lawfully.
+You agree to use myBishBash responsibly and lawfully.
 
-You must not use MyBishBash to:
+You must not use myBishBash to:
 - promote violence or illegal activity
 - encourage self-harm
 - harass or abuse others
@@ -29,7 +29,7 @@ We may restrict or remove content or access that violates these principles.
 
 # Personal Responsibility
 
-MyBishBash is a self-directed wellbeing and behavioural support tool.
+myBishBash is a self-directed wellbeing and behavioural support tool.
 
 It is not:
 - medical advice
@@ -48,7 +48,7 @@ If you are experiencing a mental health crisis or emergency, please contact an a
 
 Some features may be experimental, unfinished, or changed over time.
 
-As MyBishBash evolves:
+As myBishBash evolves:
 - features may be modified
 - functionality may change
 - bugs or interruptions may occur
@@ -67,7 +67,7 @@ You are responsible for activity occurring under your account.
 
 # Intellectual Property
 
-All MyBishBash branding, software, design, and original platform content remain the property of MyBishBash unless otherwise stated.
+All myBishBash branding, software, design, and original platform content remain the property of myBishBash unless otherwise stated.
 
 You retain ownership of the personal content you create within the app.
 
@@ -75,7 +75,7 @@ You retain ownership of the personal content you create within the app.
 
 # Limitation of Liability
 
-To the extent permitted by law, MyBishBash is provided “as is” without warranties of any kind.
+To the extent permitted by law, myBishBash is provided “as is” without warranties of any kind.
 
 We are not liable for:
 - indirect losses
@@ -97,7 +97,7 @@ We may suspend or terminate access if these Terms are violated or if misuse of t
 
 We may update these Terms periodically.
 
-Continued use of MyBishBash means you accept the updated Terms.
+Continued use of myBishBash means you accept the updated Terms.
 
 ---
 

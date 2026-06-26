@@ -20,16 +20,13 @@ function AboutHeader() {
   const stopEditNavigation = editMode ? (event) => event.preventDefault() : undefined;
   const navItems = [
     { href: `${BASE}about`, active: true },
-    { href: HOME_HREF },
-    { href: HOME_HREF },
-    { href: HOME_HREF },
-    { href: HOME_HREF },
+    { href: `${HOME_HREF}#features` },
   ];
 
   return (
     <header className="site-header about-site-header">
       <div className="site-header-inner">
-        <a className="site-logo" href={HOME_HREF} onClick={stopEditNavigation} aria-label="MyBishBash home">
+        <a className="site-logo" href={HOME_HREF} onClick={stopEditNavigation} aria-label="myBishBash home">
           <BrandMark />
           <EditableText path="brand" />
         </a>
@@ -53,7 +50,7 @@ function AboutPhoneVisual() {
   const actions = content.phone.actions;
 
   return (
-    <div className="about-phone-wrap" aria-label="MyBishBash interruption preview">
+    <div className="about-phone-wrap" aria-label="myBishBash interruption preview">
       <div className="about-phone">
         <div className="about-phone-status">
           <span>9:41</span>

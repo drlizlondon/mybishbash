@@ -357,11 +357,11 @@ test('protected app pause opens timeout modal and bypass opens the real destinat
   await expect(overlay).toBeVisible();
 
   await overlay.getByTestId('pause-app-button').click();
-  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Pause myBishBash?' })).toBeVisible();
   await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
   await page.getByTestId('pause-modal-close').click();
-  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Pause myBishBash?' })).toHaveCount(0);
 
   await overlay.getByTestId('fake-launcher-safari').click();
   await expectDestinationAttempt(page, 'safari');
@@ -388,9 +388,9 @@ test('protected continue card keeps one dashboard, pause and continue control', 
   await expect(page).not.toHaveURL(/\/mybishbash\/apps\/safari$/);
 });
 
-test('normal MyBishBash card route does not show protected app pause or bypass controls', async ({ page }) => {
+test('normal myBishBash card route does not show protected app pause or bypass controls', async ({ page }) => {
   await seedState(page, {
-    cards: [personalCard('normal-card-personal', 'Normal MyBishBash personal')],
+    cards: [personalCard('normal-card-personal', 'Normal myBishBash personal')],
     interruptionOn: false,
   });
 

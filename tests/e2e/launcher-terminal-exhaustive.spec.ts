@@ -133,7 +133,7 @@ async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Te
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByLabel('Go home')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Back (home|to myBishBash)/ })).toHaveCount(0);
     return;
   }
 
@@ -148,7 +148,7 @@ async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Te
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByLabel('Go home')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Back (home|to myBishBash)/ })).toBeVisible();
     await expect(page.getByTestId(`card-action-continue-to-${launcherId}`).or(page.getByTestId('card-action-continue-to-app'))).toHaveCount(0);
     await expect.poll(async () => (await attempts(page)).length).toBe(attemptsBeforeAction + 1);
     const attemptList = await attempts(page);

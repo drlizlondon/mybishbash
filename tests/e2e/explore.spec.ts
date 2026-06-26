@@ -65,7 +65,7 @@ test('pack cover detail installs and removes a pack', async ({ page }) => {
   const detail = page.getByTestId('explore-pack-detail');
   await expect(detail).toBeVisible();
   // Cover anatomy: meta line, preview cards, sticky install.
-  await expect(detail.getByText(/cards · by MyBishBash/)).toBeVisible();
+  await expect(detail.getByText(/cards · by myBishBash/)).toBeVisible();
   await expect(detail.getByText('A taste:')).toBeVisible();
 
   await page.getByTestId('explore-install-button').click();
@@ -124,7 +124,7 @@ test('Explore excludes App Prompts and App Packs even when saved locally', async
         id: 'safari-app-prompts',
         title: 'Safari App Prompts',
         description: 'App-specific prompts belong in Apps.',
-        sourceLabel: 'MyBishBash',
+        sourceLabel: 'myBishBash',
         contentType: 'app-pack',
         entries: [
           {

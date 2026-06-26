@@ -3,7 +3,7 @@ import { buildCustomLauncher, registerDynamicLaunchers } from "./launcherRegistr
 // Cold-start support for HQ-created launchers. Route parsing happens before
 // Supabase configs arrive, so dynamic launcher definitions are cached in
 // localStorage and registered synchronously before first render (main.jsx).
-// Limitation: a brand-new device must open MyBishBash once (fetching configs)
+// Limitation: a brand-new device must open myBishBash once (fetching configs)
 // before a dynamic /intercept/:id shell route resolves on that device.
 
 const DYNAMIC_LAUNCHER_CACHE_KEY = "mybishbash.dynamic-launchers.v1";

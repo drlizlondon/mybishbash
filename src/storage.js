@@ -71,7 +71,7 @@ const LEGACY_SHARED_STORAGE_KEYS = SHARED_STORAGE_KEYS.map(getLegacyStorageKey).
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
   mybishbash: {
     id: "mybishbash",
-    name: "MyBishBash",
+    name: "myBishBash",
     installPath: "/mybishbash/install/mybishbash/",
     launchPath: "/home",
     iconSrc: "/mybishbash/icons/mybishbash-cover.png",

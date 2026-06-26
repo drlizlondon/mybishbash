@@ -18,7 +18,7 @@ const SHARED_STATE_TABLE = "mybishbash_state";
 const LEGACY_SHARED_STATE_TABLE = ("bish" + "bash") + "_state";
 const SHARED_EVENTS_TABLE = "mybishbash_events";
 const LEGACY_SHARED_EVENTS_TABLE = ("bish" + "bash") + "_events";
-export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nYour access code was not recognised.";
+export const INVITE_ONLY_ACCESS_ERROR = "myBishBash is currently invite-only.\nYour access code was not recognised.";
 const PENDING_ACCESS_CODE_KEY = "MYBISHBASH_PENDING_ACCESS_CODE";
 const VALIDATED_GATE_ACCESS_CODE_KEY = "mybishbash.validated-gate-access-code.v1";
 const VALIDATED_GATE_ACCESS_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -94,13 +94,13 @@ async function upsertSharedStateIntoTable(client, tableName, userId, state) {
   return { missingTable: false };
 }
 
-export function getSyncErrorMessage(error, fallback = "Could not sync your MyBishBash profile.") {
+export function getSyncErrorMessage(error, fallback = "Could not sync your myBishBash profile.") {
   if (error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "")) {
-    return "Supabase is connected, but the MyBishBash tables are not installed yet. Apply the SQL migration, then try again.";
+    return "Supabase is connected, but the myBishBash tables are not installed yet. Apply the SQL migration, then try again.";
   }
 
   if (error?.code === "42501" || /permission denied/i.test(error?.message ?? "")) {
-    return "Supabase is connected, but MyBishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
+    return "Supabase is connected, but myBishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
   }
 
   if (error?.message) return error.message;
@@ -817,7 +817,7 @@ function mapGlobalPack(pack, cards = []) {
     isFeatured: pack.is_featured === true,
     isExperimental: pack.is_experimental === true,
     contentType: pack.content_type ?? "cards",
-    sourceLabel: pack.source_label ?? "MyBishBash",
+    sourceLabel: pack.source_label ?? "myBishBash",
     publishedAt: pack.published_at ?? null,
     sortOrder: pack.sort_order ?? 0,
     entries: cards
@@ -911,7 +911,7 @@ export async function saveAdminGlobalPack(pack, userId) {
     is_featured: Boolean(pack.isFeatured),
     is_experimental: Boolean(pack.isExperimental),
     content_type: pack.contentType || "cards",
-    source_label: pack.sourceLabel?.trim() || "MyBishBash",
+    source_label: pack.sourceLabel?.trim() || "myBishBash",
     sort_order: Number.isFinite(Number(pack.sortOrder)) ? Number(pack.sortOrder) : 0,
     // First publish stamps published_at; later edits keep the original date
     // so "newest first" ordering inside goal sections stays stable.

@@ -148,7 +148,7 @@ assert.doesNotMatch(
 assert.match(
   downloadSource,
   /validateAndRememberGateAccessCode/,
-  "the Get MyBishBash gate must validate and remember the entered code through the shared access layer",
+  "the Get myBishBash gate must validate and remember the entered code through the shared access layer",
 );
 assert.doesNotMatch(
   downloadSource,

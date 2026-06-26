@@ -268,7 +268,7 @@ test('app loads into a safe entry state without console errors', async ({ page }
 
   await gotoApp(page, '/home');
 
-  await expect(page.getByTestId('sync-screen').or(page.getByTestId('app-shell')).or(page.getByText(/Make MyBishBash your gentle pattern interrupt/i))).toBeVisible();
+  await expect(page.getByTestId('sync-screen').or(page.getByTestId('app-shell')).or(page.getByText(/Make myBishBash your gentle pattern interrupt/i))).toBeVisible();
   await expectNoConsoleErrors(consoleErrors);
 });
 

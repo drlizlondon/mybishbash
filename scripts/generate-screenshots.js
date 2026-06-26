@@ -24,7 +24,7 @@ const allWindows = ["morning", "day", "evening", "night"];
 const homeScreenVersions = {
   mybishbash: {
     id: "mybishbash",
-    name: "MyBishBash",
+    name: "myBishBash",
     installPath: "/mybishbash/install/mybishbash/",
     launchPath: "/home",
     iconSrc: "/mybishbash/icons/mybishbash-cover.png",

@@ -14,7 +14,7 @@ export const PACKS = [
   {
     id: "encouraging-bible-verses",
     title: "Bible Verse",
-    description: "Gentle scripture-based MyBishBashes for the day.",
+    description: "Gentle scripture-based myBishBash cards for the day.",
     theme: "Soft Bloom",
     icon: "book",
     entries: [

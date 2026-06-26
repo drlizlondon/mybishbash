@@ -179,7 +179,7 @@ import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
 const HQPanel = lazy(() => import("./HQPanel"));
 const AUTH_SESSION_RETRY_DELAYS_MS = [150, 450, 900];
 const TESTPILOT_CONFIG = {
-  productName: "MyBishBash",
+  productName: "myBishBash",
   uiLabel: "Tester Mode",
   accent: "#D9654C",
   appVersion: import.meta.env.VITE_APP_VERSION ?? import.meta.env.VITE_GIT_SHA ?? "0.1.0",
@@ -745,7 +745,7 @@ class AppShellErrorBoundary extends React.Component {
     return (
       <main className="sync-screen" data-testid="app-shell-error">
         <BrandMark />
-        <h1>MyBishBash needs a quick reset.</h1>
+        <h1>myBishBash needs a quick reset.</h1>
         <p>Something in this view did not load cleanly.</p>
         <button type="button" className="save-button" onClick={this.props.onRecover}>
           Back to Home
@@ -2005,7 +2005,7 @@ function App() {
         return visible ? [version] : [];
       }
 
-      // Normal MyBishBash app — HQ availability decides which launchers a
+      // Normal myBishBash app — HQ availability decides which launchers a
       // user (or tester) can see here.
       // Static registry contexts plus HQ-created launchers present in
       // homeScreenVersions (registered dynamic apps merged after fetch).
@@ -2152,7 +2152,7 @@ function App() {
     if (shouldShowHomeScreenInstall) {
       items.push({
         id: "home-screen",
-        label: "Add MyBishBash to your Home Screen",
+        label: "Add myBishBash to your Home Screen",
         action: "download",
       });
     }
@@ -2575,7 +2575,7 @@ function App() {
       .catch((error) => {
         console.warn("[AUTH] Session check failed after retries", error);
         if (mounted) {
-          setSyncError(getSyncErrorMessage(error, "Still checking your MyBishBash login. Please try again in a moment."));
+          setSyncError(getSyncErrorMessage(error, "Still checking your myBishBash login. Please try again in a moment."));
           setSyncStatus("error");
         }
       })
@@ -2801,7 +2801,7 @@ function App() {
   }, [route.kind, route.versionId]);
 
   // Clear the bypass ref on warm resume (app returns to foreground) so the
-  // pause bypass re-fires correctly when the user switches back to MyBishBash
+  // pause bypass re-fires correctly when the user switches back to myBishBash
   // while still on an intercept route.
   useEffect(() => {
     function handleVisibility() {
@@ -2936,7 +2936,7 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return;
-        setSyncError(getSyncErrorMessage(error, "Could not load your MyBishBash profile."));
+        setSyncError(getSyncErrorMessage(error, "Could not load your myBishBash profile."));
         setSyncStatus("error");
       });
 
@@ -2981,7 +2981,7 @@ function App() {
         .catch((error) => {
           console.error("UPSERT ERROR", error);
           // TODO: queue offline saves instead of only preserving the local mirror.
-          console.warn("Could not save MyBishBash shared state", error);
+          console.warn("Could not save myBishBash shared state", error);
         });
     }, 500);
 
@@ -3032,7 +3032,7 @@ function App() {
           applySharedState(sharedState);
         })
         .catch((error) => {
-          console.warn("Could not periodically sync MyBishBash profile", error);
+          console.warn("Could not periodically sync myBishBash profile", error);
         });
     }, 5000);
 
@@ -3050,7 +3050,7 @@ function App() {
   useEffect(() => {
     saveMood(mood);
 
-    // Map your exact MyBishBash background hex colors here
+    // Map your exact myBishBash background hex colors here
     const themeColors = {
       "Minimal": "#F6EBCF",
       "Pop Art": "#F4A261",
@@ -4088,7 +4088,7 @@ function App() {
     setScreen(selected ? "library" : "interception");
 
     if (initialStep === FAKE_LAUNCHER_FLOW_STEPS.SELECTED_CARD) {
-      debugLaunch("[INTERCEPT] Opening fallback MyBishBash card", { versionId, source, cardId: selected.id });
+      debugLaunch("[INTERCEPT] Opening fallback myBishBash card", { versionId, source, cardId: selected.id });
       debugLaunch("[LAUNCHER_FINAL_DECISION]", {
         source,
         versionId,
@@ -4382,7 +4382,7 @@ function App() {
       return;
     }
 
-    // No active pause → navigate into the MyBishBash intervention flow.
+    // No active pause → navigate into the myBishBash intervention flow.
     // The routing useEffect will select a card (or show the caught-up empty screen).
     // The pause button is shown on cards launched from this path.
     console.log("[LAUNCHER] No active pause — entering card flow", { versionId, source });
@@ -6326,7 +6326,7 @@ function App() {
       } else {
         console.log("[LOGIN_SUCCESS_NO_SESSION]");
         setSyncStatus("needs-connection");
-        setSyncError("Login succeeded, but MyBishBash could not start your session. Please close and reopen the app.");
+        setSyncError("Login succeeded, but myBishBash could not start your session. Please close and reopen the app.");
       }
     } catch (error) {
       console.error("[LOGIN_ERROR]", error);
@@ -7614,7 +7614,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
     <div className="modal-backdrop" onClick={onClose}>
       <form className="composer" data-testid="card-composer" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <div className="composer-heading">
-          <p className="eyebrow">{initialCard ? "Edit your MyBishBash" : "Make a MyBishBash"}</p>
+          <p className="eyebrow">{initialCard ? "Edit your myBishBash" : "Make a myBishBash"}</p>
           <button type="button" className="text-button" onClick={onClose}>
             Close
           </button>
@@ -7827,7 +7827,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
               {bulkCardsCount > 0 ? (
                 <span className="field-hint">{bulkCardsCount} {bulkCardsCount === 1 ? "card" : "cards"} ready</span>
               ) : showValidation ? (
-                <span className="field-hint">Add at least one MyBishBash before saving.</span>
+                <span className="field-hint">Add at least one myBishBash before saving.</span>
               ) : null}
             </label>
             <button
@@ -7855,7 +7855,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
                 rows={5}
               />
               {showValidation ? (
-                <span className="field-hint">Add one gentle MyBishBash before saving.</span>
+                <span className="field-hint">Add one gentle myBishBash before saving.</span>
               ) : null}
             </label>
             <div className="field">
@@ -7924,7 +7924,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
               </div>
             </div>
             <div className="field">
-              <span>When should this MyBishBash appear?</span>
+              <span>When should this myBishBash appear?</span>
               <div className="timing-grid">
                 {TIME_WINDOWS.map((windowOption) => (
                   <label key={windowOption.id} className="timing-option">
@@ -7957,7 +7957,7 @@ function Composer({ initialCard, initialKind = "personal", initialDraft = null, 
               data-testid="save-card-button"
               disabled={personalLimitReached}
             >
-              Save MyBishBash
+              Save myBishBash
             </button>
           </>
         )}
@@ -8034,7 +8034,7 @@ function Masthead({ onCreate, onNavigate, onLogOut, session, hideCreate = false 
           className="add-button"
           data-testid="create-card-button"
           onClick={onCreate}
-          aria-label="Create a MyBishBash"
+          aria-label="Create a myBishBash"
         >
           +
         </button>
@@ -8068,7 +8068,7 @@ function getHomeSpotlightSteps(firstApp = null) {
     path: "/apps",
     selector: '[data-testid="bottom-nav-apps"]',
     title: "Apps",
-    body: "Choose where MyBishBash appears. Add it before the apps you already open.",
+    body: "Choose where myBishBash appears. Add it before the apps you already open.",
     button: "Next",
   },
   {
@@ -8321,7 +8321,7 @@ function HomePanel({
           className="home-floating-button"
           data-testid="create-card-button"
           onClick={onCreate}
-          aria-label="Add a MyBishBash"
+          aria-label="Add a myBishBash"
         >
           <PlusGlyph />
         </button>
@@ -8338,9 +8338,9 @@ function HomePanel({
 
       <div className="home-content">
         <header className="home-brand-hero">
-          <img className="home-brand-logo" src={logoSrc} alt="MyBishBash" />
+          <img className="home-brand-logo" src={logoSrc} alt="myBishBash" />
           <h1>{greeting}</h1>
-          <p>{hasMeaningfulSetup ? `Day ${homeState.usageDays || 1} with MyBishBash` : "Welcome to MyBishBash"}</p>
+          <p>{hasMeaningfulSetup ? `Day ${homeState.usageDays || 1} with myBishBash` : "Welcome to myBishBash"}</p>
         </header>
 
         <div className="home-card-stack" data-testid="home-dashboard-summary">
@@ -9067,7 +9067,7 @@ function StandardLibraryPanel({
       <div className="section-heading solo">
         <div>
           <h2>Library</h2>
-          <p>Your own MyBishBashes, gathered in one quiet place.</p>
+          <p>Your own myBishBash cards, gathered in one quiet place.</p>
         </div>
       </div>
       <div className="library-sections">
@@ -11538,7 +11538,7 @@ function MorningSummaryModal({ summary, onClose }) {
           </div>
         )}
         <button type="button" className="save-button morning-summary-cta" onClick={onClose}>
-          Continue to MyBishBash
+          Continue to myBishBash
         </button>
       </div>
     </div>
@@ -11841,14 +11841,14 @@ function Overlay({
         });
       }
       offlineActions.push({
-        label: "Back to MyBishBash",
+        label: "Back to myBishBash",
         variant: "secondary",
         onClick: onClose,
       });
       return (
         <PremiumCardScreen
           type="offline"
-          greeting={isIntercept ? (interceptVersion?.name ?? "MyBishBash") : "MyBishBash"}
+          greeting={isIntercept ? (interceptVersion?.name ?? "myBishBash") : "myBishBash"}
           icon="heart"
           headline="You appear to be offline."
           subtitle="Cards can't load right now. Take a breath before you open another app."
@@ -11885,7 +11885,7 @@ function Overlay({
       });
       if (canGoBackHome) {
         actions.push({
-          label: "Back to MyBishBash",
+          label: "Back to myBishBash",
           variant: "secondary",
           onClick: onClose
         });
@@ -11899,7 +11899,7 @@ function Overlay({
     return (
       <PremiumCardScreen
         type="empty"
-        greeting={isIntercept ? interceptVersion?.name || "MyBishBash" : "MyBishBash"}
+        greeting={isIntercept ? interceptVersion?.name || "myBishBash" : "myBishBash"}
         icon="heart"
         headline={isIntercept ? "You're all caught up." : "You're all caught up for now."}
         subtitle={isIntercept ? "See you later." : ""}
@@ -12637,12 +12637,12 @@ function PremiumCreateShortcut({ onClick }) {
       type="button"
       className="premium-dashboard-shortcut premium-create-shortcut"
       onClick={(event) => onClick?.(event)}
-      aria-label="Create a MyBishBash"
+      aria-label="Create a myBishBash"
       title="Create"
       data-testid="overlay-create-card-button"
     >
       <span aria-hidden="true">+</span>
-      <span className="sr-only">Create a MyBishBash</span>
+      <span className="sr-only">Create a myBishBash</span>
     </button>
   );
 }
@@ -12659,8 +12659,8 @@ const PremiumPauseShortcut = React.forwardRef(function PremiumPauseShortcut({ on
       type="button"
       className="premium-dashboard-shortcut premium-pause-shortcut"
       onClick={onClick}
-      aria-label="Pause MyBishBash for this app"
-      title="Pause MyBishBash"
+      aria-label="Pause myBishBash for this app"
+      title="Pause myBishBash"
       data-testid="pause-app-button"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
@@ -12672,7 +12672,7 @@ const PremiumPauseShortcut = React.forwardRef(function PremiumPauseShortcut({ on
 });
 
 // ─── AppPauseModal ────────────────────────────────────────────────────────────
-// Bottom sheet asking the user how long to pause MyBishBash for the current app.
+// Bottom sheet asking the user how long to pause myBishBash for the current app.
 
 const PAUSE_DURATION_OPTIONS = [
   { label: "30 minutes",  minutes: 30 },
@@ -12729,7 +12729,7 @@ function AppPauseModal({ appName, onClose, onPause, triggerRef = null, openAfter
               ×
             </button>
             <p className="app-pause-sheet-title" id="pause-sheet-title">
-              Pause MyBishBash?
+              Pause myBishBash?
             </p>
             <p className="app-pause-sheet-body">
               For a short time, {appName} will open directly without showing App Prompts.
@@ -13030,7 +13030,7 @@ function FlowConfirmationOverlay({ overlay, version, onClose, onContinueToApp, o
   return (
     <PremiumCardScreen
       type="personal"
-      greeting="MyBishBash"
+      greeting="myBishBash"
       icon="heart"
       headline={overlay.message || "Thanks for the update."}
       subtitle=""
@@ -13593,7 +13593,7 @@ function LegalPage({ title, docUrl }) {
 function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashboard, onManageApp = null, launcherAppId = null, launcherAppName = null, onPauseApp = null, className = "" }) {
   const actions = [
     { label: `Continue to ${appName}`, variant: "primary", href, onClick: onContinue },
-    ...(onBack ? [{ label: "Back to MyBishBash", variant: "secondary", onClick: onBack }] : []),
+    ...(onBack ? [{ label: "Back to myBishBash", variant: "secondary", onClick: onBack }] : []),
   ];
   const [showPauseModal, setShowPauseModal] = useState(false);
   const pauseButtonRef = useRef(null);

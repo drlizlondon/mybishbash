@@ -32,7 +32,7 @@ export function ContinueToAppCard({
         </button>
 
         <button className="continue-to-app-secondary-btn" data-testid="continue-to-app-back" onClick={onBack} type="button">
-          Back to MyBishBash
+          Back to myBishBash
         </button>
       </div>
     </div>

@@ -102,7 +102,7 @@ self.addEventListener("push", (event) => {
   console.log("[NOTIFICATIONS] Push received", data);
 
   event.waitUntil(
-    self.registration.showNotification(data.title || "Tiny MyBishBash moment?", {
+    self.registration.showNotification(data.title || "Tiny myBishBash moment?", {
       body: data.body || "Something you said mattered.",
       icon: "/mybishbash/icons/mybishbash-cover.png",
       badge: "/mybishbash/icons/mybishbash-cover.png",

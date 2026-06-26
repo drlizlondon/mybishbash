@@ -246,7 +246,7 @@ async function completeRoundToHome(page: Page, round: number) {
   }
 
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
-  await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to MyBishBash' })).toHaveCount(0);
+  await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to myBishBash' })).toHaveCount(0);
   await expect(page.getByTestId('continue-to-app-card').getByTestId('dashboard-shortcut')).toBeVisible();
   console.log(`[downloaded-shell:${round}] terminal=navigate-home-for-repeat`);
   await page.goto('/mybishbash/home');
@@ -397,7 +397,7 @@ for (const launcherId of launcherIds) {
 
     await page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
-    await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to MyBishBash' })).toHaveCount(0);
+    await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to myBishBash' })).toHaveCount(0);
     await expect(page.getByTestId('continue-to-app-card').getByTestId('dashboard-shortcut')).toBeVisible();
     await page.goto('/mybishbash/home');
     await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -422,7 +422,7 @@ test('fake launcher first rendered frame never contains legacy pack labels', asy
   expect(legacyLabels).toEqual([]);
 });
 
-test('normal MyBishBash home pack browsing keeps Back to home neutral CTA', async ({ page }) => {
+test('normal myBishBash home pack browsing keeps Back to home neutral CTA', async ({ page }) => {
   await seedDownloadedShellState(page, { interruptionOn: false });
 
   await page.goto('/mybishbash/library');

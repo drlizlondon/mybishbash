@@ -4,7 +4,9 @@ dist/
 .env.local
 .claude/
 
-screenshots/
+# Local capture output only (repo-root). Anchored so public/screenshots/ (served
+# landing assets like the hero shot) stays tracked.
+/screenshots/
 design-system/
 
 # Playwright

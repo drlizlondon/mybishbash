@@ -32,8 +32,8 @@ function useSignupInstallManifest(hasAccess, isLoggedIn) {
 
     const previousHref = manifestLink.getAttribute("href");
     const manifest = {
-      name: "MyBishBash",
-      short_name: "MyBishBash",
+      name: "myBishBash",
+      short_name: "myBishBash",
       id: "https://drlizlondon.github.io/mybishbash/",
       description: "Private little reminders from yourself.",
       start_url: buildSignupStartUrl(handoff),
@@ -218,7 +218,7 @@ function DownloadAccessGate() {
     <main className="download-page" data-testid="download-access-gate">
       <section className="download-panel download-access-panel" aria-labelledby="download-access-title">
         <header className="download-hero">
-          <img src={LOGO_SRC} alt="MyBishBash" />
+          <img src={LOGO_SRC} alt="myBishBash" />
           <EditableText as="p" className="download-access-eyebrow" path="access.eyebrow" />
           <h1 id="download-access-title"><EditableText path="access.title" /></h1>
           <EditableText as="p" path="access.body" />
@@ -353,7 +353,7 @@ function DownloadPageContent() {
     <main className="download-page" data-testid="download-page">
       <section className="download-panel" aria-labelledby="download-title">
         <header className="download-hero">
-          <img src={LOGO_SRC} alt="MyBishBash" />
+          <img src={LOGO_SRC} alt="myBishBash" />
           <EditableText as="p" className="download-access-eyebrow" path={loggedInInstall ? "install.loggedIn.eyebrow" : "install.eyebrow"} />
           <h1 id="download-title">
             <EditableText path={loggedInInstall ? "install.loggedIn.title" : "install.title"} />

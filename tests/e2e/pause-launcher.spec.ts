@@ -15,7 +15,7 @@
  *
  * Regression guard (fake-launcher bypass regression):
  *  - Tapping a fake launcher icon with NO active pause must NOT go directly to the app;
- *    it must enter the MyBishBash card/intervention flow.
+ *    it must enter the myBishBash card/intervention flow.
  *  - Tapping a fake launcher icon WITH an active pause bypasses cards and opens the app.
  *  - Expired pause does not grant bypass when tapped from the fake launcher bar.
  *  - Pause for safari does not bypass card flow for youtube.
@@ -339,7 +339,7 @@ test('pause-modal-resets-when-card-overlay-key-changes', async ({ page }) => {
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
 
   await page.getByTestId('pause-app-button').click();
-  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Pause myBishBash?' })).toBeVisible();
 
   await page.evaluate(() => {
     window.history.pushState({}, '', '/mybishbash/intercept/youtube');
@@ -348,7 +348,7 @@ test('pause-modal-resets-when-card-overlay-key-changes', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/mybishbash\/intercept\/youtube$/);
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'Pause MyBishBash?' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Pause myBishBash?' })).toHaveCount(0);
 });
 
 test('continue-card-after-normal-completion — Done on personal card shows continue-to-app', async ({ page }) => {
@@ -481,7 +481,7 @@ test('apps-route-renders — /apps and Apps nav item are visible', async ({ page
   await expect(page.getByTestId('apps-list')).toContainText('Your apps');
   await expect(page.getByTestId('apps-list')).toContainText('No apps set up yet.');
   await expect(page.getByTestId('apps-add-more')).toContainText('Add another app');
-  await expect(page.getByText('MyBishBash installed')).toHaveCount(0);
+  await expect(page.getByText('myBishBash installed')).toHaveCount(0);
   await expect(page.getByTestId('create-card-button')).toHaveCount(0);
   await expect(page.getByTestId('apps-option-safari')).toContainText('Not set up');
   await expect(page.getByTestId('apps-option-safari')).toContainText('Set up Safari with myBishBash');
@@ -1143,7 +1143,7 @@ test('home-no-global-fake-launchers — Home no longer shows all fake app shortc
   await expect(page.getByTestId('fake-launcher-instagram')).toHaveCount(0);
 });
 
-test('apps-pause-status-and-end-pause — paused app is visible and can resume MyBishBash', async ({ page }) => {
+test('apps-pause-status-and-end-pause — paused app is visible and can resume myBishBash', async ({ page }) => {
   const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   await seedState(page, {
     cards: [personalCard('apps3', 'Resume card')],
