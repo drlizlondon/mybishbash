@@ -6221,6 +6221,11 @@ body {
   --button-width: min(86vw, 350px);
   --dashboard-shortcut-size: clamp(44px, 11vw, 50px);
   --card-cta-reserved-height: clamp(150px, 24svh, 202px);
+  /* Vertical space reserved below the safe-area for the fixed top controls
+     (dashboard + create). The quote area starts below this so it can never
+     render behind them. The interception variant adds a stacked pause button,
+     so it reserves more (see .launcher-interception-card below). */
+  --card-controls-reserved: clamp(74px, 10svh, 92px);
   position: fixed;
   inset: 0;
   z-index: 99999;
@@ -6272,7 +6277,7 @@ body {
   min-height: 0;
   margin-inline: auto;
   padding:
-    calc(env(safe-area-inset-top) + clamp(36px, 5.6svh, 54px))
+    calc(env(safe-area-inset-top) + var(--card-controls-reserved))
     0
     calc(env(safe-area-inset-bottom) + 12px);
   display: flex;
@@ -6280,6 +6285,12 @@ body {
   align-items: center;
   text-align: center;
   transform: none;
+}
+
+/* Interception card stacks a pause button below the dashboard shortcut, so the
+   quote area must start lower to clear both. */
+.premium-card-screen.launcher-interception-card {
+  --card-controls-reserved: clamp(120px, 16svh, 144px);
 }
 
 .premium-card-header {
@@ -6839,7 +6850,8 @@ body {
 
 @media (max-height: 720px) {
   .premium-card-main {
-    padding-top: calc(env(safe-area-inset-top) + 30px);
+    /* Keep the var-based top reserve (so the quote still clears the top
+       controls on short iPhones); only tighten the bottom inset. */
     padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
   }
 

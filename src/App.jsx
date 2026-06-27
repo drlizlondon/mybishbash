@@ -170,13 +170,22 @@ import {
 import "./testing/TestPilot/testPilot.css";
 import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
-import { EditableLandingPage } from "./LandingPage";
-import EarlyAccessPage from "./EarlyAccessPage";
-import AboutPage from "./AboutPage";
-import DownloadPage from "./DownloadPage";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
 
 const HQPanel = lazy(() => import("./HQPanel"));
+// Marketing/legal pages are lazy: they short-circuit the app at the top of
+// App() and pull in framer-motion (landing) — keeping them out of the main
+// bundle speeds first paint on the app/card path.
+const EditableLandingPage = lazy(() => import("./LandingPage").then((m) => ({ default: m.EditableLandingPage })));
+const EarlyAccessPage = lazy(() => import("./EarlyAccessPage"));
+const AboutPage = lazy(() => import("./AboutPage"));
+const DownloadPage = lazy(() => import("./DownloadPage"));
+
+// Minimal, brand-coloured hold while a lazy page chunk loads. Intentionally
+// quiet (no spinner) so it reads as an instant background, not a loading state.
+function PageSuspenseFallback() {
+  return <div style={{ position: "fixed", inset: 0, background: "#0c0c0c" }} aria-hidden="true" />;
+}
 const AUTH_SESSION_RETRY_DELAYS_MS = [150, 450, 900];
 const TESTPILOT_CONFIG = {
   productName: "myBishBash",
@@ -1744,15 +1753,15 @@ function App() {
     const isStandaloneMode = isStandaloneDisplayMode();
 
     if (normalizedPath === "/early-access") {
-      return <EarlyAccessPage />;
+      return <Suspense fallback={<PageSuspenseFallback />}><EarlyAccessPage /></Suspense>;
     }
 
     if (normalizedPath === "/download" || normalizedPath === "/invite") {
-      return <DownloadPage />;
+      return <Suspense fallback={<PageSuspenseFallback />}><DownloadPage /></Suspense>;
     }
 
     if (normalizedPath === "/about") {
-      return <AboutPage />;
+      return <Suspense fallback={<PageSuspenseFallback />}><AboutPage /></Suspense>;
     }
 
     if (normalizedPath === "/terms" || normalizedPath === "/privacy") {
@@ -1766,7 +1775,7 @@ function App() {
     }
 
     if (!hasAppRouteParam && !isStandaloneMode && (normalizedPath === "/" || normalizedPath === "/index.html")) {
-      return <EditableLandingPage />;
+      return <Suspense fallback={<PageSuspenseFallback />}><EditableLandingPage /></Suspense>;
     }
   }
 
@@ -12496,6 +12505,20 @@ function CardRevealTemplate({
         route: window.location.pathname + window.location.search,
       },
     ];
+    // Dev-only: measure boot → first card render so slow-load regressions are
+    // visible in the console / performance timeline.
+    if (import.meta.env.DEV && typeof performance !== "undefined" && !window.__MYBISHBASH_CARD_FIRST_MOUNT_LOGGED) {
+      window.__MYBISHBASH_CARD_FIRST_MOUNT_LOGGED = true;
+      try {
+        performance.mark("mbb:card-overlay-first-mount");
+        if (performance.getEntriesByName("mbb:boot").length) {
+          const measure = performance.measure("mbb:boot→card", "mbb:boot", "mbb:card-overlay-first-mount");
+          console.info(`[perf] boot → first card overlay: ${Math.round(measure.duration)}ms (variant=${variant})`);
+        }
+      } catch {
+        /* performance API unavailable */
+      }
+    }
   }, [cardOverlayKey, variant]);
 
   return (
@@ -12560,10 +12583,15 @@ function getMessageBaseSize(value) {
   const manualLines = text ? text.split(/\r\n|\r|\n/).length : 1;
   const estimatedLines = Math.max(manualLines, Math.ceil(characterCount / 20));
 
-  if (estimatedLines <= 1 && characterCount <= 14) return 56;
-  if (estimatedLines <= 2 && characterCount <= 24) return 48;
-  if (estimatedLines <= 3 && characterCount <= 48) return 42;
-  return 34;
+  // Cap the base size by quote length so longer quotes scale down and fit the
+  // bounded quote area on small iPhones. The CSS clamp() then scales further by
+  // viewport width: clamp(18px, 10.8vw, var(--message-font-size)).
+  if (estimatedLines <= 1 && characterCount <= 14) return 52;
+  if (estimatedLines <= 2 && characterCount <= 24) return 44;
+  if (estimatedLines <= 3 && characterCount <= 48) return 38;
+  if (characterCount <= 90) return 34;
+  if (characterCount <= 140) return 30;
+  return 26;
 }
 
 function CardRevealMessage({ message, className = "" }) {

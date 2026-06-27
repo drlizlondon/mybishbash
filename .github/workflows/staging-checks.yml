@@ -48,7 +48,7 @@ jobs:
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
 
       - name: Playwright smoke tests
-        run: npx playwright test tests/e2e/release-smoke.spec.ts tests/e2e/commitment-cards.spec.ts
+        run: npx playwright test tests/e2e/release-smoke.spec.ts tests/e2e/commitment-cards.spec.ts tests/e2e/card-overlay-mobile.spec.ts
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
