@@ -19,8 +19,8 @@ function AboutHeader() {
   const { content, editMode } = useContentEdit();
   const stopEditNavigation = editMode ? (event) => event.preventDefault() : undefined;
   const navItems = [
-    { href: `${BASE}about`, active: true },
-    { href: `${HOME_HREF}#features` },
+    { href: `${HOME_HREF}#how-it-works` },
+    { href: `${HOME_HREF}#examples` },
   ];
 
   return (

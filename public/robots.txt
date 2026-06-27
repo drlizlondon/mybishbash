@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://drlizlondon.github.io/mybishbash/sitemap.xml

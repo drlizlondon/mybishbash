@@ -1,7 +1,11 @@
-// Capture fresh, real app screenshots for the landing "See it in action" section.
+// Capture the fresh, real app hero screenshot for the landing page.
 // Requires a running `vite preview` server (default http://127.0.0.1:4173).
-// Writes into public/screenshots/: hero-home.png (Nudge), feature-pause.png
-// (pause-before-app interruption), feature-commit.png (Commitment card).
+// Writes public/screenshots/hero-home.png (the Personal Card / Nudge screen
+// shown in the hero phone frame).
+//
+// The "Examples" mechanics (Pause / Personal Cards / Commitment / Packs) are
+// rendered as CSS mockups in src/LandingSections.jsx, so they no longer rely
+// on captured PNGs — keeping each example distinct, current and lightweight.
 //
 // Card prompts follow the Personal Cards rules: specific, low-burden, instantly
 // answerable; "today" is fine for the marketing demo.
@@ -33,15 +37,6 @@ const homeScreenVersions = {
   instagram: { id: "instagram", name: "Instagram", installPath: "/mybishbash/install/instagram/", launchPath: "/intercept/instagram", iconSrc: "/mybishbash/icons/instagram-cover.jpg", realAppLabel: "Instagram", appUrl: "instagram://app", manualUrl: "https://www.instagram.com", interruptionPackId: "", useInterruptionPack: true, interruptionPaused: false },
 };
 
-const instagramPack = {
-  id: "instagram-interruption", type: "interruption", targetApp: "instagram", active: true,
-  name: "Instagram Interruptions", linkedVersionId: "instagram",
-  cards: [
-    { id: "ig-1", text: "Do you really want to go on Instagram right now?", title: "Do you really want to go on Instagram right now?" },
-    { id: "ig-2", text: "Open your own life before opening everyone else's.", title: "Open your own life before opening everyone else's." },
-  ],
-};
-
 const base = (card) => ({
   attribution: null, createdAt: now.toISOString(), lastShownAt: null, notYetUntil: null,
   doneDate: null, paused: false, timingWindows: allWindows, frequency: "once_daily", ...card,
@@ -53,41 +48,6 @@ const nudgeCards = [
   base({ id: "vitamins", promptText: "Have you taken your vitamins?", theme: "Minimal", icon: "leaf", statusToday: "doneToday", doneDate: todayKey }),
   base({ id: "plants", promptText: "Have you watered the plants?", theme: "Soft Bloom", icon: "water", statusToday: "doneToday", doneDate: todayKey }),
 ];
-
-// Commitment: a full commitment card (all fields the composer writes) so it
-// renders in the Library Commitment Cards section.
-const commitmentCard = base({
-  id: "commit-1",
-  cardKind: "commitment",
-  promptText: "go for a 20 minute walk after lunch",
-  dashboardTitle: "Today's Commitment",
-  commitmentReason: "Fresh air helps me reset.",
-  commitmentTimingMode: "anytime",
-  commitmentStartWindow: "anytime",
-  commitmentCustomStartTime: "",
-  commitmentCustomEndTime: "",
-  commitmentCheckInEnabled: false,
-  commitmentCheckInTime: "",
-  commitmentCheckInPendingDate: null,
-  commitmentLifecycleStatus: null,
-  commitmentCheckInShownDate: null,
-  commitmentCheckInResponse: null,
-  commitmentCheckInResponseDate: null,
-  commitmentCheckInResponseAt: null,
-  commitmentEncouragementRequestedDate: null,
-  commitmentEncouragementCompletedDate: null,
-  commitmentClosedEarlyDate: null,
-  commitmentReviewDueDate: null,
-  commitmentReviewResponse: null,
-  commitmentReviewResponseDate: null,
-  commitmentReviewResponseAt: null,
-  commitmentFinalOutcome: null,
-  updatedAt: now.toISOString(),
-  disliked: false,
-  theme: "Starry Sky",
-  icon: "moon",
-  statusToday: "fresh",
-});
 
 function storageFor(cards, extra = {}) {
   return {
@@ -142,42 +102,8 @@ async function main() {
       await page.screenshot({ path: path.join(outDir, "hero-home.png") });
       await context.close();
     }
-    // Pause-before-app (interruption) — the intercept route renders the pause card.
-    {
-      const { context, page } = await newPage(browser);
-      await seed(page, storageFor(nudgeCards, {
-        "mybishbash.home-screen-selected.v1": "instagram",
-        "mybishbash.card-packs.v1": [instagramPack],
-      }), `${baseUrl}intercept/instagram`);
-      await page.waitForTimeout(900);
-      await page.screenshot({ path: path.join(outDir, "feature-pause.png") });
-      await context.close();
-    }
-    // Commitment — rendered in the Library Commitment Cards section.
-    {
-      const { context, page } = await newPage(browser);
-      await seed(page, storageFor([commitmentCard], { "mybishbash.home-screen-selected.v1": "mybishbash" }), `${baseUrl}library`);
-      await movePastInterruption(page);
-      // Expand the Commitment Cards section, then open the card's reveal for a
-      // focused single-card shot matching the Nudge/Pause framing.
-      const commitSection = page.getByText("Commitment Cards", { exact: false }).first();
-      if (await commitSection.isVisible().catch(() => false)) {
-        await commitSection.click();
-        await page.waitForTimeout(600);
-      }
-      const commitCard = page.getByText("20 minute walk", { exact: false }).first();
-      if (await commitCard.isVisible().catch(() => false)) {
-        await commitCard.click();
-        await page.waitForTimeout(900);
-      }
-      await page.waitForTimeout(400);
-      await page.screenshot({ path: path.join(outDir, "feature-commit.png") });
-      await context.close();
-    }
-    for (const name of ["hero-home.png", "feature-pause.png", "feature-commit.png"]) {
-      downscale(path.join(outDir, name));
-    }
-    process.stdout.write(`captured + downscaled to ${TARGET_WIDTH}px: hero-home.png, feature-pause.png, feature-commit.png\n`);
+    downscale(path.join(outDir, "hero-home.png"));
+    process.stdout.write(`captured + downscaled to ${TARGET_WIDTH}px: hero-home.png\n`);
   } finally {
     await browser.close();
   }

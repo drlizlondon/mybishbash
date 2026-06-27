@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { landingContent } from "../content/landingContent";
 
 const ContentEditContext = createContext(null);
-const DEFAULT_STORAGE_KEY = "mybishbash.landingContentDraft.v8";
+const DEFAULT_STORAGE_KEY = "mybishbash.landingContentDraft.v10";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -29,7 +29,9 @@ function isDefaultContentCompatible(value) {
   return (
     Array.isArray(value?.hero?.headline) &&
     value.hero.headline.length === landingContent.hero.headline.length &&
-    value.hero.headline[4] === landingContent.hero.headline[4]
+    typeof value?.hero?.gold === "string" &&
+    Array.isArray(value?.proof) &&
+    value.proof.length === landingContent.proof.length
   );
 }
 
