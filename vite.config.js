@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
-import { createReadStream, existsSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -168,6 +168,30 @@ function appVersionPlugin() {
   };
 }
 
+// Stamp the built service worker with the per-build version so its bytes change
+// every push. Without this the SW is byte-identical each deploy, the browser
+// never installs the new one, and its version-keyed caches never rotate —
+// leaving installed PWAs on stale assets. The SOURCE file keeps "dev" (release
+// guardrails read the source); only the emitted dist/service-worker.js is
+// stamped, which is what browsers fetch.
+function serviceWorkerVersionPlugin() {
+  return {
+    name: "mybishbash-sw-version",
+    apply: "build",
+    writeBundle(options) {
+      const outDir = options.dir || resolve(__dirname, "dist");
+      const swPath = join(outDir, "service-worker.js");
+      if (!existsSync(swPath)) return;
+      const source = readFileSync(swPath, "utf8");
+      const stamped = source.replace(
+        /const SERVICE_WORKER_VERSION = "[^"]*";/,
+        `const SERVICE_WORKER_VERSION = ${JSON.stringify(String(appVersion))};`,
+      );
+      if (stamped !== source) writeFileSync(swPath, stamped);
+    },
+  };
+}
+
 function getGitSha() {
   try {
     return execSync("git rev-parse HEAD", { cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -178,7 +202,7 @@ function getGitSha() {
 
 export default defineConfig({
   base: "/mybishbash/",
-  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },

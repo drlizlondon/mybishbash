@@ -2909,6 +2909,31 @@ function App() {
     refreshMyBishBashAppShell(BASE_PATH || "/mybishbash");
   }, []);
 
+  // Auto-apply a detected update at a SAFE moment so installed PWAs pick up new
+  // builds without a manual tap. "Safe" = nothing interactive on screen; we
+  // apply only when the user returns to the tab (visibility/focus) so a reload
+  // never interrupts an active card, composer, or onboarding. The visible
+  // banner remains for immediate in-session updates.
+  const autoUpdateSafeRef = useRef(false);
+  useEffect(() => {
+    autoUpdateSafeRef.current =
+      !e2eMode && appUpdate.updateAvailable && !overlay && !isComposerOpen && setupComplete;
+  });
+  useEffect(() => {
+    if (e2eMode || !appUpdate.updateAvailable) return undefined;
+    const applyIfSafe = () => {
+      if (document.visibilityState === "visible" && autoUpdateSafeRef.current) {
+        refreshAppShell();
+      }
+    };
+    document.addEventListener("visibilitychange", applyIfSafe);
+    window.addEventListener("focus", applyIfSafe);
+    return () => {
+      document.removeEventListener("visibilitychange", applyIfSafe);
+      window.removeEventListener("focus", applyIfSafe);
+    };
+  }, [appUpdate.updateAvailable, e2eMode, refreshAppShell]);
+
   useEffect(() => {
     if (e2eMode) return undefined;
     if (!session?.user?.id) return undefined;
