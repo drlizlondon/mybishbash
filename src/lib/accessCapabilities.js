@@ -28,7 +28,8 @@ const PAID_ENTITLEMENTS = {
 
 export const MEMBERSHIP_ENTITLEMENTS = {
   [MEMBERSHIPS.FREE]: {
-    maxConnectedApps: 2,
+    // myBishBash core is always included; free adds ONE connected app shortcut.
+    maxConnectedApps: 1,
     maxPersonalCards: 5,
     maxCustomCards: 5,
     premiumPacksEnabled: false,
@@ -69,6 +70,8 @@ function rawMembership(profile = {}) {
   const value = profile?.membership ?? profile?.access_tier ?? profile?.accessTier;
   // Legacy 'premium' tier (pre-membership rows) maps to premium membership.
   if (value === MEMBERSHIPS.PREMIUM || value === MEMBERSHIPS.FOUNDER) return value;
+  // Legacy paid markers (pre-membership tiers / E2E fixtures).
+  if (value === "founding_access" || value === "founding-access") return MEMBERSHIPS.PREMIUM;
   return MEMBERSHIPS.FREE;
 }
 

@@ -45,7 +45,7 @@ const freeEnt = resolveEntitlements({ membership: "free", has_access: true }, op
 const founderEnt = resolveEntitlements({ membership: "founder", has_access: true }, opts);
 const premiumEnt = resolveEntitlements({ membership: "premium", has_access: true }, opts);
 
-assert.equal(freeEnt.maxConnectedApps, 2, "free allows 2 connected apps");
+assert.equal(freeEnt.maxConnectedApps, 1, "free allows myBishBash core + 1 connected app");
 assert.equal(freeEnt.maxPersonalCards, 5, "free allows 5 personal cards");
 assert.equal(freeEnt.premiumPacksEnabled, false, "free has no premium packs");
 assert.equal(isUnlimited(founderEnt.maxConnectedApps), true, "founder apps unlimited");
@@ -60,7 +60,7 @@ assert.deepEqual(
 // Expired paid membership degrades to free entitlements.
 const expiredPremium = resolveEntitlements({ membership: "premium", has_access: true, access_expires_at: PAST }, opts);
 assert.equal(expiredPremium.premiumPacksEnabled, false, "expired premium loses premium packs");
-assert.equal(expiredPremium.maxConnectedApps, 2, "expired premium falls back to free app cap");
+assert.equal(expiredPremium.maxConnectedApps, 1, "expired premium falls back to free app cap");
 
 // ── Tester and admin are orthogonal ──────────────────────────────────────────
 
@@ -77,7 +77,7 @@ assert.equal(premiumEnt.canAccessHq, false, "membership alone does not grant HQ 
 const overridden = resolveEntitlements({ membership: "free", has_access: true, entitlement_overrides: { maxPersonalCards: 50, premiumPacksEnabled: true } }, opts);
 assert.equal(overridden.maxPersonalCards, 50, "override raises personal card cap");
 assert.equal(overridden.premiumPacksEnabled, true, "override can enable premium packs for a free user");
-assert.equal(overridden.maxConnectedApps, 2, "non-overridden keys keep membership default");
+assert.equal(overridden.maxConnectedApps, 1, "non-overridden keys keep membership default");
 const stringOverride = resolveEntitlements({ membership: "free", has_access: true, entitlement_overrides: '{"maxConnectedApps": null}' }, opts);
 assert.equal(isUnlimited(stringOverride.maxConnectedApps), true, "string JSON overrides parse and apply");
 
@@ -94,7 +94,8 @@ assert.equal(isWithinLimit(3, 2), false, "3 items exceeds a cap of 2");
 const freeCapabilities = getCapabilities({ membership: "free", has_access: true }, opts);
 const paidCapabilities = getCapabilities({ membership: "premium", has_access: true }, opts);
 
-assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), true, "free (2 apps) is still 'multiple apps' under the shim");
+assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_MULTIPLE_APPS), false, "free (1 connected app) is not 'multiple apps' under the shim");
+assert.equal(getMembership({ access_tier: "founding_access", has_access: true }, NOW), MEMBERSHIPS.PREMIUM, "legacy founding_access tier maps to premium");
 assert.equal(freeCapabilities.has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT), false, "free has no premium content");
 assert.equal(paidCapabilities.has(CAPABILITIES.CAN_USE_PREMIUM_CONTENT), true, "paid unlocks premium content");
 assert.equal(
