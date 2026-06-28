@@ -105,8 +105,8 @@ function PauseScreen() {
       <div className="scr-spacer" />
       <span className="scr-app-pill"><i className="pill-ig" aria-hidden="true" />Instagram</span>
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Not yet</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Open Instagram</button>
+        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Back home</button>
+        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Continue to Instagram</button>
       </div>
     </div>
   );
@@ -124,7 +124,7 @@ function PersonalScreen() {
       <div className="scr-actions">
         <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Done</button>
         <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>I'll do it now</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Not yet</button>
+        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Not done</button>
       </div>
     </div>
   );
@@ -150,19 +150,19 @@ function PacksScreen() {
   return (
     <div className="scr scr-packs">
       <div className="scr-pack-head">
-        <span className="scr-pack-tag">BETTER BEDTIME · PACK</span>
+        <span className="scr-pack-tag">CONFIDENCE · PACK</span>
         <span className="scr-pack-dots" aria-hidden="true">
           <i /><i /><i />
         </span>
       </div>
       <BrandB />
-      <p className="scr-prompt">Put your phone away for bedtime?</p>
+      <p className="scr-prompt">You've handled harder than this.</p>
       <span className="scr-rule" aria-hidden="true" />
-      <p className="scr-sub">One of a ready-made set, shown before the apps you choose.</p>
+      <p className="scr-sub">A mindset nudge, shown before the apps you choose.</p>
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Done</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Not yet</button>
+        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>I really like this one</button>
+        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Continue</button>
       </div>
     </div>
   );

@@ -136,24 +136,24 @@ export const mechanics = {
     {
       key: "packs",
       label: "Packs",
-      title: "Packs for the headspace you want",
-      copy: "Ready-made prompt sets — from Better Bedtime to Motivational Quotes — that show up before your chosen apps.",
+      title: "Packs that shift your mindset",
+      copy: "Ready-made sets of quotes and affirmations that show up before your chosen apps — nudging you towards who you want to be.",
     },
   ],
 };
 
 export const packs = {
   eyebrow: "Packs",
-  heading: "Borrow a mindset, skip the busywork.",
-  copy: "Packs are ready-made prompt sets we craft at myBishBash. Install one and its messages show up before the apps you choose — shaping how you think, not adding chores to your day.",
+  heading: "Think like the person you're becoming.",
+  copy: "Packs are ready-made sets of quotes and affirmations we craft at myBishBash. Install one and its words show up before the apps you choose — pulling your head towards who you want to be, not adding chores to your day.",
   themes: [
-    { name: "Better Bedtime", line: "“Put your phone away for bedtime?”" },
-    { name: "Stop Being Late", line: "“Checked what time you need to leave?”" },
-    { name: "Motivational Quote", line: "“It always seems impossible until it's done.”" },
-    { name: "Healthier Daily Basics", line: "“Have you moved your body today?”" },
+    { name: "Confidence", line: "“You've handled harder than this.”" },
+    { name: "Calm", line: "“Nothing in that feed is urgent.”" },
+    { name: "Focus", line: "“The work that matters is rarely the loudest.”" },
+    { name: "Motivation", line: "“It always seems impossible until it's done.”" },
   ],
   goals: ["Confidence", "Focus", "Calm", "Create", "Health", "Relationships"],
-  note: "Packs are mindset and habit prompts — not checklists. Install once and they appear wherever you've chosen.",
+  note: "Packs are mindset nudges — quotes and affirmations, not checklists. Install once and they appear wherever you've chosen.",
 };
 
 export const comparison = {
@@ -262,7 +262,7 @@ export const faq = {
     },
     {
       q: "What's in a Pack?",
-      a: "Packs are ready-made prompt sets — from Better Bedtime to Motivational Quotes to Healthier Daily Basics — that show up before your chosen apps. They shape how you think, not a list of chores.",
+      a: "Packs are ready-made sets of quotes and affirmations — think confidence, calm or motivation — that appear before your chosen apps. They nudge how you think and who you're becoming, not a list of chores.",
     },
     {
       q: "Is my data private?",
