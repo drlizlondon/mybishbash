@@ -22,10 +22,12 @@ export const landingContent = {
   "hero": {
     "eyebrow": "The intentional-phone app",
     "headline": [
-      "Your phone shapes",
-      "your attention."
+      "Your phone",
+      "shapes your",
+      "attention.",
+      "myBishBash helps"
     ],
-    "gold": "Take it back.",
+    "gold": "shape it intentionally.",
     "copy": [
       "myBishBash drops a check-in in front of the apps that eat your time, and resurfaces the things you actually meant to do — so your hours go where you want them. No blockers. No guilt-trips."
     ]

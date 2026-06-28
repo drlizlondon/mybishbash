@@ -123,8 +123,9 @@ function Hero() {
           <div className="hero-copy-block">
             <EditableText className="eyebrow hero-eyebrow reveal-up" path="hero.eyebrow" />
             <h1 className="hero-title reveal-up delay-1" id="hero-title">
-              <EditableText className="hero-title-line" path="hero.headline.0" />
-              <EditableText className="hero-title-line" path="hero.headline.1" />
+              {content.hero.headline.map((line, index) => (
+                <EditableText className="hero-title-line" path={`hero.headline.${index}`} key={index} />
+              ))}
               <span className="hero-title-line hero-gold-line">
                 <span className="hero-gold-phrase">
                   <EditableText path="hero.gold" />
