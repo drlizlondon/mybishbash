@@ -1,15 +1,15 @@
 {
   "name": "Safari",
   "short_name": "Safari",
-  "id": "https://drlizlondon.github.io/mybishbash/intercept/safari",
-  "start_url": "https://drlizlondon.github.io/mybishbash/intercept/safari",
-  "scope": "https://drlizlondon.github.io/mybishbash/",
+  "id": "https://mybishbash.app/intercept/safari",
+  "start_url": "https://mybishbash.app/intercept/safari",
+  "scope": "https://mybishbash.app/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/mybishbash/icons/apple-touch-icon.png",
+      "src": "/icons/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png"
     }

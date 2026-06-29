@@ -4,16 +4,17 @@ import {
   isAvailabilityStatusEnabledForUsers,
   isValidAvailabilityStatus,
 } from "./launcherAvailability.js";
+import { BASE, BASE_NO_SLASH, PRODUCTION_ORIGIN, rebase } from "./basePath.js";
 
 const LAUNCHER_TIMESTAMP = "2026-05-13T00:00:00.000Z";
-export const PLACEHOLDER_ICON_SRC = "/mybishbash/icons/mybishbash-cover.png";
+export const PLACEHOLDER_ICON_SRC = rebase("/mybishbash/icons/mybishbash-cover.png");
 
 export const LAUNCHER_THEME = {
   backgroundColor: "#F7F2EE",
   themeColor: "#F7F2EE",
 };
 
-export const FAKE_APP_LAUNCHERS = [
+const RAW_FAKE_APP_LAUNCHERS = [
   {
     id: "safari",
     displayName: "Safari",
@@ -298,6 +299,17 @@ export const FAKE_APP_LAUNCHERS = [
     updatedAt: LAUNCHER_TIMESTAMP,
   },
 ];
+
+// Re-point authored "/mybishbash/..." asset paths at the active base so the
+// registry works at the root domain (production) or under "/mybishbash/"
+// (staging/e2e). Launcher ids are untouched — the static-ID invariant holds.
+export const FAKE_APP_LAUNCHERS = RAW_FAKE_APP_LAUNCHERS.map((launcher) => ({
+  ...launcher,
+  installPath: rebase(launcher.installPath),
+  manifestPath: rebase(launcher.manifestPath),
+  iconSrc: rebase(launcher.iconSrc),
+  ...(launcher.customIconSrc ? { customIconSrc: rebase(launcher.customIconSrc) } : {}),
+}));
 
 export const LAUNCHER_IDS = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
 export const LAUNCHER_REGISTRY = Object.fromEntries(
@@ -644,9 +656,9 @@ export function getEnabledLaunchers() {
   return FAKE_APP_LAUNCHERS.filter((launcher) => launcher.enabled);
 }
 
-export function buildManifestForLauncher(launcher, origin = "https://drlizlondon.github.io") {
+export function buildManifestForLauncher(launcher, origin = PRODUCTION_ORIGIN) {
   const launchPath = launcher.launchPath.startsWith("/") ? launcher.launchPath : `/${launcher.launchPath}`;
-  const startUrl = `${origin}/mybishbash${launchPath}`;
+  const startUrl = `${origin}${BASE_NO_SLASH}${launchPath}`;
   const iconSrc = launcher.customIconSrc || launcher.iconSrc;
   const iconType = /\.svg(?:$|\?)/i.test(iconSrc)
     ? "image/svg+xml"
@@ -659,7 +671,7 @@ export function buildManifestForLauncher(launcher, origin = "https://drlizlondon
     short_name: launcher.displayName,
     id: startUrl,
     start_url: startUrl,
-    scope: `${origin}/mybishbash/`,
+    scope: `${origin}${BASE}`,
     display: "standalone",
     background_color: LAUNCHER_THEME.backgroundColor,
     theme_color: LAUNCHER_THEME.themeColor,

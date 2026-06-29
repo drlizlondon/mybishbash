@@ -1,15 +1,15 @@
 {
   "name": "Instagram",
   "short_name": "Instagram",
-  "id": "https://drlizlondon.github.io/mybishbash/intercept/instagram",
-  "start_url": "https://drlizlondon.github.io/mybishbash/intercept/instagram",
-  "scope": "https://drlizlondon.github.io/mybishbash/",
+  "id": "https://mybishbash.app/intercept/instagram",
+  "start_url": "https://mybishbash.app/intercept/instagram",
+  "scope": "https://mybishbash.app/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/mybishbash/icons/instagram-cover.jpg",
+      "src": "/icons/instagram-cover.jpg",
       "sizes": "180x180",
       "type": "image/jpeg"
     }

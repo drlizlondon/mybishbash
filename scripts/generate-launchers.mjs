@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FAKE_APP_LAUNCHERS, buildManifestForLauncher } from "../src/lib/launcherRegistry.js";
+import { BASE, BASE_NO_SLASH } from "../src/lib/basePath.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -41,18 +42,18 @@ function buildInstallHtml(launcher) {
     <meta name="apple-mobile-web-app-title" content="${escapeHtml(launcher.displayName)}" />
     <link rel="manifest" href="${launcher.manifestPath}" />
     <link rel="apple-touch-icon" href="${launcher.iconSrc}" />
-    <link rel="stylesheet" href="/mybishbash/install/install.css" />
+    <link rel="stylesheet" href="${BASE}install/install.css" />
     <title>${escapeHtml(launcher.displayName)} · myBishBash</title>
   </head>
   <body>
     <main class="install-shell">
       <header class="install-brand">
-        <img class="install-brand-logo" src="/mybishbash/icons/mybishbash-logo-mark.png" alt="" />
+        <img class="install-brand-logo" src="${BASE}icons/mybishbash-logo-mark.png" alt="" />
         <h1>myBishBash</h1>
         <p>reminders, commitments and prompts before the apps you already open</p>
       </header>
       <section class="install-card">
-        <a data-launch-link class="install-icon-link" href="/mybishbash${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} with myBishBash">
+        <a data-launch-link class="install-icon-link" href="${BASE_NO_SLASH}${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} with myBishBash">
           <img data-install-icon class="install-icon" src="${launcher.iconSrc}" alt="${escapeHtml(launcher.displayName)} icon" />
         </a>
         <div class="install-copy">
@@ -90,7 +91,7 @@ function buildInstallHtml(launcher) {
         </div>
       </section>
     </main>
-    <script src="/mybishbash/install/install.js"></script>
+    <script src="${BASE}install/install.js"></script>
   </body>
 </html>
 `;

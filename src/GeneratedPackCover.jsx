@@ -2,8 +2,9 @@
 // and cards; the cover system handles typography, colour, badges, and copy.
 
 import { getCoverModel } from "./lib/generatedCover";
+import { rebase } from "./lib/basePath";
 
-const LOGO_SRC = "/mybishbash/icons/mybishbash-cover.png";
+const LOGO_SRC = rebase("/mybishbash/icons/mybishbash-cover.png");
 const FALLBACK_PALETTE = {
   name: "charcoal",
   bg: "#211f1d",

@@ -34,7 +34,7 @@ function useSignupInstallManifest(hasAccess, isLoggedIn) {
     const manifest = {
       name: "myBishBash",
       short_name: "myBishBash",
-      id: "https://drlizlondon.github.io/mybishbash/",
+      id: "https://mybishbash.app/",
       description: "Private little reminders from yourself.",
       start_url: buildSignupStartUrl(handoff),
       scope: `${window.location.origin}${BASE}`,

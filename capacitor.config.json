@@ -3,7 +3,7 @@
   "appName": "MyBishBash",
   "webDir": "dist",
   "server": {
-    "url": "https://drlizlondon.github.io/mybishbash/",
+    "url": "https://mybishbash.app/",
     "cleartext": false
   },
   "ios": {

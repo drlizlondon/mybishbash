@@ -1,15 +1,15 @@
 {
   "name": "Reddit",
   "short_name": "Reddit",
-  "id": "https://drlizlondon.github.io/mybishbash/intercept/reddit",
-  "start_url": "https://drlizlondon.github.io/mybishbash/intercept/reddit",
-  "scope": "https://drlizlondon.github.io/mybishbash/",
+  "id": "https://mybishbash.app/intercept/reddit",
+  "start_url": "https://mybishbash.app/intercept/reddit",
+  "scope": "https://mybishbash.app/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/mybishbash/icons/mybishbash-cover.png",
+      "src": "/icons/mybishbash-cover.png",
       "sizes": "180x180",
       "type": "image/png"
     }

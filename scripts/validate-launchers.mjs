@@ -10,6 +10,7 @@ import {
   resolveLauncherIconSrc,
   sanitizeLauncherUrl,
 } from "../src/lib/launcherRegistry.js";
+import { BASE, BASE_NO_SLASH, PRODUCTION_ORIGIN } from "../src/lib/basePath.js";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFields = [
@@ -59,8 +60,8 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
 
   const resolvedIconSrc = resolveLauncherIconSrc(launcher);
   assert.equal(resolvedIconSrc, launcher.iconSrc, `${launcher.id} should use its registry icon as the resolved logo`);
-  if (resolvedIconSrc.startsWith("/mybishbash/")) {
-    const iconFilePath = resolve(root, "public", resolvedIconSrc.replace(/^\/mybishbash\//, ""));
+  if (resolvedIconSrc.startsWith(BASE)) {
+    const iconFilePath = resolve(root, "public", resolvedIconSrc.slice(BASE.length));
     assert.equal(existsSync(iconFilePath), true, `${launcher.id} icon file missing: ${resolvedIconSrc}`);
   }
 
@@ -79,10 +80,10 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
 
   if (!launcher.enabled) continue;
 
-  assert.match(launcher.installPath, new RegExp(`^/mybishbash/install/${launcher.id}/$`));
+  assert.match(launcher.installPath, new RegExp(`^${escapeRegExp(BASE)}install/${launcher.id}/$`));
   assert.equal(launcher.launchPath, `/intercept/${launcher.id}`);
-  assert.equal(launcher.manifestPath, `/mybishbash/launchers/${launcher.id}/manifest.webmanifest`);
-  assert.equal(buildManifestForLauncher(launcher).start_url, `https://drlizlondon.github.io/mybishbash/intercept/${launcher.id}`);
+  assert.equal(launcher.manifestPath, `${BASE}launchers/${launcher.id}/manifest.webmanifest`);
+  assert.equal(buildManifestForLauncher(launcher).start_url, `${PRODUCTION_ORIGIN}${BASE_NO_SLASH}/intercept/${launcher.id}`);
 
   const manifestPath = resolve(root, "public", "launchers", launcher.id, "manifest.webmanifest");
   const installPath = resolve(root, "public", "install", launcher.id, "index.html");
@@ -90,8 +91,8 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
   assert.equal(existsSync(installPath), true, `${launcher.id} install page missing`);
 
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  assert.equal(manifest.start_url, `https://drlizlondon.github.io/mybishbash/intercept/${launcher.id}`);
-  assert.equal(manifest.scope, "https://drlizlondon.github.io/mybishbash/");
+  assert.equal(manifest.start_url, `${PRODUCTION_ORIGIN}${BASE_NO_SLASH}/intercept/${launcher.id}`);
+  assert.equal(manifest.scope, `${PRODUCTION_ORIGIN}${BASE}`);
   assert.equal(manifest.display, "standalone");
 
   const installHtml = readFileSync(installPath, "utf8");
@@ -184,13 +185,13 @@ assert.equal(
 );
 
 const chrome = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "chrome");
-assert.equal(chrome.iconSrc, "/mybishbash/icons/chrome-cover.png", "Chrome must use its own logo, not the myBishBash placeholder");
+assert.equal(chrome.iconSrc, `${BASE}icons/chrome-cover.png`, "Chrome must use its own logo, not the myBishBash placeholder");
 const chromeManifestPath = resolve(root, "public", "launchers", "chrome", "manifest.webmanifest");
 const chromeInstallPath = resolve(root, "public", "install", "chrome", "index.html");
 assert.equal(existsSync(chromeManifestPath), true, "Chrome manifest file missing");
 assert.equal(existsSync(chromeInstallPath), true, "Chrome install page missing");
 const chromeManifest = JSON.parse(readFileSync(chromeManifestPath, "utf8"));
-assert.equal(chromeManifest.icons?.[0]?.src, "/mybishbash/icons/chrome-cover.png");
+assert.equal(chromeManifest.icons?.[0]?.src, `${BASE}icons/chrome-cover.png`);
 assert.equal(chromeManifest.icons?.[0]?.type, "image/png");
 assert.match(readFileSync(chromeInstallPath, "utf8"), /icons\/chrome-cover\.png/);
 
@@ -199,7 +200,7 @@ const whatsappInstallPath = resolve(root, "public", "install", "whatsapp", "inde
 assert.equal(existsSync(whatsappManifestPath), true, "WhatsApp manifest file missing");
 assert.equal(existsSync(whatsappInstallPath), true, "WhatsApp install page missing");
 const whatsappManifest = JSON.parse(readFileSync(whatsappManifestPath, "utf8"));
-assert.equal(whatsappManifest.start_url, "https://drlizlondon.github.io/mybishbash/intercept/whatsapp");
+assert.equal(whatsappManifest.start_url, `${PRODUCTION_ORIGIN}${BASE_NO_SLASH}/intercept/whatsapp`);
 assert.equal(whatsappManifest.display, "standalone");
 assert.match(
   readFileSync(whatsappInstallPath, "utf8"),

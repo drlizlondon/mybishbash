@@ -1,3 +1,5 @@
+import { BASE } from "./lib/basePath";
+
 export function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     console.warn("[NOTIFICATIONS] Service workers are not supported.");
@@ -24,7 +26,7 @@ export function registerServiceWorker() {
     }
 
     navigator.serviceWorker
-      .register("/mybishbash/service-worker.js", { scope: "/mybishbash/" })
+      .register(`${BASE}service-worker.js`, { scope: BASE })
       .then((registration) => {
         console.log("[NOTIFICATIONS] Service worker registered", registration.scope);
         registration.addEventListener("updatefound", () => {

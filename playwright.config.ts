@@ -82,7 +82,9 @@ export default defineConfig({
   webServer: isStagingReleaseRun
     ? undefined
     : {
-        command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
+        // The e2e suite navigates "/mybishbash/..." paths, so build + preview
+        // against that base (production builds at root "/").
+        command: 'VITE_BASE_PATH=/mybishbash/ npm run build && VITE_BASE_PATH=/mybishbash/ npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
         url: 'http://127.0.0.1:4173/mybishbash/',
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,

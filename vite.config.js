@@ -201,7 +201,9 @@ function getGitSha() {
 }
 
 export default defineConfig({
-  base: "/mybishbash/",
+  // Production (Cloudflare Pages on https://mybishbash.app) serves from root.
+  // Staging (GitHub Pages) and the e2e suite set VITE_BASE_PATH=/mybishbash/.
+  base: process.env.VITE_BASE_PATH || "/",
   plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),

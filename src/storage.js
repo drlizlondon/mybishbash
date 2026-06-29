@@ -1,4 +1,5 @@
 import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY, mergeLauncherConfig } from "./lib/launcherRegistry";
+import { rebase } from "./lib/basePath";
 
 const STORAGE_KEY = "mybishbash.cards.v1";
 const SETUP_KEY = "mybishbash.setup-complete.v1";
@@ -72,9 +73,9 @@ export const DEFAULT_HOME_SCREEN_VERSIONS = {
   mybishbash: {
     id: "mybishbash",
     name: "myBishBash",
-    installPath: "/mybishbash/install/mybishbash/",
+    installPath: rebase("/mybishbash/install/mybishbash/"),
     launchPath: "/home",
-    iconSrc: "/mybishbash/icons/mybishbash-cover.png",
+    iconSrc: rebase("/mybishbash/icons/mybishbash-cover.png"),
     realAppLabel: "",
     appUrl: "",
     manualUrl: "",

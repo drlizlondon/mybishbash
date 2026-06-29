@@ -6,6 +6,9 @@ const previewVersion = process.env.VITE_APP_VERSION || (sourceSha ? `preview-${s
 
 run("npm", ["run", "build"], {
   ...process.env,
+  // The Pages preview is rewritten from the "/mybishbash/" base into
+  // "/mybishbash-preview/", so build against that base (production is root "/").
+  VITE_BASE_PATH: process.env.VITE_BASE_PATH || "/mybishbash/",
   VITE_APP_VERSION: previewVersion,
   VITE_SOURCE_SHA: sourceSha,
 });

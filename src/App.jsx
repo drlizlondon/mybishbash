@@ -281,9 +281,9 @@ function shouldUseSafariSetupHandoff() {
 
 function getLauncherSetupUrl(launcherId) {
   if (typeof window === "undefined") {
-    return `${BASE_PATH || "/mybishbash"}/install/${launcherId}/`;
+    return `${BASE_PATH}/install/${launcherId}/`;
   }
-  const basePath = BASE_PATH || PRODUCTION_BASE_PATH;
+  const basePath = BASE_PATH;
   return new URL(`${basePath}/install/${launcherId}/`, window.location.origin).toString();
 }
 
@@ -2889,12 +2889,12 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
-    checkForAppUpdate(BASE_PATH || "/mybishbash").then((result) => {
+    checkForAppUpdate(BASE_PATH).then((result) => {
       if (!cancelled) setAppUpdate({ ...result, checking: false });
     });
 
     const interval = window.setInterval(() => {
-      checkForAppUpdate(BASE_PATH || "/mybishbash").then((result) => {
+      checkForAppUpdate(BASE_PATH).then((result) => {
         if (!cancelled && result.updateAvailable) setAppUpdate({ ...result, checking: false });
       });
     }, 5 * 60 * 1000);
@@ -2906,7 +2906,7 @@ function App() {
   }, []);
 
   const refreshAppShell = useCallback(() => {
-    refreshMyBishBashAppShell(BASE_PATH || "/mybishbash");
+    refreshMyBishBashAppShell(BASE_PATH);
   }, []);
 
   // Auto-apply a detected update at a SAFE moment so installed PWAs pick up new

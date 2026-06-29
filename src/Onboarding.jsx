@@ -149,7 +149,7 @@ function getAppBasePath() {
 }
 
 function getLauncherInstallUrl(launcher) {
-  const basePath = getAppBasePath() || "/mybishbash";
+  const basePath = getAppBasePath();
   const path = launcher?.installPath ?? `${basePath}/install/${launcher?.id ?? "instagram"}/`;
   if (typeof window === "undefined") return path;
   if ((window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") && path.endsWith("/")) {

@@ -14,7 +14,7 @@ serve(async (req) => {
     Deno.env.get("VAPID_PRIVATE_KEY") ?? ""
   );
 
-  const publicAppUrl = Deno.env.get("PUBLIC_APP_URL") || "https://drlizlondon.github.io/mybishbash";
+  const publicAppUrl = Deno.env.get("PUBLIC_APP_URL") || "https://mybishbash.app";
   const sharedStateTableNames = ["mybishbash_state", ("bish" + "bash") + "_state"];
 
   // 1. Fetch enabled users
