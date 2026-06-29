@@ -1,4 +1,8 @@
-const APP_BASE = "/mybishbash/";
+// Derive the app base from the worker's own URL so it works at the production
+// root ("/") and under a sub-path like "/mybishbash/" (staging/GitHub Pages),
+// without hardcoding either. e.g. ".../service-worker.js" -> "/", and
+// ".../mybishbash/service-worker.js" -> "/mybishbash/".
+const APP_BASE = new URL("./", self.location).pathname;
 const APP_BASE_SLUG = APP_BASE.replace(/^\/+|\/+$/g, "") || "root";
 const SERVICE_WORKER_VERSION = "dev";
 const CACHE_PREFIX = `mybishbash-${APP_BASE_SLUG}-`;
@@ -7,7 +11,7 @@ const LEGACY_APP_BASE = "/" + "bish" + "bash/";
 const HTML_CACHE = `${CACHE_PREFIX}html-${SERVICE_WORKER_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${SERVICE_WORKER_VERSION}`;
 const MEDIA_CACHE = `${CACHE_PREFIX}media-${SERVICE_WORKER_VERSION}`;
-const INDEX_URL = "/mybishbash/index.html";
+const INDEX_URL = `${APP_BASE}index.html`;
 let shouldClaimClients = false;
 
 const MEDIA_EXTENSIONS = [
@@ -104,8 +108,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Tiny myBishBash moment?", {
       body: data.body || "Something you said mattered.",
-      icon: "/mybishbash/icons/mybishbash-cover.png",
-      badge: "/mybishbash/icons/mybishbash-cover.png",
+      icon: `${APP_BASE}icons/mybishbash-cover.png`,
+      badge: `${APP_BASE}icons/mybishbash-cover.png`,
       data,
     }),
   );
@@ -138,13 +142,13 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 function normalizeNotificationUrl(rawUrl) {
-  const fallback = new URL("/mybishbash/home", self.location.origin);
+  const fallback = new URL(`${APP_BASE}home`, self.location.origin);
 
   try {
     const url = new URL(rawUrl || fallback.toString(), self.location.origin);
     if (url.origin !== self.location.origin) return fallback.toString();
 
-    if (url.pathname === "/mybishbash/" || url.pathname === "/mybishbash/index.html") {
+    if (url.pathname === APP_BASE || url.pathname === `${APP_BASE}index.html`) {
       const route = url.searchParams.get("route");
       if (route) {
         const normalizedRoute = route.startsWith("/") ? route : `/${route}`;
@@ -154,7 +158,7 @@ function normalizeNotificationUrl(rawUrl) {
     }
 
     if (url.pathname.startsWith(LEGACY_APP_BASE)) {
-      url.pathname = url.pathname.replace(LEGACY_APP_BASE, "/mybishbash/");
+      url.pathname = url.pathname.replace(LEGACY_APP_BASE, APP_BASE);
     }
 
     if (!url.pathname.startsWith(APP_BASE)) return fallback.toString();
