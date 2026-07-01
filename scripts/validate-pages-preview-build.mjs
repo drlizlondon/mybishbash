@@ -79,7 +79,10 @@ assert.match(version.version, new RegExp(escapeRegExp(expectedSourceSha)));
 assert.match(appBundle, new RegExp(escapeRegExp(version.version)));
 
 const serviceWorker = readFileSync("dist/service-worker.js", "utf8");
-assert.match(serviceWorker, /const APP_BASE = "\/mybishbash-preview\/";/);
+// The service worker derives its base from its own location (root or sub-path)
+// rather than hardcoding one, so assert the dynamic derivation is intact.
+assert.match(serviceWorker, /const APP_BASE = new URL\("\.\/", self\.location\)\.pathname;/);
+assert.doesNotMatch(serviceWorker, /const APP_BASE = "\/mybishbash/);
 assert.match(serviceWorker, new RegExp(`const SERVICE_WORKER_VERSION = "preview-${escapeRegExp(expectedSourceSha)}";`));
 assert.match(serviceWorker, /\$\{APP_BASE\.replace\(\/\\\/\$\/, ""\)\}\$\{normalizedRoute\}/);
 assert.doesNotMatch(serviceWorker, /url\.pathname = `\/mybishbash\$\{normalizedRoute\}`/);
