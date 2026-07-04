@@ -1,10 +1,5 @@
 // Local Edit Mode can save directly back to this file in development.
 // The edit panel can also copy the current JSON as a manual fallback.
-//
-// Structural sections (how-it-works, mechanics, packs, comparison, pricing,
-// faq, etc.) are rendered from the static export below — they are intentionally
-// not wired into the inline EditableText system, which only covers the hero,
-// proof strip, statement and footer.
 export const landingContent = {
   "brand": {
     "name": "myBishBash"
@@ -29,7 +24,7 @@ export const landingContent = {
     ],
     "gold": "shape it intentionally.",
     "copy": [
-      "myBishBash drops a check-in in front of the apps that eat your time, and resurfaces the things you actually meant to do — so your hours go where you want them. No blockers. No guilt-trips."
+      "myBishBash places helpful reminders and prompts in front of the apps that you use, directing your attention to the things you actually mean to do. Your choices, with a little more intention."
     ]
   },
   "proof": [

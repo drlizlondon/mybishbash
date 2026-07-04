@@ -41,12 +41,11 @@ function localContentEditorPlugin() {
           req.on("end", () => {
             try {
               const content = JSON.parse(body);
-              const output = `// Local Edit Mode can save directly back to this file in development.
-// The edit panel can also copy the current JSON as a manual fallback.
-export const ${exportName} = ${JSON.stringify(content, null, 2)};
-`;
+              const file = resolve(__dirname, filePath);
+              const existing = readFileSync(file, "utf8");
+              const output = replaceNamedExport(existing, exportName, content);
 
-              writeFileSync(resolve(__dirname, filePath), output);
+              writeFileSync(file, output);
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ok: true }));
             } catch (error) {
@@ -58,6 +57,58 @@ export const ${exportName} = ${JSON.stringify(content, null, 2)};
       });
     },
   };
+}
+
+function replaceNamedExport(source, exportName, value) {
+  const exportStart = source.indexOf(`export const ${exportName} =`);
+  if (exportStart === -1) {
+    throw new Error(`Could not find export const ${exportName}`);
+  }
+
+  const valueStart = source.indexOf("=", exportStart) + 1;
+  const objectStart = source.indexOf("{", valueStart);
+  if (objectStart === -1) {
+    throw new Error(`Could not find object for ${exportName}`);
+  }
+
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+
+  for (let index = objectStart; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = "";
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+
+    if (depth === 0) {
+      const semicolonIndex = source.indexOf(";", index);
+      if (semicolonIndex === -1) {
+        throw new Error(`Could not find export terminator for ${exportName}`);
+      }
+
+      const nextExport = `export const ${exportName} = ${JSON.stringify(value, null, 2)};`;
+      return `${source.slice(0, exportStart)}${nextExport}${source.slice(semicolonIndex + 1)}`;
+    }
+  }
+
+  throw new Error(`Could not finish reading export ${exportName}`);
 }
 
 function legacyBishbashBaseAliasPlugin() {
