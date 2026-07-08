@@ -1,5 +1,11 @@
 import { BASE } from "./lib/basePath";
 
+function debugLog(...args) {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+}
+
 export function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     console.warn("[NOTIFICATIONS] Service workers are not supported.");
@@ -28,21 +34,21 @@ export function registerServiceWorker() {
     navigator.serviceWorker
       .register(`${BASE}service-worker.js`, { scope: BASE })
       .then((registration) => {
-        console.log("[NOTIFICATIONS] Service worker registered", registration.scope);
+        debugLog("[NOTIFICATIONS] Service worker registered", registration.scope);
         registration.addEventListener("updatefound", () => {
-          console.log("[SERVICE_WORKER] updatefound", {
+          debugLog("[SERVICE_WORKER] updatefound", {
             scope: registration.scope,
             state: registration.installing?.state,
           });
           registration.installing?.addEventListener("statechange", () => {
-            console.log("[SERVICE_WORKER] installing statechange", {
+            debugLog("[SERVICE_WORKER] installing statechange", {
               scope: registration.scope,
               state: registration.installing?.state,
             });
           });
         });
         navigator.serviceWorker.addEventListener("controllerchange", () => {
-          console.log("[SERVICE_WORKER] controllerchange", { scope: registration.scope });
+          debugLog("[SERVICE_WORKER] controllerchange", { scope: registration.scope });
         });
         registration.update().catch(() => {});
       })

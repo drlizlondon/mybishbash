@@ -186,6 +186,13 @@ const DownloadPage = lazy(() => import("./DownloadPage"));
 function PageSuspenseFallback() {
   return <div style={{ position: "fixed", inset: 0, background: "#0c0c0c" }} aria-hidden="true" />;
 }
+
+function debugLog(...args) {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+}
+
 const AUTH_SESSION_RETRY_DELAYS_MS = [150, 450, 900];
 const TESTPILOT_CONFIG = {
   productName: "myBishBash",
@@ -465,7 +472,7 @@ function isLaunchDebugEnabled() {
 
 function debugLaunch(label, payload) {
   if (!isLaunchDebugEnabled()) return;
-  console.log(label, payload);
+  debugLog(label, payload);
   try {
     if (typeof window !== "undefined" && window.localStorage) {
       const stored = JSON.parse(window.localStorage.getItem("bishbash.launchDebug.v1") || "[]");
@@ -549,7 +556,7 @@ function logCommitmentDebug(label, payload = {}) {
     payload,
     at: new Date().toISOString(),
   };
-  console.log(`[COMMITMENT_CARD] ${label}`, payload);
+  debugLog(`[COMMITMENT_CARD] ${label}`, payload);
   try {
     if (typeof window === "undefined" || !window.localStorage) return;
     const stored = JSON.parse(window.localStorage.getItem("mybishbash.commitmentDebug.v1") || "[]");
@@ -1135,7 +1142,7 @@ function logLauncherSelectionAudit({
     cards: cardAudits,
   };
   window.__lastLauncherSelectionAudit = audit;
-  console.log(`[CARD_SELECTION_AUDIT_JSON] ${JSON.stringify(audit)}`);
+  debugLog(`[CARD_SELECTION_AUDIT_JSON] ${JSON.stringify(audit)}`);
 }
 
 function buildInitialState() {
@@ -1259,11 +1266,11 @@ function mergeEntitiesById(local = [], incoming = []) {
           const localTime = getTime(localItem);
 
           if (cloudTime > localTime) {
-            console.log(`[MERGE] Cloud is newer for ${localItem.id} (${formatTime(cloudTime)} > ${formatTime(localTime)}). Accepting cloud.`);
+            debugLog(`[MERGE] Cloud is newer for ${localItem.id} (${formatTime(cloudTime)} > ${formatTime(localTime)}). Accepting cloud.`);
           } else if (localTime > cloudTime) {
-            console.log(`[MERGE] Local is newer for ${localItem.id} (${formatTime(localTime)} > ${formatTime(cloudTime)}). Preserving local.`);
-            if (localItem.deletedAt) console.log(`[MERGE] Tombstone preserved for ${localItem.id}`);
-            else if (cloudItem.deletedAt) console.log(`[MERGE] Rejecting stale cloud tombstone for ${localItem.id}`);
+            debugLog(`[MERGE] Local is newer for ${localItem.id} (${formatTime(localTime)} > ${formatTime(cloudTime)}). Preserving local.`);
+            if (localItem.deletedAt) debugLog(`[MERGE] Tombstone preserved for ${localItem.id}`);
+            else if (cloudItem.deletedAt) debugLog(`[MERGE] Rejecting stale cloud tombstone for ${localItem.id}`);
             map.set(localItem.id, localItem);
           } else {
             // Times are equal. Prefer local quietly to avoid spam.
@@ -1653,7 +1660,7 @@ const ONBOARDING_COMMITMENT_DEMO_REVIEW_CARD = {
 };
 
 function shouldStartDemoOnboarding() {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined" || !import.meta.env.DEV) return false;
   const params = new URLSearchParams(window.location.search);
   if (params.get("demoOnboarding") === "1") return true;
   const routeParam = params.get("route");
@@ -1662,7 +1669,7 @@ function shouldStartDemoOnboarding() {
 }
 
 function shouldStartDemoSignup() {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined" || !import.meta.env.DEV) return false;
   const params = new URLSearchParams(window.location.search);
   if (params.get("demoSignup") === "1") return true;
   const routeParam = params.get("route");
@@ -1732,7 +1739,7 @@ function applyLocalNormalPreviewFlag() {
   window.history.replaceState({}, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`);
 }
 
-function App() {
+function RootRouter() {
   if (typeof window !== "undefined") {
     consumeSignupHandoffFromUrl();
     applyLocalNormalPreviewFlag();
@@ -1779,6 +1786,10 @@ function App() {
     }
   }
 
+  return <App />;
+}
+
+function App() {
   const initialState = useMemo(() => {
     const base = buildInitialState();
     const hiddenPackCardIdsCompat = loadHiddenPackCardIdsCompat();
@@ -2571,10 +2582,6 @@ function App() {
 
     resolveSessionWithRetry()
       .then((currentSession) => {
-        console.log("[AUTH] Session check complete. Found:", !!currentSession);
-        if (currentSession?.user?.email) console.log("[AUTH] Email:", currentSession.user.email);
-        if (typeof window !== "undefined") console.log("[AUTH] Storage key present:", !!window.localStorage.getItem("mybishbash.supabase.auth.v1"));
-
         if (mounted) {
           authSessionForTiming = currentSession;
           setSession(currentSession);
@@ -3169,7 +3176,7 @@ function App() {
 
   useEffect(() => {
     if (overlay?.type === "action-card" && visibleActionCards.length === 0) {
-      console.log("[ACTION CARDS] No visible action cards; switching to empty fallback.");
+      debugLog("[ACTION CARDS] No visible action cards; switching to empty fallback.");
       const nextOverlay = {
         ...buildActionCardEmptyOverlay(overlay.versionId),
         origin: overlay.origin,
@@ -3319,7 +3326,7 @@ function App() {
         metadata,
       });
 
-      console.log("[INTERCEPT] Launcher event", payload);
+      debugLog("[INTERCEPT] Launcher event", payload);
       void saveLauncherEvent(payload);
       void logEvent({
         event_type: eventType,
@@ -3554,12 +3561,12 @@ function App() {
 
   useEffect(() => {
     function handleOnline() {
-      console.log("[NETWORK] App is online. Processing offline event queue...");
+      debugLog("[NETWORK] App is online. Processing offline event queue...");
       setIsOffline(false);
       void processEventQueue();
     }
     function handleOffline() {
-      console.log("[NETWORK] App is offline.");
+      debugLog("[NETWORK] App is offline.");
       setIsOffline(true);
     }
     window.addEventListener("online", handleOnline);
@@ -3695,7 +3702,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const deliveryId = params.get("deliveryId");
     if (deliveryId) {
-      console.log("[NOTIFICATIONS] Opened with deliveryId:", deliveryId);
+      debugLog("[NOTIFICATIONS] Opened with deliveryId:", deliveryId);
       void markNotificationOpened(deliveryId);
 
       // Clean the URL
@@ -3830,7 +3837,7 @@ function App() {
       if (isAppPaused(route.versionId)) {
         if (!pauseBypassInitiatedRef.current.has(route.versionId)) {
           pauseBypassInitiatedRef.current.add(route.versionId);
-          console.log("[LAUNCHER] App paused — bypassing card flow", { versionId: route.versionId });
+          debugLog("[LAUNCHER] App paused — bypassing card flow", { versionId: route.versionId });
           void logLauncherEvent("fake_launcher_pause_bypass_used", route.versionId, {
             launched_from: "app_pause_bypass",
             pause_expiry: getAppPauseExpiry(route.versionId),
@@ -4301,7 +4308,7 @@ function App() {
       suppressResumeHomeAutoLaunchRef.current = true;
       suppressNextHomeAutoLaunchRef.current = true;
       setShouldLaunchOverlay(false);
-      console.log("[LAUNCHER] opening destination", { versionId, href, source, reason });
+      debugLog("[LAUNCHER] opening destination", { versionId, href, source, reason });
       const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
       if (typeof captureNavigation === "function") {
         const handled = captureNavigation(href, { versionId, source, reason });
@@ -4377,7 +4384,7 @@ function App() {
       console.warn("[ACTION_CARD] blocked unsafe URL", { source, cardId, protocol: typeof url === "string" ? url.trim().split(":")[0] : typeof url });
       return;
     }
-    console.log("[ACTION_CARD] opening external URL", { source, cardId });
+    debugLog("[ACTION_CARD] opening external URL", { source, cardId });
     const captureNavigation = window.__MYBISHBASH_E2E_CAPTURE_NAVIGATION;
     if (typeof captureNavigation === "function") {
       const handled = captureNavigation(url, { source, cardId });
@@ -4407,7 +4414,7 @@ function App() {
 
     if (isAppPaused(versionId)) {
       // Active, unexpired, app-specific pause → open real destination directly.
-      console.log("[LAUNCHER] App paused — bypassing card flow from shortcut", { versionId, source });
+      debugLog("[LAUNCHER] App paused — bypassing card flow from shortcut", { versionId, source });
       void logLauncherEvent("fake_launcher_pause_bypass_used", versionId, {
         launched_from: source,
         pause_expiry: getAppPauseExpiry(versionId),
@@ -4419,7 +4426,7 @@ function App() {
     // No active pause → navigate into the myBishBash intervention flow.
     // The routing useEffect will select a card (or show the caught-up empty screen).
     // The pause button is shown on cards launched from this path.
-    console.log("[LAUNCHER] No active pause — entering card flow", { versionId, source });
+    debugLog("[LAUNCHER] No active pause — entering card flow", { versionId, source });
     navigateTo(`/intercept/${versionId}`);
   }
 
@@ -4443,14 +4450,14 @@ function App() {
   // The write therefore happens atomically with the navigation, not before.
   function handlePauseApp(appId, durationMinutes) {
     const expiry = pauseApp(appId, durationMinutes);
-    console.log("[LAUNCHER] App paused by user", { appId, durationMinutes, expiry });
+    debugLog("[LAUNCHER] App paused by user", { appId, durationMinutes, expiry });
     setAppPauseRevision((current) => current + 1);
     openDestinationApp(appId, { source: "app_pause_selected", reason: "user_paused" });
   }
 
   function handleSetAppPause(appId, durationMinutes) {
     const expiry = pauseApp(appId, durationMinutes);
-    console.log("[LAUNCHER] App paused from Apps", { appId, durationMinutes, expiry });
+    debugLog("[LAUNCHER] App paused from Apps", { appId, durationMinutes, expiry });
     setAppPauseRevision((current) => current + 1);
   }
 
@@ -4493,7 +4500,6 @@ function App() {
     async (nextSettings) => {
       if (!session?.user?.id) return;
 
-      console.log("[NOTIFICATIONS] Saving notification preferences", nextSettings);
       await saveNotificationPreferences(session.user.id, {
         enabled: Boolean(nextSettings.enabled),
         notifications_per_day: Number(nextSettings.notificationsPerDay) || 3,
@@ -4504,7 +4510,7 @@ function App() {
   );
 
   const enableNotifications = useCallback(async () => {
-    console.log("[NOTIFICATIONS] Enable requested");
+    debugLog("[NOTIFICATIONS] Enable requested");
 
     if (!session?.user?.id) {
       setNotificationStatus("needs-login");
@@ -4526,7 +4532,7 @@ function App() {
 
     const permission = await Notification.requestPermission();
     setNotificationStatus(permission);
-    console.log("[NOTIFICATIONS] Permission result", permission);
+    debugLog("[NOTIFICATIONS] Permission result", permission);
 
     if (permission !== "granted") {
       const nextSettings = { ...notificationSettings, enabled: false };
@@ -4556,7 +4562,7 @@ function App() {
         card_source: "notification",
         action_taken: "enabled",
       });
-      console.log("[NOTIFICATIONS] Push subscription saved");
+      debugLog("[NOTIFICATIONS] Push subscription saved");
     } catch (error) {
       setNotificationStatus("error");
       console.error("[NOTIFICATIONS] Could not enable push notifications", error);
@@ -4573,7 +4579,7 @@ function App() {
       card_source: "notification",
       action_taken: "disabled",
     });
-    console.log("[NOTIFICATIONS] Disabled");
+    debugLog("[NOTIFICATIONS] Disabled");
   }, [logEvent, notificationSettings, syncNotificationPreferences]);
 
   const updateNotificationsPerDay = useCallback(
@@ -6119,7 +6125,7 @@ function App() {
     if (version.interruptionPaused || !pack || pack.messages.length === 0) return;
     const activeIndex = typeof cardIndex === "number" ? cardIndex : pickInterruptionCardIndex(pack, events);
     const nextOverlay = { ...buildCustomPackOverlay(pack, activeIndex, "intercept-pack"), versionId, origin: "home" };
-    console.log("[CARD_ORIGIN] home interruption preview created", nextOverlay);
+    debugLog("[CARD_ORIGIN] home interruption preview created", nextOverlay);
     setOverlay(nextOverlay);
   }
 
@@ -6329,11 +6335,10 @@ function App() {
         action_taken: "completed",
       });
       if (createdSession) {
-        console.log("[SIGNUP_SUCCESS_SESSION_RETURNED]", createdSession?.user?.id);
         setSession(createdSession);
         setAuthReady(true);
       } else {
-        console.log("[SIGNUP_SUCCESS_NO_SESSION]");
+        debugLog("[SIGNUP_SUCCESS_NO_SESSION]");
         setSyncError("Account created. Check your email if Supabase asks for confirmation, then log in here to start onboarding.");
         setSyncStatus("needs-connection");
       }
@@ -6352,13 +6357,12 @@ function App() {
     try {
       const nextSession = await logIn(email, password);
       if (nextSession) {
-        console.log("[LOGIN_SUCCESS_SESSION_RETURNED]", nextSession?.user?.id);
         setSession(nextSession);
         setAuthReady(true);
         signupOnboardingPendingRef.current = false;
         setSignupOnboardingPending(false);
       } else {
-        console.log("[LOGIN_SUCCESS_NO_SESSION]");
+        debugLog("[LOGIN_SUCCESS_NO_SESSION]");
         setSyncStatus("needs-connection");
         setSyncError("Login succeeded, but myBishBash could not start your session. Please close and reopen the app.");
       }
@@ -6418,7 +6422,7 @@ function App() {
   }
 
   async function handleRefreshSession() {
-    console.log("[AUTH] Refreshing session manually...");
+    debugLog("[AUTH] Refreshing session manually...");
     try {
       const currentSession = await getSession();
       setSession(currentSession);
@@ -6527,7 +6531,7 @@ function App() {
     const normalizedPack = normalizeInterruptionPack(pack, pack?.targetApp ?? pack?.linkedVersionId ?? "");
     if (!normalizedPack || normalizedPack.messages.length === 0) return;
     const nextOverlay = { ...buildCustomPackOverlay(normalizedPack), origin: "home" };
-    console.log("[CARD_ORIGIN] custom pack preview created", nextOverlay);
+    debugLog("[CARD_ORIGIN] custom pack preview created", nextOverlay);
     setOverlay(nextOverlay);
   }
 
@@ -7418,7 +7422,7 @@ function App() {
               launchSource: overlay?.launchSource,
               flowStep: nextStep,
             };
-            console.log("[CARD_ORIGIN] action success created", nextOverlay);
+            debugLog("[CARD_ORIGIN] action success created", nextOverlay);
             setOverlay(nextOverlay);
             if (card.launchUrl) {
               openExternalActionUrl(card.launchUrl, { source: "action_card", cardId: card.id });
@@ -7447,7 +7451,7 @@ function App() {
             return;
           }}
           onChooseElse={() => {
-            console.log("[INTERCEPT] Choose something else", {
+            debugLog("[INTERCEPT] Choose something else", {
               versionId: overlay?.versionId,
               visibleActionCards: visibleActionCards.length,
             });
@@ -7472,7 +7476,7 @@ function App() {
             });
             const nextStep = getNextFakeLauncherStepAfterInterruption("do_something_else");
             if (visibleActionCards.length === 0) {
-              console.log("[ACTION CARDS] Opening empty fallback.");
+              debugLog("[ACTION CARDS] Opening empty fallback.");
               const nextOverlay = {
                 ...buildActionCardEmptyOverlay(overlay?.versionId),
                 origin: overlay?.origin || "home",
@@ -7480,10 +7484,10 @@ function App() {
                 launchSource: overlay?.launchSource,
                 flowStep: nextStep,
               };
-              console.log("[CARD_ORIGIN] action card empty created", nextOverlay);
+              debugLog("[CARD_ORIGIN] action card empty created", nextOverlay);
               setOverlay(nextOverlay);
             } else {
-              console.log("[ACTION CARDS] Opening overlay.");
+              debugLog("[ACTION CARDS] Opening overlay.");
               const nextOverlay = {
                 ...buildActionCardOverlay(overlay?.versionId),
                 origin: overlay?.origin || "home",
@@ -7491,7 +7495,7 @@ function App() {
                 launchSource: overlay?.launchSource,
                 flowStep: nextStep,
               };
-              console.log("[CARD_ORIGIN] action card created", nextOverlay);
+              debugLog("[CARD_ORIGIN] action card created", nextOverlay);
               setOverlay(nextOverlay);
             }
           }}
@@ -12862,7 +12866,7 @@ function ActionCardOverlay({
   launcherAppName = null,
   onManageApp = null,
 }) {
-  console.log("[ACTION CARDS] Overlay rendered");
+  debugLog("[ACTION CARDS] Overlay rendered");
 
   const available = useMemo(
     () => actionCards.filter((c) => !c.hidden && !c.deletedAt),
@@ -12886,7 +12890,7 @@ function ActionCardOverlay({
   useEffect(() => {
     if (!currentCard) return;
     if (available.some((card) => card.id === currentCard.id)) return;
-    console.log("[ACTION CARDS] Current card is no longer visible; rotating.");
+    debugLog("[ACTION CARDS] Current card is no longer visible; rotating.");
     setCurrentCard(null);
   }, [available, currentCard]);
 
@@ -12929,7 +12933,7 @@ function ActionCardOverlay({
 
     const nextCard = pool[Math.floor(Math.random() * pool.length)];
 
-    console.log("[ACTION CARDS] Rotating action card", {
+    debugLog("[ACTION CARDS] Rotating action card", {
       from: currentCard?.id,
       to: nextCard.id,
     });
@@ -13215,7 +13219,7 @@ function InterceptionOverlay({ overlay, version, onChooseElse, onLogEvent, onLog
         message: activeMessage,
       },
     });
-    console.log("[INTERCEPT] viewed event logged", {
+    debugLog("[INTERCEPT] viewed event logged", {
       versionId: version.id,
       packId: overlay.packId,
       cardId: cards[activeIndex]?.id ?? `${overlay.packId}:${activeIndex}`,
@@ -13713,4 +13717,4 @@ function ContinueToAppCard({ appName, appIcon, href, onContinue, onBack, onDashb
   );
 }
 
-export default App;
+export default RootRouter;

@@ -263,10 +263,19 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          recharts: ["recharts"],
-          motion: ["framer-motion"],
-          supabase: ["@supabase/supabase-js"],
+        manualChunks(id) {
+          if (id.includes("/node_modules/react/") || id.includes("/node_modules/react-dom/") || id.includes("/node_modules/scheduler/")) {
+            return "react";
+          }
+          if (id.includes("/node_modules/recharts/")) {
+            return "recharts";
+          }
+          if (id.includes("/node_modules/framer-motion/")) {
+            return "motion";
+          }
+          if (id.includes("/node_modules/@supabase/")) {
+            return "supabase";
+          }
         },
       },
     },

@@ -3,6 +3,8 @@ import { getLauncherConfig } from "./launcherRegistry.js";
 // Structured destination resolution for fake launchers. Kept free of
 // browser-only imports so node test scripts can exercise it directly.
 
+function debugLog() {}
+
 export function getLauncherPlatform() {
   if (typeof navigator === "undefined") return "desktop";
   const ua = navigator.userAgent || navigator.vendor || "";
@@ -130,7 +132,7 @@ export function resolveLauncherDestination(version, { preferFastDestination = fa
     sourceField: picked?.sourceField ?? null,
   };
 
-  console.log("[LAUNCHER_URL_RESOLVED]", {
+  debugLog("[LAUNCHER_URL_RESOLVED]", {
     versionId: merged.id,
     platform: resolvedPlatform,
     href: resolution.href,

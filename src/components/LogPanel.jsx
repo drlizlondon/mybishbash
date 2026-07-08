@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 import { formatTwentyFourHourTime } from "../eventLog";
 import { HeartGlyph, LogGlyph } from "./Glyphs";
 
@@ -70,20 +69,70 @@ function getDailyMomentData(events, timezone, days = 14) {
   return buckets;
 }
 
-// ── Chart tooltip ─────────────────────────────────────────────────────────────
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-function ShiftTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const { shortLabel, count } = payload[0].payload;
+function DailyMomentChart({ data }) {
+  const width = 320;
+  const height = 120;
+  const margin = { top: 4, right: 4, bottom: 20, left: 24 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  const domainMax = maxCount + 1;
+  const barGap = 6;
+  const barWidth = Math.max(4, (plotWidth - barGap * (data.length - 1)) / data.length);
+  const tickCount = Math.min(domainMax + 1, 5);
+  const yTicks = Array.from(
+    { length: tickCount },
+    (_, index) => Math.round((domainMax / Math.max(tickCount - 1, 1)) * index),
+  );
+
   return (
-    <div className="log-chart-tooltip">
-      <span className="log-chart-tooltip-date">{shortLabel}</span>
-      <span className="log-chart-tooltip-count">{count} {count === 1 ? "moment" : "moments"}</span>
-    </div>
+    <svg className="log-inline-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Moments logged over the last 14 days" preserveAspectRatio="none">
+      {yTicks.map((tick) => {
+        const y = margin.top + plotHeight - (tick / domainMax) * plotHeight;
+        return (
+          <g key={tick} className="log-inline-chart-y-tick">
+            <text x={margin.left - 8} y={y + 4} textAnchor="end">{tick}</text>
+          </g>
+        );
+      })}
+      {data.map((entry, index) => {
+        const barHeight = (entry.count / domainMax) * plotHeight;
+        const x = margin.left + index * (barWidth + barGap);
+        const y = margin.top + plotHeight - barHeight;
+        const labelY = margin.top + plotHeight + 15;
+        const label = `${entry.shortLabel}: ${entry.count} ${entry.count === 1 ? "moment" : "moments"}`;
+        const tooltipX = Math.min(Math.max(x - 24, margin.left), width - 92);
+        const tooltipY = Math.max(y - 38, margin.top);
+        return (
+          <g key={entry.key} className="log-inline-chart-bar-group">
+            <rect
+              className={entry.count > 0 ? "log-inline-chart-bar is-active" : "log-inline-chart-bar"}
+              x={x}
+              y={y}
+              width={barWidth}
+              height={Math.max(barHeight, 2)}
+              rx="4"
+            >
+              <title>{label}</title>
+            </rect>
+            {index % 2 === 0 ? (
+              <text x={x + barWidth / 2} y={labelY} textAnchor="middle">{entry.dayLabel}</text>
+            ) : null}
+            <g className="log-inline-chart-tooltip" transform={`translate(${tooltipX} ${tooltipY})`} aria-hidden="true">
+              <rect width="88" height="32" rx="8" />
+              <text className="log-inline-chart-tooltip-date" x="8" y="13">{entry.shortLabel}</text>
+              <text className="log-inline-chart-tooltip-count" x="8" y="26">
+                {entry.count} {entry.count === 1 ? "moment" : "moments"}
+              </text>
+            </g>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
-
-// ── Sub-components ────────────────────────────────────────────────────────────
 
 function GrowthFlower({ count }) {
   const stage = count >= 15 ? "full" : count >= 10 ? "partial" : count >= 6 ? "stem" : count >= 3 ? "leaves" : "sprout";
@@ -196,7 +245,6 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
   const filledDots = Math.min(weeklyShiftCount, 14);
 
   const chartData = getDailyMomentData(allEvents ?? events, timezone);
-  const maxCount = Math.max(...chartData.map((d) => d.count), 1);
 
   return (
     <section className="log-screen">
@@ -269,35 +317,8 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
 
       <article className="log-chart-card">
         <h3>Your last 14 days</h3>
-        <div className="log-chart-wrap" aria-hidden="true">
-          <ResponsiveContainer width="100%" height={120}>
-            <BarChart data={chartData} barCategoryGap="30%" margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
-              <XAxis
-                dataKey="dayLabel"
-                tick={{ fontSize: 11, fill: "#a0887a" }}
-                tickLine={false}
-                axisLine={false}
-                interval={1}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: "#a0887a" }}
-                tickLine={false}
-                axisLine={false}
-                domain={[0, maxCount + 1]}
-                tickCount={Math.min(maxCount + 2, 5)}
-              />
-              <Tooltip content={<ShiftTooltip />} cursor={{ fill: "rgba(232,116,91,0.08)" }} />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {chartData.map((entry, index) => (
-                  <Cell
-                    key={index}
-                    fill={entry.count > 0 ? "var(--coral, #e8745b)" : "rgba(232,116,91,0.15)"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="log-chart-wrap">
+          <DailyMomentChart data={chartData} />
         </div>
       </article>
 

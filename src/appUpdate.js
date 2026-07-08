@@ -30,7 +30,6 @@ export async function checkForAppUpdate(basePath = BASE_NO_SLASH) {
       updateAvailable: Boolean(deployedVersion && deployedVersion !== CURRENT_VERSION),
     };
 
-    console.log("[APP_UPDATE] checked", result);
     return result;
   } catch {
     return { updateAvailable: false, currentVersion: CURRENT_VERSION };

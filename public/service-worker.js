@@ -14,6 +14,8 @@ const MEDIA_CACHE = `${CACHE_PREFIX}media-${SERVICE_WORKER_VERSION}`;
 const INDEX_URL = `${APP_BASE}index.html`;
 let shouldClaimClients = false;
 
+function debugLog() {}
+
 const MEDIA_EXTENSIONS = [
   ".avif",
   ".gif",
@@ -27,7 +29,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 self.addEventListener("install", (event) => {
-  console.log("[SERVICE_WORKER] install", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
+  debugLog("[SERVICE_WORKER] install", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
   event.waitUntil(
     caches
       .open(HTML_CACHE)
@@ -43,7 +45,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  console.log("[SERVICE_WORKER] activate", {
+  debugLog("[SERVICE_WORKER] activate", {
     version: SERVICE_WORKER_VERSION,
     appBase: APP_BASE,
     shouldClaimClients,
@@ -65,7 +67,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     shouldClaimClients = true;
-    console.log("[SERVICE_WORKER] skip waiting requested", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
+    debugLog("[SERVICE_WORKER] skip waiting requested", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
     self.skipWaiting();
     return;
   }
@@ -103,7 +105,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
-  console.log("[NOTIFICATIONS] Push received", data);
+  debugLog("[NOTIFICATIONS] Push received", data);
 
   event.waitUntil(
     self.registration.showNotification(data.title || "Tiny myBishBash moment?", {
@@ -119,7 +121,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const urlToOpen = normalizeNotificationUrl(event.notification.data?.url);
-  console.log("[NOTIFICATIONS] Notification clicked", urlToOpen);
+  debugLog("[NOTIFICATIONS] Notification clicked", urlToOpen);
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {

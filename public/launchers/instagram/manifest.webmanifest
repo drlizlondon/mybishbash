@@ -1,15 +1,15 @@
 {
   "name": "Instagram",
   "short_name": "Instagram",
-  "id": "https://mybishbash.app/intercept/instagram",
-  "start_url": "https://mybishbash.app/intercept/instagram",
-  "scope": "https://mybishbash.app/",
+  "id": "https://mybishbash.app/mybishbash/intercept/instagram",
+  "start_url": "https://mybishbash.app/mybishbash/intercept/instagram",
+  "scope": "https://mybishbash.app/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/icons/instagram-cover.jpg",
+      "src": "/mybishbash/icons/instagram-cover.jpg",
       "sizes": "180x180",
       "type": "image/jpeg"
     }

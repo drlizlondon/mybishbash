@@ -6,13 +6,16 @@ import { getCoverModel } from "../src/lib/generatedCover.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const onboardingSource = await readFile(new URL("../src/Onboarding.jsx", import.meta.url), "utf8");
+const logPanelSource = await readFile(new URL("../src/components/LogPanel.jsx", import.meta.url), "utf8");
 const downloadSource = await readFile(new URL("../src/DownloadPage.jsx", import.meta.url), "utf8");
 const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
 const generatedCoverSource = await readFile(new URL("../src/GeneratedPackCover.jsx", import.meta.url), "utf8");
 const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
 const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
+const launcherDestinationsSource = await readFile(new URL("../src/lib/launcherDestinations.js", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const registerServiceWorkerSource = await readFile(new URL("../src/registerServiceWorker.js", import.meta.url), "utf8");
 const serviceWorkerSource = await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8");
 const eventLogSource = await readFile(new URL("../src/eventLog.js", import.meta.url), "utf8");
 const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import.meta.url), "utf8");
@@ -57,6 +60,22 @@ function sourceBetween(source, start, end) {
   if (endIndex === -1) return "";
   return source.slice(startIndex, endIndex);
 }
+
+const rootRouterSource = sourceBetween(appSource, "function RootRouter()", "function App()");
+const appBeforeHooksSource = sourceBetween(appSource, "function App()", "const initialState = useMemo");
+const appDebugLogSource = sourceBetween(appSource, "function debugLog(...args)", "const AUTH_SESSION_RETRY_DELAYS_MS");
+const registerServiceWorkerDebugLogSource = sourceBetween(registerServiceWorkerSource, "function debugLog(...args)", "export function registerServiceWorker()");
+const launcherDestinationsDebugLogSource = sourceBetween(launcherDestinationsSource, "function debugLog(...args)", "export function getLauncherPlatform()");
+
+assertMatch("demo onboarding URL entrypoint is dev-only", appSource, /function shouldStartDemoOnboarding\(\) \{[\s\S]{0,140}!import\.meta\.env\.DEV/);
+assertMatch("demo signup URL entrypoint is dev-only", appSource, /function shouldStartDemoSignup\(\) \{[\s\S]{0,140}!import\.meta\.env\.DEV/);
+assertMatch("public marketing route selection lives above App hooks", rootRouterSource, /normalizedPath === "\/early-access"[\s\S]{0,900}normalizedPath === "\/terms"[\s\S]{0,700}EditableLandingPage/);
+assertNoMatch("App does not return marketing routes before hooks", appBeforeHooksSource, /EditableLandingPage|EarlyAccessPage|DownloadPage|AboutPage|LegalPage/);
+assertMatch("App debug logging is dev-only", appDebugLogSource, /import\.meta\.env\.DEV[\s\S]{0,80}console\.log/);
+assertMatch("service worker registration debug logging is dev-only", registerServiceWorkerDebugLogSource, /import\.meta\.env\.DEV[\s\S]{0,80}console\.log/);
+assertNoMatch("launcher destination debug logging is disabled outside app dev runtime", launcherDestinationsDebugLogSource, /console\.log/);
+assertNoMatch("public service worker has no production console.log", serviceWorkerSource, /console\.log/);
+assertNoMatch("LogPanel does not import recharts on the app critical path", logPanelSource, /from ["']recharts["']|BarChart|ResponsiveContainer|XAxis|YAxis|Tooltip/);
 
 assertMatch("fake launcher sessions never allow Back to home", appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
 assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
@@ -209,7 +228,7 @@ assertMatch("I really like this one completes the reveal instead of cycling pack
 assertNoMatch("I really like this one does not hide/dislike/delete the card", packPositiveHandlerSource, /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|deletedAt|paused|disliked:/);
 assertNoMatch("launcherState keeps interruption logic separate from library pack availability", launcherStateSource, /isPackCardAvailable/);
 
-const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default App;");
+const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default RootRouter;");
 assertMatch("ContinueToAppCard renders the continue-to-app test id", continueCardSource, /data-testid="continue-to-app-card"/);
 assertNoMatch("ContinueToAppCard does not assign window.location directly", continueCardSource, /window\.location\.assign/);
 

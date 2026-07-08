@@ -913,6 +913,55 @@ textarea {
   width: 100%;
 }
 
+.log-inline-chart {
+  display: block;
+  width: 100%;
+  height: 120px;
+  overflow: visible;
+}
+
+.log-inline-chart text {
+  fill: #a0887a;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.log-inline-chart-bar {
+  fill: rgba(232, 116, 91, 0.15);
+}
+
+.log-inline-chart-bar.is-active {
+  fill: var(--coral, #e8745b);
+}
+
+.log-inline-chart-tooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.log-inline-chart-bar-group:hover .log-inline-chart-tooltip,
+.log-inline-chart-bar-group:focus-within .log-inline-chart-tooltip {
+  opacity: 1;
+}
+
+.log-inline-chart-tooltip rect {
+  fill: #fff;
+  stroke: rgba(120, 87, 65, 0.15);
+  filter: drop-shadow(0 4px 8px rgba(120, 87, 65, 0.1));
+}
+
+.log-inline-chart .log-inline-chart-tooltip-date {
+  fill: #a0887a;
+  font-size: 10px;
+}
+
+.log-inline-chart .log-inline-chart-tooltip-count {
+  fill: var(--coral, #e8745b);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .log-chart-tooltip {
   background: #fff;
   border: 1px solid rgba(120, 87, 65, 0.15);

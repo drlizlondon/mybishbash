@@ -1,15 +1,15 @@
 {
   "name": "Chrome",
   "short_name": "Chrome",
-  "id": "https://mybishbash.app/intercept/chrome",
-  "start_url": "https://mybishbash.app/intercept/chrome",
-  "scope": "https://mybishbash.app/",
+  "id": "https://mybishbash.app/mybishbash/intercept/chrome",
+  "start_url": "https://mybishbash.app/mybishbash/intercept/chrome",
+  "scope": "https://mybishbash.app/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/icons/chrome-cover.png",
+      "src": "/mybishbash/icons/chrome-cover.png",
       "sizes": "180x180",
       "type": "image/png"
     }
