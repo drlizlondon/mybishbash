@@ -94,7 +94,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isScriptOrStyle(event.request)) {
-    event.respondWith(networkFirst(event.request, RUNTIME_CACHE));
+    const fetchStrategy = isImmutableBuildAsset(url.pathname) ? cacheFirst : networkFirst;
+    event.respondWith(fetchStrategy(event.request, RUNTIME_CACHE));
     return;
   }
 
@@ -222,6 +223,11 @@ function acceptsHtml(request) {
 
 function isScriptOrStyle(request) {
   return request.destination === "script" || request.destination === "style";
+}
+
+function isImmutableBuildAsset(pathname) {
+  const assetsPrefix = `${APP_BASE}assets/`;
+  return pathname.startsWith(assetsPrefix) && /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$/.test(pathname);
 }
 
 function isCacheableMedia(pathname) {

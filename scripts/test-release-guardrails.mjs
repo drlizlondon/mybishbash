@@ -235,9 +235,15 @@ assertNoMatch("ContinueToAppCard does not assign window.location directly", cont
 assertMatch("update banner is suppressed while overlays are active", appSource, /const showAppUpdateBanner = appUpdate\.updateAvailable && !overlay;/);
 assertMatch("update banner uses deferred visibility guard", appSource, /\{showAppUpdateBanner \? \(/);
 const serviceWorkerInstallSource = sourceBetween(serviceWorkerSource, 'self.addEventListener("install"', 'self.addEventListener("activate"');
+const serviceWorkerFetchSource = sourceBetween(serviceWorkerSource, 'self.addEventListener("fetch"', 'self.addEventListener("push"');
+const serviceWorkerHtmlSource = sourceBetween(serviceWorkerSource, "async function networkFirstHtml", "async function networkFirst");
 assertNoMatch("service worker install does not force skipWaiting", serviceWorkerInstallSource, /self\.skipWaiting\(\)/);
 assertNoMatch("service worker activate does not always claim clients", serviceWorkerSource, /\.then\(\(\) => self\.clients\.claim\(\)\)/);
 assertMatch("service worker only claims clients after explicit update", serviceWorkerSource, /shouldClaimClients \? self\.clients\.claim\(\) : undefined/);
+assertMatch("service worker cache-firsts immutable build assets", serviceWorkerFetchSource, /const fetchStrategy = isImmutableBuildAsset\(url\.pathname\) \? cacheFirst : networkFirst;[\s\S]{0,120}fetchStrategy\(event\.request, RUNTIME_CACHE\)/);
+assertMatch("service worker only treats hashed JS and CSS assets as immutable", serviceWorkerSource, /function isImmutableBuildAsset\(pathname\) \{[\s\S]{0,220}\/\\\/assets\\\/\[\^\/\]\+-\[A-Za-z0-9_-\]\{8,\}\\\.\(\?:js\|css\)\$\/\.test\(pathname\)/);
+assertMatch("service worker keeps HTML network-first with no-store", serviceWorkerHtmlSource, /fetch\(request, \{ cache: "no-store" \}\)/);
+assertMatch("service worker keeps version.json network-only", serviceWorkerFetchSource, /version\.json[\s\S]{0,140}fetch\(event\.request, \{ cache: "no-store" \}\)/);
 
 const now = new Date("2026-01-01T13:00:00.000Z");
 const personal = (id, overrides = {}) => ({
