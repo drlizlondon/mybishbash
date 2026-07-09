@@ -10026,6 +10026,12 @@ function validateWindowDefsGapFree(defs) {
 }
 
 function AppsPanel({
+  ...props
+}) {
+  return <AppsPanelClock {...props} />;
+}
+
+function AppsPanelClock({
   protectedAppStatuses,
   pendingOnboardingShortcuts = [],
   onboardingSelectedAppSetup = null,

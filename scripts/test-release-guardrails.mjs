@@ -77,8 +77,10 @@ assertNoMatch("launcher destination debug logging is disabled outside app dev ru
 assertNoMatch("public service worker has no production console.log", serviceWorkerSource, /console\.log/);
 assertNoMatch("LogPanel does not import recharts on the app critical path", logPanelSource, /from ["']recharts["']|BarChart|ResponsiveContainer|XAxis|YAxis|Tooltip/);
 assertMatch("main app screens have memo boundaries", appSource, /const MemoHomePanel = memo\(HomePanel\);[\s\S]{0,260}const MemoAppsPanel = memo\(AppsPanel\);[\s\S]{0,260}const MemoStandardLibraryPanel = memo\(StandardLibraryPanel\);[\s\S]{0,260}const MemoLogPanel = memo\(LogPanel\);[\s\S]{0,260}const MemoExplorePanel = memo\(ExplorePanel\);[\s\S]{0,260}const MemoOverlay = memo\(Overlay\);/);
-assertNoMatch("App render uses memoized main screens", appSource, /<HomePanel|<AppsPanel|<StandardLibraryPanel|<LogPanel|<ExplorePanel|<Overlay/);
+assertNoMatch("App render uses memoized main screens", appSource, /<HomePanel(?:\s|\/?>)|<AppsPanel(?:\s|\/?>)|<StandardLibraryPanel(?:\s|\/?>)|<LogPanel(?:\s|\/?>)|<ExplorePanel(?:\s|\/?>)|<Overlay(?:\s|\/?>)/);
 assertMatch("Log weekly shift count is memoized", appSource, /const weeklyShiftCount = useMemo\(\(\) => getWeeklyShiftCount\(events\), \[events\]\);/);
+assertMatch("Apps panel clock is isolated below its memo boundary", appSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
+assertMatch("Apps panel clock owns its live pause interval", appSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
 
 assertMatch("fake launcher sessions never allow Back to home", appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
 assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
