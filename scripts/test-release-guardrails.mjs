@@ -76,6 +76,9 @@ assertMatch("service worker registration debug logging is dev-only", registerSer
 assertNoMatch("launcher destination debug logging is disabled outside app dev runtime", launcherDestinationsDebugLogSource, /console\.log/);
 assertNoMatch("public service worker has no production console.log", serviceWorkerSource, /console\.log/);
 assertNoMatch("LogPanel does not import recharts on the app critical path", logPanelSource, /from ["']recharts["']|BarChart|ResponsiveContainer|XAxis|YAxis|Tooltip/);
+assertMatch("main app screens have memo boundaries", appSource, /const MemoHomePanel = memo\(HomePanel\);[\s\S]{0,260}const MemoAppsPanel = memo\(AppsPanel\);[\s\S]{0,260}const MemoStandardLibraryPanel = memo\(StandardLibraryPanel\);[\s\S]{0,260}const MemoLogPanel = memo\(LogPanel\);[\s\S]{0,260}const MemoExplorePanel = memo\(ExplorePanel\);[\s\S]{0,260}const MemoOverlay = memo\(Overlay\);/);
+assertNoMatch("App render uses memoized main screens", appSource, /<HomePanel|<AppsPanel|<StandardLibraryPanel|<LogPanel|<ExplorePanel|<Overlay/);
+assertMatch("Log weekly shift count is memoized", appSource, /const weeklyShiftCount = useMemo\(\(\) => getWeeklyShiftCount\(events\), \[events\]\);/);
 
 assertMatch("fake launcher sessions never allow Back to home", appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
 assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
@@ -134,7 +137,7 @@ assertMatch("Library section toggle remains separate from plus", appSource, /cla
 // ExplorePanel, app behaviour in Apps, action cards in Library →
 // Do Instead Cards.
 assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
-assertMatch("Explore tab renders ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<ExplorePanel/);
+assertMatch("Explore tab renders memoized ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<MemoExplorePanel/);
 assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
 assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
 assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /const BOTTOM_NAV_ITEMS = \[[\s\S]*testId: "bottom-nav-home"[\s\S]*testId: "bottom-nav-library"[\s\S]*testId: "bottom-nav-log"[\s\S]*testId: "bottom-nav-explore"[\s\S]*testId: "bottom-nav-apps"[\s\S]*\];/);

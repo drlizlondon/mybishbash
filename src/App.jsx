@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LogPanel } from "./components/LogPanel";
 import { LogGlyph } from "./components/Glyphs";
 import { BrandMark } from "./components/BrandMark";
@@ -1788,6 +1788,14 @@ function RootRouter() {
 
   return <App />;
 }
+
+const MemoHomePanel = memo(HomePanel);
+const MemoAppsPanel = memo(AppsPanel);
+const MemoTodayPersonalCardsPanel = memo(TodayPersonalCardsPanel);
+const MemoStandardLibraryPanel = memo(StandardLibraryPanel);
+const MemoLogPanel = memo(LogPanel);
+const MemoExplorePanel = memo(ExplorePanel);
+const MemoOverlay = memo(Overlay);
 
 function App() {
   const initialState = useMemo(() => {
@@ -6822,6 +6830,7 @@ function App() {
     }
     return recentMeaningfulEvents;
   }, [logFilter, recentMeaningfulEvents]);
+  const weeklyShiftCount = useMemo(() => getWeeklyShiftCount(events), [events]);
   const interruptionPacks = useMemo(
     () =>
       Array.from(new Set([
@@ -6984,7 +6993,7 @@ function App() {
                     onUpgrade={() => navigateTo("/access")}
                   />
                 ) : (
-                  <HomePanel
+                  <MemoHomePanel
                     cards={cards}
                     events={events}
                     timezone={profile.timezone}
@@ -7017,7 +7026,7 @@ function App() {
                     onUpgrade={() => navigateTo("/access")}
                   />
                 ) : (
-                <AppsPanel
+                <MemoAppsPanel
                   protectedAppStatuses={protectedAppStatuses}
                   onSaveVersionBehavior={handleSaveVersionBehavior}
                   onSwitchActiveApp={switchActiveApp}
@@ -7069,14 +7078,14 @@ function App() {
 
               {activeTab === "library" ? (
                 libraryFocusMode === "today-personal" ? (
-                  <TodayPersonalCardsPanel
+                  <MemoTodayPersonalCardsPanel
                     todayPersonalLibrary={todayPersonalLibrary}
                     onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
                     onBackToLibrary={() => setLibraryFocusMode(null)}
                     onOpenCard={openSpecificReveal}
                   />
                 ) : (
-                  <StandardLibraryPanel
+                  <MemoStandardLibraryPanel
                     personalItems={librarySections.personal}
                     commitmentItems={librarySections.commitments}
                     activePackItems={librarySections.activePacks}
@@ -7104,18 +7113,18 @@ function App() {
               ) : null}
 
               {activeTab === "log" ? (
-                <LogPanel
+                <MemoLogPanel
                   events={logEventsForPanel}
                   allEvents={events}
                   timezone={profile.timezone}
-                  weeklyShiftCount={getWeeklyShiftCount(events)}
+                  weeklyShiftCount={weeklyShiftCount}
                   filter={logFilter}
                   onShowSummary={showMorningSummaryNow}
                 />
               ) : null}
 
               {activeTab === "explore" ? (
-                <ExplorePanel
+                <MemoExplorePanel
                   packs={visibleLibraryPacks}
                   isPackActive={isPackActive}
                   onInstallPack={activatePack}
@@ -7371,7 +7380,7 @@ function App() {
       ) : null}
 
       {overlay ? (
-        <Overlay
+        <MemoOverlay
           key={`${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}:${overlay.packId ?? ""}:${overlay?.activationKey ?? ""}`}
           overlay={overlay}
           card={activeRevealCard}
