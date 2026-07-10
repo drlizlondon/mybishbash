@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 
 const checks = [
+  ["Lint", ["npm", "run", "lint"]],
+  ["Unit tests", ["npm", "run", "test:unit"]],
   ["Build", ["npm", "run", "build"]],
   ["Release guardrails", ["npm", "run", "test:release-guardrails"]],
   ["Launcher selector flow", ["npm", "run", "test:launcher-flow"]],
