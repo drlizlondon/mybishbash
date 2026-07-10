@@ -254,7 +254,6 @@ export function getInterruptionPackForLauncher(
 export function resolveVersionConfig(version, behavior = {}) {
   return {
     launchPath: "/home",
-    interruptionPackId: "",
     ...version,
     useInterruptionPack: behavior.useInterruptionPack ?? version?.useInterruptionPack ?? false,
     interruptionPaused: behavior.interruptionPaused ?? version?.interruptionPaused ?? false,

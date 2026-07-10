@@ -7053,6 +7053,7 @@ function App() {
                     window.location.href = `${BASE_PATH}/download`;
                   }}
                   onOpenLauncherSetup={openLauncherSetupFromApp}
+                  homeScreenVersions={homeScreenVersions}
                   onPauseApp={handleSetAppPause}
                   onClearAppPause={handleClearAppPause}
                   onLogLauncherEvent={logLauncherEvent}
@@ -10049,6 +10050,7 @@ function AppsPanelClock({
   onClaimAccessCode,
   onOpenInstallGuide,
   onOpenLauncherSetup,
+  homeScreenVersions = {},
   selectedVersionId = null,
   appPauseRevision = 0,
   isTester = false,

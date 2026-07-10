@@ -639,6 +639,7 @@ const HQContent = memo(function HQContent({
             handleDeletePack={handleDeletePack}
             editPack={editPack}
             loading={loading}
+            setStatus={setStatus}
           />
         ) : null}
         {activeView === "settings" ? <SettingsPage onRefresh={() => { loadStaticData(); refreshAnalytics(); }} onBack={onBack} loading={loading} /> : null}
@@ -1500,6 +1501,7 @@ const PacksPage = memo(function PacksPage({
   handleDeletePack,
   editPack,
   loading,
+  setStatus,
 }) {
   useRenderDiagnostics("PacksPage");
   return (
