@@ -9,8 +9,8 @@ Update this file in the same commit that changes a phase's status.
 | # | Phase | Status | Packet | Depends on | Commits |
 |---|---|---|---|---|---|
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
-| 0 | Safety-net tooling (Vitest + ESLint + CI) | **In progress** | `docs/architecture/phase-00-safety-tooling.md` | — | — |
-| 1 | Error telemetry (errors only) | **Blocked** (needs Phase 0) | `docs/architecture/phase-01-error-telemetry.md` | 0 | — |
+| 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
+| 1 | Error telemetry (errors only) | **Ready** | `docs/architecture/phase-01-error-telemetry.md` | 0 | — |
 | 2 | Composition root (providers + router extraction) | Planned | — | 0, 1 | — |
 | 3 | Feature module extraction | Planned | — | 2 | — |
 | 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
@@ -94,3 +94,10 @@ Update this file in the same commit that changes a phase's status.
   (existing `AppShellErrorBoundary` acknowledged; Phase 1 narrowed to errors
   only; version plumbing reuse noted). Phase 0 and Phase 1 packets written.
   Phase 0 marked Ready.
+- **2026-07-10** — Phase 0 complete. Vitest (86 tests, 6 files, <1s) in
+  `23b663c`; ESLint correctness config (0 errors, 58 warnings) in `a343ec8`;
+  triple enforcement wiring (npm test, before-push, staging-checks CI) in
+  `ae504f0`. The first lint run caught two latent ReferenceError crashes
+  (Apps pending-setup in standalone mode; HQ Packs view) plus a dead
+  duplicate object key — fixed separately in `11c2001`, verified by the
+  full before-push suite. Phase 1 is now Ready.
