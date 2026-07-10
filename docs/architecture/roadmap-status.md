@@ -10,8 +10,8 @@ Update this file in the same commit that changes a phase's status.
 |---|---|---|---|---|---|
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
-| 1 | Error telemetry (errors only) | **Ready** | `docs/architecture/phase-01-error-telemetry.md` | 0 | — |
-| 2 | Composition root (providers + router extraction) | Planned | — | 0, 1 | — |
+| 1 | Error telemetry (errors only) | **Complete** (migration pending manual apply) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, + migration commit |
+| 2 | Composition root (providers + router extraction) | Planned (packet not yet written) | — | 0, 1 | — |
 | 3 | Feature module extraction | Planned | — | 2 | — |
 | 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
 | 5 | IndexedDB persistence engine | Planned | — | 4 | — |
@@ -101,3 +101,13 @@ Update this file in the same commit that changes a phase's status.
   (Apps pending-setup in standalone mode; HQ Packs view) plus a dead
   duplicate object key — fixed separately in `11c2001`, verified by the
   full before-push suite. Phase 1 is now Ready.
+- **2026-07-11** — Phase 1 complete in code: scrub + reporter core with 21
+  unit tests (`f57b923`), root boundary + global handlers in main.jsx
+  (`8c7d000`, dev check: both handler paths log [client-error] with zero
+  network calls), two-line AppShellErrorBoundary hook (`6f17286`,
+  guardrails green), client_errors migration committed.
+  **OUTSTANDING MANUAL STEP: apply
+  `supabase/migrations/202607100001_client_errors.sql` to the hosted
+  Supabase project (supabase db push or dashboard SQL editor) and record
+  the date here.** Until then the reporter buffers and silently drops
+  (missing-table path, unit-tested). Phase 2 entry criteria are now met.
