@@ -76,6 +76,7 @@ import {
   touchUserProfile,
 } from "./lib/mybishbashSync";
 import { ACCESS_TIERS, getEffectiveTier, isAccessActive, resolveEntitlements, canAddUnder, isUnlimited } from "./lib/accessCapabilities";
+import { reportError } from "./services/errors/reporter";
 import ExplorePanel from "./ExplorePanel";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
@@ -747,6 +748,7 @@ class AppShellErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error("[APP_SHELL_ERROR]", error, info);
+    reportError(error, "boundary");
   }
 
   componentDidUpdate(previousProps) {
