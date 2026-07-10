@@ -9,7 +9,7 @@ Update this file in the same commit that changes a phase's status.
 | # | Phase | Status | Packet | Depends on | Commits |
 |---|---|---|---|---|---|
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
-| 0 | Safety-net tooling (Vitest + ESLint + CI) | **Ready** | `docs/architecture/phase-00-safety-tooling.md` | — | — |
+| 0 | Safety-net tooling (Vitest + ESLint + CI) | **In progress** | `docs/architecture/phase-00-safety-tooling.md` | — | — |
 | 1 | Error telemetry (errors only) | **Blocked** (needs Phase 0) | `docs/architecture/phase-01-error-telemetry.md` | 0 | — |
 | 2 | Composition root (providers + router extraction) | Planned | — | 0, 1 | — |
 | 3 | Feature module extraction | Planned | — | 2 | — |
