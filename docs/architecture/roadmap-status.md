@@ -11,7 +11,7 @@ Update this file in the same commit that changes a phase's status.
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
 | 1 | Error telemetry (errors only) | **Complete** (migration pending manual apply) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, + migration commit |
-| 2 | Composition root (providers + router extraction) | Planned (packet not yet written) | — | 0, 1 | — |
+| 2 | Composition root (providers + router extraction) | **Ready** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | — |
 | 3 | Feature module extraction | Planned | — | 2 | — |
 | 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
 | 5 | IndexedDB persistence engine | Planned | — | 4 | — |
@@ -111,3 +111,27 @@ Update this file in the same commit that changes a phase's status.
   Supabase project (supabase db push or dashboard SQL editor) and record
   the date here.** Until then the reporter buffers and silently drops
   (missing-table path, unit-tested). Phase 2 entry criteria are now met.
+- **2026-07-11 — Release evidence.**
+  - **Empty-env build/boot test:** `.env.local` moved aside, `npm run build`
+    succeeded, built app booted via `vite preview` — landing page rendered,
+    zero Supabase network requests, reporter silent. Env restored, gate rerun
+    green, `public/` regeneration churn reset (`generate-launchers.mjs`
+    stamps `public/` with the current `VITE_BASE_PATH` on every prebuild —
+    pre-existing behaviour worth a future cleanup).
+  - **CI:** first push (`d6bdb22`) failed Staging Checks: the before-push
+    unit run receives `VITE_SUPABASE_*`, so `supabaseClient.js` built a real
+    client and supabase-js hit Node 20's missing native WebSocket. Fixed by
+    making unit tests hermetic (`43ba153` blanks Supabase env in
+    vitest.config; verified `supabase === null` under forced env). Second
+    run **green**: Staging Checks run 29148845364 (Lint, Unit, Build,
+    Before-push, Playwright smoke all success); Pages preview run
+    29148845369 success.
+  - **Preview smoke:** https://drlizlondon.github.io/mybishbash-preview/home
+    serves `version.json` sourceSha `43ba153…` (== HEAD), renders the auth
+    gate signed-out, zero console errors, zero telemetry traffic.
+  - **Migration NOT yet applied:** anon REST probes return PGRST205 (table
+    missing). CLI blocked locally (access token 403 + no
+    `SUPABASE_DB_PASSWORD`); Chrome dashboard session unavailable. Apply the
+    migration, then run `scripts/verify-client-errors-rls.sql` in the SQL
+    editor (checks: policies exist; authenticated insert-own succeeds;
+    cross-user insert rejected 42501; normal user reads 0 rows; admin reads).
