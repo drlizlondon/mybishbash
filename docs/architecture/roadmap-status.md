@@ -10,7 +10,7 @@ Update this file in the same commit that changes a phase's status.
 |---|---|---|---|---|---|
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
-| 1 | Error telemetry (errors only) | **Complete** (migration pending manual apply) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, + migration commit |
+| 1 | Error telemetry (errors only) | **Complete** (migration applied + RLS verified) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, `d6bdb22`, fix-forward `ce78e63` |
 | 2 | Composition root (providers + router extraction) | **Ready** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | — |
 | 3 | Feature module extraction | Planned | — | 2 | — |
 | 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
@@ -129,9 +129,29 @@ Update this file in the same commit that changes a phase's status.
   - **Preview smoke:** https://drlizlondon.github.io/mybishbash-preview/home
     serves `version.json` sourceSha `43ba153…` (== HEAD), renders the auth
     gate signed-out, zero console errors, zero telemetry traffic.
-  - **Migration NOT yet applied:** anon REST probes return PGRST205 (table
-    missing). CLI blocked locally (access token 403 + no
-    `SUPABASE_DB_PASSWORD`); Chrome dashboard session unavailable. Apply the
-    migration, then run `scripts/verify-client-errors-rls.sql` in the SQL
-    editor (checks: policies exist; authenticated insert-own succeeds;
-    cross-user insert rejected 42501; normal user reads 0 rows; admin reads).
+  - **Migration applied to hosted staging (2026-07-12).** Applied via the
+    Supabase dashboard SQL editor (CLI blocked: access token 403 + no
+    `SUPABASE_DB_PASSWORD`; automated browser routes unavailable this session).
+    Applying `202607100001_client_errors.sql` and running
+    `scripts/verify-client-errors-rls.sql` surfaced a **defect in that
+    migration**: it created the RLS policies but omitted the table-level
+    GRANTs, so the `authenticated` role hit `42501 permission denied` before
+    RLS was consulted — which would have made the reporter's insert fail
+    silently in production. Fixed forward-only in `ce78e63`
+    (`202607120001_client_errors_grants.sql`:
+    `grant select, insert on public.client_errors to authenticated`), matching
+    the grant pattern used by every other table in the schema.
+  - **RLS verification — all 6 checks pass** (`scripts/verify-client-errors-rls.sql`,
+    2026-07-12, after both migrations applied):
+    | step | expected | actual | pass |
+    |---|---|---|---|
+    | 0 policies present | 2 | 2 | ✅ |
+    | 1 users found (non-null) | both | normal + admin uuids resolved | ✅ |
+    | 2 insert own row | success | success | ✅ |
+    | 3 insert as other user | blocked | blocked (42501) | ✅ |
+    | 4 normal user reads | 0 | 0 | ✅ |
+    | 5 admin reads | >= 1 | 2 | ✅ |
+    This is the requested step-5 evidence: authenticated staging error inserts;
+    ordinary users cannot read error records; admins can.
+  - **Phases 0 and 1 are fully closed.** Phase 2 packet
+    (`phase-02-composition-root.md`) is written and Ready; not yet implemented.
