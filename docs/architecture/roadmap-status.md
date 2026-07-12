@@ -155,3 +155,16 @@ Update this file in the same commit that changes a phase's status.
     ordinary users cannot read error records; admins can.
   - **Phases 0 and 1 are fully closed.** Phase 2 packet
     (`phase-02-composition-root.md`) is written and Ready; not yet implemented.
+- **2026-07-12 — Production deployment status (telemetry).** Production =
+  `main` branch = Cloudflare `mybishbash.app`, currently serving sourceSha
+  `9c0b6f2` (July 3), which **predates all Phase 1 telemetry code** — so prod
+  emits no error reports yet even though the `client_errors` table + grants
+  are live (prod and staging share Supabase project `ifcgomivmzwqqxhltfjj`, so
+  the DB work already covers prod; do NOT re-run the migration). `staging` is
+  **224 commits ahead of `main`**, so any prod deploy ships that entire batch,
+  not just telemetry. **Decision (owner): defer** — telemetry stays live on
+  staging; it goes to production as part of the next normal `staging → main`
+  release via the `docs/release-workflow.md` checklist + real-device QA, not as
+  a standalone telemetry push. Action for that release: after prod serves the
+  new build, trigger one controlled authenticated error and confirm a row lands
+  in `public.client_errors` with cross-user isolation intact.
