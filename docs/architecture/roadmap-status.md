@@ -11,7 +11,7 @@ Update this file in the same commit that changes a phase's status.
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
 | 1 | Error telemetry (errors only) | **Complete** (migration applied + RLS verified) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, `d6bdb22`, fix-forward `ce78e63` |
-| 2 | Composition root (providers + router extraction) | **In progress** (steps 1–4 of 5 complete; step 5 blocked — see log) | `docs/architecture/phase-02-composition-root.md` | 0, 1 | `3e04058`, `01f9f2c`, `f96dadb`, `bb69e8e` |
+| 2 | Composition root (providers + router extraction) | **Complete** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | `3e04058`, `01f9f2c`, `f96dadb`, `bb69e8e`, `bb88529`, `fcb85a5`, `e4e2dcf`, (this commit) |
 | 3 | Feature module extraction | Planned | — | 2 | — |
 | 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
 | 5 | IndexedDB persistence engine | Planned | — | 4 | — |
@@ -256,3 +256,31 @@ Update this file in the same commit that changes a phase's status.
     accepting the duplicated resolution logic with a documented rationale).
   - App.jsx line count: 13,739 → 13,421 (−318) across the four completed
     steps. All four commits pushed to `staging` with green gates.
+- **2026-07-13 — Phase 2 complete via phase-02b follow-up packet.**
+  - **Commit 1** (`bb88529`): added `zustand`-backed `sessionStore`,
+    extracted shared e2e helpers to `src/app/e2e.js`, and recorded the
+    connection-lifecycle classification/doc updates from
+    `phase-02b-session-store.md`.
+  - **Commit 2** (`fcb85a5`): swapped the nine session/connection `useState`
+    homes in `App.jsx` for `sessionStore` selectors and stable actions with
+    no consumer-site behaviour changes.
+  - **Commit 3** (`e4e2dcf`): extracted the core auth-resolution effect and
+    `onAuthStateChange` subscription into `useAuthLifecycle` at the exact
+    App call position. A brittle release-guardrail marker had to move from
+    `AUTH_SESSION_RETRY_DELAYS_MS` to `TESTPILOT_CONFIG` after the retry
+    constant moved into the hook module; runtime behaviour was unchanged.
+  - **Commit 4** (this commit): moved the admin, tester-status, and
+    access-profile effects into `src/app/providers/auth.js` in the same
+    relative order. Accepted micro-reorder: the access-profile effect now
+    registers inside the hook before the `globalPacks` effect instead of
+    after it; both still early-return until `authReady` and do not share
+    state, so behaviour stays unchanged.
+  - **Verification:** each commit reran
+    `npm run lint && npm run test:unit && npm run build &&
+    npm run test:release-guardrails && npm run test:before-push`.
+    Commit 3 also passed `launcher-flow-trace`,
+    `launcher-terminal-exhaustive`, and a full Playwright run at
+    `--workers=2`; Commit 4 requires the full Playwright suite at
+    `--workers=2` twice consecutively before push. The pre-existing baseline
+    failure remains `tests/e2e/access-gating.spec.ts:88`, with
+    `tests/e2e/timing-windows.spec.ts:187` still intermittent.

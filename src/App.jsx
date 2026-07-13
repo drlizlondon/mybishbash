@@ -63,7 +63,6 @@ import {
   saveLauncherEvent,
   saveNotificationPreferences,
   savePushSubscription,
-  checkIsAdmin,
   fetchGlobalPacks,
   fetchLauncherConfigs,
   fetchOwnAccessProfile,
@@ -163,7 +162,6 @@ import {
   TesterFloatingButton,
   TesterToolsSheet,
   TestPilotProvider,
-  fetchTesterStatus,
   useTestPilot,
 } from "./testing/TestPilot";
 import "./testing/TestPilot/testPilot.css";
@@ -188,7 +186,6 @@ import {
 } from "./app/providers/environment";
 import { useAuthLifecycle } from "./app/providers/auth";
 import {
-  E2E_TESTER_MODE_KEY,
   isE2EModeEnabled,
   loadE2EAccessProfile,
   recordLaunchTiming,
@@ -227,10 +224,6 @@ const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalon
 const SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY = "mybishbash.suppress-installed-shell-card-context.v1";
 const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
-const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;
 const COMMITMENT_TIMING_OPTIONS = [
@@ -1653,7 +1646,6 @@ function App() {
   const accessStatus = useSessionStore((s) => s.accessStatus);
   const {
     setSession, setAuthReady, setSyncStatus, setSyncError,
-    setIsAdmin, setAdminStatus, setTesterStatus,
     setAccessProfile, setAccessStatus,
   } = getSessionActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
@@ -2323,75 +2315,6 @@ function App() {
   useAuthLifecycle({ e2eMode, testerStatus, setShouldLaunchOverlay });
 
   useEffect(() => {
-    if (e2eMode) {
-      setIsAdmin(false);
-      setAdminStatus("ready");
-      return;
-    }
-    if (session?.user?.id) {
-      if (session.user.email && HQ_ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
-        setIsAdmin(true);
-        setAdminStatus("ready");
-        return;
-      }
-      let cancelled = false;
-      setIsAdmin(false);
-      setAdminStatus("checking");
-      checkIsAdmin(session.user.id)
-        .then((admin) => {
-          if (!cancelled) setIsAdmin(admin);
-        })
-        .catch(() => {
-          if (!cancelled) setIsAdmin(false);
-        })
-        .finally(() => {
-          if (!cancelled) setAdminStatus("ready");
-        });
-      return () => {
-        cancelled = true;
-      };
-    } else {
-      setIsAdmin(false);
-      setAdminStatus("ready");
-    }
-  }, [e2eMode, session?.user?.email, session?.user?.id]);
-
-  useEffect(() => {
-    if (e2eMode) {
-      const e2eTesterMode = typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
-      setTesterStatus({ is_tester: e2eTesterMode });
-      recordLaunchTiming("tester status ready", { source: "e2e", isTester: e2eTesterMode }, { is_tester: e2eTesterMode });
-      return undefined;
-    }
-    if (!session?.user?.id) {
-      setTesterStatus({ is_tester: false });
-      recordLaunchTiming("tester status ready", { sessionPresent: false, isTester: false }, { is_tester: false });
-      return undefined;
-    }
-
-    let cancelled = false;
-    setTesterStatus(null);
-    fetchTesterStatus(session.user.id)
-      .then((status) => {
-        if (!cancelled) {
-          const nextStatus = status ?? { is_tester: false };
-          setTesterStatus(nextStatus);
-          recordLaunchTiming("tester status ready", { sessionPresent: true, isTester: nextStatus.is_tester === true }, nextStatus);
-        }
-      })
-      .catch((error) => {
-        console.warn("Could not load tester status", error);
-        if (!cancelled) {
-          setTesterStatus({ is_tester: false });
-          recordLaunchTiming("tester status ready", { sessionPresent: true, isTester: false, error: true }, { is_tester: false });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [e2eMode, session?.user?.id]);
-
-  useEffect(() => {
     if (!authReady) return;
     if (e2eMode) {
       setGlobalPacks([]);
@@ -2404,31 +2327,6 @@ function App() {
     fetchGlobalPacks()
       .then(setGlobalPacks)
       .catch((err) => console.warn("Could not load global packs", err));
-  }, [authReady, e2eMode, session?.user?.id]);
-
-  useEffect(() => {
-    if (!authReady || e2eMode || !session?.user?.id) {
-      setAccessProfile(e2eMode ? loadE2EAccessProfile() : null);
-      setAccessStatus(e2eMode ? "granted" : session?.user?.id ? "unknown" : "signed-out");
-      return undefined;
-    }
-    let cancelled = false;
-    setAccessStatus("loading");
-    fetchOwnAccessProfile(session.user.id).then((profileRow) => {
-      if (!cancelled) {
-        setAccessProfile(profileRow);
-        setAccessStatus(!profileRow || isAccessActive(profileRow) ? "granted" : "denied");
-      }
-    }).catch((error) => {
-      console.warn("Could not load access profile; preserving signed-in session", error);
-      if (!cancelled) {
-        setAccessProfile(null);
-        setAccessStatus("granted");
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
   }, [authReady, e2eMode, session?.user?.id]);
 
   const handleClaimInAppAccessCode = useCallback(async (accessCode) => {
