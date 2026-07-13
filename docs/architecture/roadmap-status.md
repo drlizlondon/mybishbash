@@ -12,9 +12,9 @@ Update this file in the same commit that changes a phase's status.
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
 | 1 | Error telemetry (errors only) | **Complete** (migration applied + RLS verified) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, `d6bdb22`, fix-forward `ce78e63` |
 | 2 | Composition root (providers + router extraction) | **Complete** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | `3e04058`, `01f9f2c`, `f96dadb`, `bb69e8e`, `bb88529`, `fcb85a5`, `e4e2dcf`, (this commit) |
-| 3 | Feature module extraction | Planned | — | 2 | — |
-| 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
-| 5 | IndexedDB persistence engine | Planned | — | 4 | — |
+| 3 | Feature module extraction | **Ready** | `docs/architecture/phase-03-feature-modules.md` | 2 | — |
+| 4 | Domain stores & single write path (local) | Planned (packet written) | `docs/architecture/phase-04-domain-stores.md` | 3 | — |
+| 5 | IndexedDB persistence engine | Planned (packet written) | `docs/architecture/phase-05-indexeddb.md` | 4 | — |
 | 6 | Sync v2 — entities + mutation queue | Planned | — | 5 | — |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
@@ -46,20 +46,34 @@ Update this file in the same commit that changes a phase's status.
 ### Phase 3 — Feature modules
 - **Entry:** Phase 2 pattern proven.
 - **Exit:** components relocated to `features/*` with `index` public APIs;
-  overlay host + descriptor stack; App.jsx < 3,000 lines; no cross-feature
-  internal imports (lint rule); bundle budget respected.
+  overlay host + descriptor stack (single-slot semantics preserved);
+  App.jsx ≤ 6,500 lines; no cross-feature internal imports (boundary check);
+  bundle budget respected.
+- **Amendment 2026-07-13 (packet Ruling R1):** the original "App.jsx < 3,000"
+  exit was written against the blueprint's estimate. Measured at `a02724b`,
+  `App()` alone is ~5,520 lines and does not shrink in a pure component-move
+  phase — its collapse is Phase 4's job. Amended targets: Phase 3 ⇒ App.jsx
+  ≤ 6,500 with no component definitions outside `App()`; Phase 4 ⇒ App() <
+  800 **and App.jsx < 1,600**, landing below the original 3,000 one phase
+  later. See `phase-03-feature-modules.md` §R1.
 
 ### Phase 4 — Domain stores & single write path
 - **Entry:** Phase 3 complete. Scope note: only shared/persistent domain state
   enters stores — local transient UI state stays in components.
 - **Exit:** store actions are the only local-persistence writers
   (lint-enforced); launch-session reducer extracted with ≥95% branch coverage;
-  App() < 800 lines; e2e green twice consecutively.
+  App() < 800 lines and App.jsx < 1,600 (R1 amendment); e2e green twice
+  consecutively.
 
 ### Phase 5 — IndexedDB engine
 - **Entry:** Phase 4 complete (all writes flow through actions).
 - **Exit:** stores hydrate from IndexedDB; idempotent localStorage import with
-  one-release rollback; Chromium + WebKit e2e green; 10k-event boot < 1s.
+  one-release rollback (dual-write + kill switch); Chromium + WebKit e2e green
+  (webkit-smoke scope per packet R4); 10k-event boot < 1s.
+- **Amendments 2026-07-13 (packet Rulings R1/R3):** setup-complete and mood
+  migrate with everything else behind `storage.js` (the main.jsx hydration
+  gate makes the blueprint's key split unnecessary); paged event reads defer
+  to Phase 6/9 — the event log stays a single kv value this phase.
 
 ### Phase 6 — Sync v2 (entities + mutation queue)
 - **Entry:** Phase 5 complete; tester cohort available; feature flag ready.
@@ -284,3 +298,16 @@ Update this file in the same commit that changes a phase's status.
     `--workers=2` twice consecutively before push. The pre-existing baseline
     failure remains `tests/e2e/access-gating.spec.ts:88`, with
     `tests/e2e/timing-windows.spec.ts:187` still intermittent.
+- **2026-07-13 — Phase 3/4/5 packets written** (`phase-03-feature-modules.md`,
+  `phase-04-domain-stores.md`, `phase-05-indexeddb.md`), validated against
+  HEAD `a02724b` (App.jsx 13,206 lines; `App()` 1572–7089; 42 `useState` in
+  `App()`; 59 `setOverlay` sites; cards local save debounce measured at
+  120ms; main chunk 129,981 B gzip). Key rulings: Phase 3 line-count
+  amendment (R1 above); overlay descriptor stack with single-slot semantics
+  (3-R2); boundary + bundle checks as guardrail-family scripts (3-R3/R6);
+  no new lazy boundaries until Phase 9 (3-R4); HQPanel relocates now, splits
+  later (3-R5); launch-session reducer in plain `.js` with state remaining in
+  App (4-D3); Phase 5 storage-engine seam with mirror + dual-write + kill
+  switch (5-R2), WebKit scoped project (5-R4). Dead code found and scheduled
+  for deletion in Phase 3 commit 1: `src/ContinueToAppCard.jsx` + `.css`
+  (unimported; live component is the one in App.jsx). Phase 3 is Ready.
