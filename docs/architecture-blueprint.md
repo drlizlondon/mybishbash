@@ -617,8 +617,14 @@ user-visible change); 5–6 are flagged migrations; 7–10 harvest the value.
 - **Risks:** prop-drilling makes moves noisy → allowed interim: features receive
   a typed `actions` object from App; Phase 4 replaces it with stores. Lazy-split
   regressions → keep chunk map diffed in CI.
-- **Acceptance:** App.jsx < 3,000 lines; no feature imports another feature's
-  internals (lint rule active); bundle-size budget respected.
+- **Acceptance:** App.jsx ≤ 6,500 lines (amended 2026-07-13, packet
+  `phase-03-feature-modules.md` Ruling R1 — measured at `a02724b`, `App()`
+  alone is ~5,520 lines and does not shrink in a pure component-move phase;
+  collapsing `App()` to < 800 lines, landing App.jsx below the original
+  3,000, is Phase 4's job); no feature imports another feature's internals
+  (guardrail-family script `check-feature-boundaries.mjs`, not an ESLint
+  plugin — R3); bundle-size budget respected (committed baseline + checker,
+  R6).
 - **Regression:** full e2e; visual spot-checks via existing screenshot flows.
 - **Impact:** parallel work on features becomes possible (humans or agents);
   monolith risk ends.

@@ -1,8 +1,8 @@
 import "./download.css";
-import { downloadContent } from "./content/downloadContent";
-import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
-import { loadProfile, saveProfile } from "./storage";
-import { getSession, getSignupHandoffPayload, getSignupHandoffReference, validateAndRememberGateAccessCode } from "./lib/mybishbashSync";
+import { downloadContent } from "../../content/downloadContent";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
+import { loadProfile, saveProfile } from "../../storage";
+import { getSession, getSignupHandoffPayload, getSignupHandoffReference, validateAndRememberGateAccessCode } from "../../lib/mybishbashSync";
 import { useEffect, useState } from "react";
 
 const BASE = import.meta.env.BASE_URL;

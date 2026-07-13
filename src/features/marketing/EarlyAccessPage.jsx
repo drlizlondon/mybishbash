@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./landing.css";
 import "./early-access.css";
-import { isSupabaseConfigured, supabase } from "./lib/supabaseClient";
-import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
-import { earlyAccessContent } from "./content/earlyAccessContent";
+import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
+import { earlyAccessContent } from "../../content/earlyAccessContent";
 
 const HOME_HREF = `${import.meta.env.BASE_URL || "/"}`
   .replace(/\/+/g, "/")

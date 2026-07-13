@@ -5,10 +5,10 @@ import { buildLibrarySections } from "../src/lib/librarySections.js";
 import { getCoverModel } from "../src/lib/generatedCover.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-const onboardingSource = await readFile(new URL("../src/Onboarding.jsx", import.meta.url), "utf8");
+const onboardingSource = await readFile(new URL("../src/features/onboarding/Onboarding.jsx", import.meta.url), "utf8");
 const logPanelSource = await readFile(new URL("../src/components/LogPanel.jsx", import.meta.url), "utf8");
-const downloadSource = await readFile(new URL("../src/DownloadPage.jsx", import.meta.url), "utf8");
-const exploreSource = await readFile(new URL("../src/ExplorePanel.jsx", import.meta.url), "utf8");
+const downloadSource = await readFile(new URL("../src/features/marketing/DownloadPage.jsx", import.meta.url), "utf8");
+const exploreSource = await readFile(new URL("../src/features/explore/ExplorePanel.jsx", import.meta.url), "utf8");
 const generatedCoverSource = await readFile(new URL("../src/GeneratedPackCover.jsx", import.meta.url), "utf8");
 const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8");
 const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { getThemeClass } from "./utils";
-import GeneratedPackCover from "./GeneratedPackCover";
+import { getThemeClass } from "../../utils";
+import GeneratedPackCover from "../../GeneratedPackCover";
 
 // Explore — the read-only discovery surface (docs/explore-architecture.md).
 // Current launch structure: commitment invitations → generated pack covers.

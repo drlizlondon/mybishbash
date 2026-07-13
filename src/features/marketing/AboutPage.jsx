@@ -1,7 +1,7 @@
 import "./landing.css";
 import "./about.css";
-import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
-import { aboutContent } from "./content/aboutContent";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
+import { aboutContent } from "../../content/aboutContent";
 
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;

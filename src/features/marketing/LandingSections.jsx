@@ -11,7 +11,7 @@ import {
   pricing,
   problem,
   trust,
-} from "./content/landingContent";
+} from "../../content/landingContent";
 
 const BASE = import.meta.env.BASE_URL;
 const MARK_SRC = `${BASE}icons/mybishbash-logo-mark.png`;

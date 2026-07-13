@@ -13,10 +13,10 @@ import { BASE_PATH, getPathRelativeToKnownBase, normalizeRoutePath } from "./rou
 // Marketing/legal pages are lazy: they short-circuit the app at the top of
 // App() and pull in framer-motion (landing) — keeping them out of the main
 // bundle speeds first paint on the app/card path.
-const EditableLandingPage = lazy(() => import("../../LandingPage").then((m) => ({ default: m.EditableLandingPage })));
-const EarlyAccessPage = lazy(() => import("../../EarlyAccessPage"));
-const AboutPage = lazy(() => import("../../AboutPage"));
-const DownloadPage = lazy(() => import("../../DownloadPage"));
+const EditableLandingPage = lazy(() => import("../../features/marketing/LandingPage").then((m) => ({ default: m.EditableLandingPage })));
+const EarlyAccessPage = lazy(() => import("../../features/marketing/EarlyAccessPage"));
+const AboutPage = lazy(() => import("../../features/marketing/AboutPage"));
+const DownloadPage = lazy(() => import("../../features/marketing/DownloadPage"));
 
 // Minimal, brand-coloured hold while a lazy page chunk loads. Intentionally
 // quiet (no spinner) so it reads as an instant background, not a loading state.

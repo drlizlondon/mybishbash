@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import "./landing.css";
-import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "./editing/ContentEditContext";
-import { onboardingContent } from "./content/onboardingContent";
-import { getGreeting } from "./utils";
-import { BrandMark } from "./components/BrandMark";
+import "../marketing/landing.css";
+import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
+import { onboardingContent } from "../../content/onboardingContent";
+import { getGreeting } from "../../utils";
+import { BrandMark } from "../../components/BrandMark";
 
 const ONBOARDING_DEMO_CTA_UNLOCK_MS = 3000;
 const PERSONAL_ONBOARDING_LOCATION_LABEL = "Every app you choose";

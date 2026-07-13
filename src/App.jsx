@@ -74,7 +74,7 @@ import {
 } from "./lib/mybishbashSync";
 import { ACCESS_TIERS, getEffectiveTier, isAccessActive, resolveEntitlements, canAddUnder, isUnlimited } from "./lib/accessCapabilities";
 import { reportError } from "./services/errors/reporter";
-import ExplorePanel from "./ExplorePanel";
+import ExplorePanel from "./features/explore";
 import GeneratedPackCover from "./GeneratedPackCover";
 import {
   PACKS,
@@ -165,7 +165,7 @@ import {
   useTestPilot,
 } from "./testing/TestPilot";
 import "./testing/TestPilot/testPilot.css";
-import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
+import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./features/onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { refreshMyBishBashAppShell } from "./appUpdate";
 import {

@@ -5,7 +5,7 @@ import {
   EditableText,
   EditPanel,
   useContentEdit,
-} from "./editing/ContentEditContext";
+} from "../../editing/ContentEditContext";
 import LandingSections from "./LandingSections";
 
 const BASE = import.meta.env.BASE_URL;
