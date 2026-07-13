@@ -11,7 +11,7 @@ Update this file in the same commit that changes a phase's status.
 | — | Architecture audit & blueprint | **Complete** | `docs/architecture-blueprint.md` | — | (this commit) |
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
 | 1 | Error telemetry (errors only) | **Complete** (migration applied + RLS verified) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, `d6bdb22`, fix-forward `ce78e63` |
-| 2 | Composition root (providers + router extraction) | **Ready** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | — |
+| 2 | Composition root (providers + router extraction) | **In progress** (steps 1–4 of 5 complete; step 5 blocked — see log) | `docs/architecture/phase-02-composition-root.md` | 0, 1 | `3e04058`, `01f9f2c`, `f96dadb`, `bb69e8e` |
 | 3 | Feature module extraction | Planned | — | 2 | — |
 | 4 | Domain stores & single write path (local) | Planned | — | 3 | — |
 | 5 | IndexedDB persistence engine | Planned | — | 4 | — |
@@ -168,3 +168,91 @@ Update this file in the same commit that changes a phase's status.
   a standalone telemetry push. Action for that release: after prod serves the
   new build, trigger one controlled authenticated error and confirm a row lands
   in `public.client_errors` with cross-user isolation intact.
+- **2026-07-13 — Phase 2, steps 1–4 complete; step 5 stopped (entanglement).**
+  Executed on `staging`, one commit per step, full verification gate after
+  each (`npm run lint && npm run test:unit && npm run build &&
+  npm run test:release-guardrails && npm run test:before-push`), full
+  Playwright after steps 2 and 3 per the packet:
+  - **Step 1** (`3e04058`): route model → `src/app/router/routes.js`
+    (`BASE_PATH`, `PRODUCTION_BASE_PATH`, `LEGACY_BASE_PATHS`,
+    `APP_SHELL_TABS`, `normalizeRoutePath`, `getPathRelativeToKnownBase`,
+    `getRouteFromLocation`, `parseRoute`, `getSafeAppTab`,
+    `getBottomNavItems`), with `routes.test.js` (a ~30-case URL-shape table).
+    `BOTTOM_NAV_ITEMS` stayed in App.jsx (its Glyph components live there);
+    `getBottomNavItems` now takes `items` as a required param instead of
+    defaulting to it. Guardrail re-point: `/packs redirects to Explore` now
+    reads `routes.js` (regex unchanged).
+  - **Step 2** (`01f9f2c`): `RootRouter`, `PageSuspenseFallback`,
+    `LegalPage`, and the marketing lazy imports → `src/app/router/
+    RootRouter.jsx`. App.jsx's default export switched from `RootRouter` to
+    `App`; `main.jsx` now imports `RootRouter` from the new file.
+    `isStandaloneDisplayMode`, `consumeSignupHandoffFromUrl`,
+    `applyLocalNormalPreviewFlag`, `shouldStartDemoOnboarding`,
+    `shouldStartDemoSignup`, `resetDemoOnboardingState`,
+    `resetDemoSignupState` stayed in App.jsx (`isStandaloneDisplayMode` is
+    used throughout `App()`) and gained an `export` keyword. Guardrail
+    re-points: `rootRouterSource` now reads `RootRouter.jsx`;
+    `continueCardSource`'s end marker changed to `"export default App;"`.
+    Full Playwright: 355/357 green (2 pre-existing failures — see below).
+  - **Step 3** (`f96dadb`): `routePath` state, the `route`/`initialRoute`
+    memos, and the history-sync effect → `src/app/router/
+    useRoute(setupComplete)`, called at the same point in `App()` so the
+    intercept boot chain (initial route feeding the
+    `screen`/`overlay`/`launchSession`/`activeProtectedAppContext`
+    initializers) stays synchronous and order-identical. `navigateTo`
+    **stayed in App()** (smaller-move preference per the packet): it
+    mutates non-route state (shell settings version id, launcher context,
+    active protected app context) alongside the route change, so splitting
+    it would change ordering semantics. The hook returns `setRoutePath`
+    (beyond the packet's suggested shape) because ~8 other call sites in
+    `App()` set `routePath` directly, not just through `navigateTo`.
+    Targeted intercept suite (launcher-flow-trace +
+    launcher-terminal-exhaustive, 101 tests) green; full Playwright green
+    at `--workers=2` (356/357).
+  - **Step 4** (`bb69e8e`): four environment hooks →
+    `src/app/providers/environment.js` — `useOfflineFlag`,
+    `useAppUpdateStatus`, `useNotificationPermission`, `useThemePreference`.
+    Two deviations from the packet's hook descriptions, both following the
+    same smaller-move precedent as step 3: `useThemePreference(mood)` takes
+    `mood` as a parameter rather than owning the state, because `mood` flows
+    through `buildSharedState`/`applySharedState` (the cloud sync engine,
+    out of scope this phase); `useNotificationPermission` owns only the
+    state, not `enableNotifications`/`disableNotifications`, which depend on
+    `session`/`notificationSettings`/sync-adjacent App state.
+  - **Pre-existing e2e flakiness (not caused by this phase):** two failures
+    recur across runs — `access-gating.spec.ts:88` (demo-signup redirect)
+    and, intermittently, `timing-windows.spec.ts:187`. Both reproduced
+    identically via `git stash` on `staging` HEAD *before* any Phase 2
+    change, confirming they predate this work. Separately, running the full
+    suite at default worker concurrency back-to-back surfaced additional
+    timing/animation-sensitive failures (cursor-position assertions,
+    viewport interaction audits) that differed test-to-test between runs
+    and cleared at `--workers=2` — consistent with system load flakiness,
+    not a regression; no test failed twice on the same assertion, so no
+    rollback criterion was met.
+  - **Step 5 — stopped, per the packet's explicit escape hatch** ("If the
+    auth effect cannot be split cleanly per Decision 5, stop after step 4,
+    commit what is green, and report the entanglement in detail"). The core
+    auth-resolution effect (`App.jsx`, `onAuthStateChange` subscription +
+    the `resolveSessionWithRetry` effect it sits alongside) sets `session`
+    and `authReady` — two of the seven fields the packet lists for
+    `sessionStore` — in the *same* promise `.then()`/`.catch()`/`.finally()`
+    branches and the *same* `onAuthStateChange` callback that also set
+    `syncStatus` and `syncError`. Those two are not among the seven
+    session-store fields and are explicitly local/sync-adjacent state per
+    blueprint §9's state classification — but they're set based on the
+    identical conditions (e2e mode, session presence, retry failure,
+    `SIGNED_OUT` event) inside the identical callbacks as the fields that
+    must move. Splitting them would require either duplicating the async
+    session-resolution/retry logic in two places (changing timing behavior)
+    or leaving `syncStatus`/`syncError` with no way to observe *why* auth
+    resolution failed (the human-readable error text in `syncError` has no
+    other source). Neither is a verbatim, behavior-preserving move.
+    `zustand` was **not** added; no `sessionStore`/`AuthProvider` files were
+    created. Phase 2 stays **In progress** — step 5 needs its own follow-up
+    packet addressing this specific entanglement (e.g., moving `syncStatus`/
+    `syncError` into the store alongside the seven fields, which the
+    blueprint's §9 classification would need to explicitly permit, or
+    accepting the duplicated resolution logic with a documented rationale).
+  - App.jsx line count: 13,739 → 13,421 (−318) across the four completed
+    steps. All four commits pushed to `staging` with green gates.
