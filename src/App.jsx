@@ -194,6 +194,7 @@ import {
   buildE2ESession,
   recordLaunchTiming,
 } from "./app/e2e";
+import { useSessionStore, getSessionActions } from "./stores/sessionStore";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 
@@ -1634,27 +1635,29 @@ function App() {
   const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
   const { notificationStatus, setNotificationStatus } = useNotificationPermission();
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
-  const [session, setSession] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [syncStatus, setSyncStatus] = useState("loading");
-  const [syncError, setSyncError] = useState("");
+  const session = useSessionStore((s) => s.session);
+  const authReady = useSessionStore((s) => s.authReady);
+  const syncStatus = useSessionStore((s) => s.syncStatus);
+  const syncError = useSessionStore((s) => s.syncError);
   const { isOffline, setIsOffline } = useOfflineFlag();
   const [timingWindowsPrefs, setTimingWindowsPrefs] = useState(
     initialState.timingWindowsPrefs,
   );
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminStatus, setAdminStatus] = useState(e2eMode ? "ready" : "idle");
-  const [testerStatus, setTesterStatus] = useState(() => {
-    const e2eTesterMode = e2eMode && typeof window !== "undefined" && window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
-    return e2eMode ? { is_tester: e2eTesterMode } : null;
-  });
+  const isAdmin = useSessionStore((s) => s.isAdmin);
+  const adminStatus = useSessionStore((s) => s.adminStatus);
+  const testerStatus = useSessionStore((s) => s.testerStatus);
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
   const [globalPacks, setGlobalPacks] = useState([]);
   // Own access profile for capability checks (premium pack gating). null =
   // unknown/unavailable, which getCapabilities treats as the free tier, so
   // premium installs fail closed.
-  const [accessProfile, setAccessProfile] = useState(() => e2eMode ? loadE2EAccessProfile() : null);
-  const [accessStatus, setAccessStatus] = useState(e2eMode ? "granted" : "unknown");
+  const accessProfile = useSessionStore((s) => s.accessProfile);
+  const accessStatus = useSessionStore((s) => s.accessStatus);
+  const {
+    setSession, setAuthReady, setSyncStatus, setSyncError,
+    setIsAdmin, setAdminStatus, setTesterStatus,
+    setAccessProfile, setAccessStatus,
+  } = getSessionActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
