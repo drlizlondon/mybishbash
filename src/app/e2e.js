@@ -8,6 +8,10 @@ function isE2EModeEnabled() {
   return typeof window !== "undefined" && window.localStorage.getItem(E2E_MODE_KEY) === "true";
 }
 
+function isDemoModeEnabled() {
+  return typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+}
+
 function loadE2EAccessProfile() {
   if (typeof window === "undefined") return null;
   const accessTier = window.localStorage.getItem("MYBISHBASH_E2E_ACCESS_TIER") || ACCESS_TIERS.FREE_CORE;
@@ -54,6 +58,7 @@ function recordLaunchTiming(label, payload = {}, testerStatus = null) {
 export {
   E2E_TESTER_MODE_KEY,
   isE2EModeEnabled,
+  isDemoModeEnabled,
   loadE2EAccessProfile,
   buildE2ESession,
   isLaunchTimingEnabled,
