@@ -192,7 +192,7 @@ import {
 } from "./app/e2e";
 import { useSessionStore, getSessionActions } from "./stores/sessionStore";
 
-const HQPanel = lazy(() => import("./HQPanel"));
+const HQPanel = lazy(() => import("./features/hq"));
 
 function debugLog(...args) {
   if (import.meta.env.DEV) {

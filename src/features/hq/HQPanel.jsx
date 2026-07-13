@@ -30,15 +30,15 @@ import {
   saveAdminGlobalPack,
   saveAdminLauncherConfig,
   uploadLauncherIcon,
-} from "./lib/mybishbashSync";
-import { PACK_GOALS, PACK_CONTENT_TYPES } from "./lib/packGoals";
-import { parseImportedCards, formatImportedCard } from "./lib/packImport";
-import GeneratedPackCover from "./GeneratedPackCover";
+} from "../../lib/mybishbashSync";
+import { PACK_GOALS, PACK_CONTENT_TYPES } from "../../lib/packGoals";
+import { parseImportedCards, formatImportedCard } from "../../lib/packImport";
+import GeneratedPackCover from "../../GeneratedPackCover";
 import {
   fetchAdminTesterReports,
   updateTesterReportStatus,
   updateTesterUser,
-} from "./testing/TestPilot";
+} from "../../testing/TestPilot";
 import {
   FAKE_APP_LAUNCHERS,
   PLACEHOLDER_ICON_SRC,
@@ -46,14 +46,14 @@ import {
   normalizeLauncherOverride,
   resolveLauncherIconSrc,
   validateLauncherDraft,
-} from "./lib/launcherRegistry";
+} from "../../lib/launcherRegistry";
 import {
   LAUNCHER_AVAILABILITY_STATUSES,
   getLauncherAvailabilityStatus,
   getLauncherAudience,
   getLauncherLifecycleStatus,
-} from "./lib/launcherAvailability";
-import { THEMES } from "./utils";
+} from "../../lib/launcherAvailability";
+import { THEMES } from "../../utils";
 
 const EMPTY_PACK_FORM = {
   id: null,
