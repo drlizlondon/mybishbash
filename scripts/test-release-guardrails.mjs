@@ -65,7 +65,7 @@ function sourceBetween(source, start, end) {
 
 const rootRouterSource = sourceBetween(rootRouterFileSource, "function RootRouter()", "export default RootRouter;");
 const appBeforeHooksSource = sourceBetween(appSource, "function App()", "const initialState = useMemo");
-const appDebugLogSource = sourceBetween(appSource, "function debugLog(...args)", "const AUTH_SESSION_RETRY_DELAYS_MS");
+const appDebugLogSource = sourceBetween(appSource, "function debugLog(...args)", "const TESTPILOT_CONFIG");
 const registerServiceWorkerDebugLogSource = sourceBetween(registerServiceWorkerSource, "function debugLog(...args)", "export function registerServiceWorker()");
 const launcherDestinationsDebugLogSource = sourceBetween(launcherDestinationsSource, "function debugLog(...args)", "export function getLauncherPlatform()");
 
