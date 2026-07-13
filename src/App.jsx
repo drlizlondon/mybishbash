@@ -27,7 +27,6 @@ import {
   saveHiddenLibraryPacks,
   saveHomeScreenVersions,
   saveLauncherBehaviorSettings,
-  saveMood,
   saveNotificationSettings,
   saveProfile,
   saveActionCards,
@@ -171,7 +170,7 @@ import {
 import "./testing/TestPilot/testPilot.css";
 import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
-import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
+import { refreshMyBishBashAppShell } from "./appUpdate";
 import {
   BASE_PATH,
   normalizeRoutePath,
@@ -182,6 +181,12 @@ import {
   getBottomNavItems,
 } from "./app/router/routes";
 import { useRoute } from "./app/router/useRoute";
+import {
+  useThemePreference,
+  useAppUpdateStatus,
+  useOfflineFlag,
+  useNotificationPermission,
+} from "./app/providers/environment";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 
@@ -656,11 +661,6 @@ function urlBase64ToUint8Array(base64String) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
-}
-
-function getNotificationPermission() {
-  if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
-  return Notification.permission;
 }
 
 async function getPushRegistration() {
@@ -1675,16 +1675,13 @@ function App() {
   const [homeSpotlightActionSignal, setHomeSpotlightActionSignal] = useState(null);
   const [launcherSetupInterstitialVersion, setLauncherSetupInterstitialVersion] = useState(null);
   const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
-  const [notificationStatus, setNotificationStatus] = useState(() => getNotificationPermission());
+  const { notificationStatus, setNotificationStatus } = useNotificationPermission();
   const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState("loading");
   const [syncError, setSyncError] = useState("");
-  // Start optimistically online — we only flip to true when the browser fires
-  // an explicit 'offline' event. This avoids false positives from unreliable
-  // navigator.onLine values in test / sandboxed environments.
-  const [isOffline, setIsOffline] = useState(false);
+  const { isOffline, setIsOffline } = useOfflineFlag();
   const [timingWindowsPrefs, setTimingWindowsPrefs] = useState(
     initialState.timingWindowsPrefs,
   );
@@ -1701,7 +1698,7 @@ function App() {
   // premium installs fail closed.
   const [accessProfile, setAccessProfile] = useState(() => e2eMode ? loadE2EAccessProfile() : null);
   const [accessStatus, setAccessStatus] = useState(e2eMode ? "granted" : "unknown");
-  const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
+  const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
   const [screen, setScreen] = useState(initialRoute.kind === "intercept" ? "interception" : initialState.setupComplete ? "library" : "onboarding");
@@ -2708,25 +2705,6 @@ function App() {
     touchUserProfile(session.user);
   }, [e2eMode, session?.user?.email, session?.user?.id]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    checkForAppUpdate(BASE_PATH).then((result) => {
-      if (!cancelled) setAppUpdate({ ...result, checking: false });
-    });
-
-    const interval = window.setInterval(() => {
-      checkForAppUpdate(BASE_PATH).then((result) => {
-        if (!cancelled && result.updateAvailable) setAppUpdate({ ...result, checking: false });
-      });
-    }, 5 * 60 * 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-
   const refreshAppShell = useCallback(() => {
     refreshMyBishBashAppShell(BASE_PATH);
   }, []);
@@ -2903,25 +2881,7 @@ function App() {
     }
   }, [setupComplete]);
 
-  useEffect(() => {
-    saveMood(mood);
-
-    // Map your exact myBishBash background hex colors here
-    const themeColors = {
-      "Minimal": "#F6EBCF",
-      "Pop Art": "#F4A261",
-      "Soft Bloom": "#FAD2E1",
-      "Rainbow": "#E2ECE9",
-      "Starry Sky": "#1B263B",
-    };
-    const activeThemeBackground = themeColors[mood] || "#F6EBCF";
-
-    document.documentElement.style.setProperty("--app-bg", activeThemeBackground);
-    const themeMeta = document.querySelector('meta[name="theme-color"]');
-    if (themeMeta) {
-      themeMeta.setAttribute("content", activeThemeBackground);
-    }
-  }, [mood]);
+  useThemePreference(mood);
 
   useEffect(() => {
     saveProfile(profile);
@@ -3373,24 +3333,6 @@ function App() {
       setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
     }
   }, [route.kind, overlay?.launchSource]);
-
-  useEffect(() => {
-    function handleOnline() {
-      debugLog("[NETWORK] App is online. Processing offline event queue...");
-      setIsOffline(false);
-      void processEventQueue();
-    }
-    function handleOffline() {
-      debugLog("[NETWORK] App is offline.");
-      setIsOffline(true);
-    }
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
 
   // Keep the utils getCurrentWindow singleton in sync with the user's saved prefs.
   useEffect(() => {
