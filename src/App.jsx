@@ -172,6 +172,15 @@ import "./testing/TestPilot/testPilot.css";
 import Onboarding, { DEFAULT_ACTION_CARD_TITLES, DEFAULT_INTERRUPTER_CARDS, DEFAULT_PERSONAL_CARD_TEXTS } from "./Onboarding";
 import FakeAppLauncherBar from "./lib/FakeLauncherBar";
 import { checkForAppUpdate, refreshMyBishBashAppShell } from "./appUpdate";
+import {
+  BASE_PATH,
+  normalizeRoutePath,
+  getPathRelativeToKnownBase,
+  getRouteFromLocation,
+  parseRoute,
+  getSafeAppTab,
+  getBottomNavItems,
+} from "./app/router/routes";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 // Marketing/legal pages are lazy: they short-circuit the app at the top of
@@ -207,9 +216,6 @@ function resolveTheme(theme) {
   return THEMES.includes(theme) ? theme : THEMES[0];
 }
 
-const BASE_PATH = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
-const PRODUCTION_BASE_PATH = "/" + "mybishbash";
-const LEGACY_BASE_PATHS = [PRODUCTION_BASE_PATH, "/bishbash"];
 const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
 const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
@@ -239,7 +245,6 @@ const COMMITMENT_TIMING_OPTIONS = [
   { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
 ];
 const APPS_OPTION_IDS = ["whatsapp", "instagram", "youtube", "safari"];
-const APP_SHELL_TABS = ["home", "library", "log", "explore", "apps", "access", "settings"];
 const BOTTOM_NAV_ITEMS = [
   { id: "home", label: "Home", path: "/home", testId: "bottom-nav-home", Glyph: HomeGlyph },
   { id: "library", label: "Library", path: "/library", testId: "bottom-nav-library", Glyph: BookGlyph },
@@ -612,128 +617,6 @@ function getCommitmentTimingConfig(mode) {
 
 if (typeof window !== "undefined") {
   window.__bishbashLaunchDebug = () => JSON.parse(window.localStorage.getItem("bishbash.launchDebug.v1") || "[]");
-}
-
-function normalizeRoutePath(path) {
-  if (!path) return "/";
-  const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
-  return withLeadingSlash.length > 1 ? withLeadingSlash.replace(/\/+$/, "") : withLeadingSlash;
-}
-
-function getPathRelativeToKnownBase(pathname) {
-  const cleanPathname = String(pathname || "/");
-  const knownBasePaths = Array.from(new Set([BASE_PATH, ...LEGACY_BASE_PATHS].filter(Boolean)))
-    .sort((a, b) => b.length - a.length);
-  const matchingBase = knownBasePaths.find((basePath) => cleanPathname === basePath || cleanPathname.startsWith(`${basePath}/`));
-  return matchingBase ? cleanPathname.slice(matchingBase.length) || "/" : cleanPathname || "/";
-}
-
-function getRouteFromLocation(setupComplete) {
-  if (typeof window === "undefined") {
-    return setupComplete ? "/home" : "/onboarding";
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  const routeParam = params.get("route");
-  const disguiseParam = params.get("disguise");
-  const disguisedVersion = isKnownLauncher(disguiseParam) ? disguiseParam : null;
-  if (disguisedVersion) {
-    return `/intercept/${disguisedVersion}`;
-  }
-
-  const rawPath = routeParam ? getPathRelativeToKnownBase(routeParam) : getPathRelativeToKnownBase(window.location.pathname);
-  const normalized = normalizeRoutePath(rawPath);
-
-  if (routeParam) {
-    params.delete("route");
-    const remainingSearch = params.toString();
-    window.history.replaceState(
-      {},
-      "",
-      `${BASE_PATH}${normalized}${remainingSearch ? `?${remainingSearch}` : ""}`,
-    );
-  }
-
-  if (normalized === "/" || normalized === "/index.html") {
-    return setupComplete ? "/home" : "/onboarding";
-  }
-
-  const interceptMatch = normalized.match(/^\/intercept\/([^/]+)$/);
-  const validInterceptPath = interceptMatch && isKnownLauncher(interceptMatch[1]);
-
-  if (!setupComplete && normalized !== "/onboarding" && !validInterceptPath) {
-    return "/onboarding";
-  }
-
-  return normalized;
-}
-
-function parseRoute(path) {
-  const normalized = normalizeRoutePath(path);
-
-  if (normalized === "/onboarding") {
-    return { kind: "onboarding", path: normalized, tab: "home" };
-  }
-
-  const interceptMatch = normalized.match(/^\/intercept\/([^/]+)$/);
-  if (interceptMatch && isKnownLauncher(interceptMatch[1])) {
-    return {
-      kind: "intercept",
-      path: normalized,
-      tab: null,
-      versionId: interceptMatch[1],
-    };
-  }
-
-  if (interceptMatch) {
-    return { kind: "invalid-intercept", path: "/home", tab: "home", versionId: interceptMatch[1] };
-  }
-
-  const cardMatch = normalized.match(/^\/card\/([^/]+)$/);
-  if (cardMatch) {
-    return {
-      kind: "card",
-      path: normalized,
-      tab: "home",
-      cardId: decodeURIComponent(cardMatch[1]),
-    };
-  }
-
-  if (normalized === "/caught-up") return { kind: "caught-up", path: normalized, tab: "home" };
-  if (normalized === "/hq") return { kind: "hq", path: normalized, tab: null };
-  if (normalized === "/preview-continue") return { kind: "preview-continue", path: normalized, tab: null };
-  if (normalized === "/log") return { kind: "log", path: normalized, tab: "log" };
-  if (normalized === "/explore") return { kind: "explore", path: normalized, tab: "explore" };
-  // Legacy route: Packs became Explore (docs/explore-architecture.md).
-  if (normalized === "/packs") return { kind: "explore", path: "/explore", tab: "explore" };
-  if (normalized === "/library") return { kind: "library", path: normalized, tab: "library" };
-  if (normalized === "/apps") return { kind: "apps", path: normalized, tab: "apps" };
-  const appsMatch = normalized.match(/^\/apps\/([^/]+)$/);
-  if (appsMatch && isKnownLauncher(appsMatch[1])) {
-    return { kind: "apps", path: normalized, tab: "apps", versionId: appsMatch[1] };
-  }
-  if (appsMatch) {
-    return { kind: "apps", path: "/apps", tab: "apps", versionId: null, fallbackFrom: normalized };
-  }
-  if (normalized === "/access") return { kind: "access", path: normalized, tab: "access" };
-  if (normalized === "/mood") return { kind: "settings", path: "/settings", tab: "settings" };
-  if (normalized === "/settings") return { kind: "settings", path: normalized, tab: "settings" };
-  return { kind: "home", path: "/home", tab: "home", fallbackFrom: normalized };
-}
-
-function getSafeAppTab(tab) {
-  return APP_SHELL_TABS.includes(tab) ? tab : "home";
-}
-
-function getBottomNavItems(items = BOTTOM_NAV_ITEMS) {
-  return items.filter((item) =>
-    item &&
-    typeof item.id === "string" &&
-    typeof item.label === "string" &&
-    typeof item.path === "string" &&
-    typeof item.testId === "string" &&
-    typeof item.Glyph === "function"
-  );
 }
 
 class AppShellErrorBoundary extends React.Component {
@@ -7195,7 +7078,7 @@ function App() {
 
           {!isShellAppSettingsRoute ? (
           <nav className="bottom-nav" aria-label="Primary">
-            {getBottomNavItems().map(({ id, label, path, testId, Glyph }) => (
+            {getBottomNavItems(BOTTOM_NAV_ITEMS).map(({ id, label, path, testId, Glyph }) => (
               <button
                 type="button"
                 className={`nav-item ${activeTab === id ? "active" : ""}`}

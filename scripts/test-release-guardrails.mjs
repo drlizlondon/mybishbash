@@ -23,6 +23,7 @@ const generatedCoverModelSource = await readFile(new URL("../src/lib/generatedCo
 const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const launcherEventsMigrationSource = await readFile(new URL("../supabase/migrations/202606130001_allow_authenticated_anonymous_launcher_events.sql", import.meta.url), "utf8");
 const hqPackAdoptionMigrationSource = await readFile(new URL("../supabase/migrations/202606250001_hq_pack_adoption_summary.sql", import.meta.url), "utf8");
+const routesSource = await readFile(new URL("../src/app/router/routes.js", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -140,7 +141,7 @@ assertMatch("Library section toggle remains separate from plus", appSource, /cla
 // Do Instead Cards.
 assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
 assertMatch("Explore tab renders memoized ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<MemoExplorePanel/);
-assertMatch("/packs redirects to Explore", appSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
+assertMatch("/packs redirects to Explore", routesSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
 assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
 assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /const BOTTOM_NAV_ITEMS = \[[\s\S]*testId: "bottom-nav-home"[\s\S]*testId: "bottom-nav-library"[\s\S]*testId: "bottom-nav-log"[\s\S]*testId: "bottom-nav-explore"[\s\S]*testId: "bottom-nav-apps"[\s\S]*\];/);
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
