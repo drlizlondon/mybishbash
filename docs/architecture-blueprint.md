@@ -299,6 +299,7 @@ Classify every piece of state and give each class exactly one home:
 |---|---|---|---|
 | Server-replicated entities | domain stores (Zustand) | IndexedDB + sync queue | cards, packs, events, settings, profile |
 | Session | `sessionStore` | Supabase session storage | auth session, access profile, admin/tester status |
+| Connection lifecycle | `sessionStore` | none | `syncStatus`, `syncError` — pre-Phase-6 boot/connection funnel; distinct from the Phase 6 sync-engine `status`, expected to be renamed (`connectionStatus`) or partially subsumed when `services/sync` lands |
 | Transient UI | `uiStore` / component state | none | overlay stack, composer open, menu open, spotlight |
 | Device-local prefs | `settingsStore` (local-only slice) | IndexedDB | pause clocks, suppression flags, e2e/demo flags |
 | Derived | selectors only — **never stored** | n/a | home stats, eligible cards, usage days, greeting |

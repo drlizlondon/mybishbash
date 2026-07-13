@@ -191,7 +191,18 @@ Each is a verbatim relocation of one useState + its effects.
 **Verify:** full gate + before-push.
 **Commit:** `Extract environment hooks (theme, update, offline, notifications)`.
 
-### Step 5 — `src/stores/sessionStore.js` + `src/app/providers/AuthProvider.jsx`
+### Step 5 — SUPERSEDED by `docs/architecture/phase-02b-session-store.md`
+
+Step 5 as originally specified below was stopped: the auth-resolution
+effect interleaves `session`/`authReady` writes with `syncStatus`/
+`syncError` writes in the same branches, and this packet's seven-field
+`sessionStore` shape had no home for the latter two (see
+`docs/architecture/roadmap-status.md`, 2026-07-13 log). Phase 2b resolves
+this with a nine-field store (adding `syncStatus`/`syncError` as
+connection-lifecycle state, blueprint §9) and a `useAuthLifecycle` hook
+instead of an `AuthProvider`. The original spec below is kept for context
+only — do not implement it as written.
+
 Add `zustand`. Store shape (exactly today's fields):
 `{ session, authReady, isAdmin, adminStatus, testerStatus, accessProfile,
 accessStatus, actions: { setSession, setAuthReady, … } }`.

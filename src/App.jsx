@@ -187,6 +187,13 @@ import {
   useOfflineFlag,
   useNotificationPermission,
 } from "./app/providers/environment";
+import {
+  E2E_TESTER_MODE_KEY,
+  isE2EModeEnabled,
+  loadE2EAccessProfile,
+  buildE2ESession,
+  recordLaunchTiming,
+} from "./app/e2e";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 
@@ -209,8 +216,6 @@ function resolveTheme(theme) {
   return THEMES.includes(theme) ? theme : THEMES[0];
 }
 
-const E2E_MODE_KEY = "MYBISHBASH_E2E_MODE";
-const E2E_TESTER_MODE_KEY = "MYBISHBASH_E2E_TESTER_MODE";
 const SUPPRESS_HOME_AUTOLAUNCH_AFTER_DESTINATION_KEY = "mybishbash.suppress-home-autolaunch-after-destination.v1";
 const ACTIVE_PROTECTED_APP_CONTEXT_KEY = "mybishbash.active-protected-app-context.v1";
 const ACTIVE_PROTECTED_APP_CONTEXT_TTL_MS = 8 * 60 * 60 * 1000;
@@ -228,7 +233,6 @@ const HQ_ADMIN_EMAILS = (import.meta.env.VITE_HQ_ADMIN_EMAILS ?? "")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
-const LAUNCH_TIMING_LOG_KEY = "bishbash.launchTiming.v1";
 const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;
 const COMMITMENT_TIMING_OPTIONS = [
   { id: "anytime", label: "Anytime today", timingWindows: ["morning", "day", "evening", "night"] },
@@ -374,18 +378,8 @@ function isInstalledShellCardContextSuppressed() {
   }
 }
 
-function isE2EModeEnabled() {
-  return typeof window !== "undefined" && window.localStorage.getItem(E2E_MODE_KEY) === "true";
-}
-
 function isDemoModeEnabled() {
   return typeof window !== "undefined" && window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
-}
-
-function loadE2EAccessProfile() {
-  if (typeof window === "undefined") return null;
-  const accessTier = window.localStorage.getItem("MYBISHBASH_E2E_ACCESS_TIER") || ACCESS_TIERS.FREE_CORE;
-  return { access_tier: accessTier, has_access: true };
 }
 
 function loadExplicitLauncherBehaviorSettings() {
@@ -444,15 +438,6 @@ async function openStripeCustomerPortal() {
     return { ok: true };
   }
   return { ok: false, reason: "missing_portal_url" };
-}
-
-function buildE2ESession() {
-  return {
-    user: {
-      id: "e2e-user",
-      email: "e2e@mybishbash.local",
-    },
-  };
 }
 
 function setSignupOnboardingPending(value) {
@@ -519,34 +504,6 @@ function getCardOverlayRenderKey(overlay, activeCardId = null) {
 
 function isSameJsonValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function isLaunchTimingEnabled(testerStatus = null) {
-  if (typeof window === "undefined") return false;
-  if (testerStatus?.is_tester === true) return true;
-  return window.localStorage.getItem(E2E_TESTER_MODE_KEY) === "true";
-}
-
-function recordLaunchTiming(label, payload = {}, testerStatus = null) {
-  if (!isLaunchTimingEnabled(testerStatus)) return;
-  const entry = {
-    label,
-    payload,
-    at: new Date().toISOString(),
-    t: performance.now(),
-  };
-  window.__MYBISHBASH_LAUNCH_TIMINGS = [
-    ...(window.__MYBISHBASH_LAUNCH_TIMINGS ?? []),
-    entry,
-  ].slice(-200);
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(LAUNCH_TIMING_LOG_KEY) || "[]");
-    stored.push(entry);
-    if (stored.length > 200) stored.splice(0, stored.length - 200);
-    window.localStorage.setItem(LAUNCH_TIMING_LOG_KEY, JSON.stringify(stored));
-  } catch {
-    // Timing logs are diagnostic only.
-  }
 }
 
 function logCommitmentDebug(label, payload = {}) {
