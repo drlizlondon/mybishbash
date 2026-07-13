@@ -181,6 +181,7 @@ import {
   getSafeAppTab,
   getBottomNavItems,
 } from "./app/router/routes";
+import { useRoute } from "./app/router/useRoute";
 
 const HQPanel = lazy(() => import("./HQPanel"));
 
@@ -1702,8 +1703,7 @@ function App() {
   const [accessStatus, setAccessStatus] = useState(e2eMode ? "granted" : "unknown");
   const [appUpdate, setAppUpdate] = useState({ checking: true, updateAvailable: false });
   const [appPauseRevision, setAppPauseRevision] = useState(0);
-  const [routePath, setRoutePath] = useState(() => getRouteFromLocation(initialState.setupComplete));
-  const initialRoute = useMemo(() => parseRoute(routePath), []);
+  const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
   const [screen, setScreen] = useState(initialRoute.kind === "intercept" ? "interception" : initialState.setupComplete ? "library" : "onboarding");
   const [overlay, setOverlay] = useState(() =>
     initialRoute.kind === "intercept" ? buildFakeLauncherPreparingOverlay(initialRoute.versionId) : null
@@ -1752,7 +1752,6 @@ function App() {
   const localDirtyRef = useRef(false);
   const highestKnownCloudTimeRef = useRef(0);
   const activeLauncherOverlayRef = useRef(null);
-  const route = useMemo(() => parseRoute(routePath), [routePath]);
 
   useEffect(() => {
     cardsRef.current = cards;
@@ -1789,20 +1788,6 @@ function App() {
     }
     previousOverlayDebugRef.current = next;
   }, [cards, overlay, route.path]);
-
-  useEffect(() => {
-    if (!route.fallbackFrom && route.path === routePath) return;
-    const nextPath = route.path || "/home";
-    if (routePath !== nextPath) {
-      setRoutePath(nextPath);
-    }
-    if (typeof window !== "undefined") {
-      const nextUrl = `${BASE_PATH}${nextPath === "/" ? "" : nextPath}`;
-      if (window.location.pathname !== nextUrl) {
-        window.history.replaceState({}, "", nextUrl);
-      }
-    }
-  }, [route.fallbackFrom, route.path, routePath]);
 
   const activeTab = getSafeAppTab(route.tab);
   const isShellAppSettingsRoute =
