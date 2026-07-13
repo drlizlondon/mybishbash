@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import RootRouter from "./app/router/RootRouter";
 import { registerServiceWorker } from "./registerServiceWorker";
 import { initDynamicLaunchersFromCache } from "./lib/dynamicLauncherCache";
 import { installGlobalErrorHandlers } from "./services/errors/reporter";
@@ -26,6 +26,6 @@ registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <RootErrorBoundary>
-    <App />
+    <RootRouter />
   </RootErrorBoundary>,
 );

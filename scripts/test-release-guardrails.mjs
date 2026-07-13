@@ -24,6 +24,7 @@ const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url
 const launcherEventsMigrationSource = await readFile(new URL("../supabase/migrations/202606130001_allow_authenticated_anonymous_launcher_events.sql", import.meta.url), "utf8");
 const hqPackAdoptionMigrationSource = await readFile(new URL("../supabase/migrations/202606250001_hq_pack_adoption_summary.sql", import.meta.url), "utf8");
 const routesSource = await readFile(new URL("../src/app/router/routes.js", import.meta.url), "utf8");
+const rootRouterFileSource = await readFile(new URL("../src/app/router/RootRouter.jsx", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -62,7 +63,7 @@ function sourceBetween(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
-const rootRouterSource = sourceBetween(appSource, "function RootRouter()", "function App()");
+const rootRouterSource = sourceBetween(rootRouterFileSource, "function RootRouter()", "export default RootRouter;");
 const appBeforeHooksSource = sourceBetween(appSource, "function App()", "const initialState = useMemo");
 const appDebugLogSource = sourceBetween(appSource, "function debugLog(...args)", "const AUTH_SESSION_RETRY_DELAYS_MS");
 const registerServiceWorkerDebugLogSource = sourceBetween(registerServiceWorkerSource, "function debugLog(...args)", "export function registerServiceWorker()");
@@ -234,7 +235,7 @@ assertMatch("I really like this one completes the reveal instead of cycling pack
 assertNoMatch("I really like this one does not hide/dislike/delete the card", packPositiveHandlerSource, /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|deletedAt|paused|disliked:/);
 assertNoMatch("launcherState keeps interruption logic separate from library pack availability", launcherStateSource, /isPackCardAvailable/);
 
-const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default RootRouter;");
+const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default App;");
 assertMatch("ContinueToAppCard renders the continue-to-app test id", continueCardSource, /data-testid="continue-to-app-card"/);
 assertNoMatch("ContinueToAppCard does not assign window.location directly", continueCardSource, /window\.location\.assign/);
 
