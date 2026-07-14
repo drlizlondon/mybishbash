@@ -25,6 +25,10 @@ const launcherEventsMigrationSource = await readFile(new URL("../supabase/migrat
 const hqPackAdoptionMigrationSource = await readFile(new URL("../supabase/migrations/202606250001_hq_pack_adoption_summary.sql", import.meta.url), "utf8");
 const routesSource = await readFile(new URL("../src/app/router/routes.js", import.meta.url), "utf8");
 const rootRouterFileSource = await readFile(new URL("../src/app/router/RootRouter.jsx", import.meta.url), "utf8");
+const standardLibraryPanelSource = await readFile(new URL("../src/features/library/StandardLibraryPanel.jsx", import.meta.url), "utf8");
+const libraryListRowSource = await readFile(new URL("../src/features/library/LibraryListRow.jsx", import.meta.url), "utf8");
+const expandableCollectionSource = await readFile(new URL("../src/features/library/ExpandableCollection.jsx", import.meta.url), "utf8");
+const composerSource = await readFile(new URL("../src/features/composer/Composer.jsx", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -123,20 +127,20 @@ assertNoMatch("App has no manual pack card randomisation path", appSource, /sour
 assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);
 assertMatch("canonical card shown events are logged", appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
 assertMatch("canonical card completed and ignored events are logged", appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
-assertMatch("Library renders Personal Cards section", appSource, /title="Personal Cards"[\s\S]{0,160}Cards you have written for yourself\./);
-assertMatch("Library renders Commitment Cards section", appSource, /title="Commitment Cards"[\s\S]{0,160}Promises you've made to yourself\./);
-assertMatch("Library renders Active Packs section", appSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
-assertMatch("Library renders Do Instead Cards section", appSource, /title="Do Instead Cards"[\s\S]{0,160}Things to do instead of opening an app\./);
-assertMatch("Library default open states match product shape", appSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*doInstead: false,\s*\}\)/);
-assertMatch("Library uses compact list rows", appSource, /function LibraryListRow[\s\S]{0,1500}className=\{`library-list-row/);
+assertMatch("Library renders Personal Cards section", standardLibraryPanelSource, /title="Personal Cards"[\s\S]{0,160}Cards you have written for yourself\./);
+assertMatch("Library renders Commitment Cards section", standardLibraryPanelSource, /title="Commitment Cards"[\s\S]{0,160}Promises you've made to yourself\./);
+assertMatch("Library renders Active Packs section", standardLibraryPanelSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
+assertMatch("Library renders Do Instead Cards section", standardLibraryPanelSource, /title="Do Instead Cards"[\s\S]{0,160}Things to do instead of opening an app\./);
+assertMatch("Library default open states match product shape", standardLibraryPanelSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*doInstead: false,\s*\}\)/);
+assertMatch("Library uses compact list rows", libraryListRowSource, /function LibraryListRow[\s\S]{0,1500}className=\{`library-list-row/);
 // "View all" footer is intentional — part of ExpandableCollection (shows when items > maxPreview)
-assertMatch("Library View all footer is gated on hasMore", appSource, /hasMore[\s\S]{0,160}collection-view-all/);
+assertMatch("Library View all footer is gated on hasMore", expandableCollectionSource, /hasMore[\s\S]{0,160}collection-view-all/);
 assertMatch("Personal Library plus opens personal composer", appSource, /onCreatePersonal=\{\(\) => openCardComposerFromCurrentRoute\("personal"\)\}/);
 assertMatch("Commitment Library plus opens commitment composer", appSource, /onCreateCommitment=\{\(\) => openCardComposerFromCurrentRoute\("commitment"\)\}/);
 assertMatch("Active Packs Library plus opens Explore", appSource, /onAddPack=\{\(\) => navigateTo\("\/explore"\)\}/);
-assertMatch("Composer can open in section-specific creation modes", appSource, /function Composer\(\{ initialCard, initialKind = "personal"/);
-assertMatch("Library section plus has its own click target", appSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
-assertMatch("Library section toggle remains separate from plus", appSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
+assertMatch("Composer can open in section-specific creation modes", composerSource, /function Composer\(\{ initialCard, initialKind = "personal"/);
+assertMatch("Library section plus has its own click target", expandableCollectionSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
+assertMatch("Library section toggle remains separate from plus", expandableCollectionSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
 // Explore replaced the Packs tab (docs/explore-architecture.md): discovery in
 // ExplorePanel, app behaviour in Apps, action cards in Library →
 // Do Instead Cards.

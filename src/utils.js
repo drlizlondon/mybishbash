@@ -10,6 +10,19 @@ export const THEMES = [
   "Starry Sky",
 ];
 
+export const COMMITMENT_TIMING_OPTIONS = [
+  { id: "anytime", label: "Anytime today", timingWindows: ["morning", "day", "evening", "night"] },
+  { id: "morning", label: "Morning", timingWindows: ["morning"] },
+  { id: "afternoon", label: "Afternoon", timingWindows: ["day"] },
+  { id: "evening", label: "Evening", timingWindows: ["evening"] },
+  { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
+];
+
+export function resolveTheme(theme) {
+  if (theme === "Paper Cut") return "Soft Bloom";
+  return THEMES.includes(theme) ? theme : THEMES[0];
+}
+
 export const PACKS = [
   {
     id: "encouraging-bible-verses",
@@ -605,6 +618,34 @@ export function isCommitmentLikeCard(card) {
   if (card.cardKind === "commitment") return true;
   if (card.dashboardTitle === COMMITMENT_DASHBOARD_TITLE) return true;
   return COMMITMENT_COMPATIBILITY_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(card, field));
+}
+
+export function isCommitmentCard(card) {
+  return isCommitmentLikeCard(card);
+}
+
+export function getCommitmentStartWindow(timingWindows = []) {
+  const orderedWindowIds = TIME_WINDOWS.map((item) => item.id);
+  return orderedWindowIds.find((windowId) => timingWindows.includes(windowId)) ?? "day";
+}
+
+export function getCommitmentTimingOptionId(card) {
+  const validTimingIds = new Set(COMMITMENT_TIMING_OPTIONS.map((option) => option.id));
+  if (!card) return "anytime";
+  if (validTimingIds.has(card.commitmentTimingMode)) return card.commitmentTimingMode;
+  const windows = card?.timingWindows ?? [];
+  if (windows.includes("morning") && windows.includes("day") && windows.includes("evening") && windows.includes("night")) return "anytime";
+  if (windows.length === 1 && windows[0] === "morning") return "morning";
+  if (windows.length === 1 && windows[0] === "day") return "afternoon";
+  if (windows.length === 1 && windows[0] === "evening") return "evening";
+  const startWindow = getCommitmentStartWindow(windows);
+  if (startWindow === "day") return "afternoon";
+  if (startWindow === "night") return "anytime";
+  return validTimingIds.has(startWindow) ? startWindow : "anytime";
+}
+
+export function getCommitmentTimingConfig(mode) {
+  return COMMITMENT_TIMING_OPTIONS.find((option) => option.id === mode) ?? COMMITMENT_TIMING_OPTIONS[0];
 }
 
 export function isCommitmentCheckInEligible(card, date = new Date(), timeZone) {
