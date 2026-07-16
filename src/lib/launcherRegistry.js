@@ -312,6 +312,7 @@ export const FAKE_APP_LAUNCHERS = RAW_FAKE_APP_LAUNCHERS.map((launcher) => ({
 }));
 
 export const LAUNCHER_IDS = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
+export const APPS_OPTION_IDS = ["whatsapp", "instagram", "youtube", "safari"];
 export const LAUNCHER_REGISTRY = Object.fromEntries(
   FAKE_APP_LAUNCHERS.map((launcher) => [launcher.id, launcher]),
 );

@@ -29,6 +29,8 @@ const standardLibraryPanelSource = await readFile(new URL("../src/features/libra
 const libraryListRowSource = await readFile(new URL("../src/features/library/LibraryListRow.jsx", import.meta.url), "utf8");
 const expandableCollectionSource = await readFile(new URL("../src/features/library/ExpandableCollection.jsx", import.meta.url), "utf8");
 const composerSource = await readFile(new URL("../src/features/composer/Composer.jsx", import.meta.url), "utf8");
+const appsPanelSource = await readFile(new URL("../src/features/apps/AppsPanel.jsx", import.meta.url), "utf8");
+const appManagementScreenSource = await readFile(new URL("../src/features/apps/AppManagementScreen.jsx", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -85,8 +87,8 @@ assertNoMatch("LogPanel does not import recharts on the app critical path", logP
 assertMatch("main app screens have memo boundaries", appSource, /const MemoHomePanel = memo\(HomePanel\);[\s\S]{0,260}const MemoAppsPanel = memo\(AppsPanel\);[\s\S]{0,260}const MemoStandardLibraryPanel = memo\(StandardLibraryPanel\);[\s\S]{0,260}const MemoLogPanel = memo\(LogPanel\);[\s\S]{0,260}const MemoExplorePanel = memo\(ExplorePanel\);[\s\S]{0,260}const MemoOverlay = memo\(Overlay\);/);
 assertNoMatch("App render uses memoized main screens", appSource, /<HomePanel(?:\s|\/?>)|<AppsPanel(?:\s|\/?>)|<StandardLibraryPanel(?:\s|\/?>)|<LogPanel(?:\s|\/?>)|<ExplorePanel(?:\s|\/?>)|<Overlay(?:\s|\/?>)/);
 assertMatch("Log weekly shift count is memoized", appSource, /const weeklyShiftCount = useMemo\(\(\) => getWeeklyShiftCount\(events\), \[events\]\);/);
-assertMatch("Apps panel clock is isolated below its memo boundary", appSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
-assertMatch("Apps panel clock owns its live pause interval", appSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
+assertMatch("Apps panel clock is isolated below its memo boundary", appsPanelSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
+assertMatch("Apps panel clock owns its live pause interval", appsPanelSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
 
 assertMatch("fake launcher sessions never allow Back to home", appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
 assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
@@ -156,8 +158,8 @@ assertMatch("Explore commitment templates open the normal commitment composer", 
 assertMatch("Explore commitment templates return to Library after save", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,900}composerReturnPathRef\.current = "\/library"/);
 assertNoMatch("PR3 does not introduce installed commitments", appSource + exploreSource, /installedCommitment|commitmentInstall|activateCommitment|installed commitment/i);
 assertNoMatch("Settings no longer owns app behaviour management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
-assertMatch("Apps owns app behaviour management", appSource, /data-testid="apps-list"/);
-assertMatch("Apps exposes app interruption toggles", appSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
+assertMatch("Apps owns app behaviour management", appsPanelSource, /data-testid="apps-list"/);
+assertMatch("Apps exposes app interruption toggles", appManagementScreenSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
 assertNoMatch("Activation copy avoids legacy fake-launcher language", onboardingSource + downloadSource, />[^<]*(fake launcher|interruption pack|library pack)/i);
 assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
 assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="explore-commitments-rail"/);
