@@ -31,6 +31,8 @@ const expandableCollectionSource = await readFile(new URL("../src/features/libra
 const composerSource = await readFile(new URL("../src/features/composer/Composer.jsx", import.meta.url), "utf8");
 const appsPanelSource = await readFile(new URL("../src/features/apps/AppsPanel.jsx", import.meta.url), "utf8");
 const appManagementScreenSource = await readFile(new URL("../src/features/apps/AppManagementScreen.jsx", import.meta.url), "utf8");
+const homeSpotlightTourSource = await readFile(new URL("../src/features/home/HomeSpotlightTour.jsx", import.meta.url), "utf8");
+const mastheadSource = await readFile(new URL("../src/app/shell/Masthead.jsx", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -149,11 +151,11 @@ assertMatch("Library section toggle remains separate from plus", expandableColle
 assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
 assertMatch("Explore tab renders memoized ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<MemoExplorePanel/);
 assertMatch("/packs redirects to Explore", routesSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
-assertMatch("bottom nav exposes Explore", appSource, /data-testid="bottom-nav-explore"/);
+assertMatch("bottom nav exposes Explore", homeSpotlightTourSource, /data-testid="bottom-nav-explore"/);
 assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /const BOTTOM_NAV_ITEMS = \[[\s\S]*testId: "bottom-nav-home"[\s\S]*testId: "bottom-nav-library"[\s\S]*testId: "bottom-nav-log"[\s\S]*testId: "bottom-nav-explore"[\s\S]*testId: "bottom-nav-apps"[\s\S]*\];/);
 assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
 assertNoMatch("bottom nav no longer exposes Settings", appSource, /data-testid="bottom-nav-settings"/);
-assertMatch("Settings is reachable from the masthead affordance", appSource, /data-testid="settings-gear"/);
+assertMatch("Settings is reachable from the masthead affordance", mastheadSource, /data-testid="settings-gear"/);
 assertMatch("Explore commitment templates open the normal commitment composer", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,360}setComposerInitialKind\("commitment"\)/);
 assertMatch("Explore commitment templates return to Library after save", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,900}composerReturnPathRef\.current = "\/library"/);
 assertNoMatch("PR3 does not introduce installed commitments", appSource + exploreSource, /installedCommitment|commitmentInstall|activateCommitment|installed commitment/i);

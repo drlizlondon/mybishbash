@@ -914,6 +914,10 @@ export function pickRandomEligible(cards, date = new Date()) {
   return eligible[index];
 }
 
+export function isCardDoneToday(card, todayKey) {
+  return card?.doneDate === todayKey || (!card?.doneDate && card?.statusToday === "doneToday");
+}
+
 export function getStatusMeta(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const currentWindow = getCurrentWindow(date, timeZone);
