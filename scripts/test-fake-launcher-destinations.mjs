@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const overlayBuildersSource = await readFile(new URL("../src/features/launcher/overlayBuilders.js", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -38,6 +39,15 @@ function assertPattern(message, pattern) {
   pass(message);
 }
 
+function assertPatternIn(source, message, pattern) {
+  const matches = [...source.matchAll(pattern)].map((match) => normalizeSnippet(match[0]));
+  if (matches.length === 0) {
+    fail(message);
+    return;
+  }
+  pass(message);
+}
+
 function assertInAppLauncherUsesSharedHandler(source) {
   const handlerCalls = matchingSnippets(new RegExp(`handleFakeLauncherLaunch\\(versionId, "${source}"\\)`, "g"));
   if (handlerCalls.length === 0) {
@@ -58,7 +68,8 @@ if (/onLaunch=\{\(versionId\) =>\s*handleFakeLauncherLaunch\(versionId, "home_fa
   pass("Home does not render a global fake launcher bar");
 }
 
-assertPattern(
+assertPatternIn(
+  overlayBuildersSource,
   "in-app fake launcher sources are separated from installed launcher entries",
   /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"apps_protected_launch"[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"[\s\S]{0,120}\]\);[\s\S]{0,260}const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/g,
 );

@@ -23,6 +23,8 @@ import {
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const overlayHostSource = await readFile(new URL("../src/features/launcher/OverlayHost.jsx", import.meta.url), "utf8");
+const overlayBuildersSource = await readFile(new URL("../src/features/launcher/overlayBuilders.js", import.meta.url), "utf8");
 
 assert.deepEqual(
   getLauncherDecisionReadiness({
@@ -38,22 +40,22 @@ assert.deepEqual(
 
 assert.equal(LAUNCHER_DATA_WAIT_TIMEOUT_MS <= 300, true, "Launcher data wait timeout stays within perceived-performance budget");
 assert.match(appSource, /initialRoute\.kind === "intercept" \? buildFakeLauncherPreparingOverlay\(initialRoute\.versionId\) : null/);
-assert.match(appSource, /const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;/);
-assert.match(appSource, /window\.setTimeout\(\(\) => \{/);
-assert.match(appSource, /setShowLauncherPreparingFallback\(true\);/);
-assert.match(appSource, /\}, LAUNCHER_PREPARING_VISIBLE_DELAY_MS\);/);
-assert.match(appSource, /data-testid="launcher-preparing-placeholder"/);
+assert.match(overlayHostSource, /const LAUNCHER_PREPARING_VISIBLE_DELAY_MS = 180;/);
+assert.match(overlayHostSource, /window\.setTimeout\(\(\) => \{/);
+assert.match(overlayHostSource, /setShowLauncherPreparingFallback\(true\);/);
+assert.match(overlayHostSource, /\}, LAUNCHER_PREPARING_VISIBLE_DELAY_MS\);/);
+assert.match(overlayHostSource, /data-testid="launcher-preparing-placeholder"/);
 assert.doesNotMatch(appSource, /headline="Getting your card ready\.\.\."/);
 assert.doesNotMatch(appSource, /subtitle="One moment\."/);
 assert.match(appSource, /selectEligibleCard/);
 assert.doesNotMatch(appSource, /selectWeightedLauncherCard/);
 assert.doesNotMatch(cardSelectionSource, /selectWeightedLauncherCard/);
 assert.doesNotMatch(cardSelectionSource, /personalWeight|packWeight|weightedFlow/);
-assert.match(appSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
-assert.match(appSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
-assert.match(appSource, /label: `Continue to \$\{appName\}`/);
-assert.match(appSource, /label: "I really like this one", variant: "secondary"/);
-assert.match(appSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
+assert.match(overlayHostSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
+assert.match(overlayHostSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
+assert.match(overlayHostSource, /label: `Continue to \$\{appName\}`/);
+assert.match(overlayBuildersSource, /label: "I really like this one", variant: "secondary"/);
+assert.match(overlayBuildersSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
 assert.match(appSource, /const plannedInterruption = interruption;/);
 assert.match(appSource, /getInitialFakeLauncherStep/);
 assert.match(appSource, /getNextFakeLauncherStepAfterSelectedCard/);
@@ -243,6 +245,6 @@ assert.doesNotMatch(appSource, /selectPersonalFirstLauncherCard\(\{/);
 assert.doesNotMatch(appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assert.match(appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
 assert.match(appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
-assert.match(appSource, /CARD_SELECTION_SURFACES\.SHELL/);
+assert.match(overlayBuildersSource, /CARD_SELECTION_SURFACES\.SHELL/);
 
 console.log("Launcher flow checks passed");

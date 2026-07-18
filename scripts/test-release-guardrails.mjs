@@ -33,6 +33,11 @@ const appsPanelSource = await readFile(new URL("../src/features/apps/AppsPanel.j
 const appManagementScreenSource = await readFile(new URL("../src/features/apps/AppManagementScreen.jsx", import.meta.url), "utf8");
 const homeSpotlightTourSource = await readFile(new URL("../src/features/home/HomeSpotlightTour.jsx", import.meta.url), "utf8");
 const mastheadSource = await readFile(new URL("../src/app/shell/Masthead.jsx", import.meta.url), "utf8");
+const launchSessionStorageSource = await readFile(new URL("../src/features/launcher/launchSessionStorage.js", import.meta.url), "utf8");
+const overlayBuildersSource = await readFile(new URL("../src/features/launcher/overlayBuilders.js", import.meta.url), "utf8");
+const overlayHostSource = await readFile(new URL("../src/features/launcher/OverlayHost.jsx", import.meta.url), "utf8");
+const actionSuccessOverlaySource = await readFile(new URL("../src/features/launcher/ActionSuccessOverlay.jsx", import.meta.url), "utf8");
+const continueToAppCardSource = await readFile(new URL("../src/features/launcher/ContinueToAppCard.jsx", import.meta.url), "utf8");
 
 const failures = [];
 
@@ -92,7 +97,7 @@ assertMatch("Log weekly shift count is memoized", appSource, /const weeklyShiftC
 assertMatch("Apps panel clock is isolated below its memo boundary", appsPanelSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
 assertMatch("Apps panel clock owns its live pause interval", appsPanelSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
 
-assertMatch("fake launcher sessions never allow Back to home", appSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
+assertMatch("fake launcher sessions never allow Back to home", launchSessionStorageSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
 assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
 assertMatch("shared state saves retry transient fetch failures", syncSource, /isTransientFetchError\(error\)[\s\S]{0,160}wait\(250 \* \(attempt \+ 1\)\)/);
 assertMatch("launcher event transient fetch failures are non-fatal", syncSource, /saveLauncherEvent[\s\S]{0,900}isTransientFetchError\(error\) \? console\.warn : console\.error/);
@@ -221,13 +226,13 @@ assertMatch("Premium install fails closed in activatePack", appSource, /pack\.is
 assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);
 assertNoMatch("interruption must not be disabled by old weighted activation state", appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption/);
 assertNoMatch("interruption on with no layer-one card uses caught-up instead of direct continue", appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
-assertMatch("fake launcher empty state uses caught-up headline", appSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
-assertMatch("fake launcher empty state has launcher-specific Continue", appSource, /label: `Continue to \$\{appName\}`/);
-assertMatch("real app empty state stays softer than fake launcher empty state", appSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
+assertMatch("fake launcher empty state uses caught-up headline", overlayHostSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
+assertMatch("fake launcher empty state has launcher-specific Continue", overlayHostSource, /label: `Continue to \$\{appName\}`/);
+assertMatch("real app empty state stays softer than fake launcher empty state", overlayHostSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
 assertNoMatch("action success does not continue to the original launcher", appSource, /source: "action_card_success"[\s\S]{0,220}onContinueToApp/);
-assertMatch("action success returns home after no-url alternatives", appSource, /function ActionSuccessOverlay[\s\S]{0,180}label: "Back home"/);
+assertMatch("action success returns home after no-url alternatives", actionSuccessOverlaySource, /function ActionSuccessOverlay[\s\S]{0,180}label: "Back home"/);
 
-const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");
+const launcherCardActionsSource = sourceBetween(overlayBuildersSource, "function getLauncherCardActions", "function buildEmptyOverlay");
 assertMatch("pack card positive action says I really like this one", launcherCardActionsSource, /label: "I really like this one", variant: "secondary"/);
 assertMatch("pack card primary action says Continue in launcher sessions", launcherCardActionsSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
 assertNoMatch("pack overlay never renders Dislike", launcherCardActionsSource, /label: "Dislike"/);
@@ -243,7 +248,7 @@ assertMatch("I really like this one completes the reveal instead of cycling pack
 assertNoMatch("I really like this one does not hide/dislike/delete the card", packPositiveHandlerSource, /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|deletedAt|paused|disliked:/);
 assertNoMatch("launcherState keeps interruption logic separate from library pack availability", launcherStateSource, /isPackCardAvailable/);
 
-const continueCardSource = sourceBetween(appSource, "function ContinueToAppCard", "export default App;");
+const continueCardSource = continueToAppCardSource;
 assertMatch("ContinueToAppCard renders the continue-to-app test id", continueCardSource, /data-testid="continue-to-app-card"/);
 assertNoMatch("ContinueToAppCard does not assign window.location directly", continueCardSource, /window\.location\.assign/);
 

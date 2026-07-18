@@ -24,3 +24,11 @@ export function getLauncherBrowserSetupUrl(launcherId) {
   const setupUrl = getLauncherSetupUrl(launcherId);
   return shouldUseSafariSetupHandoff() ? `x-safari-${setupUrl}` : setupUrl;
 }
+
+export function getBrowserSafeDestinationHref(href) {
+  if (!href) return "";
+  if (!isStandaloneDisplayMode() && href.startsWith("x-safari-")) {
+    return href.replace(/^x-safari-/, "");
+  }
+  return href;
+}
