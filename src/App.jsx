@@ -234,6 +234,7 @@ import {
   recordLaunchTiming,
 } from "./app/e2e";
 import { useSessionStore, getSessionActions } from "./stores/sessionStore";
+import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
 const HQPanel = lazy(() => import("./features/hq"));
 
@@ -1089,9 +1090,11 @@ function App() {
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
   const [screen, setScreen] = useState(initialRoute.kind === "intercept" ? "interception" : initialState.setupComplete ? "library" : "onboarding");
-  const [overlay, setOverlay] = useState(() =>
+  getUiStore(
     initialRoute.kind === "intercept" ? buildFakeLauncherPreparingOverlay(initialRoute.versionId) : null
   );
+  const overlay = useUiStore(selectTopOverlay);
+  const { setOverlay } = getUiActions();
   const [activeProtectedAppContext, setActiveProtectedAppContext] = useState(() =>
     initialRoute.kind === "intercept" && isKnownLauncher(initialRoute.versionId)
       ? persistActiveProtectedAppContext(initialRoute.versionId)
