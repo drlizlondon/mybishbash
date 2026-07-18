@@ -222,7 +222,7 @@ assert.equal(isKnownLauncher("tiktok"), false, "reset clears the dynamic registr
 // ── Source-shape guardrails (roles + install-link gating) ────────────────────
 
 const root = resolve(import.meta.dirname, "..");
-const hqSource = readFileSync(resolve(root, "src", "HQPanel.jsx"), "utf8");
+const hqSource = readFileSync(resolve(root, "src", "features", "hq", "HQPanel.jsx"), "utf8");
 const appSource = readFileSync(resolve(root, "src", "App.jsx"), "utf8");
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
 

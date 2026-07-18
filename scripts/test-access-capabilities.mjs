@@ -113,7 +113,7 @@ assert.equal(
 
 const root = resolve(import.meta.dirname, "..");
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
-const downloadSource = readFileSync(resolve(root, "src", "DownloadPage.jsx"), "utf8");
+const downloadSource = readFileSync(resolve(root, "src", "features", "marketing", "DownloadPage.jsx"), "utf8");
 const appSource = readFileSync(resolve(root, "src", "App.jsx"), "utf8");
 
 assert.doesNotMatch(

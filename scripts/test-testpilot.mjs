@@ -53,7 +53,7 @@ assert.equal(payload.launcher_context, "instagram");
 assert.equal(payload.display_mode, "standalone");
 assert.equal(payload.severity, "high");
 
-const hqSource = await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8");
+const hqSource = await readFile(new URL("../src/features/hq/HQPanel.jsx", import.meta.url), "utf8");
 assert.match(hqSource, /tester_reports/);
 assert.match(hqSource, /TesterReportsPage/);
 
