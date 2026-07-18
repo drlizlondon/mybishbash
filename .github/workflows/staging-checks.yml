@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Feature boundaries
+        run: npm run test:boundaries
+
       - name: Unit tests
         run: npm run test:unit
 
@@ -42,6 +45,9 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
+
+      - name: Bundle budget
+        run: npm run test:bundle-budget
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps

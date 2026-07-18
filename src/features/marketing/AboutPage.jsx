@@ -1,4 +1,4 @@
-import "./landing.css";
+import "../../styles/landing.css";
 import "./about.css";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
 import { aboutContent } from "../../content/aboutContent";

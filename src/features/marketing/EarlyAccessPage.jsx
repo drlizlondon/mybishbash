@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import "./landing.css";
+import "../../styles/landing.css";
 import "./early-access.css";
 import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";

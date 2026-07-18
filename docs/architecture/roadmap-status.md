@@ -12,7 +12,7 @@ Update this file in the same commit that changes a phase's status.
 | 0 | Safety-net tooling (Vitest + ESLint + CI) | **Complete** | `docs/architecture/phase-00-safety-tooling.md` | — | `23b663c`, `a343ec8`, `ae504f0` (+ bug fixes `11c2001`) |
 | 1 | Error telemetry (errors only) | **Complete** (migration applied + RLS verified) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, `d6bdb22`, fix-forward `ce78e63` |
 | 2 | Composition root (providers + router extraction) | **Complete** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | `3e04058`, `01f9f2c`, `f96dadb`, `bb69e8e`, `bb88529`, `fcb85a5`, `e4e2dcf`, (this commit) |
-| 3 | Feature module extraction | **Ready** | `docs/architecture/phase-03-feature-modules.md` | 2 | — |
+| 3 | Feature module extraction | **Complete** | `docs/architecture/phase-03-feature-modules.md` | 2 | `de84491`, `50f2929`, `047c4e3`, `be55de1`, `200ea5b`, `199775d`, `872784f`, `54ed50c`, (this commit) |
 | 4 | Domain stores & single write path (local) | Planned (packet written) | `docs/architecture/phase-04-domain-stores.md` | 3 | — |
 | 5 | IndexedDB persistence engine | Planned (packet written) | `docs/architecture/phase-05-indexeddb.md` | 4 | — |
 | 6 | Sync v2 — entities + mutation queue | Planned | — | 5 | — |
@@ -311,3 +311,108 @@ Update this file in the same commit that changes a phase's status.
   switch (5-R2), WebKit scoped project (5-R4). Dead code found and scheduled
   for deletion in Phase 3 commit 1: `src/ContinueToAppCard.jsx` + `.css`
   (unimported; live component is the one in App.jsx). Phase 3 is Ready.
+- **2026-07-19 — Phase 3 complete.** Nine commits on `staging`, full
+  verification gate after each (`lint && test:unit && build &&
+  test:release-guardrails && test:before-push`), Playwright per the
+  packet's per-commit list at `--workers=2`:
+  - **Commit 1** (`de84491`): marketing/explore/onboarding relocated into
+    `features/{marketing,explore,onboarding}`; dead `src/ContinueToAppCard.jsx`
+    + `.css` deleted; blueprint §19 Phase 3 amended with Ruling R1.
+  - **Commit 2** (`50f2929`): `src/HQPanel.jsx` → `features/hq/HQPanel.jsx`.
+  - **Commit 3** (`047c4e3`): auth + settings relocated into
+    `features/{auth,settings}`. `isDemoModeEnabled` (used by both App() and
+    the extracted `SyncConnectionScreenContent`) moved to `src/app/e2e.js`
+    alongside `isE2EModeEnabled`, mirroring the phase-02b cycle-breaker
+    pattern, rather than staying in App.jsx per the packet's literal
+    fallback text — the established precedent from Phase 2b for this exact
+    class of helper.
+  - **Commit 4** (`be55de1`): library + composer relocated into
+    `features/{library,composer}`. `CardIcon` (consumed by ≥2 features)
+    moved to `src/components/CardIcon.jsx` per the rule-of-three note.
+    `resolveTheme`/`isCommitmentCard`/`getCommitmentStartWindow`/
+    `getCommitmentTimingOptionId`/`getCommitmentTimingConfig`/
+    `COMMITMENT_TIMING_OPTIONS` (shared between App() and the extracted
+    Composer) moved into `src/utils.js` alongside their sibling commitment
+    helpers, per the packet's own commit-7 constraint text applied one
+    commit early.
+  - **Commit 5** (`200ea5b`): apps + access relocated into
+    `features/{apps,access}` (AppsPanel+AppsPanelClock kept in one file per
+    the guardrail-pairing constraint). `AppPauseModal` moved to
+    `src/components/AppPauseModal.jsx` (rule of three: App + apps, later
+    launcher too). New `src/lib/launcherSetupUrl.js`, `src/lib/pauseFormat.js`,
+    `src/lib/stripeCheckout.js` for App()-and-feature-shared pure helpers.
+  - **Commit 6** (`199775d`): home group → `features/home`; all eleven
+    glyph functions + `Masthead` → `src/app/shell/`. `isCardDoneToday`
+    moved into `src/utils.js` (shared with the extracted `buildHomeState`).
+  - **Commit 7** (`872784f`, "the big one"): the entire launcher/overlay
+    component cluster (~1,700 lines) + the module-scope overlay/launch-session
+    builder cluster (~300 lines) → `features/launcher/`. `CardRevealTemplate`
+    and every `Premium*` component bundled into one file (mutual dependency
+    would otherwise cycle across files). New `commitmentDebug.js` and
+    `launchDebug.js` each carry a private 3-line `debugLog` duplicate rather
+    than importing App.jsx's guardrail-pinned copy — matching this
+    codebase's pre-existing convention (registerServiceWorker.js,
+    launcherDestinations.js already did this before Phase 3).
+    `getBrowserSafeDestinationHref` joined `isStandaloneDisplayMode` in
+    `src/lib/launcherSetupUrl.js`. Guardrail re-points landed across all
+    three guardrail-family scripts this commit needed
+    (`test-release-guardrails.mjs`, plus the previously-undocumented
+    `test-launcher-flow.mjs` and `test-fake-launcher-destinations.mjs`,
+    both part of the `test:before-push` chain). Full Playwright suite run
+    twice at `--workers=2`: 355/357 then 356/357 (only the documented
+    `access-gating.spec.ts:88` baseline failure; one `onboarding.spec.ts`
+    flake in the first run passed cleanly in isolation and did not recur).
+  - **Commit 8** (`54ed50c`): `src/stores/uiStore.js` (descriptor stack,
+    single-slot semantics preserved per Ruling R2) + `uiStore.test.js`;
+    App.jsx's `const [overlay, setOverlay] = useState(...)` swapped for the
+    store selector/action pair with identical local names, so all 59
+    call sites and every dependency array are untouched (`git diff --stat`
+    confirmed App.jsx + store files only). Full suite run twice
+    consecutively at `--workers=2`: 356/357 both times (only the
+    documented baseline failure) — the state-home swap flake check the
+    packet required.
+  - **Commit 9** (this commit): `scripts/check-feature-boundaries.mjs`
+    (R3) and `scripts/check-bundle-budget.mjs` + `scripts/bundle-budget.json`
+    (R6), wired into `npm run test`, `test:before-push`, and
+    `staging-checks.yml`. The boundary checker's first run caught two real
+    findings, both fixed in this commit: (1) `Onboarding.jsx` importing
+    `features/marketing/landing.css` directly — a genuine cross-feature
+    coupling introduced in commit 1, resolved by moving the shared
+    `landing.css` to `src/styles/landing.css` (consumed by marketing's
+    three pages and onboarding alike, none of them "owning" it); (2) the
+    checker's own false-positive on App.jsx importing feature internals
+    directly (permitted — only feature-to-feature imports are restricted),
+    fixed in the checker itself. The bundle-budget checker's first run
+    caught a real regression from commit 2: `App.jsx`'s
+    `lazy(() => import("./features/hq"))` (pointed at the feature's
+    `index.js`) had silently renamed the HQPanel lazy chunk to
+    `index-*.js`, merging it into the generic chunk-name pool instead of
+    emitting a separately identifiable `HQPanel-*.js` chunk. Fixed by
+    pointing the lazy import at `./features/hq/HQPanel` directly (same
+    fix pattern already used for the marketing pages' lazy imports in
+    commit 1), restoring the named chunk.
+  - **App.jsx: 13,206 → 6,531 lines** (R1-amended target: ≤ 6,500 — 31
+    lines over; App() itself is unchanged in scope per R1's design, all
+    module-scope helpers remaining in App.jsx were individually verified
+    by grep to be App()-only consumers with no moved-component caller, and
+    every "stays" disposition from the packet's evidence — `buildInitialState`/
+    `buildSharedState`/`normalizeSharedState`/`mergeEntitiesById` (sync
+    bridge, Phase 6), `TESTPILOT_CONFIG`, demo/e2e glue, memo wrappers — is
+    confirmed still in place. No further move candidates remain; closing
+    the last 31 lines is Phase 4's `App()` collapse, not a Phase 3 gap).
+  - **No component definitions outside `App()` remain in App.jsx** except
+    memo wrappers, `lazy()` calls, `TESTPILOT_CONFIG`, and the App-only
+    helpers listed above — verified by grep.
+  - **Guardrail re-points enumerated across all nine commits' messages**;
+    zero regex/label changes; every re-point kept the assertion
+    byte-identically equivalent per R7.
+  - **Deviations from the packet's literal text**, both applying
+    established same-codebase precedent rather than the packet's fallback
+    "stays in App.jsx... STOP" instruction, recorded in their commit
+    messages: commit 3 (`isDemoModeEnabled` → `app/e2e.js`) and commit 4
+    (six commitment/theme helpers → `utils.js`). Both avoid an App.jsx ↔
+    feature import cycle without duplicating logic, mirroring the
+    phase-02b `app/e2e.js` cycle-breaker pattern this repo already
+    established.
+  - Phase 4 (`docs/architecture/phase-04-domain-stores.md`) entry
+    criteria are now met.

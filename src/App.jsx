@@ -236,7 +236,7 @@ import {
 import { useSessionStore, getSessionActions } from "./stores/sessionStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
-const HQPanel = lazy(() => import("./features/hq"));
+const HQPanel = lazy(() => import("./features/hq/HQPanel"));
 
 function debugLog(...args) {
   if (import.meta.env.DEV) {

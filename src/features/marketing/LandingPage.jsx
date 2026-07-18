@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import "./landing.css";
+import "../../styles/landing.css";
 import {
   ContentEditProvider,
   EditableText,

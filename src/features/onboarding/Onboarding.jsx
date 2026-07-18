@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import "../marketing/landing.css";
+import "../../styles/landing.css";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
 import { onboardingContent } from "../../content/onboardingContent";
 import { getGreeting } from "../../utils";
