@@ -204,6 +204,38 @@ Before enabling, grep `src/features` for existing writes and relocate any
 found into actions (expected: none after the persistence commits; STOP if a
 write has no obvious owning action).
 
+## Phase 3 actuals (verified 2026-07-19 at HEAD `e4d3356` — read before the evidence below)
+
+- Phase 3 closed at `d4dfeca` + fix-forward `e4d3356`. App.jsx is **6,531
+  lines** (31 over the R1 target, accepted: every remaining module-scope
+  helper was grep-verified App()-only; the residue collapses under this
+  phase's < 1,600 target). Nothing below `export default App;`; only memo
+  wrappers, `lazy()` calls, `TESTPILOT_CONFIG`, and App-only helpers remain
+  outside `App()`.
+- **Relocations that supersede this packet's original paths:** commitment/
+  theme helpers (`isCommitmentCard`, `getCommitmentStartWindow`,
+  `getCommitmentTimingOptionId`, `getCommitmentTimingConfig`,
+  `COMMITMENT_TIMING_OPTIONS`, `resolveTheme`, `isCardDoneToday`) →
+  `src/utils.js`; `isDemoModeEnabled` → `src/app/e2e.js`; overlay builders →
+  `features/launcher/overlayBuilders.js`; launch-session + protected-app
+  persistence → `features/launcher/launchSessionStorage.js`; `CardIcon`,
+  `AppPauseModal` → `src/components/`; `getBrowserSafeDestinationHref`,
+  `isStandaloneDisplayMode` → `src/lib/launcherSetupUrl.js`.
+- **The guardrail family is SIX scripts, not one.** Source-shape assertions
+  reading files by literal path live in: `test-release-guardrails.mjs`,
+  `test-launcher-flow.mjs`, `test-fake-launcher-destinations.mjs`,
+  `test-hq-launcher-admin.mjs`, `test-testpilot.mjs`,
+  `test-access-capabilities.mjs`. R7 (Phase 3 packet) applies to ALL of them.
+  Phase 3's lesson: three of these sit outside `test:before-push` and were
+  silently broken for seven commits until the full `npm run test` chain ran
+  (`e4d3356`). Consequence for this phase: **the per-commit gate is the full
+  `npm run test` chain**, which now includes lint, unit, boundaries, build,
+  bundle budget, and all six guardrail scripts — plus `npm run
+  test:before-push`.
+- `stores/uiStore.js` exists (descriptor stack, single-slot semantics, 59
+  `setOverlay` sites untouched). `stores/sessionStore.js` is the pattern
+  reference. Boundary + bundle checks are live and green at HEAD.
+
 ## Current-state evidence
 
 (Verified at `a02724b`; re-verify positions post-Phase-3.)
@@ -294,9 +326,10 @@ last). Each store lands as a pair: (a) state-home swap, (b) persistence move.
 
 ## Test strategy
 
-After **every** commit:
+After **every** commit (amended per Phase 3 actuals — the full chain, not a
+subset; three guardrail scripts live only in `npm run test`):
 ```
-npm run lint && npm run test:unit && npm run build && npm run test:release-guardrails && npm run test:boundaries && npm run test:bundle-budget && npm run test:before-push
+npm run test && npm run test:before-push
 ```
 From commit 8 also: `npm run test:coverage:launch-session` (fails < 95% branches).
 
@@ -360,22 +393,27 @@ You are implementing Phase 4 of the myBishBash architecture roadmap on branch
 `staging`.
 
 Read completely before touching anything:
-1. docs/architecture/phase-04-domain-stores.md (your work order)
+1. docs/architecture/phase-04-domain-stores.md (your work order — including
+   the "Phase 3 actuals" section, which supersedes stale paths below it)
 2. docs/architecture/phase-02b-session-store.md (the swap pattern: lazy
    singleton, functional updates, same-local-name selector binding)
 3. docs/architecture/phase-03-feature-modules.md (feature layout, guardrail
    re-point policy R7, boundary rules)
 4. docs/architecture-blueprint.md §9–§11, §19 Phase 4
-5. scripts/test-release-guardrails.mjs and eslint.config.js
+5. ALL SIX guardrail-family scripts (enumerated in "Phase 3 actuals") and
+   eslint.config.js
 
-The packet's line numbers predate Phase 3. Re-locate every symbol BY NAME
-(grep) and re-verify: the 42 App() useState fields against the D1 map, all
-local-persistence writers against the D2 table, and the 6 setLaunchSession
-sites. On any mismatch, STOP and report before editing.
+The packet's line numbers predate Phase 3 (App.jsx is now 6,531 lines).
+Re-locate every symbol BY NAME (grep) and re-verify: the 42 App() useState
+fields against the D1 map, all local-persistence writers against the D2
+table, and the 6 setLaunchSession sites. On any mismatch, STOP and report
+before editing.
 
 Rules:
-- Thirteen commits in packet order; the full gate after each; Playwright per
-  the packet's list at --workers=2; full suite twice after commit 13.
+- Thirteen commits in packet order; after each: `npm run test && npm run
+  test:before-push` (the FULL chain — a subset gate missed broken scripts in
+  Phase 3); Playwright per the packet's list at --workers=2; full suite twice
+  after commit 13.
 - State swaps change ONLY the declaration lines: same local names, functional
   updates supported, dependency arrays byte-identical.
 - Persistence moves must reproduce today's timing (immediate vs 120ms
