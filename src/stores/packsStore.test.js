@@ -5,7 +5,7 @@ function createLocalStorageStub() {
   const data = new Map();
   return {
     getItem: (key) => (data.has(key) ? data.get(key) : null),
-    setItem: (key, value) => data.set(key, String(value)),
+    setItem: vi.fn((key, value) => data.set(key, String(value))),
     removeItem: (key) => data.delete(key),
     clear: () => data.clear(),
   };
@@ -46,5 +46,19 @@ describe("packsStore", () => {
       globalPacks: [{ id: "global" }],
     });
     expect(getPacksActions()).toBe(first);
+  });
+
+  it("persists owned slices but never persists global packs", () => {
+    const actions = getPacksActions();
+    window.localStorage.setItem.mockClear();
+    actions.setCardPacks([{ id: "pack" }]);
+    actions.setHiddenPackCardIdsCompat(["pack:card"]);
+    actions.setHiddenLibraryPacks(["hidden"]);
+    actions.setGlobalPacks([{ id: "remote" }]);
+    expect(window.localStorage.setItem.mock.calls).toEqual([
+      ["mybishbash.card-packs.v1", JSON.stringify([{ id: "pack" }])],
+      ["mybishbash.disliked-pack-card-ids.v1", JSON.stringify(["pack:card"])],
+      ["mybishbash.hidden-library-packs.v1", JSON.stringify(["hidden"])],
+    ]);
   });
 });

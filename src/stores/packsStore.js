@@ -4,6 +4,9 @@ import {
   loadCardPacks,
   loadDislikedPackCardIds,
   loadHiddenLibraryPacks,
+  saveCardPacks,
+  saveDislikedPackCardIds,
+  saveHiddenLibraryPacks,
 } from "../storage";
 
 export function buildInitialPacksState() {
@@ -21,11 +24,19 @@ function functionalSetter(set, key) {
   }));
 }
 
-function buildActions(set) {
+function persistentSetter(set, get, key, persist) {
+  return (next) => {
+    const value = typeof next === "function" ? next(get()[key]) : next;
+    set({ [key]: value });
+    persist(value);
+  };
+}
+
+function buildActions(set, get) {
   return {
-    setCardPacks: functionalSetter(set, "cardPacks"),
-    setHiddenPackCardIdsCompat: functionalSetter(set, "hiddenPackCardIdsCompat"),
-    setHiddenLibraryPacks: functionalSetter(set, "hiddenLibraryPacks"),
+    setCardPacks: persistentSetter(set, get, "cardPacks", saveCardPacks),
+    setHiddenPackCardIdsCompat: persistentSetter(set, get, "hiddenPackCardIdsCompat", saveDislikedPackCardIds),
+    setHiddenLibraryPacks: persistentSetter(set, get, "hiddenLibraryPacks", saveHiddenLibraryPacks),
     setGlobalPacks: functionalSetter(set, "globalPacks"),
   };
 }
@@ -34,9 +45,9 @@ let store = null;
 
 export function getPacksStore() {
   if (!store) {
-    store = createStore((set) => ({
+    store = createStore((set, get) => ({
       ...buildInitialPacksState(),
-      actions: buildActions(set),
+      actions: buildActions(set, get),
     }));
   }
   return store;

@@ -19,9 +19,6 @@ import {
   loadActionCards,
   loadSetupComplete,
   saveCards,
-  saveCardPacks,
-  saveDislikedPackCardIds as saveHiddenPackCardIdsCompat,
-  saveHiddenLibraryPacks,
   saveActionCards,
   isAppPaused,
   getAppPauseExpiry,
@@ -2130,18 +2127,6 @@ function App() {
       return changed ? next : current;
     });
   }, [launcherBehaviorSettings]);
-
-  useEffect(() => {
-    saveCardPacks(cardPacks);
-  }, [cardPacks]);
-
-  useEffect(() => {
-    saveHiddenPackCardIdsCompat(hiddenPackCardIdsCompat);
-  }, [hiddenPackCardIdsCompat]);
-
-  useEffect(() => {
-    saveHiddenLibraryPacks(hiddenLibraryPacks);
-  }, [hiddenLibraryPacks]);
 
   useEffect(() => {
     saveEventLog(events);
