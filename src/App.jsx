@@ -18,8 +18,6 @@ import {
   loadProfile,
   loadActionCards,
   loadSetupComplete,
-  saveCards,
-  saveActionCards,
   isAppPaused,
   getAppPauseExpiry,
   pauseApp,
@@ -1079,7 +1077,7 @@ function App() {
   const {
     setCardPacks, setHiddenPackCardIdsCompat, setHiddenLibraryPacks, setGlobalPacks,
   } = getPacksActions();
-  const { setCards, setActionCards } = getCardsActions();
+  const { setCards, setActionCards, setCardsAndPersistImmediately } = getCardsActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
@@ -1128,7 +1126,6 @@ function App() {
   const loggedCardShownRef = useRef(new Set());
   const isApplyingSharedStateRef = useRef(false);
   const cloudSaveTimerRef = useRef(null);
-  const cardSaveTimerRef = useRef(null);
   const lastCloudStateStrRef = useRef(null);
   const localDirtyRef = useRef(false);
   const highestKnownCloudTimeRef = useRef(0);
@@ -1729,22 +1726,6 @@ function App() {
     }, 0);
   }, [initialState]);
 
-  useEffect(() => {
-    if (cardSaveTimerRef.current) {
-      window.clearTimeout(cardSaveTimerRef.current);
-    }
-    cardSaveTimerRef.current = window.setTimeout(() => {
-      saveCards(cards);
-      cardSaveTimerRef.current = null;
-    }, 120);
-    return () => {
-      if (cardSaveTimerRef.current) {
-        window.clearTimeout(cardSaveTimerRef.current);
-        cardSaveTimerRef.current = null;
-      }
-    };
-  }, [cards]);
-
   useAuthLifecycle({ e2eMode, testerStatus, setShouldLaunchOverlay });
 
   useEffect(() => {
@@ -2133,10 +2114,6 @@ function App() {
   useEffect(() => {
     saveEventLog(events);
   }, [events]);
-
-  useEffect(() => {
-    saveActionCards(actionCards);
-  }, [actionCards]);
 
   useEffect(() => {
     if (overlay?.type === "action-card" && visibleActionCards.length === 0) {
@@ -3408,8 +3385,7 @@ function App() {
     const current = cardsRef.current;
     const normalized = normalizeCards(typeof updater === "function" ? updater(current) : updater, new Date(), profile.timezone);
     cardsRef.current = normalized;
-    saveCards(normalized);
-    setCards(normalized);
+    setCardsAndPersistImmediately(normalized);
   }
 
   useEffect(() => {
@@ -5194,10 +5170,6 @@ function App() {
       window.clearTimeout(cloudSaveTimerRef.current);
       cloudSaveTimerRef.current = null;
     }
-    if (cardSaveTimerRef.current) {
-      window.clearTimeout(cardSaveTimerRef.current);
-      cardSaveTimerRef.current = null;
-    }
     lastCloudStateStrRef.current = null;
     localDirtyRef.current = false;
     highestKnownCloudTimeRef.current = 0;
@@ -5336,10 +5308,6 @@ function App() {
     if (cloudSaveTimerRef.current) {
       window.clearTimeout(cloudSaveTimerRef.current);
       cloudSaveTimerRef.current = null;
-    }
-    if (cardSaveTimerRef.current) {
-      window.clearTimeout(cardSaveTimerRef.current);
-      cardSaveTimerRef.current = null;
     }
     localDirtyRef.current = false;
     setSyncError("");

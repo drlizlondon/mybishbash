@@ -1,6 +1,13 @@
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import { loadActionCards, loadCards, loadDislikedPackCardIds, loadProfile } from "../storage";
+import {
+  loadActionCards,
+  loadCards,
+  loadDislikedPackCardIds,
+  loadProfile,
+  saveActionCards,
+  saveCards,
+} from "../storage";
 import { getPackDislikeKey } from "../lib/launcherState";
 import { normalizeCards, resolveTheme } from "../utils";
 
@@ -15,16 +22,34 @@ export function buildInitialCardsState() {
   return { cards, actionCards: loadActionCards() };
 }
 
-function functionalSetter(set, key) {
-  return (next) => set((state) => ({
-    [key]: typeof next === "function" ? next(state[key]) : next,
-  }));
-}
+let cardsSaveTimer = null;
 
-function buildActions(set) {
+function buildActions(set, get) {
+  const cancelPendingCardsPersist = () => {
+    if (cardsSaveTimer) globalThis.clearTimeout(cardsSaveTimer);
+    cardsSaveTimer = null;
+  };
   return {
-    setCards: functionalSetter(set, "cards"),
-    setActionCards: functionalSetter(set, "actionCards"),
+    setCards: (next) => {
+      const value = typeof next === "function" ? next(get().cards) : next;
+      set({ cards: value });
+      if (cardsSaveTimer) globalThis.clearTimeout(cardsSaveTimer);
+      cardsSaveTimer = globalThis.setTimeout(() => {
+        saveCards(value);
+        cardsSaveTimer = null;
+      }, 120);
+    },
+    setActionCards: (next) => {
+      const value = typeof next === "function" ? next(get().actionCards) : next;
+      set({ actionCards: value });
+      saveActionCards(value);
+    },
+    setCardsAndPersistImmediately: (next) => {
+      const value = typeof next === "function" ? next(get().cards) : next;
+      set({ cards: value });
+      cancelPendingCardsPersist();
+      saveCards(value);
+    },
   };
 }
 
@@ -32,9 +57,9 @@ let store = null;
 
 export function getCardsStore() {
   if (!store) {
-    store = createStore((set) => ({
+    store = createStore((set, get) => ({
       ...buildInitialCardsState(),
-      actions: buildActions(set),
+      actions: buildActions(set, get),
     }));
   }
   return store;
@@ -49,5 +74,7 @@ export function getCardsActions() {
 }
 
 export function resetCardsStoreForTests() {
+  if (cardsSaveTimer) globalThis.clearTimeout(cardsSaveTimer);
+  cardsSaveTimer = null;
   store = null;
 }

@@ -5,7 +5,7 @@ function createLocalStorageStub() {
   const data = new Map();
   return {
     getItem: (key) => (data.has(key) ? data.get(key) : null),
-    setItem: (key, value) => data.set(key, String(value)),
+    setItem: vi.fn((key, value) => data.set(key, String(value))),
     removeItem: (key) => data.delete(key),
     clear: () => data.clear(),
   };
@@ -33,5 +33,50 @@ describe("cardsStore", () => {
     actions.setActionCards((current) => [...current, { id: "action-2" }]);
     expect(getCardsStore().getState().cards).toEqual([{ id: "one" }, { id: "two" }]);
     expect(getCardsStore().getState().actionCards.at(-1)).toEqual({ id: "action-2" });
+  });
+
+  it("debounces cards persistence for 120ms and writes only the latest value", () => {
+    vi.useFakeTimers();
+    const actions = getCardsActions();
+    window.localStorage.setItem.mockClear();
+    actions.setCards([{ id: "one" }]);
+    actions.setCards([{ id: "two" }]);
+    actions.setCards([{ id: "three" }]);
+    expect(window.localStorage.setItem).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(119);
+    expect(window.localStorage.setItem).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(window.localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.setItem).toHaveBeenCalledWith(
+      "mybishbash.cards.v1",
+      JSON.stringify([{ id: "three" }]),
+    );
+    vi.useRealTimers();
+  });
+
+  it("persists action cards immediately", () => {
+    const actions = getCardsActions();
+    window.localStorage.setItem.mockClear();
+    actions.setActionCards([{ id: "action" }]);
+    expect(window.localStorage.setItem).toHaveBeenCalledWith(
+      "mybishbash.action-cards.v1",
+      JSON.stringify([{ id: "action" }]),
+    );
+  });
+
+  it("supports the reload-safe immediate cards write path", () => {
+    vi.useFakeTimers();
+    const actions = getCardsActions();
+    window.localStorage.setItem.mockClear();
+    actions.setCards([{ id: "pending" }]);
+    actions.setCardsAndPersistImmediately([{ id: "immediate" }]);
+    expect(window.localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.setItem).toHaveBeenCalledWith(
+      "mybishbash.cards.v1",
+      JSON.stringify([{ id: "immediate" }]),
+    );
+    vi.advanceTimersByTime(120);
+    expect(window.localStorage.setItem).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });
