@@ -230,6 +230,7 @@ import {
   useSettingsStore,
 } from "./stores/settingsStore";
 import { getPacksActions, usePacksStore } from "./stores/packsStore";
+import { getCardsActions, useCardsStore } from "./stores/cardsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
@@ -1030,7 +1031,7 @@ function App() {
     setWindowDefs(initialState.timingWindowsPrefs);
   }
 
-  const [cards, setCards] = useState(initialState.cards);
+  const cards = useCardsStore((s) => s.cards);
   const cardsRef = useRef(initialState.cards);
   const mood = useSettingsStore((s) => s.mood);
   const profile = useSettingsStore((s) => s.profile);
@@ -1042,7 +1043,7 @@ function App() {
   const globalInterruptionMode = useSettingsStore((s) => s.globalInterruptionMode);
   const hiddenLibraryPacks = usePacksStore((s) => s.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
-  const [actionCards, setActionCards] = useState(initialState.actionCards);
+  const actionCards = useCardsStore((s) => s.actionCards);
   const [libraryFocusMode, setLibraryFocusMode] = useState(null);
   const [shellSettingsVersionId, setShellSettingsVersionId] = useState(null);
   const [homeSpotlightActionSignal, setHomeSpotlightActionSignal] = useState(null);
@@ -1078,6 +1079,7 @@ function App() {
   const {
     setCardPacks, setHiddenPackCardIdsCompat, setHiddenLibraryPacks, setGlobalPacks,
   } = getPacksActions();
+  const { setCards, setActionCards } = getCardsActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
