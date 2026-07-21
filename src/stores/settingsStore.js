@@ -9,8 +9,15 @@ import {
   loadProfile,
   loadSetupComplete,
   loadTimingWindowsPrefs,
+  saveGlobalInterruptionMode,
+  saveHomeScreenVersions,
+  saveLauncherBehaviorSettings,
+  saveNotificationSettings,
+  saveProfile,
+  saveSetupComplete,
+  saveTimingWindowsPrefs,
 } from "../storage";
-import { DEFAULT_WINDOW_DEFS, resolveTheme } from "../utils";
+import { DEFAULT_WINDOW_DEFS, resolveTheme, setWindowDefs } from "../utils";
 
 const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
 
@@ -44,17 +51,26 @@ function functionalSetter(set, key) {
     }));
 }
 
-function buildActions(set) {
+function persistentSetter(set, get, key, persist, afterPersist) {
+  return (next) => {
+    const value = typeof next === "function" ? next(get()[key]) : next;
+    set({ [key]: value });
+    persist(value);
+    afterPersist?.(value);
+  };
+}
+
+function buildActions(set, get) {
   return {
-    setProfile: functionalSetter(set, "profile"),
-    setSetupComplete: functionalSetter(set, "setupComplete"),
+    setProfile: persistentSetter(set, get, "profile", saveProfile),
+    setSetupComplete: persistentSetter(set, get, "setupComplete", saveSetupComplete),
     setMood: functionalSetter(set, "mood"),
-    setHomeScreenVersions: functionalSetter(set, "homeScreenVersions"),
-    setLauncherBehaviorSettings: functionalSetter(set, "launcherBehaviorSettings"),
+    setHomeScreenVersions: persistentSetter(set, get, "homeScreenVersions", saveHomeScreenVersions),
+    setLauncherBehaviorSettings: persistentSetter(set, get, "launcherBehaviorSettings", saveLauncherBehaviorSettings),
     setExplicitLauncherBehaviorSettings: functionalSetter(set, "explicitLauncherBehaviorSettings"),
-    setGlobalInterruptionMode: functionalSetter(set, "globalInterruptionMode"),
-    setNotificationSettings: functionalSetter(set, "notificationSettings"),
-    setTimingWindowsPrefs: functionalSetter(set, "timingWindowsPrefs"),
+    setGlobalInterruptionMode: persistentSetter(set, get, "globalInterruptionMode", saveGlobalInterruptionMode),
+    setNotificationSettings: persistentSetter(set, get, "notificationSettings", saveNotificationSettings),
+    setTimingWindowsPrefs: persistentSetter(set, get, "timingWindowsPrefs", saveTimingWindowsPrefs, setWindowDefs),
   };
 }
 
@@ -62,9 +78,9 @@ let store = null;
 
 export function getSettingsStore() {
   if (!store) {
-    store = createStore((set) => ({
+    store = createStore((set, get) => ({
       ...buildInitialSettingsState(),
-      actions: buildActions(set),
+      actions: buildActions(set, get),
     }));
   }
   return store;

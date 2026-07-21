@@ -21,21 +21,14 @@ import {
   saveCards,
   saveCardPacks,
   saveDislikedPackCardIds as saveHiddenPackCardIdsCompat,
-  saveGlobalInterruptionMode,
   saveHiddenLibraryPacks,
-  saveHomeScreenVersions,
-  saveLauncherBehaviorSettings,
-  saveNotificationSettings,
-  saveProfile,
   saveActionCards,
-  saveSetupComplete,
   isAppPaused,
   getAppPauseExpiry,
   pauseApp,
   clearAppPause,
   clearExpiredAppPause,
   loadTimingWindowsPrefs,
-  saveTimingWindowsPrefs,
 } from "./storage";
 import {
   createEventRecord,
@@ -1404,7 +1397,6 @@ function App() {
         ...current,
         hasCompletedHomeSpotlightTour: true,
       };
-      saveProfile(next);
       return next;
     });
   }, []);
@@ -2097,7 +2089,6 @@ function App() {
   }, [e2eMode, screen, syncStatus, session?.user?.id, applySharedState]);
 
   useEffect(() => {
-    saveSetupComplete(setupComplete);
     if (setupComplete) {
       signupOnboardingPendingRef.current = false;
       setSignupOnboardingPending(false);
@@ -2105,18 +2096,6 @@ function App() {
   }, [setupComplete]);
 
   useThemePreference(mood);
-
-  useEffect(() => {
-    saveProfile(profile);
-  }, [profile]);
-
-  useEffect(() => {
-    saveHomeScreenVersions(homeScreenVersions);
-  }, [homeScreenVersions]);
-
-  useEffect(() => {
-    saveLauncherBehaviorSettings(launcherBehaviorSettings);
-  }, [launcherBehaviorSettings]);
 
   useEffect(() => {
     setExplicitLauncherBehaviorSettings((current) => {
@@ -2157,10 +2136,6 @@ function App() {
   }, [hiddenPackCardIdsCompat]);
 
   useEffect(() => {
-    saveGlobalInterruptionMode(globalInterruptionMode);
-  }, [globalInterruptionMode]);
-
-  useEffect(() => {
     saveHiddenLibraryPacks(hiddenLibraryPacks);
   }, [hiddenLibraryPacks]);
 
@@ -2184,10 +2159,6 @@ function App() {
       setOverlay(nextOverlay);
     }
   }, [overlay?.type, overlay?.versionId, overlay?.origin, overlay?.activationKey, overlay?.launchSource, visibleActionCards.length]);
-
-  useEffect(() => {
-    saveNotificationSettings(notificationSettings);
-  }, [notificationSettings]);
 
   useEffect(() => {
     const normalized = normalizeCards(cards, new Date(), profile.timezone);
@@ -2556,11 +2527,6 @@ function App() {
       setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
     }
   }, [route.kind, overlay?.launchSource]);
-
-  // Keep the utils getCurrentWindow singleton in sync with the user's saved prefs.
-  useEffect(() => {
-    setWindowDefs(timingWindowsPrefs);
-  }, [timingWindowsPrefs]);
 
   useEffect(() => {
     if (syncStatus === "ready") {
@@ -5014,13 +4980,11 @@ function App() {
 
   function finishOnboarding(destination = "home", launcherId = profile.onboardingLauncherId ?? "instagram") {
     const supportedLauncherId = isKnownLauncher(launcherId) ? launcherId : "instagram";
-    saveSetupComplete(true);
     setScreen("library");
     setOverlay(null);
     setMenuOpenId(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    saveSetupComplete(true);
     setSetupComplete(true);
     setShouldLaunchOverlay(destination === "try");
     navigateTo(destination === "try" ? `/intercept/${supportedLauncherId}` : "/home", { replace: true });
@@ -5221,7 +5185,6 @@ function App() {
 
   function handleSaveTimingWindowsPrefs(defs) {
     if (!isValidWindowDefs(defs)) return;
-    saveTimingWindowsPrefs(defs);
     setTimingWindowsPrefs(defs);
   }
 
@@ -5268,7 +5231,6 @@ function App() {
     setActionCards(loadActionCards());
     setNotificationSettings(loadNotificationSettings());
     setTimingWindowsPrefs(DEFAULT_WINDOW_DEFS);
-    setWindowDefs(DEFAULT_WINDOW_DEFS);
     setSetupComplete(false);
     setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
     setActiveProtectedAppContext(null);

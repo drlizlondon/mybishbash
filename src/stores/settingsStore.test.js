@@ -10,7 +10,7 @@ function createLocalStorageStub() {
   const data = new Map();
   return {
     getItem: (key) => (data.has(key) ? data.get(key) : null),
-    setItem: (key, value) => data.set(key, String(value)),
+    setItem: vi.fn((key, value) => data.set(key, String(value))),
     removeItem: (key) => data.delete(key),
     clear: () => data.clear(),
   };
@@ -100,5 +100,42 @@ describe("settingsStore — action semantics", () => {
     const first = getSettingsActions();
     const second = getSettingsActions();
     for (const key of Object.keys(first)) expect(first[key]).toBe(second[key]);
+  });
+
+  it("persists each owning slice synchronously with the current payload format", () => {
+    const actions = getSettingsActions();
+    window.localStorage.setItem.mockClear();
+
+    actions.setProfile({ name: "Liz" });
+    actions.setSetupComplete(true);
+    actions.setHomeScreenVersions({ safari: { id: "safari" } });
+    actions.setLauncherBehaviorSettings({ safari: { appEnabled: true } });
+    actions.setGlobalInterruptionMode(false);
+    actions.setNotificationSettings({ enabled: true, notificationsPerDay: 2 });
+    const timingWindows = [
+      { id: "morning", start: 5, end: 11 },
+      { id: "day", start: 11, end: 17 },
+      { id: "evening", start: 17, end: 22 },
+      { id: "night", start: 22, end: 5 },
+    ];
+    actions.setTimingWindowsPrefs(timingWindows);
+
+    expect(window.localStorage.setItem.mock.calls).toEqual([
+      ["mybishbash.profile.v1", JSON.stringify({ name: "Liz" })],
+      ["mybishbash.setup-complete.v1", "true"],
+      ["mybishbash.home-screen-versions.v1", JSON.stringify({ safari: { id: "safari" } })],
+      ["mybishbash.launcher-behavior-settings.v1", JSON.stringify({ safari: { appEnabled: true } })],
+      ["mybishbash.global-interruption-mode.v1", "false"],
+      ["mybishbash.notifications.v1", JSON.stringify({ enabled: true, notificationsPerDay: 2 })],
+      ["mybishbash.timing-windows-prefs.v1", JSON.stringify(timingWindows)],
+    ]);
+  });
+
+  it("does not add persistence for mood or explicit launcher settings", () => {
+    const actions = getSettingsActions();
+    window.localStorage.setItem.mockClear();
+    actions.setMood("Rainbow");
+    actions.setExplicitLauncherBehaviorSettings({ safari: { appEnabled: true } });
+    expect(window.localStorage.setItem).not.toHaveBeenCalled();
   });
 });
