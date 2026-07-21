@@ -232,6 +232,7 @@ import {
   loadExplicitLauncherBehaviorSettings,
   useSettingsStore,
 } from "./stores/settingsStore";
+import { getPacksActions, usePacksStore } from "./stores/packsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
@@ -1039,10 +1040,10 @@ function App() {
   const homeScreenVersions = useSettingsStore((s) => s.homeScreenVersions);
   const launcherBehaviorSettings = useSettingsStore((s) => s.launcherBehaviorSettings);
   const explicitLauncherBehaviorSettings = useSettingsStore((s) => s.explicitLauncherBehaviorSettings);
-  const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
-  const [hiddenPackCardIdsCompat, setHiddenPackCardIdsCompat] = useState(initialState.hiddenPackCardIdsCompat);
+  const cardPacks = usePacksStore((s) => s.cardPacks);
+  const hiddenPackCardIdsCompat = usePacksStore((s) => s.hiddenPackCardIdsCompat);
   const globalInterruptionMode = useSettingsStore((s) => s.globalInterruptionMode);
-  const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
+  const hiddenLibraryPacks = usePacksStore((s) => s.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
   const [libraryFocusMode, setLibraryFocusMode] = useState(null);
@@ -1062,7 +1063,7 @@ function App() {
   const adminStatus = useSessionStore((s) => s.adminStatus);
   const testerStatus = useSessionStore((s) => s.testerStatus);
   const [testerReportsRefreshKey, setTesterReportsRefreshKey] = useState(0);
-  const [globalPacks, setGlobalPacks] = useState([]);
+  const globalPacks = usePacksStore((s) => s.globalPacks);
   // Own access profile for capability checks (premium pack gating). null =
   // unknown/unavailable, which getCapabilities treats as the free tier, so
   // premium installs fail closed.
@@ -1077,6 +1078,9 @@ function App() {
     setExplicitLauncherBehaviorSettings, setGlobalInterruptionMode,
     setNotificationSettings, setSetupComplete, setTimingWindowsPrefs,
   } = getSettingsActions();
+  const {
+    setCardPacks, setHiddenPackCardIdsCompat, setHiddenLibraryPacks, setGlobalPacks,
+  } = getPacksActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
