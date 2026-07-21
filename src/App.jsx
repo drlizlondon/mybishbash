@@ -234,6 +234,11 @@ import {
   recordLaunchTiming,
 } from "./app/e2e";
 import { useSessionStore, getSessionActions } from "./stores/sessionStore";
+import {
+  getSettingsActions,
+  loadExplicitLauncherBehaviorSettings,
+  useSettingsStore,
+} from "./stores/settingsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
@@ -259,7 +264,6 @@ const NATIVE_SCHEME_FALLBACK_MS = 1400;
 const INSTALLED_LAUNCHER_SHELL_KEY = "mybishbash.installed-launcher-shell.v1";
 const SUPPRESS_STANDALONE_LAUNCHER_RECOVERY_KEY = "mybishbash.suppress-standalone-launcher-recovery.v1";
 const SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY = "mybishbash.suppress-installed-shell-card-context.v1";
-const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1";
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? "";
 const SIGNUP_ONBOARDING_PENDING_KEY = "mybishbash.signup-onboarding-pending.v1";
 const BOTTOM_NAV_ITEMS = [
@@ -373,15 +377,6 @@ function isInstalledShellCardContextSuppressed() {
     return window.sessionStorage.getItem(SUPPRESS_INSTALLED_SHELL_CARD_CONTEXT_KEY) === "true";
   } catch {
     return false;
-  }
-}
-
-function loadExplicitLauncherBehaviorSettings() {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY) || "{}") || {};
-  } catch {
-    return {};
   }
 }
 
@@ -1046,14 +1041,14 @@ function App() {
 
   const [cards, setCards] = useState(initialState.cards);
   const cardsRef = useRef(initialState.cards);
-  const [mood, setMood] = useState(initialState.mood);
-  const [profile, setProfile] = useState(initialState.profile);
-  const [homeScreenVersions, setHomeScreenVersions] = useState(initialState.homeScreenVersions);
-  const [launcherBehaviorSettings, setLauncherBehaviorSettings] = useState(initialState.launcherBehaviorSettings);
-  const [explicitLauncherBehaviorSettings, setExplicitLauncherBehaviorSettings] = useState(() => loadExplicitLauncherBehaviorSettings());
+  const mood = useSettingsStore((s) => s.mood);
+  const profile = useSettingsStore((s) => s.profile);
+  const homeScreenVersions = useSettingsStore((s) => s.homeScreenVersions);
+  const launcherBehaviorSettings = useSettingsStore((s) => s.launcherBehaviorSettings);
+  const explicitLauncherBehaviorSettings = useSettingsStore((s) => s.explicitLauncherBehaviorSettings);
   const [cardPacks, setCardPacks] = useState(initialState.cardPacks);
   const [hiddenPackCardIdsCompat, setHiddenPackCardIdsCompat] = useState(initialState.hiddenPackCardIdsCompat);
-  const [globalInterruptionMode, setGlobalInterruptionMode] = useState(initialState.globalInterruptionMode);
+  const globalInterruptionMode = useSettingsStore((s) => s.globalInterruptionMode);
   const [hiddenLibraryPacks, setHiddenLibraryPacks] = useState(initialState.hiddenLibraryPacks);
   const [events, setEvents] = useState(initialState.events);
   const [actionCards, setActionCards] = useState(initialState.actionCards);
@@ -1061,17 +1056,15 @@ function App() {
   const [shellSettingsVersionId, setShellSettingsVersionId] = useState(null);
   const [homeSpotlightActionSignal, setHomeSpotlightActionSignal] = useState(null);
   const [launcherSetupInterstitialVersion, setLauncherSetupInterstitialVersion] = useState(null);
-  const [notificationSettings, setNotificationSettings] = useState(initialState.notificationSettings);
+  const notificationSettings = useSettingsStore((s) => s.notificationSettings);
   const { notificationStatus, setNotificationStatus } = useNotificationPermission();
-  const [setupComplete, setSetupComplete] = useState(initialState.setupComplete);
+  const setupComplete = useSettingsStore((s) => s.setupComplete);
   const session = useSessionStore((s) => s.session);
   const authReady = useSessionStore((s) => s.authReady);
   const syncStatus = useSessionStore((s) => s.syncStatus);
   const syncError = useSessionStore((s) => s.syncError);
   const { isOffline, setIsOffline } = useOfflineFlag();
-  const [timingWindowsPrefs, setTimingWindowsPrefs] = useState(
-    initialState.timingWindowsPrefs,
-  );
+  const timingWindowsPrefs = useSettingsStore((s) => s.timingWindowsPrefs);
   const isAdmin = useSessionStore((s) => s.isAdmin);
   const adminStatus = useSessionStore((s) => s.adminStatus);
   const testerStatus = useSessionStore((s) => s.testerStatus);
@@ -1086,6 +1079,11 @@ function App() {
     setSession, setAuthReady, setSyncStatus, setSyncError,
     setAccessProfile, setAccessStatus,
   } = getSessionActions();
+  const {
+    setMood, setProfile, setHomeScreenVersions, setLauncherBehaviorSettings,
+    setExplicitLauncherBehaviorSettings, setGlobalInterruptionMode,
+    setNotificationSettings, setSetupComplete, setTimingWindowsPrefs,
+  } = getSettingsActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
