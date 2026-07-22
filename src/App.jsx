@@ -29,8 +29,6 @@ import {
   createEventRecord,
   getStartOfWeek,
   loadEventLog,
-  persistEventRecord,
-  saveEventLog,
   mergeEventsById,
   processEventQueue,
 } from "./eventLog";
@@ -229,6 +227,7 @@ import {
 } from "./stores/settingsStore";
 import { getPacksActions, usePacksStore } from "./stores/packsStore";
 import { getCardsActions, useCardsStore } from "./stores/cardsStore";
+import { getEventsActions, useEventsStore } from "./stores/eventsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
@@ -1040,7 +1039,7 @@ function App() {
   const hiddenPackCardIdsCompat = usePacksStore((s) => s.hiddenPackCardIdsCompat);
   const globalInterruptionMode = useSettingsStore((s) => s.globalInterruptionMode);
   const hiddenLibraryPacks = usePacksStore((s) => s.hiddenLibraryPacks);
-  const [events, setEvents] = useState(initialState.events);
+  const events = useEventsStore((s) => s.events);
   const actionCards = useCardsStore((s) => s.actionCards);
   const [libraryFocusMode, setLibraryFocusMode] = useState(null);
   const [shellSettingsVersionId, setShellSettingsVersionId] = useState(null);
@@ -1078,6 +1077,7 @@ function App() {
     setCardPacks, setHiddenPackCardIdsCompat, setHiddenLibraryPacks, setGlobalPacks,
   } = getPacksActions();
   const { setCards, setActionCards, setCardsAndPersistImmediately } = getCardsActions();
+  const { setEvents, appendEvent } = getEventsActions();
   const { appUpdate } = useAppUpdateStatus(BASE_PATH);
   const [appPauseRevision, setAppPauseRevision] = useState(0);
   const { setRoutePath, route, initialRoute } = useRoute(initialState.setupComplete);
@@ -1428,6 +1428,7 @@ function App() {
   const handledResumeLaunchNonceRef = useRef(0);
   const suppressNextHomeAutoLaunchRef = useRef(false);
   const suppressResumeHomeAutoLaunchRef = useRef(false);
+  const standaloneRecoveryInFlightRef = useRef(null);
   const launcherTimingSeenRef = useRef(new Set());
   const visibleActionCards = useMemo(
     () => actionCards.filter((card) => !card.hidden && !card.deletedAt),
@@ -1450,6 +1451,10 @@ function App() {
     if (route.kind !== "intercept") {
       launcherTimingSeenRef.current = new Set();
     }
+  }, [route.kind]);
+
+  useEffect(() => {
+    if (route.kind !== "home") standaloneRecoveryInFlightRef.current = null;
   }, [route.kind]);
 
   useLayoutEffect(() => {
@@ -2112,10 +2117,6 @@ function App() {
   }, [launcherBehaviorSettings]);
 
   useEffect(() => {
-    saveEventLog(events);
-  }, [events]);
-
-  useEffect(() => {
     if (overlay?.type === "action-card" && visibleActionCards.length === 0) {
       debugLog("[ACTION CARDS] No visible action cards; switching to empty fallback.");
       const nextOverlay = {
@@ -2200,8 +2201,7 @@ function App() {
       launcher_context: launcherContext,
       ...input,
     });
-    const next = await persistEventRecord(record);
-    setEvents(next);
+    await appendEvent(record);
   }, [launcherContext]);
 
   const showMorningSummaryForDate = useCallback((dateKey, { forced = false } = {}) => {
@@ -2866,6 +2866,9 @@ function App() {
     if (isHomeRoute && testerStatus?.is_tester === true && isStandaloneDisplayMode()) {
       const installedLauncherId = getInstalledLauncherShellId();
       if (installedLauncherId && !consumeStandaloneLauncherRecoverySuppression()) {
+        const recoveryKey = `${installedLauncherId}:${route.path}`;
+        if (standaloneRecoveryInFlightRef.current === recoveryKey) return;
+        standaloneRecoveryInFlightRef.current = recoveryKey;
         debugLaunch("[STANDALONE_LAUNCHER_RECOVERY] restarting launcher shell from home", {
           route: route.path,
           launcherContext: installedLauncherId,
