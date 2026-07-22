@@ -152,13 +152,16 @@ import { HomeGlyph, BookGlyph, PacksGlyph, AppsGlyph } from "./app/shell/glyphs"
 import Masthead from "./app/shell/Masthead";
 import HomePanel, { HomeSpotlightTour } from "./features/home";
 import {
-  buildLaunchSession,
   persistLaunchSession,
   loadActiveProtectedAppContext,
   persistActiveProtectedAppContext,
   clearActiveProtectedAppContext,
-  buildLaunchSessionForRoute,
 } from "./features/launcher/launchSessionStorage";
+import {
+  LAUNCH_SESSION_EVENTS,
+  buildLaunchSessionForRoute,
+  launchSessionReducer,
+} from "./domain/launcher/launchSession";
 import {
   buildRevealOverlay,
   buildFakeLauncherOverlayContext,
@@ -1525,11 +1528,11 @@ function App() {
       clearInstalledShellCardContextSuppression();
       setActiveProtectedAppContext(persistActiveProtectedAppContext(route.versionId));
       setLaunchSession((current) => {
-        if (current?.entrySurface === "fake_launcher" && current?.launcherId === route.versionId) {
-          return current;
-        }
-        const nextSession = buildLaunchSession("fake_launcher", route.versionId);
-        persistLaunchSession(nextSession);
+        const nextSession = launchSessionReducer(current, {
+          type: LAUNCH_SESSION_EVENTS.ROUTE_INTERCEPT,
+          launcherId: route.versionId,
+        });
+        if (nextSession !== current) persistLaunchSession(nextSession);
         return nextSession;
       });
       return;
@@ -1537,11 +1540,8 @@ function App() {
 
     if (isAppTabRoute && overlay?.launchSource !== "fake_launcher") {
       setLaunchSession((current) => {
-        if (current?.entrySurface === "mybishbash_home") {
-          return current;
-        }
-        const nextSession = buildLaunchSession("mybishbash_home");
-        persistLaunchSession(nextSession);
+        const nextSession = launchSessionReducer(current, { type: LAUNCH_SESSION_EVENTS.APP_TAB_HOME });
+        if (nextSession !== current) persistLaunchSession(nextSession);
         return nextSession;
       });
     }
@@ -1579,7 +1579,10 @@ function App() {
     const fakeContext = getActiveFakeLauncherReturnContext(route, overlay, interceptActivationRef.current, installedShellId);
     const installedLauncherId = fakeContext?.versionId;
     if (installedLauncherId) {
-      const nextSession = buildLaunchSession("fake_launcher", installedLauncherId);
+      const nextSession = launchSessionReducer(launchSession, {
+        type: LAUNCH_SESSION_EVENTS.SHELL_CARD,
+        launcherId: installedLauncherId,
+      });
       persistLaunchSession(nextSession);
       setLaunchSession(nextSession);
       return buildFakeLauncherRevealOverlay(
@@ -1588,7 +1591,7 @@ function App() {
         fakeContext?.activationKey || null,
       );
     }
-    const nextSession = buildLaunchSession("mybishbash_home");
+    const nextSession = launchSessionReducer(launchSession, { type: LAUNCH_SESSION_EVENTS.HOME_CARD });
     persistLaunchSession(nextSession);
     setLaunchSession(nextSession);
     return { ...buildRevealOverlay(cardId), origin: "home" };
@@ -3114,7 +3117,10 @@ function App() {
       return null;
     }
     debugLaunch("[INTERCEPT] Starting interception flow", { versionId, source });
-    const nextSession = buildLaunchSession("fake_launcher", versionId);
+    const nextSession = launchSessionReducer(launchSession, {
+      type: LAUNCH_SESSION_EVENTS.INTERCEPTION_START,
+      launcherId: versionId,
+    });
     persistLaunchSession(nextSession);
     setLaunchSession(nextSession);
     suppressNextHomeAutoLaunchRef.current = false;
@@ -5180,7 +5186,7 @@ function App() {
     if (clearStorage) {
       clearSharedMyBishBashState();
     }
-    const nextLaunchSession = buildLaunchSession("mybishbash_home");
+    const nextLaunchSession = launchSessionReducer(launchSession, { type: LAUNCH_SESSION_EVENTS.RESET_HOME });
     persistLaunchSession(nextLaunchSession);
     setCards([]);
     setMood(resolveTheme("Minimal"));

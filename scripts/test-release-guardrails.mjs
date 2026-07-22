@@ -33,7 +33,7 @@ const appsPanelSource = await readFile(new URL("../src/features/apps/AppsPanel.j
 const appManagementScreenSource = await readFile(new URL("../src/features/apps/AppManagementScreen.jsx", import.meta.url), "utf8");
 const homeSpotlightTourSource = await readFile(new URL("../src/features/home/HomeSpotlightTour.jsx", import.meta.url), "utf8");
 const mastheadSource = await readFile(new URL("../src/app/shell/Masthead.jsx", import.meta.url), "utf8");
-const launchSessionStorageSource = await readFile(new URL("../src/features/launcher/launchSessionStorage.js", import.meta.url), "utf8");
+const launchSessionDomainSource = await readFile(new URL("../src/domain/launcher/launchSession.js", import.meta.url), "utf8");
 const overlayBuildersSource = await readFile(new URL("../src/features/launcher/overlayBuilders.js", import.meta.url), "utf8");
 const overlayHostSource = await readFile(new URL("../src/features/launcher/OverlayHost.jsx", import.meta.url), "utf8");
 const actionSuccessOverlaySource = await readFile(new URL("../src/features/launcher/ActionSuccessOverlay.jsx", import.meta.url), "utf8");
@@ -97,7 +97,7 @@ assertMatch("Log weekly shift count is memoized", appSource, /const weeklyShiftC
 assertMatch("Apps panel clock is isolated below its memo boundary", appsPanelSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
 assertMatch("Apps panel clock owns its live pause interval", appsPanelSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
 
-assertMatch("fake launcher sessions never allow Back to home", launchSessionStorageSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
+assertMatch("fake launcher sessions never allow Back to home", launchSessionDomainSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
 assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
 assertMatch("shared state saves retry transient fetch failures", syncSource, /isTransientFetchError\(error\)[\s\S]{0,160}wait\(250 \* \(attempt \+ 1\)\)/);
 assertMatch("launcher event transient fetch failures are non-fatal", syncSource, /saveLauncherEvent[\s\S]{0,900}isTransientFetchError\(error\) \? console\.warn : console\.error/);

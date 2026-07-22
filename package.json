@@ -9,7 +9,7 @@
     "build": "vite build",
     "build:cloudflare": "node scripts/build-cloudflare-production.mjs",
     "build:pages-preview": "node scripts/build-pages-preview.mjs",
-    "test": "npm run lint && npm run test:unit && npm run test:boundaries && npm run build && npm run test:bundle-budget && npm run test:launcher-flow && npm run test:launchers && npm run test:testpilot && npm run test:access && npm run test:pack-import && npm run test:cover-generation && npm run test:fake-launchers && npm run test:release-guardrails",
+    "test": "npm run lint && npm run test:unit && npm run test:coverage:launch-session && npm run test:boundaries && npm run build && npm run test:bundle-budget && npm run test:launcher-flow && npm run test:launchers && npm run test:testpilot && npm run test:access && npm run test:pack-import && npm run test:cover-generation && npm run test:fake-launchers && npm run test:release-guardrails",
     "test:release": "npm run build && npm run test:launcher-flow && npm run test:launchers && npm run test:testpilot && npm run test:access && npm run test:pack-import && npm run test:cover-generation && npm run test:fake-launchers && npm run test:release-guardrails && npm run test:e2e",
     "test:release:staging": "npm run test:release && npm run test:staging-release",
     "test:launcher-flow": "node scripts/test-launcher-flow.mjs",
@@ -37,6 +37,7 @@
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android",
     "test:unit": "vitest run",
+    "test:coverage:launch-session": "vitest run --coverage --config vitest.launch-session.config.js",
     "lint": "eslint src"
   },
   "dependencies": {
@@ -60,6 +61,7 @@
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",

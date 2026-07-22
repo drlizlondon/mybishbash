@@ -4,7 +4,7 @@ import { getVersionOpenHref } from "../../lib/launcherState";
 import { getBrowserSafeDestinationHref } from "../../lib/launcherSetupUrl";
 import { getGreeting, isCommitmentCard, isCommitmentCheckInCard, isCommitmentEncouragementCard, isCommitmentReviewCard } from "../../utils";
 import { getLauncherCardActions } from "./overlayBuilders";
-import { normalizeLaunchSession, LAUNCH_PRIMARY_ACTIONS } from "./launchSessionStorage";
+import { normalizeLaunchSession, LAUNCH_PRIMARY_ACTIONS } from "../../domain/launcher/launchSession";
 import { debugLaunch, getCardOverlayRenderKey } from "./launchDebug";
 import { BASE_PATH } from "../../app/router/routes";
 import { PremiumCardScreen } from "./CardRevealTemplate";
@@ -547,4 +547,3 @@ export default function Overlay({
     />
   );
 }
-

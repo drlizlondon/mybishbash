@@ -1,6 +1,5 @@
-import { isKnownLauncher } from "../../lib/launcherRegistry";
 import { CARD_SELECTION_SURFACES } from "../../lib/cardSelection";
-import { normalizeLaunchSession, LAUNCH_PRIMARY_ACTIONS } from "./launchSessionStorage";
+import { normalizeLaunchSession, LAUNCH_PRIMARY_ACTIONS, getLaunchSessionForOverlay, isFakeLauncherSession } from "../../domain/launcher/launchSession";
 
 const IN_APP_SHORTCUT_SOURCES = new Set([
   "apps_protected_launch",
@@ -55,20 +54,7 @@ export function buildFakeLauncherPreparingOverlay(versionId) {
   };
 }
 
-export function getLaunchSessionForOverlay(launchSession, overlay) {
-  if (overlay?.launchSource === "fake_launcher" && isKnownLauncher(overlay.versionId)) {
-    return normalizeLaunchSession({
-      ...launchSession,
-      entrySurface: "fake_launcher",
-      launcherId: overlay.versionId,
-    });
-  }
-  return normalizeLaunchSession(launchSession);
-}
-
-export function isFakeLauncherSession(launchSession) {
-  return launchSession?.entrySurface === "fake_launcher";
-}
+export { getLaunchSessionForOverlay, isFakeLauncherSession };
 
 export function isInAppShortcutClick(source) {
   return IN_APP_SHORTCUT_SOURCES.has(source);

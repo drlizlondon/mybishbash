@@ -39,6 +39,9 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Launch-session reducer coverage
+        run: npm run test:coverage:launch-session
+
       - name: Build
         run: npm run build
         env:
