@@ -1,4 +1,4 @@
-export { default } from "./AppsPanel";
+export { default } from "./AppsScreen";
 export { default as EnabledAppRow } from "./EnabledAppRow";
 export { default as MoreAppsOptions } from "./MoreAppsOptions";
 export { default as LauncherSetupInterstitial } from "./LauncherSetupInterstitial";

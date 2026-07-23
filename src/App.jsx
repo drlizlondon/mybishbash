@@ -1056,7 +1056,6 @@ function App() {
   const syncStatus = useSessionStore((s) => s.syncStatus);
   const syncError = useSessionStore((s) => s.syncError);
   const { isOffline, setIsOffline } = useOfflineFlag();
-  const timingWindowsPrefs = useSettingsStore((s) => s.timingWindowsPrefs);
   const isAdmin = useSessionStore((s) => s.isAdmin);
   const adminStatus = useSessionStore((s) => s.adminStatus);
   const testerStatus = useSessionStore((s) => s.testerStatus);
@@ -5955,7 +5954,6 @@ function App() {
                     window.location.href = `${BASE_PATH}/download`;
                   }}
                   onOpenLauncherSetup={openLauncherSetupFromApp}
-                  homeScreenVersions={homeScreenVersions}
                   onPauseApp={handleSetAppPause}
                   onClearAppPause={handleClearAppPause}
                   onLogLauncherEvent={logLauncherEvent}
@@ -5963,10 +5961,7 @@ function App() {
                   appPauseRevision={appPauseRevision}
                   pendingOnboardingShortcuts={pendingOnboardingShortcuts}
                   onboardingSelectedAppSetup={onboardingSelectedAppSetup}
-                  isTester={testerStatus?.is_tester === true}
                   isShellContext={isShellAppSettingsRoute}
-                  canUseMultipleApps={canUseMultipleApps}
-                  maxConnectedApps={entitlements.maxConnectedApps}
                   onOpenMyBishBash={() => {
                     setShellSettingsVersionId(null);
                     setLauncherContext(NORMAL_LAUNCHER_CONTEXT);
@@ -6041,8 +6036,6 @@ function App() {
               ) : null}
               {activeTab === "access" ? (
                 <AccessPanel
-                  accessProfile={accessProfile}
-                  canUseMultipleApps={canUseMultipleApps}
                   onManageApps={() => navigateTo("/apps")}
                   onEnterCode={() => {
                     window.location.href = `${BASE_PATH}/invite`;
@@ -6051,20 +6044,15 @@ function App() {
               ) : null}
               {activeTab === "settings" ? (
                 <SettingsPanel
-                  homeScreenVersions={homeScreenVersions}
-                  session={session}
                   onLogOut={handleLogOut}
                   onDeleteAccount={handleDeleteAccount}
                   onRefreshSession={handleRefreshSession}
                   onRefreshAppShell={refreshAppShell}
                   onResetSharedState={handleResetSharedState}
-                  isTester={testerStatus?.is_tester === true}
-                  notificationSettings={notificationSettings}
                   notificationStatus={notificationStatus}
                   onEnableNotifications={enableNotifications}
                   onDisableNotifications={disableNotifications}
                   onUpdateNotificationsPerDay={updateNotificationsPerDay}
-                  actionCards={actionCards}
                   onRestoreActionCards={handleRestoreActionCards}
                   morningSummaryDebug={morningSummaryDebug}
                   onShowMorningSummaryNow={showMorningSummaryNow}
@@ -6073,7 +6061,6 @@ function App() {
                   onFakeLauncherLaunch={(versionId) =>
                     handleFakeLauncherLaunch(versionId, "settings_fake_launcher")
                   }
-                  timingWindowsPrefs={timingWindowsPrefs}
                   onSaveTimingWindowsPrefs={handleSaveTimingWindowsPrefs}
                 />
               ) : null}
