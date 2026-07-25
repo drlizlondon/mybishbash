@@ -8,5 +8,5 @@ export {
   getLibraryPackSecondary,
 } from "./librarySecondary";
 export { default as TodayPersonalCardsPanel } from "./TodayPersonalCardsPanel";
-export { default as StandardLibraryPanel } from "./StandardLibraryPanel";
+export { default as StandardLibraryPanel } from "./LibraryScreen";
 export { default as PackDetailModal } from "./PackDetailModal";

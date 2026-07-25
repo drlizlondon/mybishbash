@@ -107,7 +107,6 @@ import {
   isLauncherVisibleInContext,
   shouldBlockCrossAppLaunch,
 } from "./lib/launcherAvailability";
-import { buildLibrarySections } from "./lib/librarySections";
 import {
   FAKE_LAUNCHER_FLOW_STEPS,
   buildFakeLauncherFlowContext,
@@ -1185,12 +1184,6 @@ function App() {
   // "Unlimited apps" (paid). Free is still limited — its exact cap
   // (maxConnectedApps) is enforced at add time via canAddAnotherApp.
   const canUseMultipleApps = isUnlimited(entitlements.maxConnectedApps);
-  // Personal-card count for the maxPersonalCards entitlement (excludes pack
-  // cards, deleted cards, and commitments).
-  const personalCardCount = useMemo(
-    () => cards.filter((card) => !card.sourcePackId && !card.deletedAt && !isCommitmentCard(card)).length,
-    [cards],
-  );
   const activeInterceptionVersion = useMemo(
     () =>
       route.kind === "intercept"
@@ -5690,16 +5683,6 @@ function App() {
     },
     [hiddenLibraryPacks, globalPacks],
   );
-  // Unlike visibleActionCards (intercept surface), the Library list keeps
-  // hidden starters so they can be restored.
-  const libraryDoInsteadItems = useMemo(
-    () => actionCards.filter((card) => !card.deletedAt),
-    [actionCards],
-  );
-  const librarySections = useMemo(
-    () => buildLibrarySections({ cards, libraryPacks: visibleLibraryPacks }),
-    [cards, visibleLibraryPacks],
-  );
   const todayPersonalLibrary = useMemo(() => {
     const now = new Date();
     const todayKey = getTodayKey(now, profile.timezone);
@@ -5984,11 +5967,6 @@ function App() {
                   />
                 ) : (
                   <MemoStandardLibraryPanel
-                    personalItems={librarySections.personal}
-                    commitmentItems={librarySections.commitments}
-                    activePackItems={librarySections.activePacks}
-                    libraryPacks={visibleLibraryPacks}
-                    timezone={profile.timezone}
                     menuOpenId={menuOpenId}
                     setMenuOpenId={setMenuOpenId}
                     openEditor={openEditor}
@@ -6002,7 +5980,6 @@ function App() {
                     onCreatePersonal={() => openCardComposerFromCurrentRoute("personal")}
                     onCreateCommitment={() => openCardComposerFromCurrentRoute("commitment")}
                     onAddPack={() => navigateTo("/explore")}
-                    doInsteadItems={libraryDoInsteadItems}
                     onToggleActionCardHidden={handleToggleActionCardHidden}
                     onDeleteActionCard={handleDeleteActionCard}
                     onCreateActionCard={() => setIsActionCardEditorOpen(true)}
@@ -6023,13 +6000,9 @@ function App() {
 
               {activeTab === "explore" ? (
                 <MemoExplorePanel
-                  packs={visibleLibraryPacks}
-                  isPackActive={isPackActive}
                   onInstallPack={activatePack}
                   onRemovePack={deactivatePack}
                   onManageCards={(packId) => setSelectedPackDetail({ type: "library", id: packId })}
-                  isTester={testerStatus?.is_tester === true}
-                  canUsePremiumContent={canUsePremiumContent}
                   onPremiumInterest={handlePremiumInterest}
                   onTakeCommitment={takeCommitmentTemplate}
                 />
@@ -6204,8 +6177,6 @@ function App() {
           initialCard={editingCard}
           initialKind={composerInitialKind}
           initialDraft={composerInitialDraft}
-          personalCardCount={personalCardCount}
-          maxPersonalCards={entitlements.maxPersonalCards}
           onClose={() => {
             setEditingId(null);
             setComposerInitialKind("personal");
