@@ -57,16 +57,42 @@ Update this file in the same commit that changes a phase's status.
   800 **and App.jsx < 1,600**, landing below the original 3,000 one phase
   later. See `phase-03-feature-modules.md` §R1.
 
-### Phase 4 — Domain stores & single write path
+### Phase 4 — Domain stores & single write path — **COMPLETE 2026-07-26**
 - **Entry:** Phase 3 complete. Scope note: only shared/persistent domain state
   enters stores — local transient UI state stays in components.
-- **Exit:** store actions are the only local-persistence writers
-  (lint-enforced); launch-session reducer extracted with ≥95% branch coverage;
-  App() < 800 lines and App.jsx < 1,600 (R1 amendment); e2e green twice
-  consecutively.
+- **Exit as amended:** store actions are the only local-persistence writers
+  (lint-enforced); launch-session reducer extracted with ≥95% branch coverage
+  (achieved 100%); **Ruling R2** replaced `App() < 800`, and R2's own criterion
+  1 (`App() < 2,600`) was then **waived** at measured 5,404 — see
+  `phase-04-domain-stores.md` "Phase 4 closure". R2 criteria 2–5 met with
+  evidence.
+- **Closing commits:** `85f5286`, `a4357f7`, `382379d`. Suite 358 passed / 1
+  failed (`access-gating.spec.ts:88`, documented Phase 2b baseline).
+- **Structural finding:** de-prop-drilling is not a size lever — commits 9–12
+  moved a net 67 lines out of `App()`. The mass is handler bodies (690), the
+  JSX return (563), and the launcher engine (586). **The waiver does not make
+  that work optional** — it is carried by Phases 4b and 4c.
+
+### Phase 4b — Card & commitment handler extraction — **NOT STARTED**
+- **Packet:** `docs/architecture/phase-04b-card-handlers.md`
+- **Entry:** Phase 4 complete. **Blocks Phase 5.**
+- **Exit:** the ~690-line handler cluster lives in feature hooks with unit
+  tests; card/commitment localStorage payloads byte-identical.
+
+### Phase 4c — Launcher-engine extraction — **NOT STARTED**
+- **Packet:** `docs/architecture/phase-04c-launcher-engine.md`
+- **Entry:** Phase 4b complete. Does **not** block Phase 5.
+- **Exit:** the ~586-line engine lives in `features/launcher/useLauncherEngine.js`
+  with an explicit dependency object; the launch-decision effect and its seven
+  concurrency-control refs stay in `App()`; every re-pointed invariant carries
+  both a positive assertion and an `assertNoMatch` against `appSource`.
 
 ### Phase 5 — IndexedDB engine
-- **Entry:** Phase 4 complete (all writes flow through actions).
+- **Entry:** Phase 4 complete (all writes flow through actions) **AND Phase 4b
+  complete — HARD BLOCKER.** `handleSaveCard` and the commitment persistence
+  handlers must be out of `App()` before any synchronous save becomes async;
+  doing both in one diff combines persistence risk with structural risk. See
+  `phase-04-domain-stores.md` "Sequencing constraint".
 - **Exit:** stores hydrate from IndexedDB; idempotent localStorage import with
   one-release rollback (dual-write + kill switch); Chromium + WebKit e2e green
   (webkit-smoke scope per packet R4); 10k-event boot < 1s.

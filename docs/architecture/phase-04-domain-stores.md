@@ -373,6 +373,106 @@ cards debounce), reducer test matrix (D3), a regression test that
       in App; `mergeEntitiesById`/`normalizeSharedState` untouched;
       two-login smoke on staging preview shows profile round-trip.
 
+## Phase 4 closure — COMPLETE with criterion 1 waived (2026-07-26)
+
+**Closing commits:** `85f5286` (launcher hardening), `a4357f7` (Home/log
+containers), `382379d` (Overlay store callbacks). Working tree clean.
+
+**Final test state:** full Playwright suite **358 passed, 1 failed** — the sole
+failure is `access-gating.spec.ts:88`, the documented Phase 2b baseline, which
+predates Phase 4 and is unrelated to it. `npm run test` and
+`npm run test:before-push` green. Launcher/interception specs 187 passed;
+`launch-decision-loop` + `launcher-shell-repeat` 15 passed (independently
+re-verified after closure).
+
+### R2 criterion 1 — WAIVED, not met
+
+Measured `App()` = **5,404 lines** against a target of 2,600. The waiver is
+recorded rather than the target quietly restated, because **the 2,600 figure was
+not derived from a complete section-by-section measurement.** It was set from
+the launcher-engine and launch-decision-effect measurements alone, without
+measuring the card/commitment handler cluster (690 lines), the JSX return
+block (563), or the onboarding/setup handlers (262). It repeated, one level
+down, the same error as the original `< 800`: a line target inferred rather
+than counted.
+
+**The structural finding that matters more than the number:** de-prop-drilling
+is not a size lever. The four de-prop-drilling commits (9–12) moved a net **67
+lines** out of `App()`. Feature containers remove *props*, and props were never
+the mass. The mass is handler bodies, the render tree, and the launcher engine.
+Any future size target for `App()` must be derived by subtracting *named,
+measured sections* that a specific packet actually moves — never estimated.
+
+**This waiver does not make the remaining structural work optional.** Phases 4b
+and 4c below carry it, and the Phase 5 constraint in the next section is a hard
+blocker, not a preference.
+
+### R2 criteria 2–5 — MET, with evidence
+
+2. **No avoidable domain-state ownership in `App`** — ✅ 24 `useState` remain and
+   every one is on D1's explicit "stays in App/components" list (`screen`,
+   `launchSession`, `launcherContext`, composer/editing/menu ids, `logFilter`,
+   `morningSummary`, `shouldLaunchOverlay`, `resumeLaunchNonce`, …). Zero
+   D1-classified domain fields remain in `App`. `cardsRef` is gone as a
+   launch-decision consumer.
+3. **No new prop-drilling paths** — ✅ `HomeScreen`, `LogScreen` and
+   `OverlayScreen` subscribe to stores directly. Both commits removed props from
+   App's JSX and added none; no prop was traded for another.
+4. **Launcher-critical behaviour in place** — ✅ engine untouched; no
+   guardrail-pinned subject moved in commit 12. Two re-points, both documented
+   and same-strength or stronger (see below).
+5. **Remaining launcher engine measured and documented** — ✅ the measured
+   breakdown is in Phase 4c below.
+
+### Launcher hardening proof (`85f5286`)
+
+The dependency defect was **masked, not fixed**, by `9b3440d`'s
+`standaloneRecoveryInFlightRef` idempotence guard. A regression test that merely
+passed against staging would therefore have proved nothing. Sensitivity was
+established by a three-state matrix:
+
+| State | Result |
+|---|---|
+| Unmodified staging (guard present, `events` dep present) | 2 passed — proves nothing |
+| **Guard removed**, `events` dep still present | **2 failed** — app never settles on a card; stuck navigating to `/intercept/safari` |
+| **Guard still removed**, dependency fix applied | **2 passed** |
+
+Row 3 is load-bearing: the non-reactive read is **independently sufficient**, so
+the fix addresses the root cause rather than adding a second belt. Both
+mechanisms are retained. Regression test: `tests/e2e/launch-decision-loop.spec.ts`.
+
+**Guardrail re-point (Phase 3 R7):** the pre-existing assertion's regex ended in
+the literal `events,`, which the replacement expression
+`getEventsStore().getState().events,` *contains* — it would have continued
+passing while asserting nothing. Re-pointed explicitly and **strengthened** with
+`assertNoMatch("home launch decision does not depend reactively on the event
+log")`. A second re-point in `a4357f7` moved the "Log weekly shift count is
+memoized" assertion from `appSource` to `logScreenSource`, same regex.
+
+*Note: no dedicated morning-summary e2e spec exists (grep-verified); the morning
+summary is exercised inside seven other specs, all of which were run.*
+
+## Sequencing constraint — Phase 5 is BLOCKED until 4b lands
+
+**Phase 5 (IndexedDB) must not begin while `handleSaveCard` and the commitment
+persistence handlers remain inside `App()`.** This is a hard blocker.
+
+Phase 5 converts the storage engine beneath `storage.js` to IndexedDB, making
+every persistence call asynchronous. `handleSaveCard` (211 lines) and the four
+commitment handlers (334 lines combined) are the densest cluster of synchronous
+save calls in the codebase. Converting them to async *while they sit inside a
+5,404-line component* combines two independently risky changes in one diff:
+**persistence risk** (a dropped `await`, a lost write, a reordered save) and
+**structural risk** (moving code whose closure dependencies are implicit across
+thousands of lines). Each is hard to review alone; together they are effectively
+unreviewable, and a dropped `await` inside a 5,404-line component is invisible
+to review and silent at runtime until a user loses a card.
+
+Sequence: extract to hooks with unit tests (4b) → *then* make the hooks async
+(Phase 5). This orders the work by irreversibility: the structural move is cheap
+and reversible today, and becomes brutal once async persistence is layered on
+top of it.
+
 ## Ruling R2 — the `App() < 800` exit criterion is replaced (2026-07-26)
 
 **Superseded:** `App() < 800 lines` / `App.jsx < 1,600`. Those numbers were
