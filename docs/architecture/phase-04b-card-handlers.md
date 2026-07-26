@@ -85,6 +85,57 @@ Verified at `b732e8c` by locating each symbol and counting to its closing brace:
    either order, but 4b first is recommended because it is lower risk and it is
    the one on Phase 5's critical path.
 
+## Prerequisite commit — the D5 ratchet (NOT one of the five)
+
+**Lands before commit 1. Not part of this phase's five extraction commits; keep
+it in its own diff.** Ruling 2026-07-26: ratchet first, criterion 6 not waived.
+
+Delivers the Phase 4 D5 write-path lint rule that was never implemented. Scope:
+
+- Prohibit new direct `localStorage` access in the D5-scoped feature/component
+  directories, using **exact file and syntax matching wherever ESLint permits**.
+- **No directory-wide, wildcard, or generic exemptions.** A rule that passes
+  because its scoped files are broadly excluded does not satisfy criterion 6.
+- Allow the pre-authorised `features/launcher/launchSessionStorage.js` path.
+- **Enumerate each existing violation individually**, each with a brief
+  justification and a debt classification drawn from at least: genuine
+  domain-state persistence that should move to a store/persistence adapter;
+  debugging or diagnostic storage; UI draft or transient state; administrative or
+  marketing state; authorised launcher session storage.
+- Fail if a **new** violation appears. Fail if an **existing** violation is
+  **copied to another location**.
+- Removing an exception when its debt is later migrated must be a one-line edit.
+
+**Do NOT relocate the twelve existing violations in this commit.** Any relocation
+needing a behavioural or ownership decision belongs to its own packet.
+
+**Classify before enabling.** If a violation cannot be represented narrowly
+without a broad exemption, **STOP and report that specific case before enabling
+the rule. Do not weaken the ratchet to accommodate it.**
+
+### Two-directional sensitivity proof (required)
+
+Both must be demonstrated, then reverted, with commands and outcomes recorded:
+
+1. Introduce one new direct `localStorage` access in a scoped file → **lint must
+   fail**.
+2. Remove or alter one exact exception while its legacy violation remains →
+   **lint must fail**.
+
+Direction 2 is the one that catches a vacuous rule: it proves the exceptions are
+load-bearing and precisely targeted rather than blanket cover.
+
+### Verification before proceeding to commit 1
+
+- The D5 rule is active.
+- All existing exceptions are explicit and documented.
+- No unlisted violations exist in the scoped directories.
+- Launcher storage remains covered by its authorised path.
+- `access-gating.spec.ts:88` remains the only full-suite failure.
+
+Then update `phase-04-domain-stores.md` so criterion 6 reads **met** — only after
+this commit lands.
+
 ## Commit-by-commit plan
 
 Each commit gated on the **full** chain `npm run test && npm run test:before-push`
@@ -135,10 +186,16 @@ These must hold at every commit, not just at the end:
 ## Mechanical guardrails
 
 - The hooks live under `src/features/**`, so the **Phase 4 D5 write-path lint
-  rule already applies to them** — they cannot call `localStorage.setItem`
-  directly. This is the mechanical enforcement that the extraction does not
-  quietly reintroduce a second write path. Verify once with a deliberate trial
-  violation, then revert it.
+  rule applies to them** — they cannot call `localStorage.setItem` directly. This
+  is the mechanical enforcement that the extraction does not quietly reintroduce
+  a second write path. Verify once with a deliberate trial violation, then revert
+  it.
+
+  > **Corrected 2026-07-26:** this bullet previously stated the D5 rule "already
+  > applies". It did not — the rule was never implemented in Phase 4 (see
+  > `phase-04-domain-stores.md` §CORRECTION). It is delivered by the **D5 ratchet
+  > prerequisite commit** below, which must land before commit 1 of this phase.
+  > This phase's exit criterion 6 depends on it.
 - `npm run test:boundaries` must stay green — `features/` may not import from
   `app/`.
 - Any guardrail assertion pinned to `appSource` whose subject moves must be

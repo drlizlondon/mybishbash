@@ -373,7 +373,60 @@ cards debounce), reducer test matrix (D3), a regression test that
       in App; `mergeEntitiesById`/`normalizeSharedState` untouched;
       two-login smoke on staging preview shows profile round-trip.
 
+## CORRECTION — Phase 4 was closed prematurely (2026-07-26, same day)
+
+**The closure below (commit `b732e8c`) was premature and is corrected here rather
+than rewritten.** It stands as written; this section supersedes it on one point.
+
+**What was wrong.** Phase 4's **D5 write-path lint rule was never implemented.**
+`eslint.config.js` contains no `no-restricted-syntax` block, and no Phase 4
+commit ever touched that file (`git log 4c42858..b732e8c -- eslint.config.js` is
+empty). The planned commit 13, `Enforce single local write path; close Phase 4`,
+does not exist in history. Closing commit `b732e8c` is **docs-only** — 132 lines
+across two documents, zero source files.
+
+**What this means for the phase's stated objective.** Objective 2 of this packet
+is "Single local write path… Lint enforces that features/components never touch
+`localStorage` directly." **The first half landed; the second did not.** Every
+domain-state persistence call did move inside store actions (commits 2, 4, 6) —
+that work is real and stands. But the enforcement is currently *textual*: a
+document saying features must not write to `localStorage`, with no mechanism
+stopping them. That is precisely the failure shape the planning doctrine names
+in §1.5 — a constraint a model can satisfy while defeating its purpose.
+
+**Root cause of the error.** Commit 13 was treated as *wholly* superseded by the
+closure when only its **byte-comparison portion** had been replaced. Commit 13
+carried two deliverables — the localStorage byte-comparison verification and the
+D5 lint rule — and the closure reasoning was conducted entirely in terms of the
+R2 line-count argument. The second deliverable was dropped without ever being
+considered. Recorded here because the mistake is instructive: a superseded commit
+must be enumerated deliverable-by-deliverable, not dismissed as a unit.
+
+**Status of criterion 6** (`npm run lint` fails on a deliberate trial
+`localStorage.setItem` in a feature file): **REOPENED, not waived.** This is
+deliberately different from R2 criterion 1, which was waived on measured
+evidence that its target was unreachable. Criterion 6 is reachable; it simply was
+not done.
+
+**Operational status.** Phase 4 **remains closed for the completed store
+migrations** — `settingsStore`, `packsStore`, `cardsStore`, `eventsStore`, the
+launch-session reducer and its coverage gate, and the de-prop-drilling commits
+are all complete, verified, and are not reopened. **The enforcement follow-up
+must land before Phase 4b implementation resumes.** It is scoped as a narrow
+ratchet (block new violations, enumerate existing ones as classified debt) —
+see the D5 ratchet commit. Relocating existing violations is explicitly NOT part
+of that commit and belongs to its own packet.
+
+**Discovered by** the Phase 4b executor, which stopped before writing any code
+because the packet's mechanical-guardrails section asserts the D5 rule "already
+applies" to the new hooks. It does not, and 4b exit criterion 6 was therefore
+unsatisfiable as written.
+
 ## Phase 4 closure — COMPLETE with criterion 1 waived (2026-07-26)
+
+> **Superseded in part — read the CORRECTION section above first.** This section
+> understated one item: criterion 6 (D5 write-path lint enforcement) was not met
+> at the time of writing and is reopened, not waived.
 
 **Closing commits:** `85f5286` (launcher hardening), `a4357f7` (Home/log
 containers), `382379d` (Overlay store callbacks). Working tree clean.

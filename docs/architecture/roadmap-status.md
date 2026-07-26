@@ -57,7 +57,14 @@ Update this file in the same commit that changes a phase's status.
   800 **and App.jsx < 1,600**, landing below the original 3,000 one phase
   later. See `phase-03-feature-modules.md` §R1.
 
-### Phase 4 — Domain stores & single write path — **COMPLETE 2026-07-26**
+### Phase 4 — Domain stores & single write path — **COMPLETE for store migrations; D5 ENFORCEMENT REOPENED 2026-07-26**
+- ⚠️ **Correction:** Phase 4 was closed prematurely. The D5 write-path lint rule
+  was never implemented (planned commit 13 does not exist; closing commit
+  `b732e8c` is docs-only). Objective 2's enforcement half is unmet — the
+  centralised write paths landed, the mechanical guard did not. **Criterion 6 is
+  reopened, not waived**, and its ratchet commit must land before Phase 4b
+  implementation resumes. Store migrations are NOT reopened. See
+  `phase-04-domain-stores.md` §CORRECTION.
 - **Entry:** Phase 3 complete. Scope note: only shared/persistent domain state
   enters stores — local transient UI state stays in components.
 - **Exit as amended:** store actions are the only local-persistence writers
