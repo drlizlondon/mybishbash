@@ -408,6 +408,59 @@ deliberately different from R2 criterion 1, which was waived on measured
 evidence that its target was unreachable. Criterion 6 is reachable; it simply was
 not done.
 
+> **RESOLVED 2026-07-26 — criterion 6 is now MET.** The D5 ratchet landed in
+> `eslint.config.js` as a `no-restricted-syntax` block scoped to
+> `src/features/**`, `src/components/**`, `src/editing/**` and `src/App.jsx`.
+> Details and the debt inventory are in §"D5 ratchet — delivered" below.
+
+### D5 ratchet — delivered (2026-07-26)
+
+**Shape.** Two esquery selectors match `localStorage.{setItem,removeItem,clear}`
+in both the bare and `window.`-qualified forms, applied to every scoped file with
+no exceptions. Per-file exception blocks then re-declare the same rule with
+`:not(...)` fragments keyed to **one exact file and one exact storage key**.
+There are no directory-wide, wildcard or whole-file exemptions.
+
+**Consequences of that shape**, all demonstrated:
+- a new write in any scoped file fails, *including inside an excepted file*;
+- copying an existing write to another file fails — the exception does not travel;
+- deleting an exception while its legacy write remains fails, proving every
+  exception is load-bearing rather than blanket cover;
+- retiring a debt item is a **one-line deletion** from the `D5_EXCEPTIONS` table.
+
+**Known limit** (finest granularity ESLint selectors permit): duplicating an
+already-excepted key *within its own file* is not caught. Cross-file copying,
+which is the propagation risk that matters, is.
+
+**Scope note.** `src/App.jsx` was brought into scope now rather than "after the
+App shrink" as D5 originally staged it. Deferring it would have left the largest
+file in the repo as an uncovered copy target, defeating the ratchet's purpose.
+This is strictly stricter than D5 as written; its 13 sites are enumerated below.
+
+**Debt inventory — 26 sites, none relocated by this commit.**
+
+| File | Key | Sites | Class |
+|---|---|---|---|
+| `features/launcher/launchSessionStorage.js` | `LAUNCH_SESSION_STORAGE_KEY` | 1 | AUTHORISED |
+| `features/launcher/commitmentDebug.js` | `"mybishbash.commitmentDebug.v1"` | 1 | DIAGNOSTIC |
+| `features/launcher/launchDebug.js` | `"bishbash.launchDebug.v1"` | 1 | DIAGNOSTIC |
+| `features/hq/HQPanel.jsx` | `HQ_VIEW_STORAGE_KEY` | 1 | ADMIN |
+| `features/explore/ExplorePanel.jsx` | `PREMIUM_INTEREST_KEY` | 1 | **DOMAIN-DEBT** |
+| `features/marketing/EarlyAccessPage.jsx` | `WAITLIST_SOURCE_STORAGE_KEY` | 1 | MARKETING |
+| `features/onboarding/Onboarding.jsx` | `PROTECTED_APP_SETUP_PENDING_KEY` | 2 | **DOMAIN-DEBT** |
+| `editing/ContentEditContext.jsx` | `storageKey`, `"mybishbash.editPanelPosition.v1"` | 5 | UI-DRAFT |
+| `App.jsx` | `SIGNUP_ONBOARDING_PENDING_KEY` | 2 | **DOMAIN-DEBT** |
+| `App.jsx` | `key` (demo-reset purge loops) | 2 | TEST-FLAG |
+| `App.jsx` | `MYBISHBASH_DEMO_MODE` / `_E2E_MODE` / `_E2E_TESTER_MODE` | 8 | TEST-FLAG |
+| `App.jsx` | `"mybishbash.setup-complete.v1"`, `"mybishbash.profile.v1"` | 2 | TEST-FLAG |
+| `App.jsx` | `"mybishbash.pending-launcher-install.v1"` | 1 | **DOMAIN-DEBT** |
+
+Only the four **DOMAIN-DEBT** rows are genuine unmet obligations of D5's "single
+local write path"; they are owed store actions or a persistence adapter and are
+the scope of a future migration packet. DIAGNOSTIC, UI-DRAFT, ADMIN, MARKETING
+and TEST-FLAG rows are not domain state and may reasonably remain, but stay
+enumerated so they cannot spread.
+
 **Operational status.** Phase 4 **remains closed for the completed store
 migrations** — `settingsStore`, `packsStore`, `cardsStore`, `eventsStore`, the
 launch-session reducer and its coverage gate, and the de-prop-drilling commits
@@ -426,7 +479,9 @@ unsatisfiable as written.
 
 > **Superseded in part — read the CORRECTION section above first.** This section
 > understated one item: criterion 6 (D5 write-path lint enforcement) was not met
-> at the time of writing and is reopened, not waived.
+> at the time of writing and was reopened, not waived. It was subsequently
+> **delivered by the D5 ratchet commit and now reads met** — see
+> §"D5 ratchet — delivered" above.
 
 **Closing commits:** `85f5286` (launcher hardening), `a4357f7` (Home/log
 containers), `382379d` (Overlay store callbacks). Working tree clean.
