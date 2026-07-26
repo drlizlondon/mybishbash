@@ -6216,7 +6216,6 @@ function App() {
           route={route}
           launchSession={effectiveLaunchSession}
           version={activeOverlayVersion}
-          timezone={profile.timezone}
           isOffline={isOffline}
           onRetryConnection={() => {
             setIsOffline(false);
@@ -6250,7 +6249,6 @@ function App() {
           onCommitmentEncouragementAction={handleCommitmentEncouragementAction}
           onCommitmentReviewAction={handleCommitmentReviewAction}
           onCreateCard={openCardComposerFromCurrentRoute}
-          actionCards={actionCards}
           onAcceptActionCard={(card) => {
             const nextStep = getNextFakeLauncherStepAfterActionCard();
             const nextOverlay = {

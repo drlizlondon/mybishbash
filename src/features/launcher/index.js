@@ -1,4 +1,4 @@
-export { default as OverlayHost } from "./OverlayHost";
+export { default as OverlayHost } from "./OverlayScreen";
 export { default as ActiveProtectedAppShortcut } from "./ActiveProtectedAppShortcut";
 export { default as ContinueToAppCard } from "./ContinueToAppCard";
 export { default as ActionButton } from "./ActionButton";
