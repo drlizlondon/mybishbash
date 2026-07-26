@@ -353,8 +353,8 @@ cards debounce), reducer test matrix (D3), a regression test that
 
 ## Acceptance criteria
 
-- [ ] **Local:** full gate green; `App()` < 800 lines and App.jsx < 1,600
-      (report both); zero `useState` in App for D1-moved fields; the eleven
+- [ ] **Local:** full gate green; the **amended R2 size criteria** below are met
+      (report the measured numbers); zero `useState` in App for D1-moved fields; the eleven
       save effects and `cardSaveTimerRef` gone; `npm run lint` fails on a
       deliberate trial `localStorage.setItem` in a feature file (verify once,
       then revert the trial).
@@ -373,6 +373,39 @@ cards debounce), reducer test matrix (D3), a regression test that
       in App; `mergeEntitiesById`/`normalizeSharedState` untouched;
       two-login smoke on staging preview shows profile round-trip.
 
+## Ruling R2 — the `App() < 800` exit criterion is replaced (2026-07-26)
+
+**Superseded:** `App() < 800 lines` / `App.jsx < 1,600`. Those numbers were
+written pre-Phase-3 and do not survive measurement. Measured at Phase 4
+commit 8: `App()` = **5,471 lines**, and D4's *must-stay* residue alone —
+launcher engine (583: `selectLauncherActivationCard` 187, `openDestinationApp`
+119, `handleRevealCompletion` 120, `renderInterceptionDecision` 72,
+`handleFakeLauncherLaunch` 36, `scheduleNativeSchemeFallback` 27,
+`beginInterceptionFlow` 22) plus the launch-decision effect (379) — is **962
+lines, already over the old target** before the sync bridge (~180), the auth
+gate ladder (~93), or the main JSX return (597). The target was always a proxy
+for "the launcher engine does not live in `App()`"; the engine's extraction is
+a phase, not a bullet point.
+
+**Phase 4 now exits on all five of:**
+
+1. `App()` **< 2,600 lines** (report the measured count).
+2. **No avoidable domain-state ownership remains in `App`** — every D1-classified
+   field lives in its store; anything still owned by `App` is named, with the
+   reason it cannot move yet.
+3. **No new prop-drilling paths are introduced** — feature containers read stores
+   directly; a de-prop-drilling commit must not trade one drilled prop for another.
+4. **Launcher-critical behaviour remains in place** unless moved under a
+   separately approved extraction plan.
+5. **The remaining launcher engine is measured and documented** as explicit
+   follow-on work (per-section line counts + responsibility), feeding the
+   launcher-engine extraction phase.
+
+**Standing prohibition:** do not move launcher-critical code merely to satisfy a
+line target. If a number can only be reached by relocating the engine, the
+sync bridge, or guardrail-pinned subjects, report the measured shape instead —
+that is the packet's own rollback instruction, not a failure of the executor.
+
 ## Rollback criteria
 
 Revert newest-first. Triggers: any non-baseline e2e failing twice on one
@@ -381,8 +414,8 @@ comparison script diff is non-empty); cloud-save regression on staging
 (`client_errors` spike, or the cloud-save effect firing with stale values —
 watch for it specifically after commits 5–6); reducer coverage gate failing
 after a legitimate change (means the reducer missed a transition — STOP,
-don't lower the threshold); `App()` cannot reach < 800 without moving
-launch-critical code (report instead of forcing). Store state is in-memory;
+don't lower the threshold); `App()` cannot reach the Ruling R2 target without
+moving launch-critical code (report instead of forcing). Store state is in-memory;
 persistence format is unchanged throughout — rollback at any commit is purely
 git with no data migration.
 
