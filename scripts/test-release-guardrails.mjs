@@ -7,6 +7,7 @@ import { getCoverModel } from "../src/lib/generatedCover.js";
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const onboardingSource = await readFile(new URL("../src/features/onboarding/Onboarding.jsx", import.meta.url), "utf8");
 const logPanelSource = await readFile(new URL("../src/components/LogPanel.jsx", import.meta.url), "utf8");
+const logScreenSource = await readFile(new URL("../src/features/log/LogScreen.jsx", import.meta.url), "utf8");
 const downloadSource = await readFile(new URL("../src/features/marketing/DownloadPage.jsx", import.meta.url), "utf8");
 const exploreSource = await readFile(new URL("../src/features/explore/ExplorePanel.jsx", import.meta.url), "utf8");
 const generatedCoverSource = await readFile(new URL("../src/GeneratedPackCover.jsx", import.meta.url), "utf8");
@@ -93,7 +94,10 @@ assertNoMatch("public service worker has no production console.log", serviceWork
 assertNoMatch("LogPanel does not import recharts on the app critical path", logPanelSource, /from ["']recharts["']|BarChart|ResponsiveContainer|XAxis|YAxis|Tooltip/);
 assertMatch("main app screens have memo boundaries", appSource, /const MemoHomePanel = memo\(HomePanel\);[\s\S]{0,260}const MemoAppsPanel = memo\(AppsPanel\);[\s\S]{0,260}const MemoStandardLibraryPanel = memo\(StandardLibraryPanel\);[\s\S]{0,260}const MemoLogPanel = memo\(LogPanel\);[\s\S]{0,260}const MemoExplorePanel = memo\(ExplorePanel\);[\s\S]{0,260}const MemoOverlay = memo\(Overlay\);/);
 assertNoMatch("App render uses memoized main screens", appSource, /<HomePanel(?:\s|\/?>)|<AppsPanel(?:\s|\/?>)|<StandardLibraryPanel(?:\s|\/?>)|<LogPanel(?:\s|\/?>)|<ExplorePanel(?:\s|\/?>)|<Overlay(?:\s|\/?>)/);
-assertMatch("Log weekly shift count is memoized", appSource, /const weeklyShiftCount = useMemo\(\(\) => getWeeklyShiftCount\(events\), \[events\]\);/);
+// Re-pointed (Phase 3 R7): the log screen's store container owns this
+// derivation now that App no longer drills the event log into LogPanel. Same
+// assertion, same strength, new home — features/log/LogScreen.jsx.
+assertMatch("Log weekly shift count is memoized", logScreenSource, /const weeklyShiftCount = useMemo\(\(\) => getWeeklyShiftCount\(events\), \[events\]\);/);
 assertMatch("Apps panel clock is isolated below its memo boundary", appsPanelSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
 assertMatch("Apps panel clock owns its live pause interval", appsPanelSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
 

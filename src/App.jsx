@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LogPanel } from "./components/LogPanel";
+import { LogPanel } from "./features/log";
 import { LogGlyph } from "./components/Glyphs";
 import { BrandMark } from "./components/BrandMark";
 import {
@@ -27,7 +27,6 @@ import {
 } from "./storage";
 import {
   createEventRecord,
-  getStartOfWeek,
   loadEventLog,
   mergeEventsById,
   processEventQueue,
@@ -495,24 +494,6 @@ function getInstallUrl(path) {
 
 function isMeaningfulEvent(event) {
   return event.event_type !== "intercept_card_viewed";
-}
-
-function isRecentMomentEvent(event) {
-  return [
-    "bash_done",
-    "bash_do_now",
-    "intercept_do_something_else",
-    "intercept_continue_to_app",
-  ].includes(event.event_type);
-}
-
-function getWeeklyShiftCount(events, now = new Date()) {
-  const weekStart = getStartOfWeek(now).getTime();
-  const shiftTypes = new Set(["bash_done", "bash_do_now", "intercept_do_something_else"]);
-  return events.filter((event) => {
-    if (!shiftTypes.has(event.event_type)) return false;
-    return new Date(event.created_at).getTime() >= weekStart;
-  }).length;
 }
 
 
@@ -5677,10 +5658,6 @@ function App() {
 
     return count;
   }, [cards, profile.timezone]);
-  const recentMeaningfulEvents = useMemo(
-    () => events.filter(isRecentMomentEvent).slice(0, 5),
-    [events],
-  );
   const visibleLibraryPacks = useMemo(
     () => {
       const databaseSourceKeys = new Set(globalPacks.map((pack) => pack.sourceKey).filter(Boolean));
@@ -5714,13 +5691,6 @@ function App() {
       return getTodayKey(new Date(event.created_at), profile.timezone) === todayKey;
     }).length;
   }, [events, profile.timezone]);
-  const logEventsForPanel = useMemo(() => {
-    if (logFilter === "intercepts") {
-      return recentMeaningfulEvents.filter((event) => event.event_type.startsWith("intercept_"));
-    }
-    return recentMeaningfulEvents;
-  }, [logFilter, recentMeaningfulEvents]);
-  const weeklyShiftCount = useMemo(() => getWeeklyShiftCount(events), [events]);
   const interruptionPacks = useMemo(
     () =>
       Array.from(new Set([
@@ -5884,10 +5854,6 @@ function App() {
                   />
                 ) : (
                   <MemoHomePanel
-                    cards={cards}
-                    events={events}
-                    timezone={profile.timezone}
-                    homeScreenVersions={homeScreenVersions}
                     pendingOnboardingShortcuts={pendingOnboardingShortcuts}
                     onboardingSelectedAppSetup={onboardingSelectedAppSetup}
                     activationChecklistItems={activationChecklistItems}
@@ -5995,10 +5961,6 @@ function App() {
 
               {activeTab === "log" ? (
                 <MemoLogPanel
-                  events={logEventsForPanel}
-                  allEvents={events}
-                  timezone={profile.timezone}
-                  weeklyShiftCount={weeklyShiftCount}
                   filter={logFilter}
                   onShowSummary={showMorningSummaryNow}
                 />
