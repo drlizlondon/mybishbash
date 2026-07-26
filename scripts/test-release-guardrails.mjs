@@ -130,7 +130,12 @@ assertNoMatch("old weighted launcher selector is not used by the app", appSource
 assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
 assertMatch("App filters launch selection to non-commitment cards", appSource, /function getLaunchPersonalCardPool\(cards = \[\]\) \{[\s\S]{0,220}!isCommitmentCard\(card\)[\s\S]{0,120}cardKind/);
 assertMatch("App uses Personal Card launch pool for launcher decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedSelectionCards\),[\s\S]{0,500}timezone: profile\.timezone/);
-assertMatch("App uses Personal Card launch pool for home decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedHomeCards\),[\s\S]{0,500}events,/);
+// Re-pointed (Phase 3 R7): the home decision reads the event log non-reactively
+// (getEventsStore().getState().events) so the launch-decision effect cannot
+// re-trigger itself by logging launcher events. The assertion keeps both
+// load-bearing halves — the Personal Card launch pool AND an events argument.
+assertMatch("App uses Personal Card launch pool for home decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedHomeCards\),[\s\S]{0,500}events: getEventsStore\(\)\.getState\(\)\.events,/);
+assertNoMatch("home launch decision does not depend reactively on the event log", appSource, /globalInterruptionMode, events, authReady/);
 assertNoMatch("App has no legacy selector call sites", appSource, /selectPersonalFirstLauncherCard\(\{/);
 assertNoMatch("App has no manual pack card randomisation path", appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);

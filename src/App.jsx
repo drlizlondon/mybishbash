@@ -229,7 +229,7 @@ import {
 } from "./stores/settingsStore";
 import { getPacksActions, usePacksStore } from "./stores/packsStore";
 import { getCardsActions, useCardsStore } from "./stores/cardsStore";
-import { getEventsActions, useEventsStore } from "./stores/eventsStore";
+import { getEventsActions, getEventsStore, useEventsStore } from "./stores/eventsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
@@ -2885,7 +2885,7 @@ function App() {
     if (isHomeRoute && shouldLaunchOverlay) {
       const todayKey = getTodayKey(new Date(), profile.timezone);
       if (shouldAutoShowMorningSummary({ timezone: profile.timezone, seenDateKey: todayKey })) {
-        const summary = buildMorningSummary(events, {
+        const summary = buildMorningSummary(getEventsStore().getState().events, {
           dateKey: getPreviousDateKey(new Date(), profile.timezone),
           timezone: profile.timezone,
         });
@@ -2931,7 +2931,7 @@ function App() {
       const normalizedHomeCards = normalizeCards(cards, homeNow, profile.timezone);
       const homeDecision = selectEligibleCard({
         cards: getLaunchPersonalCardPool(normalizedHomeCards),
-        events,
+        events: getEventsStore().getState().events,
         timezone: profile.timezone,
       });
       const selected = homeDecision.selected;
@@ -2999,7 +2999,13 @@ function App() {
     }
 
     setOverlay((current) => (current?.type === "custom-pack-preview" ? current : null));
-  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, hiddenPackCardIdsCompat, globalInterruptionMode, events, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent, e2eMode]);
+    // `events` is deliberately NOT a dependency: this effect writes events
+    // (beginInterceptionFlow -> logLauncherEvent -> logEvent -> the eventsStore
+    // append) from inside its own body, so depending on them made it
+    // self-triggering. Its two decision points read the log non-reactively via
+    // getEventsStore().getState().events instead — a snapshot input, not a
+    // re-render trigger. Guarded by tests/e2e/launch-decision-loop.spec.ts.
+  }, [route, setupComplete, homeScreenVersions, launcherBehaviorSettings, cardPacks, cards, profile.timezone, shouldLaunchOverlay, launcherContext, hiddenPackCardIdsCompat, globalInterruptionMode, authReady, session, syncStatus, resumeLaunchNonce, launcherDataWaitExpired, testerStatus?.is_tester, overlay?.type, overlay?.versionId, overlay?.cardId, overlay?.launchSource, logLauncherEvent, e2eMode]);
 
   function navigateTo(path, { replace = false } = {}) {
     const normalized = normalizeRoutePath(path);
