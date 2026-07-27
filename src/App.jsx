@@ -186,6 +186,7 @@ import {
 } from "./features/launcher/overlayBuilders";
 import { logCommitmentDebug } from "./features/launcher/commitmentDebug";
 import { useCardActions } from "./features/cards/useCardActions";
+import { useCommitmentActions } from "./features/commitments/useCommitmentActions";
 import { debugLaunch } from "./features/launcher/launchDebug";
 import {
   OverlayHost as Overlay,
@@ -3671,228 +3672,17 @@ function App() {
     navigateTo,
   });
 
-  function handleCommitmentAction(action) {
-    if (!overlay || !["reveal", "commitment-motivation"].includes(overlay.type)) return;
-
-    const activeCard = cards.find((card) => card.id === overlay.cardId);
-    if (!activeCard || !isCommitmentCard(activeCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const savedMotivation = String(activeCard.commitmentReason ?? "").trim();
-    if (action === "decline" && overlay.type === "reveal" && savedMotivation) {
-      const activation = interceptActivationRef.current;
-      const activationKey = overlay?.activationKey || activation?.activationKey || Date.now().toString();
-      const nextOverlay = buildCommitmentMotivationOverlay(
-        activeCard.id,
-        overlay?.launchSource === "fake_launcher" ? overlay.versionId : null,
-        activationKey
-      );
-      logCommitmentDebug("showing commitment motivation before final decline", {
-        cardId: activeCard.id,
-        commitmentText: activeCard.promptText,
-      });
-      setOverlay(nextOverlay);
-      return;
-    }
-
-    const now = new Date();
-    const todayKey = getTodayKey(now, profile.timezone);
-    const committed = action === "commit" || action === "commit_after_all";
-    const updatedCard = {
-      ...activeCard,
-      statusToday: "doneToday",
-      doneDate: todayKey,
-      lastShownAt: now.toISOString(),
-      notYetUntil: null,
-      updatedAt: now.toISOString(),
-      commitmentStatusToday: committed ? "made" : "declined",
-      commitmentLifecycleStatus: committed ? "active" : "declined",
-      commitmentDecisionDate: todayKey,
-      commitmentDecisionAt: now.toISOString(),
-      commitmentCheckInPendingDate: committed && activeCard.commitmentCheckInEnabled ? todayKey : null,
-      commitmentCheckInShownDate: null,
-      commitmentCheckInResponse: null,
-      commitmentCheckInResponseDate: null,
-      commitmentCheckInResponseAt: null,
-      commitmentEncouragementRequestedDate: null,
-      commitmentEncouragementCompletedDate: null,
-      commitmentClosedEarlyDate: null,
-      commitmentReviewDueDate: null,
-      commitmentReviewResponse: null,
-      commitmentReviewResponseDate: null,
-      commitmentReviewResponseAt: null,
-      commitmentFinalOutcome: null,
-    };
-    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
-    setCards(cardsAfterAction);
-
-    const eventType = committed ? "commitment_made" : "commitment_declined";
-    void logEvent({
-      event_type: eventType,
-      source_type: "personal",
-      card_source: "personal",
-      bash_id: activeCard.id,
-      bash_title: activeCard.promptText,
-      card_id: activeCard.id,
-      card_title: "Today’s Commitment",
-      card_text: activeCard.promptText,
-      action_taken: committed ? "committed" : "declined",
-      metadata: {
-        cardKind: "commitment",
-        reason: activeCard.commitmentReason ?? "",
-        decisionSource: action,
-        frequency: activeCard.frequency,
-        timingWindows: activeCard.timingWindows,
-      },
-    });
-    void logEvent({
-      event_type: CARD_EVENT_TYPES.COMPLETED,
-      source_type: "personal",
-      card_source: "personal",
-      bash_id: activeCard.id,
-      bash_title: activeCard.promptText,
-      card_id: activeCard.id,
-      card_title: "Today’s Commitment",
-      card_text: activeCard.promptText,
-      action_taken: committed ? "committed" : "declined",
-      metadata: {
-        legacyEventType: eventType,
-        cardKind: "commitment",
-        surface: getCardSelectionSurfaceForOverlay(overlay),
-        decisionSource: action,
-        frequency: activeCard.frequency,
-        timingWindows: activeCard.timingWindows,
-        origin: overlay.origin ?? null,
-        launchSource: overlay.launchSource ?? null,
-        activationKey: overlay?.activationKey ?? null,
-      },
-    });
-
-    if (action === "commit_after_all") {
-      logCommitmentDebug("user committed after the second screen", {
-        cardId: activeCard.id,
-        commitmentText: activeCard.promptText,
-      });
-    } else {
-      logCommitmentDebug(committed ? "user committed" : "user declined commitment", {
-        cardId: activeCard.id,
-        commitmentText: activeCard.promptText,
-      });
-    }
-
-    handleRevealCompletion({
-      cardsOverride: cardsAfterAction,
-      completedCardId: activeCard.id,
-      confirmationMessage: getCommitmentAcknowledgementMessage({
-        committed,
-        checkInEnabled: Boolean(activeCard.commitmentCheckInEnabled),
-      }),
-      confirmationActionLabel: "Continue",
-    });
-  }
-
-  function handleCommitmentCheckInAction(response) {
-    if (!overlay || overlay.type !== "reveal") return;
-
-    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
-    if (!activeCard || !isCommitmentCheckInCard(activeCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
-    if (!parentCard || !isCommitmentCard(parentCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const now = new Date();
-    const todayKey = getTodayKey(now, profile.timezone);
-    const closesEarly = response === "closed_early";
-    const needsEncouragement = response === "somewhat_on_track";
-    const updatedCard = {
-      ...parentCard,
-      lastShownAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      commitmentCheckInResponse: response,
-      commitmentCheckInResponseDate: todayKey,
-      commitmentCheckInResponseAt: now.toISOString(),
-      commitmentCheckInShownDate: todayKey,
-      commitmentCheckInPendingDate: null,
-      commitmentLifecycleStatus: closesEarly ? "closed_early" : "active",
-      commitmentEncouragementRequestedDate: needsEncouragement ? todayKey : null,
-      commitmentEncouragementCompletedDate: needsEncouragement ? null : parentCard.commitmentEncouragementCompletedDate ?? null,
-      commitmentClosedEarlyDate: closesEarly ? todayKey : null,
-      commitmentReviewDueDate: closesEarly ? null : todayKey,
-    };
-    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
-    setCards(cardsAfterAction);
-
-    void logEvent({
-      event_type: "commitment_check_in",
-      source_type: "personal",
-      card_source: "personal",
-      bash_id: parentCard.id,
-      bash_title: parentCard.promptText,
-      card_id: activeCard.id,
-      card_title: "Check-in",
-      card_text: parentCard.promptText,
-      action_taken: response,
-      metadata: {
-        cardKind: "commitment_check_in",
-        parentCommitmentCardId: parentCard.id,
-        checkInTime: parentCard.commitmentCheckInTime ?? "",
-        response,
-        phase: "in_progress",
-      },
-    });
-    void logEvent({
-      event_type: CARD_EVENT_TYPES.COMPLETED,
-      source_type: "personal",
-      card_source: "personal",
-      bash_id: parentCard.id,
-      bash_title: parentCard.promptText,
-      card_id: activeCard.id,
-      card_title: "Check-in",
-      card_text: parentCard.promptText,
-      action_taken: response,
-      metadata: {
-        legacyEventType: "commitment_check_in",
-        cardKind: "commitment_check_in",
-        surface: getCardSelectionSurfaceForOverlay(overlay),
-        parentCommitmentCardId: parentCard.id,
-        checkInTime: parentCard.commitmentCheckInTime ?? "",
-        response,
-        phase: "in_progress",
-        origin: overlay.origin ?? null,
-        launchSource: overlay.launchSource ?? null,
-        activationKey: overlay?.activationKey ?? null,
-      },
-    });
-
-    if (needsEncouragement) {
-      const encouragementCard = buildEligibleCommitmentLifecycleCards(cardsAfterAction, now, profile.timezone)
-        .find((candidate) => candidate.parentCommitmentCardId === parentCard.id && isCommitmentEncouragementCard(candidate));
-      if (encouragementCard) {
-        setOverlay({
-          ...overlay,
-          type: "reveal",
-          cardId: encouragementCard.id,
-          phase: null,
-        });
-        return;
-      }
-    }
-
-    handleRevealCompletion({
-      cardsOverride: cardsAfterAction,
-      completedCardId: activeCard.id,
-      confirmationMessage: getCommitmentCheckInOutcomeMessage(response),
-      confirmationActionLabel: "Continue",
-    });
-  }
+  const { handleCommitmentAction, handleCommitmentCheckInAction } = useCommitmentActions({
+    cards,
+    setCards,
+    overlay,
+    setOverlay,
+    profile,
+    logEvent,
+    handleRevealCompletion,
+    interceptActivationRef,
+    resolveRevealCard,
+  });
 
   function handleCommitmentEncouragementAction() {
     if (!overlay || overlay.type !== "reveal") return;
