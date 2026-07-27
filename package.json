@@ -28,6 +28,7 @@
     "test:launcher-qa": "playwright test tests/e2e/launcher-flow-trace.spec.ts",
     "test:prelaunch-interactions": "playwright test tests/e2e/library-bottom-nav.spec.ts",
     "test:before-push": "node scripts/test-before-push.mjs",
+    "test:localstorage-bytes": "playwright test tests/e2e/localstorage-bytes.spec.ts",
     "test:launcher-exhaustive": "playwright test tests/e2e/launcher-terminal-exhaustive.spec.ts",
     "test:launcher-shell-repeat": "playwright test tests/e2e/launcher-shell-repeat.spec.ts",
     "test:e2e:headed": "playwright test --headed",

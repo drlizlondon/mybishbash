@@ -128,6 +128,13 @@ export default [
       "react-hooks/exhaustive-deps": "off",
     },
   },
+  {
+    // Unit tests call hooks directly, by design — that is what makes the
+    // Phase 4b extraction testable. rules-of-hooks polices render order in
+    // components and has nothing to say about a test harness.
+    files: ["src/**/*.test.{js,jsx}"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
+  },
   // D5 ratchet: the prohibition, applied to every scoped file with no exceptions.
   {
     files: D5_SCOPE,

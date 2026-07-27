@@ -23,6 +23,7 @@ import {
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const cardActionsSource = await readFile(new URL("../src/features/cards/useCardActions.js", import.meta.url), "utf8");
 const overlayHostSource = await readFile(new URL("../src/features/launcher/OverlayHost.jsx", import.meta.url), "utf8");
 const overlayBuildersSource = await readFile(new URL("../src/features/launcher/overlayBuilders.js", import.meta.url), "utf8");
 
@@ -244,7 +245,10 @@ assert.match(appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPers
 assert.doesNotMatch(appSource, /selectPersonalFirstLauncherCard\(\{/);
 assert.doesNotMatch(appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assert.match(appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
-assert.match(appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+// Phase 3 R7 re-point: subject moved to features/cards/useCardActions.js in
+// Phase 4b. assert.doesNotMatch proves it moved rather than being duplicated.
+assert.match(cardActionsSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+assert.doesNotMatch(appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
 assert.match(overlayBuildersSource, /CARD_SELECTION_SURFACES\.SHELL/);
 
 console.log("Launcher flow checks passed");

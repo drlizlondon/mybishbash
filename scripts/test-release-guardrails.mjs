@@ -27,6 +27,7 @@ const hqPackAdoptionMigrationSource = await readFile(new URL("../supabase/migrat
 const routesSource = await readFile(new URL("../src/app/router/routes.js", import.meta.url), "utf8");
 const rootRouterFileSource = await readFile(new URL("../src/app/router/RootRouter.jsx", import.meta.url), "utf8");
 const standardLibraryPanelSource = await readFile(new URL("../src/features/library/StandardLibraryPanel.jsx", import.meta.url), "utf8");
+const cardActionsSource = await readFile(new URL("../src/features/cards/useCardActions.js", import.meta.url), "utf8");
 const libraryListRowSource = await readFile(new URL("../src/features/library/LibraryListRow.jsx", import.meta.url), "utf8");
 const expandableCollectionSource = await readFile(new URL("../src/features/library/ExpandableCollection.jsx", import.meta.url), "utf8");
 const composerSource = await readFile(new URL("../src/features/composer/Composer.jsx", import.meta.url), "utf8");
@@ -144,7 +145,11 @@ assertNoMatch("App has no legacy selector call sites", appSource, /selectPersona
 assertNoMatch("App has no manual pack card randomisation path", appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
 assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);
 assertMatch("canonical card shown events are logged", appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
-assertMatch("canonical card completed and ignored events are logged", appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+// Phase 3 R7 re-point: this assertion's subject moved from App() into
+// features/cards/useCardActions.js in Phase 4b. Re-pointed at the new home,
+// with an assertNoMatch proving it was MOVED and not duplicated.
+assertMatch("canonical card completed and ignored events are logged", cardActionsSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+assertNoMatch("card completed/ignored logging does not remain in App", appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
 assertMatch("Library renders Personal Cards section", standardLibraryPanelSource, /title="Personal Cards"[\s\S]{0,160}Cards you have written for yourself\./);
 assertMatch("Library renders Commitment Cards section", standardLibraryPanelSource, /title="Commitment Cards"[\s\S]{0,160}Promises you've made to yourself\./);
 assertMatch("Library renders Active Packs section", standardLibraryPanelSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
