@@ -15,5 +15,6 @@ export { default as ActionSuccessOverlay } from "./ActionSuccessOverlay";
 export { default as FlowConfirmationOverlay } from "./FlowConfirmationOverlay";
 export { default as CardRevealTemplate, PremiumCardScreen } from "./CardRevealTemplate";
 export * from "./overlayBuilders";
+export * from "./commitmentDebug";
 export * from "./launchSessionStorage";
 export * from "../../domain/launcher/launchSession";
