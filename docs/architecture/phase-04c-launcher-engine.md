@@ -114,6 +114,16 @@ assertions across `test-release-guardrails.mjs`, `test-launcher-flow.mjs` and
 `test-fake-launcher-destinations.mjs` are pinned to `appSource` for engine
 subjects. Enumerate them by grep before moving anything.
 
+> **Grep for BODIES, not just names — learned in Phase 4b (2026-07-27).** 4b's
+> packet predicted zero re-points on the strength of a name-grep that returned
+> zero hits. **Two re-points were nonetheless required**:
+> `test-release-guardrails.mjs:147` and `test-launcher-flow.mjs:247` pin the
+> moved code by its **body** (e.g. `/event_type: action === "done" ? .../`),
+> which no name-grep can find. Before moving any function here, grep the six
+> guardrail scripts for distinctive *code fragments* from inside it — string
+> literals, ternaries, property names — not only its identifier. Assume a
+> silent body-pin exists until you have looked for one.
+
 For **every** re-pointed invariant:
 
 - a **positive assertion** against the new source file, and
