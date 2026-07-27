@@ -57,14 +57,19 @@ Update this file in the same commit that changes a phase's status.
   800 **and App.jsx < 1,600**, landing below the original 3,000 one phase
   later. See `phase-03-feature-modules.md` §R1.
 
-### Phase 4 — Domain stores & single write path — **COMPLETE for store migrations; D5 ENFORCEMENT REOPENED 2026-07-26**
-- ⚠️ **Correction:** Phase 4 was closed prematurely. The D5 write-path lint rule
-  was never implemented (planned commit 13 does not exist; closing commit
-  `b732e8c` is docs-only). Objective 2's enforcement half is unmet — the
-  centralised write paths landed, the mechanical guard did not. **Criterion 6 is
-  reopened, not waived**, and its ratchet commit must land before Phase 4b
-  implementation resumes. Store migrations are NOT reopened. See
-  `phase-04-domain-stores.md` §CORRECTION.
+### Phase 4 — Domain stores & single write path — **COMPLETE (D5 enforcement delivered 2026-07-27)**
+- ⚠️ **Correction and resolution:** Phase 4 was closed prematurely — the D5
+  write-path lint rule was never implemented (planned commit 13 does not exist;
+  closing commit `b732e8c` is docs-only). Criterion 6 was **reopened, not
+  waived**, and has since been **met** by the D5 ratchet commit `08e776d`:
+  `no-restricted-syntax` scoped to `src/features/**`, `src/components/**`,
+  `src/editing/**` and `src/App.jsx`, with 26 pre-existing write sites
+  enumerated as classified debt, each exception keyed to one exact file AND one
+  exact storage key. No directory-wide or wildcard exemptions. Proven in both
+  directions: a new/copied write fails, and deleting any single exception line
+  while its legacy write remains also fails. Only four sites are genuine
+  DOMAIN-DEBT owed a store action; relocating them is a separate packet.
+  See `phase-04-domain-stores.md` §"D5 ratchet — delivered".
 - **Entry:** Phase 3 complete. Scope note: only shared/persistent domain state
   enters stores — local transient UI state stays in components.
 - **Exit as amended:** store actions are the only local-persistence writers
@@ -80,11 +85,32 @@ Update this file in the same commit that changes a phase's status.
   JSX return (563), and the launcher engine (586). **The waiver does not make
   that work optional** — it is carried by Phases 4b and 4c.
 
-### Phase 4b — Card & commitment handler extraction — **NOT STARTED**
+### Phase 4b — Card & commitment handler extraction — **COMPLETE 2026-07-27**
 - **Packet:** `docs/architecture/phase-04b-card-handlers.md`
-- **Entry:** Phase 4 complete. **Blocks Phase 5.**
-- **Exit:** the ~690-line handler cluster lives in feature hooks with unit
-  tests; card/commitment localStorage payloads byte-identical.
+- **Entry:** Phase 4 complete, D5 ratchet landed. **Blocked Phase 5; now clear.**
+- **Exit — met.** All eight named handlers (690 measured lines) live in
+  `src/features/cards/useCardActions.js` (4 handlers, 356 lines of handler body)
+  and `src/features/commitments/useCommitmentActions.js` (4 handlers, 334 lines).
+  Zero remain in `App()`, verified by per-symbol grep. Each hook takes an
+  explicit dependency object and closes over nothing in App scope.
+- **Commits:** `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, plus this closure.
+  Prerequisite D5 ratchet: `08e776d`.
+- **Measured:** `App.jsx` 6,383 → 5,725; `App()` 5,404 → 4,746. Against the
+  packet's ≈4,700 prediction the residual is **+46 lines**, accounted for by the
+  two hook call sites (26 lines of explicit dependency object) and the blank-line
+  seams left where the handlers were removed. No extra code was moved to close
+  the gap — the packet declares 4,700 a predicted consequence, not a target.
+- **Tests:** 54 new unit tests (23 + 31), every handler carrying a recorded
+  mutation that makes its test fail. localStorage byte-comparison harness
+  (`tests/e2e/localstorage-bytes.spec.ts` + checked-in baseline) run at every
+  commit: **empty diff throughout**. Full suite twice consecutively, minus the
+  documented `access-gating.spec.ts:88` baseline.
+- **Two R7 re-points were required**, contradicting the packet's prediction of
+  none: `test-release-guardrails.mjs:147` and `test-launcher-flow.mjs:247` pin
+  the moved code by BODY, not by name, so the packet's name-grep could not find
+  them. Both re-pointed with a paired `assertNoMatch`/`doesNotMatch` against
+  `appSource`. **Phase 4c must grep guardrails for handler bodies, not just
+  handler names.**
 
 ### Phase 4c — Launcher-engine extraction — **NOT STARTED**
 - **Packet:** `docs/architecture/phase-04c-launcher-engine.md`

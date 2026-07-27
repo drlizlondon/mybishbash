@@ -241,18 +241,75 @@ Rollback is pure git — no persistence format changes, no data migration.
 
 ## Exit criteria — derived from measured structure
 
-- [ ] All eight named handlers (690 measured lines) live in the two feature
+- [x] All eight named handlers (690 measured lines) live in the two feature
       hooks; **zero** of them remain in `App()`. Verified by grep, per symbol.
-- [ ] `App()` is re-measured and reported. Expected ≈ **4,700** (5,404 − 690, less
-      the hook call sites). **This is a predicted consequence, not a target** — if
-      the measured number differs, report the difference and its cause; do not
-      move additional code to hit it.
-- [ ] Every handler has a unit test, and every unit test has a recorded mutation
-      that makes it fail.
-- [ ] Byte-comparison diff empty at every commit.
-- [ ] Full suite twice consecutively, minus the documented baseline.
-- [ ] Write-path lint rule verified to fire on a trial violation inside the new
-      hooks.
+- [x] `App()` is re-measured and reported. **Measured 4,746** against the ≈4,700
+      prediction: **+46**. Cause: the two hook call sites carry 26 lines of
+      explicit dependency object, plus blank-line seams at the removal sites. No
+      additional code was moved to close the gap.
+- [x] Every handler has a unit test, and every unit test has a recorded mutation
+      that makes it fail. 13 mutations recorded across the five commits.
+- [x] Byte-comparison diff empty at every commit.
+- [x] Full suite twice consecutively, minus the documented baseline.
+- [x] Write-path lint rule verified to fire on a trial violation inside the new
+      hooks — see the closure section below.
+
+## Closure — Phase 4b COMPLETE (2026-07-27)
+
+**Commits:** `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, and this one.
+Prerequisite D5 ratchet: `08e776d`.
+
+**Measured:** `App.jsx` 6,383 → 5,725; `App()` 5,404 → 4,746.
+
+**Three packet/reality mismatches, all recorded rather than adapted to:**
+
+1. **Two R7 re-points were required**, where the packet predicted none. Grepping
+   the six guardrail scripts for the eight handler NAMES did return zero hits,
+   exactly as the packet said. But `test-release-guardrails.mjs:147` and
+   `test-launcher-flow.mjs:247` pin the moved code by its **body**
+   (`/event_type: action === "done" ? CARD_EVENT_TYPES.COMPLETED : .../`), which
+   a name grep cannot find. Both re-pointed at `useCardActions.js` with a paired
+   `assertNoMatch`/`doesNotMatch` against `appSource`. **Phase 4c must grep for
+   handler bodies, not just handler names.**
+
+2. **`handleSaveCard` does not use the 120ms debounce.** The packet asks for a
+   test proving two saves inside the debounce window collapse to one write.
+   handleSaveCard calls `updateCards` → `cardsStore.setCardsAndPersistImmediately`
+   — the immediate path, which *cancels* any pending debounce. The debounce
+   belongs to `setCards`, used by `handleAction` and the commitment handlers, and
+   is already covered at `src/stores/cardsStore.test.js:38`. The invariant is
+   asserted against the mechanism handleSaveCard actually uses.
+
+3. **The check-in, encouragement and review overlays are not reachable through
+   any UI surface the e2e suite can drive.** No spec in the repo drives one
+   positively; they only assert absence from launcher flows. Their payloads are
+   asserted directly, and more precisely, by the unit tests. Inventing a surface
+   to reach them would be a behaviour change, which this phase forbids.
+
+**No handler had to drag route/overlay/launch-flow state.** `overlay`,
+`setOverlay`, `handleRevealCompletion`, `interceptActivationRef` and
+`resolveRevealCard` are **injected** through the dependency object; none of them
+moved. That is the packet's intended design and not the rollback trigger, which
+concerns *relocating* launch state into a card hook.
+
+**Trial-violation proof for the new hooks (D5 exit criterion):** adding
+`window.localStorage.setItem("d5.trial.v1", "1")` inside
+`src/features/cards/useCardActions.js` makes `npm run lint` fail with the D5
+message; reverted.
+
+**Residual `App()` — 4,746 lines by responsibility** (approximate classification
+by top-level construct; overlapping nesting makes these indicative, not exact):
+
+| Responsibility | Lines |
+|---|---|
+| `useMemo` / `useCallback` blocks (incl. the JSX return, which sits inside one) | ~1,755 |
+| remaining function handlers (onboarding/setup, packs/apps/account, interruption cards, auth ladder, `handleRevealCompletion` 120, launcher engine) | ~1,518 |
+| `useEffect` / `useLayoutEffect` blocks (incl. the launch-decision effect and cloud sync bridge) | ~1,127 |
+| glue, early returns, derived consts | ~286 |
+| `useState` / `useRef` / store selector declarations | ~61 |
+
+The two largest named residents remain the **launcher engine** (Phase 4c) and the
+**launch-decision effect + cloud sync bridge** (permanent, by design).
 
 ## Expected residual responsibilities in `App()`
 
