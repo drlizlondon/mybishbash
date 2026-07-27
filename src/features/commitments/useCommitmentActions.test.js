@@ -347,3 +347,193 @@ describe("handleCommitmentCheckInAction", () => {
     }));
   });
 });
+
+describe("handleCommitmentEncouragementAction", () => {
+  function encouragementCard(parentId = "commitment-card") {
+    return {
+      id: "encouragement-card",
+      cardKind: "commitment_encouragement",
+      parentCommitmentCardId: parentId,
+      promptText: "You said you wanted to do this.",
+      dashboardTitle: "Commitment reminder",
+    };
+  }
+
+  function encDeps(overrides = {}) {
+    const parent = commitmentCard({
+      commitmentStatusToday: "made",
+      commitmentLifecycleStatus: "active",
+      commitmentDecisionDate: TODAY,
+      commitmentEncouragementRequestedDate: TODAY,
+      commitmentCheckInEnabled: true,
+      commitmentCheckInTime: "09:00",
+    });
+    const synthetic = encouragementCard();
+    return makeDeps({
+      cards: [parent],
+      overlay: { type: "reveal", cardId: "encouragement-card", origin: "home", launchSource: null, activationKey: "k1" },
+      resolveRevealCard: vi.fn(() => synthetic),
+      ...overrides,
+    });
+  }
+
+  it("ignores non-reveal overlays", () => {
+    const deps = encDeps({ overlay: { type: "action-card", cardId: "encouragement-card" } });
+    useCommitmentActions(deps).handleCommitmentEncouragementAction();
+    expect(deps.setCards).not.toHaveBeenCalled();
+  });
+
+  it("closes the overlay when the parent commitment is missing", () => {
+    const deps = encDeps({ cards: [] });
+    useCommitmentActions(deps).handleCommitmentEncouragementAction();
+    expect(deps.setOverlay).toHaveBeenCalledWith(null);
+    expect(deps.setCards).not.toHaveBeenCalled();
+  });
+
+  it("marks encouragement complete and keeps the commitment active", () => {
+    const deps = encDeps();
+    useCommitmentActions(deps).handleCommitmentEncouragementAction();
+    expect(deps.setCards.mock.calls[0][0][0]).toMatchObject({
+      lastShownAt: NOW,
+      updatedAt: NOW,
+      commitmentEncouragementCompletedDate: TODAY,
+      commitmentLifecycleStatus: "active",
+      commitmentReviewDueDate: TODAY,
+    });
+  });
+
+  it("does not overwrite an already scheduled review date", () => {
+    const deps = encDeps();
+    deps.cards[0].commitmentReviewDueDate = "2026-05-30";
+    useCommitmentActions(deps).handleCommitmentEncouragementAction();
+    expect(deps.setCards.mock.calls[0][0][0].commitmentReviewDueDate).toBe("2026-05-30");
+  });
+
+  it("logs the encouragement event with exact payload", () => {
+    const deps = encDeps();
+    useCommitmentActions(deps).handleCommitmentEncouragementAction();
+    expect(deps.logEvent).toHaveBeenCalledTimes(1);
+    expect(deps.logEvent.mock.calls[0][0]).toEqual({
+      event_type: "commitment_encouragement_completed",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: "commitment-card",
+      bash_title: "go for a walk",
+      card_id: "encouragement-card",
+      card_title: "Commitment reminder",
+      card_text: "You said you wanted to do this.",
+      action_taken: "continued",
+      metadata: {
+        cardKind: "commitment_encouragement",
+        parentCommitmentCardId: "commitment-card",
+        phase: "encouragement",
+      },
+    });
+  });
+
+  it("hands off to reveal completion with the fixed confirmation copy", () => {
+    const deps = encDeps();
+    useCommitmentActions(deps).handleCommitmentEncouragementAction();
+    expect(deps.handleRevealCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      completedCardId: "encouragement-card",
+      confirmationMessage: "Good.\nKeep this with you.",
+      confirmationActionLabel: "Continue",
+    }));
+  });
+});
+
+describe("handleCommitmentReviewAction", () => {
+  function reviewCard(parentId = "commitment-card") {
+    return {
+      id: "review-card",
+      cardKind: "commitment_review",
+      parentCommitmentCardId: parentId,
+      promptText: "go for a walk",
+      dashboardTitle: "Commitment review",
+    };
+  }
+
+  function reviewDeps(overrides = {}) {
+    const parent = commitmentCard({
+      commitmentStatusToday: "made",
+      commitmentLifecycleStatus: "active",
+      commitmentDecisionDate: TODAY,
+      commitmentCheckInEnabled: true,
+      commitmentCheckInTime: "09:00",
+      commitmentCheckInResponse: "on_track",
+      commitmentCheckInResponseDate: TODAY,
+      commitmentReviewDueDate: TODAY,
+    });
+    const synthetic = reviewCard();
+    return makeDeps({
+      cards: [parent],
+      overlay: { type: "reveal", cardId: "review-card", origin: "home", launchSource: null, activationKey: "k1" },
+      resolveRevealCard: vi.fn(() => synthetic),
+      ...overrides,
+    });
+  }
+
+  it("ignores non-reveal overlays", () => {
+    const deps = reviewDeps({ overlay: { type: "action-card", cardId: "review-card" } });
+    useCommitmentActions(deps).handleCommitmentReviewAction("did_it");
+    expect(deps.setCards).not.toHaveBeenCalled();
+  });
+
+  it("closes the overlay when the parent commitment is missing", () => {
+    const deps = reviewDeps({ cards: [] });
+    useCommitmentActions(deps).handleCommitmentReviewAction("did_it");
+    expect(deps.setOverlay).toHaveBeenCalledWith(null);
+    expect(deps.setCards).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["did_it", "completed"],
+    ["nearly_did_it", "partially_completed"],
+    ["didnt_do_it", "not_completed"],
+  ])("maps review response %s to final outcome %s", (response, finalOutcome) => {
+    const deps = reviewDeps();
+    useCommitmentActions(deps).handleCommitmentReviewAction(response);
+    expect(deps.setCards.mock.calls[0][0][0]).toMatchObject({
+      commitmentLifecycleStatus: "reviewed",
+      commitmentReviewResponse: response,
+      commitmentReviewResponseDate: TODAY,
+      commitmentReviewResponseAt: NOW,
+      commitmentFinalOutcome: finalOutcome,
+      lastShownAt: NOW,
+      updatedAt: NOW,
+    });
+  });
+
+  it("logs the review event with exact payload", () => {
+    const deps = reviewDeps();
+    useCommitmentActions(deps).handleCommitmentReviewAction("did_it");
+    expect(deps.logEvent).toHaveBeenCalledTimes(1);
+    expect(deps.logEvent.mock.calls[0][0]).toEqual({
+      event_type: "commitment_review",
+      source_type: "personal",
+      card_source: "personal",
+      bash_id: "commitment-card",
+      bash_title: "go for a walk",
+      card_id: "review-card",
+      card_title: "Commitment review",
+      card_text: "go for a walk",
+      action_taken: "did_it",
+      metadata: {
+        cardKind: "commitment_review",
+        parentCommitmentCardId: "commitment-card",
+        response: "did_it",
+        finalOutcome: "completed",
+        phase: "review",
+      },
+    });
+  });
+
+  it("hands off to reveal completion with the outcome message", () => {
+    const deps = reviewDeps();
+    useCommitmentActions(deps).handleCommitmentReviewAction("did_it");
+    expect(deps.handleRevealCompletion).toHaveBeenCalledWith(expect.objectContaining({
+      completedCardId: "review-card",
+      confirmationActionLabel: "Continue",
+    }));
+  });
+});

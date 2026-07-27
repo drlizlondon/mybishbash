@@ -3672,7 +3672,12 @@ function App() {
     navigateTo,
   });
 
-  const { handleCommitmentAction, handleCommitmentCheckInAction } = useCommitmentActions({
+  const {
+    handleCommitmentAction,
+    handleCommitmentCheckInAction,
+    handleCommitmentEncouragementAction,
+    handleCommitmentReviewAction,
+  } = useCommitmentActions({
     cards,
     setCards,
     overlay,
@@ -3683,121 +3688,6 @@ function App() {
     interceptActivationRef,
     resolveRevealCard,
   });
-
-  function handleCommitmentEncouragementAction() {
-    if (!overlay || overlay.type !== "reveal") return;
-
-    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
-    if (!activeCard || !isCommitmentEncouragementCard(activeCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
-    if (!parentCard || !isCommitmentCard(parentCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const now = new Date();
-    const todayKey = getTodayKey(now, profile.timezone);
-    const updatedCard = {
-      ...parentCard,
-      lastShownAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      commitmentEncouragementCompletedDate: todayKey,
-      commitmentLifecycleStatus: "active",
-      commitmentReviewDueDate: parentCard.commitmentReviewDueDate ?? todayKey,
-    };
-    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
-    setCards(cardsAfterAction);
-
-    void logEvent({
-      event_type: "commitment_encouragement_completed",
-      source_type: "personal",
-      card_source: "personal",
-      bash_id: parentCard.id,
-      bash_title: parentCard.promptText,
-      card_id: activeCard.id,
-      card_title: "Commitment reminder",
-      card_text: activeCard.promptText,
-      action_taken: "continued",
-      metadata: {
-        cardKind: "commitment_encouragement",
-        parentCommitmentCardId: parentCard.id,
-        phase: "encouragement",
-      },
-    });
-
-    handleRevealCompletion({
-      cardsOverride: cardsAfterAction,
-      completedCardId: activeCard.id,
-      confirmationMessage: "Good.\nKeep this with you.",
-      confirmationActionLabel: "Continue",
-    });
-  }
-
-  function handleCommitmentReviewAction(response) {
-    if (!overlay || overlay.type !== "reveal") return;
-
-    const activeCard = resolveRevealCard(cards, overlay.cardId, profile.timezone);
-    if (!activeCard || !isCommitmentReviewCard(activeCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const parentCard = cards.find((card) => card.id === activeCard.parentCommitmentCardId);
-    if (!parentCard || !isCommitmentCard(parentCard)) {
-      setOverlay(null);
-      return;
-    }
-
-    const now = new Date();
-    const todayKey = getTodayKey(now, profile.timezone);
-    const finalOutcome = response === "did_it"
-      ? "completed"
-      : response === "nearly_did_it"
-        ? "partially_completed"
-        : "not_completed";
-    const updatedCard = {
-      ...parentCard,
-      lastShownAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      commitmentLifecycleStatus: "reviewed",
-      commitmentReviewResponse: response,
-      commitmentReviewResponseDate: todayKey,
-      commitmentReviewResponseAt: now.toISOString(),
-      commitmentFinalOutcome: finalOutcome,
-    };
-    const cardsAfterAction = cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
-    setCards(cardsAfterAction);
-
-    void logEvent({
-      event_type: "commitment_review",
-      source_type: "personal",
-      card_source: "personal",
-      bash_id: parentCard.id,
-      bash_title: parentCard.promptText,
-      card_id: activeCard.id,
-      card_title: "Commitment review",
-      card_text: parentCard.promptText,
-      action_taken: response,
-      metadata: {
-        cardKind: "commitment_review",
-        parentCommitmentCardId: parentCard.id,
-        response,
-        finalOutcome,
-        phase: "review",
-      },
-    });
-
-    handleRevealCompletion({
-      cardsOverride: cardsAfterAction,
-      completedCardId: activeCard.id,
-      confirmationMessage: getCommitmentReviewOutcomeMessage(response),
-      confirmationActionLabel: "Continue",
-    });
-  }
 
   function handleDeleteCard(cardId) {
     const now = new Date().toISOString();
