@@ -140,13 +140,51 @@ until you have checked it.
 Additionally: `npm run test:boundaries` green; the Phase 4 D5 write-path lint
 rule applies to the new file.
 
+## GATE — the re-entrancy invariant test comes FIRST (ruling 2026-07-26)
+
+**This is commit 0 and it precedes every extraction commit.** Lizzie's ruling:
+begin with the isolated re-entrancy invariant test *before* extracting any
+launcher function. If the invariant cannot be tested, the extraction does not
+start.
+
+**The required property, stated exactly:** *launcher recovery and destination
+opening cannot execute twice or re-enter for the same launch lifecycle.*
+
+**The test must:**
+- **fail** against a deliberately exposed pre-fix hazard (e.g. one concurrency
+  ref disabled), and
+- **pass** with the current protections in place.
+
+Both directions recorded with commands and outcomes, mutation reverted.
+
+**Do not manufacture a failing test. Do not weaken the invariant. Do not proceed
+on implied coverage alone** — "the launcher specs would probably catch it" is
+exactly the reasoning this gate exists to refuse.
+
+### If the invariant cannot be tested in isolation — STOP before extraction
+
+If testing it would require **materially changing the launcher engine** or
+**introducing production seams that exist solely for the test**, stop and report
+all five of:
+
+1. **Why** the current architecture prevents isolated testing.
+2. **What behaviour is still covered** by the existing launcher specifications.
+3. **What additional seam** would be required.
+4. **Whether introducing that seam is safer** than retaining the engine in
+   `App()`.
+5. **Your revised recommendation for Phase 4c** — including "don't do it" if
+   that is where the evidence points.
+
+A seam added only to make a test possible is a production change with no
+product justification; it may still be the right call, but it is Lizzie's call,
+not the executor's.
+
 ## Required regression tests
 
 - **`openDestinationApp` uniqueness:** a source-shape assertion that exactly one
   destination href assignment exists repo-wide. This must fail if a second is
   introduced anywhere.
-- **Re-entrancy:** a test that a second launch attempt while one is in flight is
-  suppressed — the property the refs guarantee, currently untested in isolation.
+- **Re-entrancy:** the commit-0 gate test above.
 - **Per-function move verification:** `launcher-shell-repeat` and
   `launcher-terminal-exhaustive` after **each function moved**, not once at the
   end. See §Risk for why.
@@ -170,6 +208,12 @@ a mutation does not produce a failure, that is itself the finding.
 Full chain after each commit; the two launcher specs after **each function
 moved**.
 
+0. **The re-entrancy invariant test — GATE, no extraction in this commit.**
+   Per §GATE above: write the isolated test, prove it fails with a concurrency
+   ref disabled and passes with protections intact, revert the mutation. **If it
+   cannot be written without a production seam, STOP and file the five-part
+   report — do not proceed to commit 1.**
+   Commit: `Assert launcher re-entrancy invariant`.
 1. **Scaffold + guardrail sensitivity proof.** Create the hook with the explicit
    dependency object and move `beginInterceptionFlow` (25) only — the smallest,
    with the clearest boundary. Record proof 1 above.
