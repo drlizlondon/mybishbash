@@ -112,7 +112,47 @@ Update this file in the same commit that changes a phase's status.
   `appSource`. **Phase 4c must grep guardrails for handler bodies, not just
   handler names.**
 
-### Phase 4c — Launcher-engine extraction — **NOT STARTED**
+### Phase 4c — Launcher-engine extraction — **STOPPED AT THE GATE 2026-07-28, awaiting a ruling**
+- **Zero extraction performed.** No production file was modified; `App()` and
+  `App.jsx` are unchanged at 4,744 / 5,725. Commit `f3e7899` is test-script +
+  docs only.
+- **Gate outcome:** the re-entrancy invariant **cannot be tested in isolation**.
+  Both halves of the property live in the launch-decision effect, which the
+  packet declares STAYS — not in the seven extractable functions. Recovery
+  re-entry is an inline guard at `App.jsx:2848`; destination once-only is **not
+  in `openDestinationApp` at all** (its body has no re-entrancy guard and calls
+  `window.location.assign(href)` unconditionally) but is supplied by callers,
+  chiefly `pauseBypassInitiatedRef`. Isolating either would require lifting guard
+  predicates out of the effect — for the destination half that is **new
+  production behaviour**, which "no behaviour change whatsoever" forbids.
+- **What IS mutation-proven:** forcing the `pauseBypassInitiatedRef` guard open
+  makes `pause-launcher.spec.ts:266` fail (expected 1 navigation attempt,
+  received 3); reverting restores 43 passed. A genuine two-direction proof — but
+  by an existing Playwright spec, not an isolated test. Removing the
+  `standaloneRecoveryInFlightRef` guard produces **no** failure: it is
+  defence-in-depth behind the route change and
+  `consumeStandaloneLauncherRecoverySuppression()`, consistent with Phase 4's
+  finding that the dependency fix was independently sufficient.
+- **LIVE DEFECT FOUND AND FIXED (`f3e7899`):** the guardrail labelled
+  *"openDestinationApp is the single destination href assignment"* — the repo's
+  central security-shaped invariant — **was vacuous.** It used `assertMatch`
+  (existence-only), so adding a second `window.location.assign(href)` left every
+  guardrail script passing. Replaced with a count assertion plus an enumeration
+  of every navigation sink in `App.jsx`. Independently re-verified: a duplicated
+  sink fails with `found 2`; a second sink under a **different name**
+  (`sneakyHref`) passes the count but fails the enumeration — the evasion the old
+  form could never catch. Enumerated sinks: `href` (openDestinationApp),
+  `fallbackHref` (scheduleNativeSchemeFallback), `url` (openExternalActionUrl).
+  **Invariant 1 of this packet is therefore satisfied today, with no extraction.**
+- **Method trap to carry forward:** Playwright's `reuseExistingServer` served a
+  **stale bundle**, making a mutation look inert. Detected via the bundle content
+  hash. Any future mutation proof in this repo must verify the hash changed.
+- **Awaiting ruling** between: (a) re-scope the gate to `pause-launcher.spec.ts:266`
+  and proceed with extraction; (b) close 4c as "measured, not moved" — the exit
+  criteria already pass on that outcome; (c) build the seam (not recommended —
+  behaviour-bearing change to the highest-risk block in the repo).
+
+### Phase 4c — packet reference — **NOT STARTED**
 - **Packet:** `docs/architecture/phase-04c-launcher-engine.md`
 - **Entry:** Phase 4b complete. Does **not** block Phase 5.
 - **Exit:** the ~586-line engine lives in `features/launcher/useLauncherEngine.js`
