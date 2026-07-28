@@ -1,5 +1,73 @@
 # Phase 4c — Launcher-engine extraction
 
+> ## CLOSED 2026-07-28 — "measured, not moved". Conditional, NOT abandoned.
+>
+> **Ruling (Lizzie, 2026-07-28):** close 4c without extracting; proceed to
+> Phase 5. **Revisit this packet only if Phase 5 produces concrete architectural
+> evidence that separating the engine is required.** Until then it is deferred
+> conditional work, not dead work — the measured scope, risk analysis, guardrail
+> rules and commit plan below remain valid and reusable exactly as written.
+>
+> **Do not reopen 4c merely to bank a structural refactor.** Product progress
+> takes priority. 4c blocks nothing: Phase 5 does not depend on it.
+>
+> ### What happened
+>
+> 1. **The commit-0 gate stopped the extraction, correctly.** It did the job it
+>    was designed to do. Stopping was the right outcome, not a failure.
+> 2. **No production extraction was performed.** Zero engine functions moved; no
+>    production file was modified. `App()` = 4,744, `App.jsx` = 5,725, unchanged.
+> 3. **Destination re-entrancy IS genuinely mutation-proven — at browser level,
+>    in both directions.** Forcing the `pauseBypassInitiatedRef` guard open fails
+>    `pause-launcher.spec.ts:266` (expected 1 navigation attempt, received 3);
+>    reverting restores 43 passed. This is real evidence, not implied coverage.
+> 4. **The intended *isolated* test was not possible** because
+>    **`openDestinationApp` does not contain its own re-entrancy guard** — its
+>    body calls `window.location.assign(href)` unconditionally, and once-only
+>    behaviour belongs to its **callers** (chiefly `pauseBypassInitiatedRef`, and
+>    it is deliberately re-callable from `App.jsx:5144, :5233, :5356, :5682`).
+>    The gate's mutation recipe assumed a symmetry the code does not have.
+> 5. **We will NOT add a new production seam or guard purely to make the
+>    extraction testable.** A guard that does not exist today is new production
+>    behaviour with no product justification, in the highest-risk block in the
+>    repo. Standing decision.
+>
+> ### Permanent gates established by this phase (keep; do not remove)
+>
+> - **The browser-level re-entrancy regression test** —
+>   `pause-launcher.spec.ts:266`, proven sensitive in both directions. **Permanent
+>   gate.** It is the re-entrancy invariant's real home.
+> - **The strengthened navigation guardrail** — the previously **vacuous**
+>   assertion (labelled *"openDestinationApp is the single destination href
+>   assignment"* but using existence-only `assertMatch`, so a duplicated sink
+>   passed everything) is replaced with a **count assertion plus a complete
+>   navigation-sink enumeration**. **Permanent gate.**
+>
+> **Both proving mutations must remain documented** as evidence the guardrail
+> catches obvious *and* evasive violations:
+>
+> | Mutation | Expected result |
+> |---|---|
+> | Duplicate `window.location.assign(href)` | FAIL — `expected exactly 1 … found 2` |
+> | Second sink under a **different name** (`sneakyHref`) | count passes, **enumeration FAILS** — `found [sneakyHref, href, fallbackHref, url]` |
+>
+> Enumerated sinks: `href` (`openDestinationApp`, the single launcher destination
+> sink), `fallbackHref` (`scheduleNativeSchemeFallback`, fed only by
+> `openDestinationApp`), `url` (`openExternalActionUrl`, https-validated).
+>
+> **Packet invariant 1 is satisfied today, with no extraction.**
+>
+> ### Mandatory method rule for all future mutation testing in this repo
+>
+> **Verify the served bundle hash changed before trusting a mutation result.**
+> Playwright's `reuseExistingServer` served a **stale build** during this phase
+> and made a mutation appear inert — a false negative that would have "proved"
+> a guard unnecessary. Check the bundle content hash (e.g. `index-<hash>.js`)
+> after every rebuild. A mutation proof run against a stale bundle is worthless
+> and actively misleading.
+
+
+
 **Blueprint:** `docs/architecture-blueprint.md` §9–§11
 **Status tracker:** `docs/architecture/roadmap-status.md`
 **Depends on:** Phase 4 complete (`b732e8c`); **Phase 4b complete** (recommended

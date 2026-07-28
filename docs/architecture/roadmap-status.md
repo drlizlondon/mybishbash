@@ -13,8 +13,10 @@ Update this file in the same commit that changes a phase's status.
 | 1 | Error telemetry (errors only) | **Complete** (migration applied + RLS verified) | `docs/architecture/phase-01-error-telemetry.md` | 0 | `f57b923`, `8c7d000`, `6f17286`, `d6bdb22`, fix-forward `ce78e63` |
 | 2 | Composition root (providers + router extraction) | **Complete** | `docs/architecture/phase-02-composition-root.md` | 0, 1 | `3e04058`, `01f9f2c`, `f96dadb`, `bb69e8e`, `bb88529`, `fcb85a5`, `e4e2dcf`, (this commit) |
 | 3 | Feature module extraction | **Complete** | `docs/architecture/phase-03-feature-modules.md` | 2 | `de84491`, `50f2929`, `047c4e3`, `be55de1`, `200ea5b`, `199775d`, `872784f`, `54ed50c`, (this commit) |
-| 4 | Domain stores & single write path (local) | Planned (packet written) | `docs/architecture/phase-04-domain-stores.md` | 3 | — |
-| 5 | IndexedDB persistence engine | Planned (packet written) | `docs/architecture/phase-05-indexeddb.md` | 4 | — |
+| 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
+| 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
+| 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
+| 5 | IndexedDB persistence engine | **In progress** (4b prerequisite met) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | — |
 | 6 | Sync v2 — entities + mutation queue | Planned | — | 5 | — |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
@@ -112,7 +114,7 @@ Update this file in the same commit that changes a phase's status.
   `appSource`. **Phase 4c must grep guardrails for handler bodies, not just
   handler names.**
 
-### Phase 4c — Launcher-engine extraction — **STOPPED AT THE GATE 2026-07-28, awaiting a ruling**
+### Phase 4c — Launcher-engine extraction — **CLOSED 2026-07-28 "measured, not moved" (conditional, not abandoned)**
 - **Zero extraction performed.** No production file was modified; `App()` and
   `App.jsx` are unchanged at 4,744 / 5,725. Commit `f3e7899` is test-script +
   docs only.
@@ -147,18 +149,19 @@ Update this file in the same commit that changes a phase's status.
 - **Method trap to carry forward:** Playwright's `reuseExistingServer` served a
   **stale bundle**, making a mutation look inert. Detected via the bundle content
   hash. Any future mutation proof in this repo must verify the hash changed.
-- **Awaiting ruling** between: (a) re-scope the gate to `pause-launcher.spec.ts:266`
-  and proceed with extraction; (b) close 4c as "measured, not moved" — the exit
-  criteria already pass on that outcome; (c) build the seam (not recommended —
-  behaviour-bearing change to the highest-risk block in the repo).
-
-### Phase 4c — packet reference — **NOT STARTED**
-- **Packet:** `docs/architecture/phase-04c-launcher-engine.md`
-- **Entry:** Phase 4b complete. Does **not** block Phase 5.
-- **Exit:** the ~586-line engine lives in `features/launcher/useLauncherEngine.js`
-  with an explicit dependency object; the launch-decision effect and its seven
-  concurrency-control refs stay in `App()`; every re-pointed invariant carries
-  both a positive assertion and an `assertNoMatch` against `appSource`.
+- **RULING 2026-07-28 — CLOSED as "measured, not moved". Conditional, NOT
+  abandoned.** Proceed to Phase 5. **Revisit 4c only if Phase 5 produces concrete
+  architectural evidence that separating the engine is required** — do not reopen
+  it merely to bank a structural refactor. Standing decision: **no new production
+  seam or guard will be added purely to make the extraction testable.**
+- **Permanent gates established here (keep):** the browser-level re-entrancy
+  regression test (`pause-launcher.spec.ts:266`, sensitive in both directions),
+  and the strengthened navigation guardrail (count + complete sink enumeration).
+  Both proving mutations stay documented in the packet as evidence the guardrail
+  catches obvious and evasive violations.
+- **Mandatory method rule for all future mutation testing:** verify the served
+  bundle hash changed before trusting a result — `reuseExistingServer` served a
+  stale build here and made a mutation look inert.
 
 ### Phase 5 — IndexedDB engine
 - **Entry:** Phase 4 complete (all writes flow through actions) **AND Phase 4b
