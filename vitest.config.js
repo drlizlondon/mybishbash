@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.{js,jsx}"],
+    // Phase 5: fake-indexeddb/auto provides globalThis.indexedDB for the
+    // `node` environment so src/services/db can be unit-tested.
+    setupFiles: ["./vitest.setup.js"],
     // Playwright owns *.spec.*; never collect them.
     exclude: ["node_modules/**", "dist/**", "tests/**", "e2e/**"],
     // Hermetic unit tests: blank out Supabase env so supabaseClient.js never

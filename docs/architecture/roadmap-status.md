@@ -175,7 +175,68 @@ Update this file in the same commit that changes a phase's status.
 - **Amendments 2026-07-13 (packet Rulings R1/R3):** setup-complete and mood
   migrate with everything else behind `storage.js` (the main.jsx hydration
   gate makes the blueprint's key split unnecessary); paged event reads defer
-  to Phase 6/9 — the event log stays a single kv value this phase.
+  to Phase 6/9 — the event log stays a single kv value this phase. Blueprint
+  §19 Phase 5 carries the same amendments plus R4 as of commit 1.
+- **In progress 2026-07-28 — commit 1 of 6 landed.** `src/services/db/`
+  (IndexedDB wrapper, `kv` + `meta`, versioned `onupgradeneeded`), 32 unit
+  tests on `fake-indexeddb`, `vitest.setup.js`. Zero production consumers —
+  dead code until commit 2. Commits 2–6 not started.
+- **Packet audit findings (2026-07-28, before commit 1) — read before commit 2.**
+  The packet was written pre-Phase-4/4b/4c; these of its claims no longer hold:
+  1. **"`getStorageItem`/`setStorageItem` … already the single read/write
+     funnel — verified" (R2) is false.** Bypasses that touch
+     `SHARED_STORAGE_KEYS` directly: `storage.js` app-pause helpers
+     (`getAppPausesMap`/`saveAppPausesMap`, `mybishbash.app-pauses.v1` — also
+     the one shared key with no legacy-prefix shim) and
+     `clearSharedMyBishBashState`; **all** of `eventLog.js`, which carries its
+     own private duplicate of the funnel including the legacy shim, not the
+     "direct `window.localStorage` calls" the packet describes;
+     `stores/settingsStore.js:27` (`mybishbash.launcher-behavior-settings.v1`);
+     and `lib/mybishbashSync.js:355–373`, which reads **13** shared keys for
+     the E2E shared-state bridge. Commit 2 must funnel these or the idb engine
+     silently splits the brain. `storage.js` cannot simply *import* from
+     `eventLog.js`'s copy — R2's "import the funnel from storage.js" requires
+     exporting two currently module-private functions.
+  2. **Packet's D5 description is wrong about the mechanism.** It claims the
+     write-path lint rule has "an allowlist [that] already names `storage.js`,
+     `eventLog.js`, `services/**`". It does not. The D5 ratchet is *scoped* to
+     `src/features/**`, `src/components/**`, `src/editing/**`, `src/App.jsx`
+     with per-file/per-key exceptions. `services/db` is legal because it is out
+     of scope, not because it is allowlisted. Same outcome, different mechanism
+     — commit 6's proposed guardrail must not assume an allowlist exists.
+  3. **`vitest.setup.js` was not optional.** `vitest.config.js` had no
+     `setupFiles` and runs `environment: "node"`, so `fake-indexeddb/auto`
+     needed a new setup file, not a conditional one.
+  4. **`localstorage-bytes.spec.ts` postdates the packet** and is the largest
+     dual-write-dependent e2e assertion in the repo: a Phase 4b invariant
+     comparing exact localStorage bytes for six shared keys against a committed
+     baseline. It is a free byte-identity proof for the commit-4 migration, and
+     it **breaks at commit 6** when dual-write retires. Commit 4's enumeration
+     must list it first.
+  5. **The D5 debt table already assigns Phase 5 an obligation the packet omits:**
+     `src/features/launcher/launchSessionStorage.js` is annotated "relocate to
+     `services/` in Phase 5". R1 correctly keeps its keys on localStorage
+     (synchronous `useState` initializers), so the obligation is a *file move*,
+     not a migration — but the packet never mentions it.
+  6. **Minor staleness:** `main.jsx` now also runs `installGlobalErrorHandlers()`
+     first and `registerServiceWorker()` before render (commit 3 must preserve
+     both); the roadmap's own Phase 5 Exit line says "stores hydrate from
+     IndexedDB", which the packet's mirror design satisfies only indirectly —
+     stores are explicitly unchanged.
+  7. **Confirmed still accurate:** `storage.js` 538 lines, `eventLog.js` 216
+     lines, `SHARED_STORAGE_KEYS` 20 entries, single Chromium Playwright
+     project on `127.0.0.1:4173/mybishbash`, no `idb` dependency.
+- **Non-vacuity note (commit 1).** The packet mandates "a per-key promise chain
+  guaranteeing put ordering". A mutation test (bypass `chainWrite`, run the
+  suite) showed ordering tests passing **either way**: IndexedDB already
+  serialises same-scope readwrite transactions in creation order, and every
+  write here creates its transaction immediately. The chain is therefore
+  redundant *for ordering alone* today. It is kept — it makes the guarantee
+  independent of code shape, and it is the only thing that makes fire-and-forget
+  writes awaitable (`flushWrites`, which commit 2's hydration and tests need) —
+  but the tests now claim only what they prove: a separate
+  "write-chain observability" group fails (5 tests) under the bypass mutation,
+  while the ordering tests are labelled behavioural coverage, not a chain proof.
 
 ### Phase 6 — Sync v2 (entities + mutation queue)
 - **Entry:** Phase 5 complete; tester cohort available; feature flag ready.

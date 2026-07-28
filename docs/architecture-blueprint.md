@@ -667,6 +667,25 @@ user-visible change); 5–6 are flagged migrations; 7–10 harvest the value.
   across the migration in a scripted round-trip test.
 - **Regression:** full e2e on Chromium + WebKit; new migration round-trip test.
 - **Impact:** years-of-data becomes a non-event; boot cost decoupled from account age.
+- **Amendments (Phase 5 packet Rulings R1/R3/R4, recorded 2026-07-28 at commit 1):**
+  - **R1 supersedes "localStorage retained for theme, setup-complete, e2e
+    flags".** Because `main.jsx` gates first render on `hydrateLocalData()`,
+    everything read at or after App's first render — `setup-complete` and
+    `mood` included — migrates with the rest of `SHARED_STORAGE_KEYS`.
+    Splitting them would give one atomically-cleared key set two engines.
+    Only pre-hydration and non-storage-layer keys stay on localStorage.
+  - **R3 supersedes "events store gains paged reads".** Per-event rows and
+    paged reads defer to Phase 6/9; the event log stays a single kv value.
+    The 5MB-ceiling win still lands because IDB kv values are unbounded.
+  - **R4:** WebKit coverage arrives as a scoped `webkit-smoke` Playwright
+    project (six persistence/boot specs), not a full second suite.
+  - **Correction to the packet's own current-state claims (audit, commit 1):**
+    `getStorageItem`/`setStorageItem` are *not* the single read/write funnel
+    the packet asserts. `storage.js`'s app-pauses helpers, its
+    `clearSharedMyBishBashState`, all of `eventLog.js` (a duplicated private
+    copy of the funnel), `stores/settingsStore.js` and `lib/mybishbashSync.js`
+    read or write `SHARED_STORAGE_KEYS` through `window.localStorage`
+    directly. Funnelling them is prerequisite work inside packet commit 2.
 
 ### Phase 6 — Sync v2: entities + mutation queue (the big one)
 - **Objective:** `entities` table + `services/sync` (queue, push, pull,
