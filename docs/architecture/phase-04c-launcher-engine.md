@@ -179,6 +179,118 @@ A seam added only to make a test possible is a production change with no
 product justification; it may still be the right call, but it is Lizzie's call,
 not the executor's.
 
+### GATE OUTCOME — STOPPED at commit 0 (2026-07-27, HEAD `82003f5`)
+
+**No extraction was performed. No production file was changed.** The gate's
+"stop and report" branch was taken. Awaiting Lizzie's ruling.
+
+**1. Why isolated testing is prevented.** Both halves of the invariant are
+implemented as *render-lifecycle* state inside `App()`, not as logic in the
+seven engine functions:
+
+- *Recovery re-entry* is the inline guard at `App.jsx:2848`
+  (`if (standaloneRecoveryInFlightRef.current === recoveryKey) return;`), inside
+  the launch-decision effect — the block this packet declares **STAYS**.
+- *Destination-opening once-only* is **not implemented inside
+  `openDestinationApp` at all.** Its body (`App.jsx:3121–3237`) has no
+  re-entrancy guard; it calls `window.location.assign(href)` unconditionally on
+  the success path. The once-only property is supplied by callers — chiefly
+  `pauseBypassInitiatedRef` at `App.jsx:2730`, again inside the launch-decision
+  effect.
+
+So the invariant does not live in the extractable unit. Reaching it requires
+rendering `App()`. The unit runner cannot: `vitest.config.js` sets
+`environment: "node"`, and neither `jsdom`/`happy-dom` nor
+`@testing-library/react` is installed — adding either is barred by this packet's
+"no new dependencies". Even with them, rendering a 5,725-line component wired to
+Supabase, `localStorage` and the router is an integration test, not isolation.
+
+**2. What is covered today — proven by mutation, not assumed.** Two mutations
+were applied, each with a verified fresh build, and reverted:
+
+| Mutation | Spec run | Result |
+|---|---|---|
+| `standaloneRecoveryInFlightRef` re-entry guard removed (`:2848`) | `launch-decision-loop` + `launcher-shell-repeat` | **15 passed — no failure** |
+| `pauseBypassInitiatedRef` guard forced open (`:2730`) | `pause-launcher` (`-g "pause"`) | **1 failed, 42 passed** — `pause-launcher.spec.ts:266` expected 1 navigation attempt, **received 3** |
+
+The destination-opening half is therefore genuinely covered and genuinely
+ref-sensitive — a real two-direction proof, but delivered by an existing
+Playwright spec, not an isolated test. The recovery half is **not observable**:
+that guard is defence-in-depth behind the route change and
+`consumeStandaloneLauncherRecoverySuppression()`, consistent with Phase 4's
+finding that the dependency fix was independently sufficient. The packet
+anticipates this: "If a mutation does not produce a failure, that is itself the
+finding."
+
+> Method note: Playwright's `reuseExistingServer` silently served a **stale
+> build** on the first mutation attempt, making the mutation appear inert.
+> Every result above was re-run against a manually rebuilt bundle with a
+> confirmed new content hash. Any future mutation proof in this repo must
+> verify the bundle hash changed.
+
+**3. The seam that would be required.** Lifting the two guard predicates out of
+the launch-decision effect into pure functions — e.g.
+`shouldBeginStandaloneRecovery({ inFlightKey, recoveryKey, … })` and a
+once-only wrapper owning destination opening. That is a change to the effect
+this packet places out of scope, and for destination opening it is not a
+refactor but **new production behaviour** (a guard that does not exist today),
+which "no behaviour change whatsoever" forbids.
+
+**4. Is the seam safer than leaving the engine in `App()`?** No. It buys a unit
+test for a property already mutation-proven at the browser level, at the cost of
+editing the one block the packet identifies as the highest-risk code in the
+repo, and of inventing a guard whose absence is currently load-bearing (multiple
+call sites rely on `openDestinationApp` being re-callable — `App.jsx:5144`,
+`:5233`, `:5356`, `:5682`).
+
+**5. Revised recommendation — do not extract under this gate as written.** In
+preference order:
+
+1. **Preferred: re-scope the gate to the coverage that exists.** Accept the
+   `pause-launcher.spec.ts:257` mutation proof as the re-entrancy gate, add a
+   comment in that spec naming it as the invariant's guard, and proceed to the
+   extraction commits. The extraction itself is closure-correctness work that
+   `launcher-shell-repeat` / `launcher-terminal-exhaustive` verify per function,
+   exactly as §Risk designs.
+2. **Or: close Phase 4c as "measured, not moved."** The exit criteria already
+   pass on that outcome. `App()` stays ~4,746 lines; the remaining candidates
+   are JSX decomposition and onboarding handlers, not the launcher engine.
+3. **Not recommended: build the seam.** Only if Lizzie decides an isolated unit
+   test of launcher re-entrancy is worth a behaviour-bearing change to the
+   launch-decision effect. That is her call, not the executor's.
+
+### Independent finding — the uniqueness guardrail was vacuous (FIXED)
+
+Not part of the gate, and fixed without touching any production file, because
+§Pre-change hazard proof 1 instructs exactly this ("If it passes, the guardrail
+was already vacuous — record that as a finding, fix it").
+
+`test-release-guardrails.mjs:117` was labelled *"openDestinationApp is the
+single destination href assignment"* but used `assertMatch`, which is
+**existence-only**. Proof: a second `window.location.assign(href)` was added to
+`App.jsx` and **both** `test-release-guardrails.mjs` and
+`test-fake-launcher-destinations.mjs` passed unchanged. The repo's central
+security-shaped invariant was asserting nothing about uniqueness — the exact
+defect class §Mechanical guardrails predicts.
+
+Replaced with two counted assertions, both mutation-proven:
+
+| Direction | Result |
+|---|---|
+| unmutated | both PASS |
+| duplicate `assign(href)` added | both FAIL (`found 2`; `[href, href, fallbackHref, url]`) |
+| second sink added under a **different variable name** (`sneakyHref`) | count check passes, **enumeration check FAILS** — the evasion the old guardrail could never catch |
+
+The enumerated sinks in `App.jsx` are exactly `href` (openDestinationApp, the
+single launcher destination sink), `fallbackHref` (`scheduleNativeSchemeFallback`,
+fed only by openDestinationApp) and `url` (`openExternalActionUrl`,
+https-validated action-card links). Adding, removing or renaming one now fails
+the release guardrails and must update the list in the same commit.
+
+**Unrelated flake observed:** `selectPersonalFirstLauncherCard handles large
+event history under 50ms` failed once at 56.29ms, then passed three times at
+36–44ms. Pre-existing, timing-sensitive, not caused by this work.
+
 ## Required regression tests
 
 - **`openDestinationApp` uniqueness:** a source-shape assertion that exactly one

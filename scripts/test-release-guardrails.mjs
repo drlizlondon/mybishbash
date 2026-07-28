@@ -114,7 +114,38 @@ assertNoMatch("settings fake launcher is not wired to beginInterceptionFlow", ap
 assertNoMatch("FakeLauncherBar does not navigate by itself", fakeLauncherBarSource, /window\.location\.assign|getVersionOpenHref/);
 assertMatch("/intercept/:launcherId still starts the interception flow", appSource, /beginInterceptionFlow\(route\.versionId/);
 assertMatch("continue-to-app still opens the real destination through openDestinationApp", appSource, /onContinueToApp=\{\(versionId, options\) => openDestinationApp\(versionId, options\)\}/);
-assertMatch("openDestinationApp is the single destination href assignment", appSource, /window\.location\.assign\(href\)/);
+// Security-shaped invariant (Phase 4c): openDestinationApp is the ONE place a
+// resolved launcher destination reaches the browser. The previous form of this
+// check used assertMatch, which is existence-only — it passed unchanged when a
+// second `window.location.assign(href)` was added to App.jsx (proven by
+// mutation 2026-07-27). Uniqueness must be counted, and every navigation sink
+// in App.jsx must be enumerated, or a duplicate sink can be introduced under a
+// different variable name and go unasserted.
+assertMatch("openDestinationApp still performs the destination href assignment", appSource, /window\.location\.assign\(href\)/);
+{
+  const label = "openDestinationApp is the single destination href assignment";
+  const hrefSinks = [...appSource.matchAll(/window\.location\.assign\(href\)/g)].length;
+  if (hrefSinks !== 1) {
+    fail(label, `expected exactly 1 window.location.assign(href) in App.jsx, found ${hrefSinks}`);
+  } else {
+    pass(label);
+  }
+}
+{
+  // Enumerated navigation sinks in App.jsx. Adding, removing or renaming one is
+  // a deliberate act and must update this list in the same commit.
+  //   href         — openDestinationApp, the single launcher destination sink
+  //   fallbackHref — scheduleNativeSchemeFallback, fed only by openDestinationApp
+  //   url          — openExternalActionUrl, https-validated action-card links
+  const label = "App.jsx navigation sinks are exactly the three enumerated ones";
+  const EXPECTED_SINKS = ["href", "fallbackHref", "url"];
+  const sinks = [...appSource.matchAll(/window\.location\.assign\(([^)]*)\)/g)].map((match) => match[1].trim());
+  if (sinks.length !== EXPECTED_SINKS.length || sinks.some((sink, index) => sink !== EXPECTED_SINKS[index])) {
+    fail(label, `expected [${EXPECTED_SINKS.join(", ")}], found [${sinks.join(", ")}]`);
+  } else {
+    pass(label);
+  }
+}
 assertMatch(
   "custom-scheme launches compute the timed-fallback decision",
   appSource,
