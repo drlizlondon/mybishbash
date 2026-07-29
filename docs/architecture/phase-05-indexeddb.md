@@ -78,9 +78,18 @@ Record this amendment in blueprint §19 Phase 5 and roadmap-status in commit 1.
 
 ### R2 — The mirror is the API-compatibility layer
 
+> **CORRECTED 2026-07-29 (commit 1.5).** The parenthetical below originally
+> read "(already the single read/write funnel — **verified**)". That claim was
+> **false when written and was never verified**: the audit before commit 2
+> found five paths bypassing the funnel (see §"Commit 1.5" below). They were
+> closed by commit 1.5 as a standalone behaviour-preserving refactor, *before*
+> any engine seam was introduced. R2's design is unchanged; only its premise
+> is now actually true. Do not read the sentence below as evidence of anything
+> — the evidence is commit 1.5's tests.
+
 `storage.js` keeps exporting the same synchronous `loadX`/`saveX` functions.
-Internally, `getStorageItem`/`setStorageItem` (already the single
-read/write funnel — verified) route by engine:
+Internally, `getStorageItem`/`setStorageItem`/`removeStorageItem` (the single
+read/write funnel — true as of commit 1.5, not before it) route by engine:
 
 - **legacy engine:** `window.localStorage` exactly as today (byte-identical
   code path, kept until dual-write retirement + one release).
@@ -133,14 +142,91 @@ signal. CI: `npx playwright install --with-deps webkit` added to
 `test:release` (via plain `playwright test`, which now includes both
 projects). Expanding WebKit scope is a Phase 9 option.
 
+## Commit 1.5 — unify every storage access behind the existing funnel (landed 2026-07-29)
+
+**Why it exists.** R2's premise was false. `getStorageItem`/`setStorageItem`
+were *not* the single read/write funnel; five paths bypassed them, three of
+them touching `SHARED_STORAGE_KEYS`. Introducing the engine seam on top of
+that would have split the brain silently — the seam would have re-pointed the
+funnel while the bypasses kept reading and writing localStorage. Ruling: close
+the bypasses **first**, as a standalone behaviour-preserving refactor with no
+engine seam in it. Commit 1.5 is that refactor; commit 2 proceeds unchanged
+afterwards.
+
+**The five bypasses closed:**
+
+| # | Site | Was | Now |
+|---|---|---|---|
+| 1 | `storage.js` `getAppPausesMap`/`saveAppPausesMap` | direct `window.localStorage` for `mybishbash.app-pauses.v1` — the funnel bypassed *inside storage.js itself* | `getStorageItem`/`setStorageItem` |
+| 2 | `storage.js` `clearSharedMyBishBashState` | direct `removeItem` loop | new `removeStorageItem` funnel |
+| 3 | `src/eventLog.js` | a byte-for-byte **private duplicate** of the funnel, legacy-prefix shim included | imports the real one from `storage.js` |
+| 4 | `src/stores/settingsStore.js` `loadExplicitLauncherBehaviorSettings` | direct read of `mybishbash.launcher-behavior-settings.v1` | `getStorageItem` |
+| 5 | `src/lib/mybishbashSync.js` `readE2ELocalSharedState` | direct reads of 13 production keys in the E2E shared-state bridge | `getStorageItem` / `readSharedStateJson` |
+
+`getStorageItem`, `setStorageItem` and the new `removeStorageItem` are now
+**exported** from `storage.js` (they were module-private). `removeStorageItem`
+is a plain `window.localStorage.removeItem` funnel with no added semantics —
+`clearSharedMyBishBashState` keeps enumerating both the modern and the legacy
+key lists explicitly, exactly as before.
+
+**Ruling — `app-pauses` uses the normal funnel.** No special no-legacy-shim
+path was added. The funnel now also reads `bishbash.app-pauses.v1` if present;
+git history confirms that literal has **never** been written by any build (0
+commits contain it), so preserving the distinction has no observable value and
+would have meant a second funnel variant for one key.
+
+**Ruling — the E2E sync bridge is funnelled and nothing more.** The bridge is
+E2E infrastructure that writes and reads *production* storage keys, so it must
+use the same *current* funnel as production callers. That is the whole change.
+It does **not** move behind the persistence engine, and this commit takes no
+position on whether it eventually should. **The bridge remains architecturally
+separate from the future persistence engine; moving it behind the engine is a
+Phase 6 (sync) question, not a hidden commitment made here.** Its own
+`MYBISHBASH_E2E_*` scratch keys stay on direct localStorage — they are harness
+flags with no production meaning and no legacy-prefix history.
+
+**Not in commit 1.5** (each explicitly out of scope): the engine seam, debounce
+or hydration timing, relocating `launchSessionStorage.js`, D5 policy,
+dual-write, sync semantics, persistence formats, new dependencies.
+
+**Proof carried by the commit:**
+- `src/storage.funnel.bytes.test.js` + `src/__fixtures__/storage-funnel-bytes.baseline.json`
+  — six scenarios driven through the public API against a recording
+  localStorage stub; the baseline was captured at the **pre-refactor** commit.
+  The ordered write/remove log and the final store are compared byte for byte
+  and are **identical**; the read logs are recorded too and also came out
+  identical, because every real profile has the modern key present so the
+  shim's extra legacy read never fires.
+- `src/storage.funnel.test.js` — 15 focused tests, one group per bypass. They
+  pin the funnel's *observable* contract (legacy-prefix visibility and
+  promotion), not which function name is called, so a reverted site fails for
+  losing user data rather than for moved text.
+- Recorded honest limit: routing `clearSharedMyBishBashState`'s loop through
+  `removeStorageItem` is behaviour-preserving **by construction**, so no
+  mutation can distinguish it. Its test pins the exact removal set instead.
+
+**Residual direct access to production storage keys after 1.5 — one site,
+knowingly left:** `src/App.jsx`'s demo/e2e reset helpers
+(`resetDemoState`/`resetDemoOnboardingState`, ~lines 915–950) directly
+`removeItem` eight `SHARED_STORAGE_KEYS` and directly `setItem`
+`mybishbash.setup-complete.v1` + `mybishbash.profile.v1`. They are classified
+TEST-FLAG debt in the D5 exception table and were outside commit 1.5's ruled
+scope. **Commit 2 must funnel them or scope the engine so demo/e2e resets
+cannot desynchronise the mirror** — under the idb engine a direct
+`removeItem` here would clear localStorage while leaving the mirror and IDB
+populated.
+
 ## Current-state evidence
 
-- `src/storage.js` (538 lines): all reads/writes already funnel through
-  `getStorageItem`/`setStorageItem`; ~20 versioned keys; legacy
-  `bishbash.`-prefix migration shim; `SHARED_STORAGE_KEYS` (20 entries incl.
-  `event-log`, `offline-event-queue`, `user-id`); `clearSharedMyBishBashState`.
-- `src/eventLog.js` (216 lines): own `window.localStorage` calls for the
-  event log + offline queue + anonymous user id.
+- `src/storage.js`: all reads/writes funnel through
+  `getStorageItem`/`setStorageItem`/`removeStorageItem` **as of commit 1.5**
+  (not before — see above); ~20 versioned keys; legacy `bishbash.`-prefix
+  migration shim; `SHARED_STORAGE_KEYS` (20 entries incl. `event-log`,
+  `offline-event-queue`, `user-id`); `clearSharedMyBishBashState`.
+- `src/eventLog.js`: since commit 1.5 it imports the storage.js funnel. Before
+  1.5 it carried a private duplicate of the funnel *including the legacy
+  shim* — not the "direct `window.localStorage` calls" this packet originally
+  described.
 - Boot order (must survive verbatim): `main.jsx` runs
   `initDynamicLaunchersFromCache()` → renders `RootRouter` (consumes handoff/
   demo flags from localStorage) → `App()` first render runs
@@ -199,8 +285,11 @@ blueprint §5).
   immediately in legacy mode) + write-through + dual-write per R2; export
   `hydrateLocalData` and `getActiveStorageEngine` (for tests/diagnostics).
   The legacy path must remain byte-equivalent to today's code.
-- **Modify `src/eventLog.js`:** route its localStorage touches through the
-  storage.js funnel (same keys/payloads).
+- **`src/eventLog.js`: already done by commit 1.5** — it imports the funnel;
+  commit 2 has nothing left to re-point here. Same for
+  `stores/settingsStore.js` and `lib/mybishbashSync.js`. Commit 2's remaining
+  funnel obligation is `src/App.jsx`'s demo/e2e reset helpers (see §Commit 1.5,
+  "Residual direct access").
 - **Create:** `src/storage.engine.test.js`: both engines × load/save
   round-trips; dual-write asserts both sinks; legacy-prefix lookup still
   works; `clearSharedMyBishBashState` clears all sinks; open-failure fallback

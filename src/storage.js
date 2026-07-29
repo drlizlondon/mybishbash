@@ -26,7 +26,17 @@ function getLegacyStorageKey(key) {
   return key.startsWith(`${STORAGE_PREFIX}.`) ? key.replace(`${STORAGE_PREFIX}.`, `${LEGACY_STORAGE_PREFIX}.`) : null;
 }
 
-function getStorageItem(key) {
+// ─── The single local read/write funnel ─────────────────────────────────────
+// Phase 5 commit 1.5: these three are THE storage funnel for every production
+// storage key in the app. They are exported (rather than module-private) so
+// that eventLog.js, stores/settingsStore.js and lib/mybishbashSync.js route
+// through them instead of carrying private duplicates or direct
+// `window.localStorage` calls — see docs/architecture/phase-05-indexeddb.md
+// "Commit 1.5". Nothing outside this file may touch a production storage key
+// directly; when the persistence engine seam lands (commit 2) these three
+// functions are the only place it has to be introduced.
+
+export function getStorageItem(key) {
   const value = window.localStorage.getItem(key);
   if (value !== null) return value;
 
@@ -40,8 +50,12 @@ function getStorageItem(key) {
   return legacyValue;
 }
 
-function setStorageItem(key, value) {
+export function setStorageItem(key, value) {
   window.localStorage.setItem(key, value);
+}
+
+export function removeStorageItem(key) {
+  window.localStorage.removeItem(key);
 }
 
 
@@ -483,7 +497,7 @@ export function saveTimingWindowsPrefs(value) {
 
 function getAppPausesMap() {
   try {
-    const stored = JSON.parse(window.localStorage.getItem(APP_PAUSES_KEY) ?? "{}");
+    const stored = JSON.parse(getStorageItem(APP_PAUSES_KEY) ?? "{}");
     return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
   } catch {
     return {};
@@ -491,7 +505,7 @@ function getAppPausesMap() {
 }
 
 function saveAppPausesMap(map) {
-  window.localStorage.setItem(APP_PAUSES_KEY, JSON.stringify(map));
+  setStorageItem(APP_PAUSES_KEY, JSON.stringify(map));
 }
 
 export function getAppPauseExpiry(appId) {
@@ -534,5 +548,5 @@ export function clearExpiredAppPause(appId) {
 }
 
 export function clearSharedMyBishBashState() {
-  [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS].forEach((key) => window.localStorage.removeItem(key));
+  [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS].forEach((key) => removeStorageItem(key));
 }

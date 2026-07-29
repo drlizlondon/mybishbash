@@ -6,6 +6,7 @@ import {
 } from "./launcherRegistry";
 import { LAUNCHER_AVAILABILITY_STATUSES } from "./launcherAvailability";
 import { isAccessActive } from "./accessCapabilities";
+import { getStorageItem } from "../storage";
 
 function requireSupabase() {
   if (!supabase) {
@@ -348,29 +349,52 @@ function writeE2ESignupHandoffs(handoffs) {
   window.localStorage.setItem(E2E_SIGNUP_HANDOFFS_KEY, JSON.stringify(handoffs));
 }
 
+/**
+ * Reads a PRODUCTION storage key through storage.js's funnel.
+ *
+ * Distinct from readE2ELocalJson, which reads this module's own
+ * `MYBISHBASH_E2E_*` scratch keys: those are e2e-harness flags with no
+ * production meaning and no legacy-prefix history, and they stay on direct
+ * localStorage. Production keys must not be read by a second, private path —
+ * that is the bypass Phase 5 commit 1.5 closed.
+ *
+ * SCOPE NOTE (deliberate, not an oversight): funnelling this bridge says
+ * nothing about whether the shared-state bridge should ultimately operate
+ * *through* the persistence engine. That is a Phase 6 (sync) question and is
+ * explicitly left open here.
+ */
+function readSharedStateJson(key, fallback) {
+  try {
+    const rawValue = getStorageItem(key);
+    return rawValue ? JSON.parse(rawValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function readE2ELocalSharedState() {
   if (!isE2EAuthMockMode()) return null;
   const savedSharedState = readE2ELocalJson(E2E_SHARED_STATE_KEY, null);
   if (savedSharedState) return savedSharedState;
-  if (window.localStorage.getItem("mybishbash.setup-complete.v1") !== "true") return null;
+  if (getStorageItem("mybishbash.setup-complete.v1") !== "true") return null;
   return {
     version: 1,
-    cards: readE2ELocalJson("mybishbash.cards.v1", []),
-    setupComplete: window.localStorage.getItem("mybishbash.setup-complete.v1") === "true",
-    mood: window.localStorage.getItem("mybishbash.mood.v1") || "Minimal",
-    profile: readE2ELocalJson("mybishbash.profile.v1", {
+    cards: readSharedStateJson("mybishbash.cards.v1", []),
+    setupComplete: getStorageItem("mybishbash.setup-complete.v1") === "true",
+    mood: getStorageItem("mybishbash.mood.v1") || "Minimal",
+    profile: readSharedStateJson("mybishbash.profile.v1", {
       name: "",
       timezone: "Europe/London",
       plan: "free",
     }),
-    cardPacks: readE2ELocalJson("mybishbash.card-packs.v1", []),
-    homeScreenVersions: readE2ELocalJson("mybishbash.home-screen-versions.v1", {}),
-    launcherBehaviorSettings: readE2ELocalJson("mybishbash.launcher-behavior-settings.v1", {}),
-    hiddenLibraryPacks: readE2ELocalJson("mybishbash.hidden-library-packs.v1", []),
-    dislikedPackCardIds: readE2ELocalJson("mybishbash.disliked-pack-card-ids.v1", []),
-    globalInterruptionMode: window.localStorage.getItem("mybishbash.global-interruption-mode.v1") !== "false",
-    events: readE2ELocalJson("mybishbash.event-log.v1", []),
-    actionCards: readE2ELocalJson("mybishbash.action-cards.v1", []),
+    cardPacks: readSharedStateJson("mybishbash.card-packs.v1", []),
+    homeScreenVersions: readSharedStateJson("mybishbash.home-screen-versions.v1", {}),
+    launcherBehaviorSettings: readSharedStateJson("mybishbash.launcher-behavior-settings.v1", {}),
+    hiddenLibraryPacks: readSharedStateJson("mybishbash.hidden-library-packs.v1", []),
+    dislikedPackCardIds: readSharedStateJson("mybishbash.disliked-pack-card-ids.v1", []),
+    globalInterruptionMode: getStorageItem("mybishbash.global-interruption-mode.v1") !== "false",
+    events: readSharedStateJson("mybishbash.event-log.v1", []),
+    actionCards: readSharedStateJson("mybishbash.action-cards.v1", []),
     updatedAt: new Date().toISOString(),
   };
 }

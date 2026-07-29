@@ -181,6 +181,30 @@ Update this file in the same commit that changes a phase's status.
   (IndexedDB wrapper, `kv` + `meta`, versioned `onupgradeneeded`), 32 unit
   tests on `fake-indexeddb`, `vitest.setup.js`. Zero production consumers —
   dead code until commit 2. Commits 2–6 not started.
+- **Commit 1.5 landed 2026-07-29 — the funnel is now actually single.** A
+  standalone, behaviour-preserving refactor closing the five bypasses the
+  audit found (finding 1 below), executed **before** any engine seam so the
+  seam lands on a premise that is true. `getStorageItem`/`setStorageItem` are
+  now exported and joined by `removeStorageItem`; `storage.js`'s app-pause
+  helpers and `clearSharedMyBishBashState`, `eventLog.js` (its private
+  duplicate of the funnel deleted), `stores/settingsStore.js` and
+  `lib/mybishbashSync.js`'s E2E shared-state bridge all route through them.
+  Byte-identity proved by `src/storage.funnel.bytes.test.js` against a
+  baseline captured at the pre-refactor commit: identical write/remove log,
+  identical final store, identical read log across six scenarios. 15 focused
+  tests in `src/storage.funnel.test.js`, each pinning the funnel's observable
+  legacy-prefix contract rather than a call site's text.
+  - **`app-pauses` uses the normal funnel** — no special-cased no-shim path.
+    `bishbash.app-pauses.v1` has never been written by any build (0 commits),
+    so the distinction has no observable value.
+  - **The E2E sync bridge now uses the funnel but remains architecturally
+    separate from the future persistence engine.** Whether it should operate
+    *through* the engine is a **Phase 6 (sync) question and is explicitly NOT
+    decided here** — 1.5 deliberately makes no commitment either way.
+  - **Still open for commit 2:** `src/App.jsx`'s demo/e2e reset helpers
+    directly remove eight `SHARED_STORAGE_KEYS` and directly write
+    `setup-complete`/`profile`. TEST-FLAG debt, outside 1.5's ruled scope, and
+    the last known direct access to shared production keys in the repo.
 - **Packet audit findings (2026-07-28, before commit 1) — read before commit 2.**
   The packet was written pre-Phase-4/4b/4c; these of its claims no longer hold:
   1. **"`getStorageItem`/`setStorageItem` … already the single read/write
@@ -197,6 +221,8 @@ Update this file in the same commit that changes a phase's status.
      silently splits the brain. `storage.js` cannot simply *import* from
      `eventLog.js`'s copy — R2's "import the funnel from storage.js" requires
      exporting two currently module-private functions.
+     **RESOLVED by commit 1.5 (2026-07-29)** — all five closed; the two
+     functions are exported and a third, `removeStorageItem`, was added.
   2. **Packet's D5 description is wrong about the mechanism.** It claims the
      write-path lint rule has "an allowlist [that] already names `storage.js`,
      `eventLog.js`, `services/**`". It does not. The D5 ratchet is *scoped* to

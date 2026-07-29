@@ -16,6 +16,7 @@ import {
   saveProfile,
   saveSetupComplete,
   saveTimingWindowsPrefs,
+  getStorageItem,
 } from "../storage";
 import { DEFAULT_WINDOW_DEFS, resolveTheme, setWindowDefs } from "../utils";
 
@@ -24,7 +25,10 @@ const LAUNCHER_BEHAVIOR_SETTINGS_KEY = "mybishbash.launcher-behavior-settings.v1
 export function loadExplicitLauncherBehaviorSettings() {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(window.localStorage.getItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY) || "{}") || {};
+    // Reads the RAW stored value (no defaults merge) — unlike
+    // loadLauncherBehaviorSettings — but through the same funnel, so the
+    // legacy-prefix shim applies here exactly as it does everywhere else.
+    return JSON.parse(getStorageItem(LAUNCHER_BEHAVIOR_SETTINGS_KEY) || "{}") || {};
   } catch {
     return {};
   }
