@@ -206,7 +206,7 @@ dual-write, sync semantics, persistence formats, new dependencies.
   mutation can distinguish it. Its test pins the exact removal set instead.
 
 **Residual direct access to production storage keys after 1.5 — one site,
-knowingly left:** `src/App.jsx`'s demo/e2e reset helpers
+knowingly left** (CLOSED by commit 1.6, below): `src/App.jsx`'s demo/e2e reset helpers
 (`resetDemoState`/`resetDemoOnboardingState`, ~lines 915–950) directly
 `removeItem` eight `SHARED_STORAGE_KEYS` and directly `setItem`
 `mybishbash.setup-complete.v1` + `mybishbash.profile.v1`. They are classified
@@ -215,6 +215,112 @@ scope. **Commit 2 must funnel them or scope the engine so demo/e2e resets
 cannot desynchronise the mirror** — under the idb engine a direct
 `removeItem` here would clear localStorage while leaving the mirror and IDB
 populated.
+
+## Commit 1.6 — funnel the reset path, and make the read side a ratchet (landed 2026-07-29)
+
+**Why it exists — Lizzie's precondition for commit 2.** After 1.5 the funnel's
+singleness was held by *convention and tests, not mechanically*. The D5 ratchet
+is scoped to `src/features/**`, `src/components/**`, `src/editing/**` and
+`src/App.jsx`, and it polices **writes only** — it would not have caught a new
+direct **read** of an owned key in `src/lib/` or `src/stores/`, which is exactly
+the shape of two of the five bypasses 1.5 had just repaired. Ruling: **commit 2
+(the engine seam) may only begin once the reset path is funnelled AND future
+read-side bypasses are mechanically blocked.** Commit 1.6 is that work. It is a
+pure refactor plus a lint rule — no engine seam, no timing change, no format
+change, no new dependencies.
+
+**Task A — the demo/e2e reset path is funnelled.** `resetDemoSignupState` and
+`resetDemoOnboardingState` in `src/App.jsx` cleared a *mixture* of namespaces in
+one list. The two halves are now split explicitly:
+
+- **owned** — the eight `SHARED_STORAGE_KEYS` (`cards`, `profile`,
+  `action-cards`, `event-log`, `offline-event-queue`,
+  `launcher-behavior-settings`, `app-pauses`, `setup-complete`) go through
+  `removeStorageItem`, via a new `FUNNELLED_DEMO_RESET_KEYS` set and a
+  `removeDemoResetKey(key)` dispatcher. The two seed writes
+  (`setup-complete` = `"false"`, the demo `profile`) go through
+  `setStorageItem`.
+- **unowned** — the `MYBISHBASH_*` test-mode flags and the two onboarding
+  handoff keys stay on direct `localStorage`. They are read pre-hydration and
+  are legitimately direct per Ruling R1; funnelling them would be a semantic
+  change, not a refactor.
+
+Dispatching per key (rather than splitting the list into two loops) keeps the
+**call order** identical, so the write log is unchanged. This closes the
+residual recorded at the end of the 1.5 section: under the idb engine those
+`removeItem` calls would have cleared localStorage while leaving the mirror and
+IDB populated — *a demo reset that does not reset*.
+
+Two D5 write exceptions are **retired** by this (one-line deletions each):
+`literal("mybishbash.setup-complete.v1")` and `literal("mybishbash.profile.v1")`
+for `src/App.jsx`. Verified: re-adding a direct `setItem` of either key in
+`App.jsx` now fails lint.
+
+**Task B — the read-side ratchet.** `eslint.config.js` gains a second
+`no-restricted-syntax` half, built in the same shape and with the same rigour as
+D5: a direct `localStorage.getItem` (both `localStorage.x` and
+`window.localStorage.x` forms) of a **storage.js-owned key** is an error across
+**all of `src/**`** — not just D5's four directories.
+
+- **Owned-key set** = exactly `storage.js`'s `SHARED_STORAGE_KEYS` (20 keys),
+  plus their `bishbash.`-prefixed legacy twins, matched by
+  `OWNED_KEY_PATTERN`. Nothing else. Per Ruling R1 the app's many legitimate
+  direct reads — pre-hydration flags (`MYBISHBASH_E2E_*`, `_DEMO_MODE`, the E2E
+  auth keys), device-local keys (`dynamic-launchers.v1`, `launch-session.v1`,
+  `pending-launcher-install.v1`), diagnostic ring buffers, HQ/marketing view
+  state, the Supabase session key — are **not** owned and are **not** flagged.
+  An over-broad rule that forced ~90 exceptions would have been a failed design.
+- **Out of scope by design** (not exceptions — places the rule has nothing to
+  say about): `src/storage.js` (it *is* the funnel), `src/services/db/**` (the
+  engine layer, commit 2's home), and `src/**/*.test.{js,jsx}` (tests drive the
+  funnel against recording stubs and must assert on raw keys).
+- **The exception table `OWNED_READ_EXCEPTIONS` is EMPTY** — and that is the
+  finding. After 1.5's five closures and 1.6's reset-path funnelling, `src/**`
+  contains **no direct read of an owned key at all**. The rule asserts a real,
+  currently-total property rather than papering over debt. Any future entry is
+  new debt, keyed to one exact file AND one exact key, with its own
+  justification; retiring it is a one-line deletion. No directory-wide or
+  wildcard exemptions exist.
+
+Mechanically the two halves are composed by `restrictedSyntax({ writeAllow,
+readAllow })`, because ESLint flat config is last-block-wins per rule name:
+every block that sets `no-restricted-syntax` restates both halves, so a D5
+write-exception block can no longer silently drop the read selectors.
+
+**Known limit, stated honestly.** The rule matches the *call-site literal*. A
+key reached through a variable — `localStorage.getItem(SOME_KEY)` — is not
+matched, because ESLint selectors cannot resolve a constant's value. This is the
+same limit D5's write ratchet has. It is mitigated, not eliminated, by the fact
+that `storage.js` exports no key constants: a bypass author must still write the
+literal somewhere in their own file. Closing it properly needs a type-aware or
+scope-resolving check (Phase 7 TypeScript lint), not an esquery selector.
+
+**Proof carried by the commit** (all probes reverted; tree clean):
+- *Read ratchet fires:* new direct reads of `mybishbash.cards.v1` and
+  `bishbash.profile.v1` added to `src/lib/dynamicLauncherCache.js` and of
+  `mybishbash.event-log.v1` to `src/stores/sessionStore.js` → `npx eslint src`
+  went 0 errors → **3 errors**, both callee forms and both key prefixes.
+- *Exceptions are load-bearing:* adding **one** exact exception line
+  (`dynamicLauncherCache.js` + `cards.v1`) dropped it to **2 errors** —
+  silencing exactly that one call and nothing else, including the *legacy-prefix
+  read in the same file*. Deleting that one line with the read still present
+  returned it to **3 errors**.
+- *Not over-broad:* a `MYBISHBASH_E2E_MODE` read added alongside the probes did
+  **not** fire, at any point.
+- *Write ratchet still intact after the restructure:* a `setItem` added to
+  `src/features/log/LogScreen.jsx` still fails with the D5 message.
+- *Byte-identity for the reset path:* two new scenarios in
+  `src/storage.funnel.bytes.test.js` (`demo-reset-signup`,
+  `demo-reset-onboarding`) drive both helpers through their public API against
+  the recording stub, seeded with all 20 shared keys plus the flags and
+  onboarding keys. The baseline was captured at the **pre-refactor** `App.jsx`
+  and compared against the post-refactor one: ordered write/remove log and final
+  store **identical**, 8/8 green. The other six 1.5 scenarios were untouched by
+  the capture (baseline diff is insertions only).
+
+**Consequence for commit 2.** The precondition is met: the reset path is
+funnelled, and a new read-side bypass in `src/lib/`, `src/stores/` or anywhere
+else in `src/**` now fails the build. Commit 2 may begin.
 
 ## Current-state evidence
 

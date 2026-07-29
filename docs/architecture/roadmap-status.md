@@ -205,6 +205,44 @@ Update this file in the same commit that changes a phase's status.
     directly remove eight `SHARED_STORAGE_KEYS` and directly write
     `setup-complete`/`profile`. TEST-FLAG debt, outside 1.5's ruled scope, and
     the last known direct access to shared production keys in the repo.
+    **CLOSED by commit 1.6 — see below.**
+- **Commit 1.6 landed 2026-07-29 — the funnel is now mechanically single, and
+  this was Lizzie's stated precondition for commit 2.** After 1.5 the
+  singleness was held by convention and tests only: the D5 ratchet covers
+  `src/features/**`, `src/components/**`, `src/editing/**` and `src/App.jsx`,
+  and polices **writes only** — it would not have caught a new direct **read**
+  of an owned key in `src/lib/` or `src/stores/`, the exact shape of two of the
+  five bypasses 1.5 repaired. Ruling: **commit 2 may only begin once the reset
+  path is funnelled AND read-side bypasses are mechanically blocked.** Both are
+  now done.
+  - **Reset path funnelled.** `resetDemoSignupState`/`resetDemoOnboardingState`
+    route their eight owned keys through `removeStorageItem` and their two seed
+    writes through `setStorageItem`, via a `FUNNELLED_DEMO_RESET_KEYS` set and a
+    per-key dispatcher that preserves the original call order. The
+    `MYBISHBASH_*` flags and the two onboarding handoff keys stay direct — they
+    are not storage.js-owned and are read pre-hydration (Ruling R1). Under the
+    idb engine the old code would have cleared localStorage while leaving the
+    mirror and IDB populated: a demo reset that does not reset.
+  - **Read-side ratchet added** to `eslint.config.js`, mirroring D5's shape:
+    a direct `localStorage.getItem` of a storage.js-owned key (exactly
+    `SHARED_STORAGE_KEYS` + their `bishbash.` legacy twins) is an error across
+    **all of `src/**`**. Scoped to owned keys only, so the app's many legitimate
+    direct reads (R1 flags, device-local keys, diagnostic buffers, Supabase
+    session) do not fire. Out of scope by design: `src/storage.js`,
+    `src/services/db/**`, `src/**/*.test.*`.
+  - **The read-exception table is EMPTY**, and that is the finding: `src/**` now
+    contains no direct read of an owned key at all. Two D5 *write* exceptions
+    (`setup-complete`, `profile` in `App.jsx`) were retired outright.
+  - **Both proof directions run and recorded:** adding a new owned-key read in
+    `src/lib/`/`src/stores/` takes lint from 0 → 3 errors; adding one exact
+    exception line drops it to 2 (silencing only that call, not even the
+    legacy-prefix read in the same file); deleting that line returns it to 3.
+    A `MYBISHBASH_E2E_MODE` read never fires. Byte-identity for both reset
+    helpers proved against a baseline captured at the pre-refactor `App.jsx`.
+  - **Known limit, recorded not hidden:** a key reached via a variable
+    (`getItem(SOME_KEY)`) is not matched — ESLint selectors cannot resolve a
+    constant's value. Same limit D5 has. Mitigated by `storage.js` exporting no
+    key constants; a real fix needs type-aware lint (Phase 7).
 - **Packet audit findings (2026-07-28, before commit 1) — read before commit 2.**
   The packet was written pre-Phase-4/4b/4c; these of its claims no longer hold:
   1. **"`getStorageItem`/`setStorageItem` … already the single read/write

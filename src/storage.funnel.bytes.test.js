@@ -211,6 +211,42 @@ describe("storage funnel — byte identity", () => {
     record("settings-explicit-launcher-behavior", snapshot());
   });
 
+  // Commit 1.6 — the demo/e2e reset path. Eight storage.js-owned keys moved
+  // from direct localStorage.removeItem onto removeStorageItem, and the two
+  // seed writes onto setStorageItem. The removal ORDER, the key set, the seed
+  // values and the resulting store must all be byte-identical.
+  it("resetDemoSignupState removes and seeds identical bytes", async () => {
+    const app = await import("./App.jsx");
+    seed({
+      ...SHARED_SEED,
+      MYBISHBASH_E2E_AUTH_MOCK: "true",
+      MYBISHBASH_E2E_AUTH_SESSION: '{"user":{"id":"u1"}}',
+      MYBISHBASH_E2E_MODE: "true",
+      MYBISHBASH_E2E_TESTER_MODE: "true",
+      "mybishbash.onboarding-protected-app-setup-pending.v1": '{"id":"instagram"}',
+      "mybishbash.signup-onboarding-pending.v1": "true",
+      "mybishbash.commitmentDebug.v1": "[]",
+    });
+
+    app.resetDemoSignupState();
+
+    record("demo-reset-signup", snapshot());
+  });
+
+  it("resetDemoOnboardingState removes and seeds identical bytes", async () => {
+    const app = await import("./App.jsx");
+    seed({
+      ...SHARED_SEED,
+      "mybishbash.onboarding-protected-app-setup-pending.v1": '{"id":"instagram"}',
+      "mybishbash.signup-onboarding-pending.v1": "true",
+      "mybishbash.commitmentDebug.v1": "[]",
+    });
+
+    app.resetDemoOnboardingState();
+
+    record("demo-reset-onboarding", snapshot());
+  });
+
   it("the E2E shared-state bridge writes identical bytes", async () => {
     const sync = await import("./lib/mybishbashSync.js");
     seed({ ...SHARED_SEED, MYBISHBASH_E2E_AUTH_MOCK: "true" });

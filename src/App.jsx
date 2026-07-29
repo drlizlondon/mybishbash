@@ -24,6 +24,8 @@ import {
   clearAppPause,
   clearExpiredAppPause,
   loadTimingWindowsPrefs,
+  removeStorageItem,
+  setStorageItem,
 } from "./storage";
 import {
   createEventRecord,
@@ -906,6 +908,43 @@ export function shouldStartDemoSignup() {
   return normalizeRoutePath(rawPath) === "/demo-signup";
 }
 
+// Phase 5 commit 1.6 — the demo/e2e reset helpers below clear a MIXTURE of
+// key namespaces, and the two halves must be treated differently:
+//
+//   OWNED    — keys storage.js owns (SHARED_STORAGE_KEYS). These MUST go
+//              through the storage.js funnel. When the persistence engine
+//              seam lands (commit 2) a direct localStorage.removeItem here
+//              would clear localStorage while leaving the IndexedDB mirror
+//              populated: a demo reset that does not reset.
+//   UNOWNED  — MYBISHBASH_* test-mode flags and the onboarding handoff keys.
+//              Not storage.js-owned; read pre-hydration; legitimately direct
+//              per Ruling R1. Funnelling them would be a semantic change.
+//
+// removeStorageItem/localStorage.removeItem are byte-identical today, so the
+// split below is a pure refactor; it exists so the engine seam has exactly one
+// place to intercept.
+const FUNNELLED_DEMO_RESET_KEYS = new Set([
+  "mybishbash.cards.v1",
+  "mybishbash.profile.v1",
+  "mybishbash.action-cards.v1",
+  "mybishbash.event-log.v1",
+  "mybishbash.offline-event-queue.v1",
+  "mybishbash.launcher-behavior-settings.v1",
+  "mybishbash.app-pauses.v1",
+  "mybishbash.setup-complete.v1",
+]);
+
+// Removes one demo-reset key, routing storage.js-owned keys through the
+// funnel and leaving unowned test-mode/onboarding keys on direct localStorage.
+// Call order — and therefore the resulting write log — is unchanged.
+function removeDemoResetKey(key) {
+  if (FUNNELLED_DEMO_RESET_KEYS.has(key)) {
+    removeStorageItem(key);
+    return;
+  }
+  window.localStorage.removeItem(key);
+}
+
 export function resetDemoSignupState() {
   if (typeof window === "undefined") return;
   const demoKeysToRemove = [
@@ -924,7 +963,7 @@ export function resetDemoSignupState() {
     "mybishbash.app-pauses.v1",
     "mybishbash.setup-complete.v1",
   ];
-  demoKeysToRemove.forEach((key) => window.localStorage.removeItem(key));
+  demoKeysToRemove.forEach(removeDemoResetKey);
   window.localStorage.setItem("MYBISHBASH_DEMO_MODE", "true");
 }
 
@@ -941,12 +980,12 @@ export function resetDemoOnboardingState() {
     "mybishbash.launcher-behavior-settings.v1",
     "mybishbash.app-pauses.v1",
   ];
-  demoKeysToRemove.forEach((key) => window.localStorage.removeItem(key));
+  demoKeysToRemove.forEach(removeDemoResetKey);
   window.localStorage.setItem("MYBISHBASH_E2E_MODE", "true");
   window.localStorage.setItem("MYBISHBASH_E2E_TESTER_MODE", "true");
   window.localStorage.setItem("MYBISHBASH_DEMO_MODE", "true");
-  window.localStorage.setItem("mybishbash.setup-complete.v1", "false");
-  window.localStorage.setItem("mybishbash.profile.v1", JSON.stringify({
+  setStorageItem("mybishbash.setup-complete.v1", "false");
+  setStorageItem("mybishbash.profile.v1", JSON.stringify({
     name: "Demo",
     timezone: "Europe/London",
     plan: "premium",
