@@ -1,5 +1,6 @@
 import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY, mergeLauncherConfig } from "./lib/launcherRegistry";
 import { rebase } from "./lib/basePath";
+import { kvDelete, kvGetAll, kvPut, openDb } from "./services/db/index.js";
 
 const STORAGE_KEY = "mybishbash.cards.v1";
 const SETUP_KEY = "mybishbash.setup-complete.v1";
@@ -37,6 +38,69 @@ function getLegacyStorageKey(key) {
 // functions are the only place it has to be introduced.
 
 export function getStorageItem(key) {
+  if (isMirrorActive()) return getMirrorItem(key);
+  return getLocalStorageItem(key);
+}
+
+export function setStorageItem(key, value) {
+  if (isMirrorActive()) {
+    const stringValue = String(value);
+    mirror.set(key, stringValue);
+    void kvPut(key, stringValue);
+    // Dual-write (R2): localStorage stays current for the whole transition
+    // release so the kill switch and a build rollback lose nothing. Retired in
+    // commit 6, one release after the cutover.
+    window.localStorage.setItem(key, stringValue);
+    return;
+  }
+  window.localStorage.setItem(key, value);
+}
+
+export function removeStorageItem(key) {
+  if (isMirrorActive()) {
+    mirror.delete(key);
+    void kvDelete(key);
+    window.localStorage.removeItem(key);
+    return;
+  }
+  window.localStorage.removeItem(key);
+}
+
+// ─── The persistence engine seam (Phase 5, commit 2) ─────────────────────────
+//
+// The three funnel functions above route by ENGINE. Everything below is that
+// routing, and nothing above this line in the file has changed shape: the
+// legacy path performs exactly the same localStorage calls, in the same order,
+// with the same arguments, as it did before the seam existed
+// (`src/storage.funnel.bytes.test.js` compares it byte for byte).
+//
+//   "localstorage" (the default this commit) — `window.localStorage`, verbatim.
+//   "idb"                                    — an in-memory mirror seeded by
+//        `hydrateLocalData()`; reads are synchronous Map lookups, writes update
+//        the mirror synchronously, then fire-and-forget `kvPut`/`kvDelete` into
+//        IndexedDB (per-key ordered by services/db's write chain), and ALSO
+//        write localStorage for the dual-write transition release.
+//
+// Engine selection: the kill switch `mybishbash.storage-engine.v1` (values
+// "idb" / "localstorage") wins if present; otherwise DEFAULT_STORAGE_ENGINE.
+// The switch key itself is read straight from localStorage on purpose — it is
+// the thing that decides where owned keys live, so it cannot live behind the
+// decision (Ruling R1: pre-hydration flags stay on localStorage).
+//
+// This commit changes NO behaviour: DEFAULT_STORAGE_ENGINE is "localstorage",
+// nothing in the app calls `hydrateLocalData()` yet (commit 3 wires main.jsx),
+// and without hydration the mirror is never active. The one-time localStorage
+// import and the flip of the default belong to commit 4.
+
+const STORAGE_ENGINE_KEY = "mybishbash.storage-engine.v1";
+const DEFAULT_STORAGE_ENGINE = "localstorage";
+const HYDRATION_TIMEOUT_MS = 3000;
+
+let activeEngine = null;
+let mirror = null;
+let hydrationPromise = null;
+
+function getLocalStorageItem(key) {
   const value = window.localStorage.getItem(key);
   if (value !== null) return value;
 
@@ -50,12 +114,93 @@ export function getStorageItem(key) {
   return legacyValue;
 }
 
-export function setStorageItem(key, value) {
-  window.localStorage.setItem(key, value);
+// The mirror's read path is the same contract as the legacy one, including the
+// legacy-prefix shim and its promotion write — promotion goes back through
+// setStorageItem so it lands in every sink the active engine owns.
+function getMirrorItem(key) {
+  const value = mirror.get(key);
+  if (value !== undefined && value !== null) return value;
+
+  const legacyKey = getLegacyStorageKey(key);
+  if (!legacyKey) return null;
+
+  const legacyValue = mirror.get(legacyKey);
+  if (legacyValue === undefined || legacyValue === null) return null;
+  setStorageItem(key, legacyValue);
+  return legacyValue;
 }
 
-export function removeStorageItem(key) {
-  window.localStorage.removeItem(key);
+function readEngineOverride() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_ENGINE_KEY);
+    return raw === "idb" || raw === "localstorage" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The engine in force for this session ("idb" | "localstorage"). */
+export function getActiveStorageEngine() {
+  if (activeEngine === null) activeEngine = readEngineOverride() ?? DEFAULT_STORAGE_ENGINE;
+  return activeEngine;
+}
+
+// The mirror is only authoritative once hydration has seeded it. Before that —
+// and after any fallback to legacy — every read and write is plain localStorage,
+// which is exactly today's behaviour.
+function isMirrorActive() {
+  return getActiveStorageEngine() === "idb" && mirror !== null;
+}
+
+async function reportEngineFallback(error) {
+  try {
+    const { reportError } = await import("./services/errors/reporter.js");
+    reportError(error instanceof Error ? error : new Error(String(error)), "storage-engine-fallback");
+  } catch {
+    // Reporting must never be able to break boot.
+  }
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("IndexedDB open timed out")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function runHydration() {
+  activeEngine = readEngineOverride() ?? DEFAULT_STORAGE_ENGINE;
+  if (activeEngine !== "idb") return;
+
+  try {
+    await withTimeout(openDb(), HYDRATION_TIMEOUT_MS);
+    mirror = await kvGetAll();
+  } catch (error) {
+    // Failure policy (R2): fall back to legacy for this session, report, and
+    // ALWAYS resolve — the app must never hang on boot.
+    activeEngine = "localstorage";
+    mirror = null;
+    await reportEngineFallback(error);
+  }
+}
+
+/**
+ * Prepare synchronous local reads for this session. Resolves exactly once per
+ * session (success, timeout-fallback, or failure-fallback) and never rejects.
+ * In legacy mode it is a no-op that resolves immediately.
+ */
+export function hydrateLocalData() {
+  if (!hydrationPromise) hydrationPromise = runHydration();
+  return hydrationPromise;
 }
 
 
