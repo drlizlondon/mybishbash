@@ -147,7 +147,10 @@ export function getActiveStorageEngine() {
 
 // The mirror is only authoritative once hydration has seeded it. Before that —
 // and after any fallback to legacy — every read and write is plain localStorage,
-// which is exactly today's behaviour.
+// which is exactly today's behaviour. There is deliberately no buffer or replay
+// into the mirror for pre-hydration accesses: main.jsx must keep every
+// storage.js-owned access — including first render — behind hydrateLocalData().
+// Only the R1-classified device-local flags may be touched before that gate.
 function isMirrorActive() {
   return getActiveStorageEngine() === "idb" && mirror !== null;
 }

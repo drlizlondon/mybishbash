@@ -5,6 +5,7 @@ import { registerServiceWorker } from "./registerServiceWorker";
 import { initDynamicLaunchersFromCache } from "./lib/dynamicLauncherCache";
 import { installGlobalErrorHandlers } from "./services/errors/reporter";
 import { RootErrorBoundary } from "./services/errors/RootErrorBoundary";
+import { hydrateLocalData } from "./storage";
 import "./styles.css";
 
 // Install error telemetry first so failures in the boot sequence below
@@ -24,8 +25,20 @@ initDynamicLaunchersFromCache();
 
 registerServiceWorker();
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <RootErrorBoundary>
-    <RootRouter />
-  </RootErrorBoundary>,
-);
+async function renderAfterLocalDataHydration() {
+  // In idb mode, storage.js deliberately serves localStorage until hydration
+  // finishes; those pre-hydration accesses are not replayed into the mirror.
+  // Keep every storage.js-owned read/write below this gate. The work above is
+  // limited to pre-hydration-safe device-local flags and service registration.
+  // hydrateLocalData owns the 3s timeout, fallback, and error report, and always
+  // resolves so a failed IndexedDB open cannot strand the app before render.
+  await hydrateLocalData();
+
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <RootErrorBoundary>
+      <RootRouter />
+    </RootErrorBoundary>,
+  );
+}
+
+void renderAfterLocalDataHydration();
