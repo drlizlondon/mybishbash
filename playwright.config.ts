@@ -2,11 +2,25 @@ import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 const isStagingReleaseRun = Boolean(process.env.MYBISHBASH_STAGING_URL) || process.argv.some((arg) => arg.includes('staging-release.spec'));
+const testOutputDir = process.env.PLAYWRIGHT_TEST_OUTPUT_DIR ?? 'test-results';
+const htmlOutputDir = process.env.PLAYWRIGHT_HTML_OUTPUT_DIR ?? 'playwright-report';
 
 // Ignore only the project root's own .claude dir. The bare glob '.claude/**'
 // matches anywhere in the absolute path, which silently discovered zero tests
 // when the checkout itself lives inside .claude/worktrees/.
 const projectClaudeDir = `${fileURLToPath(new URL('./.claude', import.meta.url))}/**`;
+const chromiumTestMatch = [
+  '**/tests/e2e/**/*.spec.ts',
+  '**/e2e/staging-release.spec.js',
+];
+const webkitSmokeTestMatch = [
+  '**/tests/e2e/release-smoke.spec.ts',
+  '**/tests/e2e/auth-session-persistence.spec.ts',
+  '**/tests/e2e/offline-fallback.spec.ts',
+  '**/tests/e2e/onboarding.spec.ts',
+  '**/tests/e2e/launcher-flow-trace.spec.ts',
+  '**/tests/e2e/storage-migration.spec.ts',
+];
 
 /**
  * Read environment variables from file.
@@ -21,8 +35,7 @@ const projectClaudeDir = `${fileURLToPath(new URL('./.claude', import.meta.url))
  */
 export default defineConfig({
   testDir: './',
-  testMatch: '**/*.spec.@(ts|js)',
-  outputDir: 'test-results',
+  outputDir: testOutputDir,
   testIgnore: isStagingReleaseRun
     ? [projectClaudeDir]
     : ['e2e/staging-release.spec.js', projectClaudeDir],
@@ -38,7 +51,7 @@ export default defineConfig({
   reporter: process.env.CI
     ? [
         ['github'],
-        ['html', { outputFolder: 'playwright-report', open: 'never' }],
+        ['html', { outputFolder: htmlOutputDir, open: 'never' }],
       ]
     : 'list',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -55,6 +68,12 @@ export default defineConfig({
     {
       name: 'release-smoke',
       use: { ...devices['Desktop Chrome'] },
+      testMatch: chromiumTestMatch,
+    },
+    {
+      name: 'webkit-smoke',
+      use: { ...devices['Desktop Safari'] },
+      testMatch: webkitSmokeTestMatch,
     },
 
     /* Test against mobile viewports. */

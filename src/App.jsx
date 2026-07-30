@@ -6,6 +6,7 @@ import {
   DEFAULT_HOME_SCREEN_VERSIONS,
   DEFAULT_ACTION_CARDS,
   clearSharedMyBishBashState,
+  flushPendingStorageWrites,
   loadCards,
   loadCardPacks,
   loadDislikedPackCardIds as loadHiddenPackCardIdsCompat,
@@ -3044,13 +3045,16 @@ function App() {
     setRoutePath(normalized);
   }
 
-  function openLauncherSetupFromApp(versionOrId) {
+  async function openLauncherSetupFromApp(versionOrId) {
     const versionId = typeof versionOrId === "string" ? versionOrId : versionOrId?.id;
     if (!versionId || !isKnownLauncher(versionId)) return;
     const version =
       typeof versionOrId === "object" && versionOrId?.id
         ? versionOrId
         : homeScreenVersions[versionId] ?? DEFAULT_HOME_SCREEN_VERSIONS[versionId] ?? getLauncherConfig(versionId);
+    // Completing onboarding can persist profile state immediately before
+    // opening either setup handoff. Let the IDB write land first.
+    await flushPendingStorageWrites();
     if (isStandaloneDisplayMode()) {
       setLauncherSetupInterstitialVersion(version);
       return;
@@ -4535,6 +4539,7 @@ function App() {
   }
 
   function resetLocalMyBishBashState({ routeToOnboarding = true, clearStorage = true } = {}) {
+    let clearStoragePromise = Promise.resolve();
     if (cloudSaveTimerRef.current) {
       window.clearTimeout(cloudSaveTimerRef.current);
       cloudSaveTimerRef.current = null;
@@ -4544,7 +4549,7 @@ function App() {
     highestKnownCloudTimeRef.current = 0;
     isApplyingSharedStateRef.current = false;
     if (clearStorage) {
-      clearSharedMyBishBashState();
+      clearStoragePromise = clearSharedMyBishBashState();
     }
     const nextLaunchSession = launchSessionReducer(launchSession, { type: LAUNCH_SESSION_EVENTS.RESET_HOME });
     persistLaunchSession(nextLaunchSession);
@@ -4575,6 +4580,7 @@ function App() {
       setScreen("onboarding");
       navigateTo("/onboarding", { replace: true });
     }
+    return clearStoragePromise;
   }
 
   async function handleResetSharedState() {
@@ -4585,11 +4591,11 @@ function App() {
     setSyncError("");
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    resetLocalMyBishBashState();
+    await resetLocalMyBishBashState();
   }
 
   async function handleSignUp(email, password) {
-    resetLocalMyBishBashState();
+    await resetLocalMyBishBashState();
     setSyncStatus("loading");
     setSyncError("");
     signupOnboardingPendingRef.current = true;
@@ -4667,8 +4673,9 @@ function App() {
     setSession(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    clearSharedMyBishBashState();
+    const clearStoragePromise = clearSharedMyBishBashState();
     resetLocalMyBishBashState({ clearStorage: false });
+    await clearStoragePromise;
     setSyncStatus("needs-connection");
     setSyncError("");
   }
@@ -4686,7 +4693,7 @@ function App() {
     setSession(null);
     signupOnboardingPendingRef.current = false;
     setSignupOnboardingPending(false);
-    resetLocalMyBishBashState();
+    await resetLocalMyBishBashState();
     setSyncStatus("needs-connection");
     setSyncError("");
   }

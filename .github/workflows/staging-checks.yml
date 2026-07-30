@@ -53,7 +53,7 @@ jobs:
         run: npm run test:bundle-budget
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Before-push checks
         run: npm run test:before-push
@@ -63,8 +63,28 @@ jobs:
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
 
       - name: Playwright smoke tests
-        run: npx playwright test tests/e2e/release-smoke.spec.ts tests/e2e/commitment-cards.spec.ts tests/e2e/card-overlay-mobile.spec.ts
+        run: npx playwright test tests/e2e/release-smoke.spec.ts tests/e2e/commitment-cards.spec.ts tests/e2e/card-overlay-mobile.spec.ts --project=release-smoke
         env:
+          PLAYWRIGHT_TEST_OUTPUT_DIR: test-results/chromium-smoke
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/chromium-smoke
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
+
+      - name: Chromium storage migration
+        run: npx playwright test tests/e2e/storage-migration.spec.ts --project=release-smoke
+        env:
+          PLAYWRIGHT_TEST_OUTPUT_DIR: test-results/chromium-storage-migration
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/chromium-storage-migration
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}
+
+      - name: WebKit persistence smoke
+        run: npx playwright test --project=webkit-smoke
+        env:
+          PLAYWRIGHT_TEST_OUTPUT_DIR: test-results/webkit-persistence
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/webkit-persistence
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY || vars.VITE_VAPID_PUBLIC_KEY }}

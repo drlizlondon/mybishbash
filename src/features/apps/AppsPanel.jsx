@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { canAddUnder } from "../../lib/accessCapabilities";
 import { getLauncherConfig } from "../../lib/launcherRegistry";
-import { isStandaloneDisplayMode, getLauncherSetupUrl } from "../../lib/launcherSetupUrl";
+import { getLauncherSetupUrl } from "../../lib/launcherSetupUrl";
 import { formatPauseRemaining } from "../../lib/pauseFormat";
 import { DEFAULT_HOME_SCREEN_VERSIONS } from "../../storage";
 import EnabledAppRow from "./EnabledAppRow";
 import MoreAppsOptions from "./MoreAppsOptions";
-import LauncherSetupInterstitial from "./LauncherSetupInterstitial";
 import AppManagementScreen from "./AppManagementScreen";
 import { AppsAccessScreen, AppSwitchAccessScreen, AppsCodeScreen } from "../access";
 
@@ -46,7 +45,6 @@ function AppsPanelClock({
   const [showAccessScreen, setShowAccessScreen] = useState(false);
   const [showCodeScreen, setShowCodeScreen] = useState(false);
   const [switchTargetStatus, setSwitchTargetStatus] = useState(null);
-  const [setupInterstitialVersion, setSetupInterstitialVersion] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -83,19 +81,8 @@ function AppsPanelClock({
 
   function openLauncherSetup(version) {
     if (!version?.id) return;
-    if (isStandaloneDisplayMode()) {
-      setSetupInterstitialVersion(version);
-      return;
-    }
     onOpenLauncherSetup?.(version.id);
   }
-
-  const setupInterstitial = setupInterstitialVersion ? (
-    <LauncherSetupInterstitial
-      version={setupInterstitialVersion}
-      onClose={() => setSetupInterstitialVersion(null)}
-    />
-  ) : null;
 
   if (showCodeScreen) {
     return (
@@ -166,7 +153,6 @@ function AppsPanelClock({
           onOpenLauncherSetup={openLauncherSetup}
           nowMs={nowMs}
         />
-        {setupInterstitial}
       </section>
     );
   }
@@ -222,11 +208,11 @@ function AppsPanelClock({
                       method="get"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        if (isStandaloneDisplayMode()) {
-                          openLauncherSetup(homeScreenVersions[app.id] ?? DEFAULT_HOME_SCREEN_VERSIONS[app.id] ?? getLauncherConfig(app.id));
-                          return;
-                        }
-                        window.location.href = getLauncherSetupUrl(app.id);
+                        openLauncherSetup(
+                          homeScreenVersions[app.id] ??
+                            DEFAULT_HOME_SCREEN_VERSIONS[app.id] ??
+                            getLauncherConfig(app.id),
+                        );
                       }}
                     >
                       <button
@@ -263,11 +249,7 @@ function AppsPanelClock({
             method="get"
             onSubmit={(event) => {
               event.preventDefault();
-              if (isStandaloneDisplayMode()) {
-                openLauncherSetup(onboardingSelectedAppSetup.version);
-                return;
-              }
-              window.location.href = getLauncherSetupUrl(onboardingSelectedAppSetup.id);
+              openLauncherSetup(onboardingSelectedAppSetup.version);
             }}
           >
             <button
@@ -322,8 +304,6 @@ function AppsPanelClock({
           }}
         />
       </div>
-      {setupInterstitial}
     </section>
   );
 }
-

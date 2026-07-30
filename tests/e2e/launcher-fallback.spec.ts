@@ -72,6 +72,9 @@ test.describe('iOS custom-scheme failure recovers via timed web fallback', () =>
     await seedE2EState(page);
     await stubDestination(page, 'https://www.google.com/**', 'google-web');
     await page.goto('/mybishbash/home');
+    await page.waitForFunction(
+      () => typeof (window as any).__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function',
+    );
 
     await page.evaluate(() => {
       (window as any).__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH('safari', 'settings_fake_launcher');
@@ -96,6 +99,9 @@ test('HQ-created dynamic launcher opens its https web fallback', async ({ page }
   });
   await stubDestination(page, 'https://example.com/**', 'dynamic-web');
   await page.goto('/mybishbash/home');
+  await page.waitForFunction(
+    () => typeof (window as any).__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH === 'function',
+  );
 
   await page.evaluate(() => {
     (window as any).__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH('testapp', 'settings_fake_launcher');

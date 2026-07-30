@@ -1,6 +1,6 @@
 import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY, mergeLauncherConfig } from "./lib/launcherRegistry";
 import { rebase } from "./lib/basePath";
-import { kvDelete, kvGetAll, kvPut, openDb } from "./services/db/index.js";
+import { flushWrites, kvDelete, kvGetAll, kvPut, metaGet, metaPut, openDb } from "./services/db/index.js";
 
 const STORAGE_KEY = "mybishbash.cards.v1";
 const SETUP_KEY = "mybishbash.setup-complete.v1";
@@ -46,24 +46,28 @@ export function setStorageItem(key, value) {
   if (isMirrorActive()) {
     const stringValue = String(value);
     mirror.set(key, stringValue);
-    void kvPut(key, stringValue);
+    queueIdbWrite(() => kvPut(key, stringValue));
     // Dual-write (R2): localStorage stays current for the whole transition
     // release so the kill switch and a build rollback lose nothing. Retired in
     // commit 6, one release after the cutover.
     window.localStorage.setItem(key, stringValue);
+    markIdbMutationDuringReconciliation();
     return;
   }
   window.localStorage.setItem(key, value);
+  markLegacyMutationForReconciliation();
 }
 
 export function removeStorageItem(key) {
   if (isMirrorActive()) {
     mirror.delete(key);
-    void kvDelete(key);
+    queueIdbWrite(() => kvDelete(key));
     window.localStorage.removeItem(key);
+    markIdbMutationDuringReconciliation();
     return;
   }
   window.localStorage.removeItem(key);
+  markLegacyMutationForReconciliation();
 }
 
 // ─── The persistence engine seam (Phase 5, commit 2) ─────────────────────────
@@ -74,8 +78,11 @@ export function removeStorageItem(key) {
 // with the same arguments, as it did before the seam existed
 // (`src/storage.funnel.bytes.test.js` compares it byte for byte).
 //
-//   "localstorage" (the default this commit) — `window.localStorage`, verbatim.
-//   "idb"                                    — an in-memory mirror seeded by
+//   "localstorage" — owned-key reads/writes remain `window.localStorage`
+//        byte-for-byte. Once hydration has selected this engine, an out-of-band
+//        retry generation also records that localStorage is authoritative so a
+//        later return to IDB cannot load stale data.
+//   "idb" (default) — an in-memory mirror seeded by
 //        `hydrateLocalData()`; reads are synchronous Map lookups, writes update
 //        the mirror synchronously, then fire-and-forget `kvPut`/`kvDelete` into
 //        IndexedDB (per-key ordered by services/db's write chain), and ALSO
@@ -87,18 +94,22 @@ export function removeStorageItem(key) {
 // the thing that decides where owned keys live, so it cannot live behind the
 // decision (Ruling R1: pre-hydration flags stay on localStorage).
 //
-// This commit changes NO behaviour: DEFAULT_STORAGE_ENGINE is "localstorage",
-// nothing in the app calls `hydrateLocalData()` yet (commit 3 wires main.jsx),
-// and without hydration the mirror is never active. The one-time localStorage
-// import and the flip of the default belong to commit 4.
+// On the first idb boot, hydration imports the raw localStorage bytes before it
+// seeds the mirror. localStorage remains current through dual-write so the kill
+// switch and a build rollback retain the complete transition-release state.
 
 const STORAGE_ENGINE_KEY = "mybishbash.storage-engine.v1";
-const DEFAULT_STORAGE_ENGINE = "localstorage";
+const MIGRATION_RETRY_REQUEST_KEY = "mybishbash.storage-migration-retry.v1";
+const MIGRATION_RETRY_ACK_KEY = "mybishbash.storage-migration-retry-ack.v1";
+const MIGRATION_META_KEY = "migratedFromLocalStorage";
+const DEFAULT_STORAGE_ENGINE = "idb";
 const HYDRATION_TIMEOUT_MS = 3000;
+const WRITE_FLUSH_TIMEOUT_MS = 1000;
 
 let activeEngine = null;
 let mirror = null;
 let hydrationPromise = null;
+let isClearingSharedState = false;
 
 function getLocalStorageItem(key) {
   const value = window.localStorage.getItem(key);
@@ -110,6 +121,7 @@ function getLocalStorageItem(key) {
   const legacyValue = window.localStorage.getItem(legacyKey);
   if (legacyValue !== null) {
     window.localStorage.setItem(key, legacyValue);
+    markLegacyMutationForReconciliation();
   }
   return legacyValue;
 }
@@ -139,6 +151,73 @@ function readEngineOverride() {
   }
 }
 
+function readMigrationRetry() {
+  try {
+    const token = window.localStorage.getItem(MIGRATION_RETRY_REQUEST_KEY);
+    const acknowledgedToken = window.localStorage.getItem(MIGRATION_RETRY_ACK_KEY);
+    return {
+      token,
+      pending: token !== null && token !== acknowledgedToken,
+    };
+  } catch {
+    return { token: null, pending: false };
+  }
+}
+
+function markMigrationRetry() {
+  try {
+    const token =
+      typeof globalThis.crypto?.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(MIGRATION_RETRY_REQUEST_KEY, token);
+  } catch {
+    // A failed control-key write must not prevent the legacy fallback.
+  }
+}
+
+function markLegacyMutationForReconciliation() {
+  // Production storage access is hydration-gated. Once that gate has selected
+  // legacy mode — explicitly or after an IDB failure — every later mutation
+  // advances the durable generation. A concurrent/future IDB context can only
+  // acknowledge the generation it sampled, so it cannot hide a newer legacy
+  // write. Direct pre-hydration test calls retain the byte-identical legacy
+  // path established by commit 1.5.
+  if (!isClearingSharedState && hydrationPromise !== null && activeEngine === "localstorage") {
+    markMigrationRetry();
+  }
+}
+
+function markIdbMutationDuringReconciliation() {
+  // Normally IDB writes need no control-key churn: the mirror and both sinks
+  // update together. If another context is currently reconciling a pending
+  // generation, however, advance it after the localStorage dual-write. That
+  // importer must then reject its older snapshot instead of acknowledging over
+  // this newer mutation.
+  if (!isClearingSharedState && readMigrationRetry().pending) markMigrationRetry();
+}
+
+function queueIdbWrite(run) {
+  try {
+    void Promise.resolve(run()).catch(() => markMigrationRetry());
+  } catch {
+    markMigrationRetry();
+  }
+}
+
+function acknowledgeMigrationRetry(token) {
+  if (token === null) return;
+  try {
+    // Never remove the request key. Another tab may write a newer token after
+    // this hydration samples state; acknowledging only the sampled generation
+    // leaves that newer request pending without a cross-context compare/remove
+    // race.
+    window.localStorage.setItem(MIGRATION_RETRY_ACK_KEY, token);
+  } catch {
+    // The successful IDB session remains valid even if cleanup is unavailable.
+  }
+}
+
 /** The engine in force for this session ("idb" | "localstorage"). */
 export function getActiveStorageEngine() {
   if (activeEngine === null) activeEngine = readEngineOverride() ?? DEFAULT_STORAGE_ENGINE;
@@ -164,9 +243,9 @@ async function reportEngineFallback(error) {
   }
 }
 
-function withTimeout(promise, ms) {
+function withTimeout(promise, ms, message) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("IndexedDB open timed out")), ms);
+    const timer = setTimeout(() => reject(new Error(message)), ms);
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -182,14 +261,42 @@ function withTimeout(promise, ms) {
 
 async function runHydration() {
   activeEngine = readEngineOverride() ?? DEFAULT_STORAGE_ENGINE;
-  if (activeEngine !== "idb") return;
+  if (activeEngine !== "idb") {
+    // The kill switch may stay enabled for many sessions. Mark this source as
+    // authoritative now, and advance the generation again after each mutation,
+    // so returning to IDB is a lossless two-way operation.
+    markMigrationRetry();
+    return;
+  }
 
   try {
-    await withTimeout(openDb(), HYDRATION_TIMEOUT_MS);
-    mirror = await kvGetAll();
+    // The settled Phase 5 policy bounds database opening only. Once open,
+    // IndexedDB transactions complete or reject without an arbitrary
+    // first-migration deadline that could false-fallback on slower WebKit.
+    await withTimeout(
+      openDb(),
+      HYDRATION_TIMEOUT_MS,
+      "IndexedDB open timed out",
+    );
+    const migrationRetry = readMigrationRetry();
+    await migrateLocalStorageIfNeeded({ force: migrationRetry.pending });
+    const entries = await kvGetAll();
+    // A different context may have selected/written legacy storage while this
+    // one awaited IDB. Never activate a snapshot older than the latest durable
+    // generation; fall back for this session and let the next boot reconcile.
+    if (readMigrationRetry().token !== migrationRetry.token) {
+      throw new Error("IndexedDB hydration invalidated by a concurrent legacy write");
+    }
+    mirror = entries;
+    // Acknowledge only after the complete import + mirror read succeeds.
+    if (migrationRetry.pending) {
+      acknowledgeMigrationRetry(migrationRetry.token);
+    }
   } catch (error) {
     // Failure policy (R2): fall back to legacy for this session, report, and
-    // ALWAYS resolve — the app must never hang on boot.
+    // ALWAYS resolve — the app must never hang on boot. Keep localStorage
+    // authoritative until a later healthy boot completes an exact replay.
+    markMigrationRetry();
     activeEngine = "localstorage";
     mirror = null;
     await reportEngineFallback(error);
@@ -199,13 +306,33 @@ async function runHydration() {
 /**
  * Prepare synchronous local reads for this session. Resolves exactly once per
  * session (success, timeout-fallback, or failure-fallback) and never rejects.
- * In legacy mode it is a no-op that resolves immediately.
+ * In legacy mode it does no IndexedDB work and resolves immediately after
+ * publishing the reconciliation generation.
  */
 export function hydrateLocalData() {
   if (!hydrationPromise) hydrationPromise = runHydration();
   return hydrationPromise;
 }
 
+/**
+ * Wait for fire-and-forget IndexedDB writes before deliberately leaving the
+ * app document. Normal in-app reads stay synchronous through the mirror.
+ */
+export async function flushPendingStorageWrites() {
+  if (!isMirrorActive()) return;
+  await settlePendingStorageWrites();
+}
+
+async function settlePendingStorageWrites() {
+  try {
+    await withTimeout(flushWrites(), WRITE_FLUSH_TIMEOUT_MS, "IndexedDB write flush timed out");
+  } catch {
+    // Navigation/reset must remain available if a transaction stalls. The
+    // synchronous dual-write is already current, and this generation forces an
+    // exact localStorage → IDB replay on the next healthy boot.
+    markMigrationRetry();
+  }
+}
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
@@ -230,6 +357,36 @@ const SHARED_STORAGE_KEYS = [
   "mybishbash.user-id.v1",
 ];
 const LEGACY_SHARED_STORAGE_KEYS = SHARED_STORAGE_KEYS.map(getLegacyStorageKey).filter(Boolean);
+
+async function migrateLocalStorageIfNeeded({ force = false } = {}) {
+  const marker = await metaGet(MIGRATION_META_KEY);
+  if (marker !== null && !force) return;
+
+  // Read canonical keys through the existing legacy-prefix shim. A legacy-only
+  // value is promoted to its canonical localStorage key and imported under that
+  // canonical key; payload strings are never parsed or reshaped. This is an
+  // exact reconciliation, so absent source keys delete stale partial/fallback
+  // rows as well as present keys replacing them.
+  for (const key of SHARED_STORAGE_KEYS) {
+    const value = getLocalStorageItem(key);
+    if (value !== null) await kvPut(key, value);
+    else await kvDelete(key);
+  }
+  // Migration always canonicalises legacy-prefix localStorage values. During a
+  // forced recovery, remove any legacy-prefix IDB rows too; otherwise a failed
+  // clear could later fall through to one of those stale rows and resurrect it.
+  if (force) {
+    for (const key of LEGACY_SHARED_STORAGE_KEYS) await kvDelete(key);
+  }
+
+  // This marker is deliberately the final committed write. If boot stops
+  // anywhere above, the next hydration safely replays the whole import from the
+  // untouched localStorage source.
+  await metaPut(MIGRATION_META_KEY, {
+    at: new Date().toISOString(),
+    appVersion: typeof __MYBISHBASH_VERSION__ !== "undefined" ? String(__MYBISHBASH_VERSION__) : "dev",
+  });
+}
 
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
   mybishbash: {
@@ -696,5 +853,27 @@ export function clearExpiredAppPause(appId) {
 }
 
 export function clearSharedMyBishBashState() {
-  [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS].forEach((key) => removeStorageItem(key));
+  const keys = [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS];
+  const mirrorWasActive = isMirrorActive();
+
+  // Preserve the established localStorage removal order, but publish one
+  // durable invalidation for the atomic clear instead of forty intermediate
+  // generations.
+  isClearingSharedState = true;
+  try {
+    keys.forEach((key) => removeStorageItem(key));
+  } finally {
+    isClearingSharedState = false;
+  }
+  if (hydrationPromise !== null) markMigrationRetry();
+
+  // In IDB mode removeStorageItem already enqueued every delete. Under the
+  // explicit kill switch or automatic fallback there is no mirror, so clear
+  // the IDB sink directly as well. Failure is recoverable: the generation
+  // above makes the next healthy IDB boot reconcile from the now-empty source.
+  if (!mirrorWasActive) keys.forEach((key) => void kvDelete(key));
+
+  // Synchronous callers still observe the cleared mirror/localStorage
+  // immediately; account/reset flows may await durable IDB settlement.
+  return settlePendingStorageWrites();
 }

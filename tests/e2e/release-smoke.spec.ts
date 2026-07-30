@@ -833,7 +833,7 @@ test('Home empty states use calm copy without stacked zero language', async ({ p
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('Home commitment card distinguishes active and completed commitment states', async ({ page }) => {
+test('Home commitment card shows the active commitment state', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
 
   await seedE2EState(page, {
@@ -848,7 +848,11 @@ test('Home commitment card distinguishes active and completed commitment states'
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('Live Commitment');
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('go for a walk today');
   await expect(page.getByTestId('home-live-commitment-card')).toContainText('1 live commitment');
+  await expectNoConsoleErrors(consoleErrors);
+});
 
+test('Home commitment card omits the completed commitment state', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [
       commitmentCard('completed-commitment', 'not eat snacks after dinner', {

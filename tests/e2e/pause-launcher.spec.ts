@@ -447,6 +447,7 @@ test('fake-launcher-warm-resume-clears-bypass — revisiting home after bypass d
   await seedState(page, {
     cards: [personalCard('fl5', 'Warm resume card')],
     appPauses: { safari: futureExpiry },
+    enabledAppIds: ['safari'],
   });
   await page.goto('/mybishbash/home');
 
@@ -456,11 +457,14 @@ test('fake-launcher-warm-resume-clears-bypass — revisiting home after bypass d
   await page.evaluate(() => window.__MYBISHBASH_E2E_FAKE_LAUNCHER_LAUNCH?.('safari'));
   await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
 
-  // Clear the pause so next tap should show cards.
+  // End the pause through the real UI so the live mirror and both persistence
+  // sinks all observe the same state.
+  await page.getByTestId('bottom-nav-apps').click();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Paused until');
+  await page.getByTestId('apps-end-pause-safari').click();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Enabled');
+  await page.getByTestId('bottom-nav-home').click();
   await page.evaluate(() => {
-    const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
-    delete pauses['safari'];
-    window.localStorage.setItem('mybishbash.app-pauses.v1', JSON.stringify(pauses));
     window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
   });
 
@@ -587,14 +591,16 @@ test('access-route-founding — paid access shows Apps and billing actions', asy
   expect(layout.billingBottom).toBeLessThanOrEqual(layout.navTop);
 });
 
-test('main Apps control centre shows all apps while preserving enabled state', async ({ page }) => {
+test('main Apps control centre shows all apps with none set up', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-count-zero', 'Apps count zero')], appIds: ['safari', 'youtube'], enabledAppIds: [], testerMode: false });
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('apps-list')).toContainText('Your apps');
   await expect(page.getByTestId('apps-list')).toContainText('No apps set up yet.');
   await expect(page.getByTestId('apps-option-safari')).toContainText('Not set up');
   await expect(page.getByTestId('apps-option-youtube')).toContainText('Not set up');
+});
 
+test('main Apps control centre preserves one enabled app and gates another', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-count-one', 'Apps count one')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari'], testerMode: false });
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toContainText('Safari with myBishBash');
@@ -602,7 +608,9 @@ test('main Apps control centre shows all apps while preserving enabled state', a
   await expect(page.getByTestId('apps-option-youtube')).toContainText('Free Core includes myBishBash and one connected app shortcut.');
   await expect(page.getByTestId('apps-option-youtube')).toContainText('Upgrade');
   await expect(page.getByTestId('apps-option-youtube').getByRole('button', { name: 'Settings' })).toHaveCount(0);
+});
 
+test('main Apps control centre preserves two enabled apps with full access', async ({ page }) => {
   await seedState(page, { cards: [personalCard('apps-count-two', 'Apps count two')], appIds: ['safari', 'youtube'], enabledAppIds: ['safari', 'youtube'], testerMode: false, accessTier: 'founding_access' });
   await page.goto('/mybishbash/apps');
   await expect(page.getByTestId('protected-app-safari')).toBeVisible();
@@ -1123,9 +1131,6 @@ test('apps-app-prompts-toggle — prompts off survives reload and shared-state a
     useInterruptionPack: false,
   });
 
-  await page.evaluate((settings) => {
-    window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(settings));
-  }, localPromptsOn);
   await page.reload();
 
   const reloadedToggle = page.getByTestId('apps-interruptions-toggle-safari');

@@ -1,6 +1,6 @@
 import { formatPauseUntil } from "../../lib/pauseFormat";
 import { resolveLauncherIconSrc } from "../../lib/launcherRegistry";
-import { getLauncherSetupUrl, isStandaloneDisplayMode } from "../../lib/launcherSetupUrl";
+import { getLauncherSetupUrl } from "../../lib/launcherSetupUrl";
 import { getDefaultAppPrompt } from "../access";
 
 export default function AppManagementScreen({
@@ -56,11 +56,7 @@ export default function AppManagementScreen({
             method="get"
             onSubmit={(event) => {
               event.preventDefault();
-              if (isStandaloneDisplayMode()) {
-                onOpenLauncherSetup?.(version);
-                return;
-              }
-              window.location.href = getLauncherSetupUrl(version.id);
+              onOpenLauncherSetup?.(version);
             }}
           >
             <button
@@ -204,4 +200,3 @@ export default function AppManagementScreen({
     </div>
   );
 }
-

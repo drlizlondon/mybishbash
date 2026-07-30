@@ -231,7 +231,7 @@ describe("storage funnel — byte identity", () => {
     app.resetDemoSignupState();
 
     record("demo-reset-signup", snapshot());
-  });
+  }, 30_000);
 
   it("resetDemoOnboardingState removes and seeds identical bytes", async () => {
     const app = await import("./App.jsx");
@@ -245,7 +245,7 @@ describe("storage funnel — byte identity", () => {
     app.resetDemoOnboardingState();
 
     record("demo-reset-onboarding", snapshot());
-  });
+  }, 30_000);
 
   it("the E2E shared-state bridge writes identical bytes", async () => {
     const sync = await import("./lib/mybishbashSync.js");

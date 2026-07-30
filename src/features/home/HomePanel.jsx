@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { getGreeting } from "../../utils";
-import { getLauncherSetupUrl, isStandaloneDisplayMode } from "../../lib/launcherSetupUrl";
 import { BASE_PATH } from "../../app/router/routes";
 import { PlusGlyph, AppsGlyph } from "../../app/shell/glyphs";
 import HomeAppIcon from "./HomeAppIcon";
@@ -84,11 +83,7 @@ export default function HomePanel({
 
   const openOnboardingLauncherSetup = () => {
     if (!onboardingSelectedAppSetup?.id) return;
-    if (isStandaloneDisplayMode()) {
-      onOpenLauncherSetup?.(onboardingSelectedAppSetup.id);
-      return;
-    }
-    window.location.href = getLauncherSetupUrl(onboardingSelectedAppSetup.id);
+    onOpenLauncherSetup?.(onboardingSelectedAppSetup.id);
   };
 
   return (
@@ -236,4 +231,3 @@ export default function HomePanel({
     </section>
   );
 }
-

@@ -480,6 +480,10 @@ test('before-push caught-up on one launcher does not leak into another valid lau
   await page.getByTestId('bottom-nav-home').click();
   await page.getByTestId('create-card-button').click();
   await page.getByTestId('card-prompt-input').fill('Fresh after caught up');
+  const composer = page.getByTestId('card-composer');
+  for (const timingLabel of ['Morning', 'During the day', 'Evening', 'At night']) {
+    await composer.getByRole('checkbox', { name: timingLabel }).check();
+  }
   await page.getByTestId('save-card-button').click();
   await expect(page.getByText('Fresh after caught up')).toBeVisible();
   await expect
@@ -490,17 +494,10 @@ test('before-push caught-up on one launcher does not leak into another valid lau
       }),
     )
     .toBe(true);
-  await page.evaluate(() => {
-    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') || '[]');
-    const eligibleCards = cards.map((card: { promptText?: string; timingWindows?: string[] }) =>
-      card.promptText === 'Fresh after caught up'
-        ? { ...card, timingWindows: ['morning', 'day', 'evening', 'night'] }
-        : card,
-    );
-    window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(eligibleCards));
-  });
-
-  await openLauncher(page, 'youtube');
+  // This case owns warm-session state isolation. Reload durability is covered
+  // by storage-migration.spec.ts, so do not race a just-queued IDB write with a
+  // synthetic hard navigation here.
+  await routeToLauncherInWarmApp(page, 'youtube');
   await expectOverlay(page, 'personal');
   await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'Fresh after caught up' })).toBeVisible();
 });

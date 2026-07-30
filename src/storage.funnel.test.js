@@ -104,11 +104,10 @@ describe("app-pauses reads and writes through the funnel", () => {
 
 describe("clearSharedMyBishBashState", () => {
   /**
-   * HONEST LIMITATION: `removeStorageItem` is `window.localStorage.removeItem`
-   * with no added semantics, so restoring the inline call here is
-   * behaviourally indistinguishable and NO test can catch it. What can
-   * regress — and what this test pins — is the removal set itself: all 20
-   * shared keys, all 20 legacy twins, and nothing else.
+   * This test pins the local removal set: all 20 shared keys, all 20 legacy
+   * twins, and nothing else. `storage.engine.test.js` separately seeds and
+   * verifies mirror + IndexedDB state under both engines, including a reload,
+   * so the all-sink clear guarantee is no longer asserted vacuously here.
    */
   it("removes every shared key and its legacy twin, and nothing else", async () => {
     const { clearSharedMyBishBashState } = await import("./storage.js");

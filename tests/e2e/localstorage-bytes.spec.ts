@@ -179,6 +179,13 @@ async function dump(page: Page) {
   return normalise(raw);
 }
 
+async function navigateWithinApp(page: Page, path: string) {
+  await page.evaluate((nextPath) => {
+    window.history.pushState({}, '', `/mybishbash${nextPath}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
 const captured: Record<string, unknown> = {};
 
 function record(name: string, snapshot: unknown) {
@@ -231,7 +238,10 @@ test('bytes: handleSaveCard, handleDuplicateCard, handleResetItem, handleAction'
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   // handleDuplicateCard + handleResetItem via the library row menu.
-  await page.goto('/mybishbash/library');
+  // Keep this handler-byte test in one hydrated app session. A hard reload can
+  // race the deliberately fire-and-forget IDB put; storage-migration.spec.ts
+  // owns the separate durability round-trip.
+  await navigateWithinApp(page, '/library');
   await page.getByTestId('library-personal-section-toggle').click();
   const row = page.getByTestId('library-row-personal-card');
   await expect(row).toBeVisible();
@@ -252,7 +262,7 @@ test('bytes: handleSaveCard, handleDuplicateCard, handleResetItem, handleAction'
   await reset.dispatchEvent('click');
 
   // handleAction — complete the seeded personal card.
-  await page.goto('/mybishbash/card/personal-card');
+  await navigateWithinApp(page, '/card/personal-card');
   await page.getByTestId('card-action-done').click();
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
 

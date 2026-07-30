@@ -202,10 +202,17 @@ test('login persists after pause and continue-to-app flows', async ({ page }) =>
   await expectSessionPresent(page);
 
   await page.evaluate(() => {
-    window.localStorage.setItem('mybishbash.app-pauses.v1', '{}');
-    window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
+    window.history.pushState({}, '', '/mybishbash/apps/safari');
+    window.dispatchEvent(new PopStateEvent('popstate'));
   });
-  await page.goto('/mybishbash/intercept/safari');
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Paused until');
+  await page.getByTestId('apps-end-pause-inline-safari').click();
+  await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Enabled');
+  await page.evaluate(() => {
+    window.__MYBISHBASH_NAVIGATION_ATTEMPTS = [];
+    window.history.pushState({}, '', '/mybishbash/intercept/safari');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
   await expect(page.getByRole('link', { name: 'Continue to Safari' })).toBeVisible({ timeout: 10000 });
   await page.getByRole('link', { name: 'Continue to Safari' }).evaluate((element) => (element as HTMLElement).click());
   await expect.poll(
@@ -266,8 +273,9 @@ test('successful account deletion clears local state and returns to signed-out s
   await page.getByTestId('delete-account-settings-card').getByRole('button', { name: 'Delete account' }).click();
   await page.getByTestId('delete-account-confirmation-input').fill('DELETE');
   await page.getByTestId('delete-account-final-button').click();
-  await expect(page.getByTestId('delete-account-final-button')).toContainText('Deleting...');
 
+  // The mocked deletion can complete before the transient button label paints;
+  // the durable signed-out and cleared-storage outcomes are the contract.
   await expectSessionMissing(page);
   await expect(page.getByTestId('sync-screen')).toBeVisible({ timeout: 10000 });
   await expect.poll(async () => page.evaluate(() => ({

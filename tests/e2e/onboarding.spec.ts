@@ -631,8 +631,11 @@ test('onboarding back buttons move through the previous logical setup step', asy
   await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
-  await page.getByRole('button', { name: 'Set up my Personal Cards', exact: true }).click();
+  const setupCards = page.getByRole('button', { name: 'Set up my Personal Cards', exact: true });
+  await expect(setupCards).toBeDisabled();
+  await expect(setupCards).toBeEnabled({ timeout: 4500 });
+  await setupCards.click();
+  await expect(page.getByRole('heading', { name: 'Let’s start with a few things you’d like to remember more often.' })).toBeVisible();
   await page.getByRole('button', { name: 'Have you taken your vitamins?' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Great. Your Personal Cards are ready.' })).toBeVisible();
@@ -701,7 +704,13 @@ test('skipping personal cards continues to Commitment Cards instead of ending on
 
 test('home spotlight tour supports navigation and persists dismissal after Personal Cards onboarding', async ({ page }) => {
   await completeOnboardingToHome(page, 'Instagram');
-  await page.goto('/mybishbash/library');
+  // This case owns warm-session tour navigation. Reload durability is covered
+  // by storage-migration.spec.ts, so do not race the just-queued onboarding
+  // writes with a synthetic hard navigation here.
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/mybishbash/library');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
 
   const tour = page.getByTestId('home-spotlight-tour');
   await expect(tour).toBeVisible();
