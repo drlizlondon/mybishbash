@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson, readIndexedDbValues } from './indexeddb';
 
 declare global {
   interface Window {
@@ -177,10 +178,10 @@ test('login persists after showing and completing one card', async ({ page }) =>
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible({ timeout: 10000 });
   await page.getByTestId('card-action-done').click();
-  await expect.poll(() => page.evaluate(() => {
-    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]');
+  await expect.poll(async () => {
+    const cards = await readIndexedDbJson<Array<Record<string, unknown>>>(page, 'mybishbash.cards.v1', []);
     return Boolean(cards.find((card: Record<string, unknown>) => card.id === 'session-card')?.doneDate);
-  })).toBe(true);
+  }).toBe(true);
 
   await expectSessionPresent(page);
   await page.goto('/mybishbash/home');
@@ -278,10 +279,16 @@ test('successful account deletion clears local state and returns to signed-out s
   // the durable signed-out and cleared-storage outcomes are the contract.
   await expectSessionMissing(page);
   await expect(page.getByTestId('sync-screen')).toBeVisible({ timeout: 10000 });
-  await expect.poll(async () => page.evaluate(() => ({
-    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
-    cards: window.localStorage.getItem('mybishbash.cards.v1'),
-  }))).toEqual({ setupComplete: 'false', cards: '[]' });
+  await expect.poll(async () => {
+    const values = await readIndexedDbValues<string>(page, [
+      'mybishbash.setup-complete.v1',
+      'mybishbash.cards.v1',
+    ]);
+    return {
+      setupComplete: values['mybishbash.setup-complete.v1'],
+      cards: values['mybishbash.cards.v1'],
+    };
+  }).toEqual({ setupComplete: 'false', cards: '[]' });
 });
 
 test('failed account deletion shows an error and keeps the user signed in', async ({ page }) => {

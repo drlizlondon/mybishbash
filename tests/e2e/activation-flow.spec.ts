@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 const SIGNUP_HANDOFF_REFERENCE_KEY = 'mybishbash.signup-handoff-ref.v1';
 const E2E_SIGNUP_HANDOFFS_KEY = 'MYBISHBASH_E2E_SIGNUP_HANDOFFS';
@@ -141,10 +142,22 @@ test('download page presents Home Screen install flow before the success step', 
   await expect(page.getByRole('link', { name: 'Continue in Browser' })).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Next you’ll create your account');
 
-  const installedProfile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
-  expect(installedProfile.hasCompletedHomeScreenInstall).toBe(true);
-  expect(installedProfile.hasSkippedHomeScreenInstallPrompt).toBe(false);
-  expect(installedProfile.plan).toBe('free');
+  await expect.poll(async () => {
+    const installedProfile = await readIndexedDbJson<Record<string, unknown>>(
+      page,
+      'mybishbash.profile.v1',
+      {},
+    );
+    return {
+      hasCompletedHomeScreenInstall: installedProfile.hasCompletedHomeScreenInstall,
+      hasSkippedHomeScreenInstallPrompt: installedProfile.hasSkippedHomeScreenInstallPrompt,
+      plan: installedProfile.plan,
+    };
+  }).toEqual({
+    hasCompletedHomeScreenInstall: true,
+    hasSkippedHomeScreenInstallPrompt: false,
+    plan: 'free',
+  });
 
   await page.getByRole('link', { name: 'Continue in Browser' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
@@ -163,10 +176,18 @@ test('download success fallback stores incomplete install state and continues to
   await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
 
-  const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
-  expect(profile.hasCompletedHomeScreenInstall).toBe(false);
-  expect(profile.hasSkippedHomeScreenInstallPrompt).toBe(true);
-  expect(profile.plan).toBe('free');
+  await expect.poll(async () => {
+    const profile = await readIndexedDbJson<Record<string, unknown>>(page, 'mybishbash.profile.v1', {});
+    return {
+      hasCompletedHomeScreenInstall: profile.hasCompletedHomeScreenInstall,
+      hasSkippedHomeScreenInstallPrompt: profile.hasSkippedHomeScreenInstallPrompt,
+      plan: profile.plan,
+    };
+  }).toEqual({
+    hasCompletedHomeScreenInstall: false,
+    hasSkippedHomeScreenInstallPrompt: true,
+    plan: 'free',
+  });
 });
 
 test('Home shows only incomplete activation checklist items', async ({ page }) => {

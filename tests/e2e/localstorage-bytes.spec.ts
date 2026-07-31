@@ -2,7 +2,7 @@
  * Phase 4b behavioural invariant 1: persistence payloads are byte-identical.
  *
  * Drives a scripted session through the REAL app for every handler this phase
- * extracts, dumps the resulting localStorage, normalises only the genuinely
+ * extracts, dumps the resulting IndexedDB payloads, normalises only the genuinely
  * volatile parts (generated UUIDs), and compares against a baseline captured
  * at the pre-extraction commit.
  *
@@ -17,6 +17,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readIndexedDbJson, readIndexedDbValues } from './indexeddb';
 
 const BASELINE_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -171,11 +172,7 @@ async function dump(page: Page) {
   // The cardsStore save is a 120ms trailing debounce; let it flush before
   // reading, otherwise the snapshot measures timing, not payload.
   await page.waitForTimeout(500);
-  const raw = await page.evaluate((keys) => {
-    const result: Record<string, string | null> = {};
-    for (const key of keys) result[key] = window.localStorage.getItem(key);
-    return result;
-  }, TRACKED_KEYS);
+  const raw = await readIndexedDbValues<string>(page, TRACKED_KEYS);
   return normalise(raw);
 }
 
@@ -194,7 +191,7 @@ function record(name: string, snapshot: unknown) {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
   expect(
     snapshot,
-    `localStorage bytes drifted for session "${name}". This is a Phase 4b rollback trigger.`,
+    `Persisted bytes drifted for session "${name}". This is a Phase 4b rollback trigger.`,
   ).toEqual(baseline[name]);
 }
 
@@ -251,10 +248,9 @@ test('bytes: handleSaveCard, handleDuplicateCard, handleResetItem, handleAction'
   await duplicate.dispatchEvent('click');
   // Assert the duplicate landed: a silent no-op here would under-cover the
   // handler while the snapshot still compared equal.
-  await expect.poll(async () => page.evaluate(() =>
-    JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') || '[]')
-      .filter((card: any) => card.promptText === 'take a steady breath').length,
-  )).toBe(2);
+  await expect.poll(async () => (
+    await readIndexedDbJson<any[]>(page, 'mybishbash.cards.v1', [])
+  ).filter((card) => card.promptText === 'take a steady breath').length).toBe(2);
 
   await row.getByLabel('Card options').click();
   const reset = row.getByRole('button', { name: 'Reset for today', exact: true });

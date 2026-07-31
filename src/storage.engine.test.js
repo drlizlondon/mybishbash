@@ -7,7 +7,7 @@
  *   legacy  × load/save round-trip           — unchanged behaviour behind the kill switch
  *   idb     × load/save round-trip           — synchronous reads off the mirror
  *   idb     × one-time migration              — raw-byte, idempotent, marker-last
- *   idb     × dual-write                     — mirror AND IndexedDB AND localStorage
+ *   idb     × retired dual-write             — mirror + IndexedDB; legacy snapshot unchanged
  *   both    × legacy `bishbash.` prefix shim — still readable, still promoted
  *   both    × clearSharedMyBishBashState     — clears every sink
  *   idb     × open failure                   — lands in legacy mode + reports
@@ -117,8 +117,9 @@ describe("localStorage migration", () => {
     expect(await db.kvGet("bishbash.profile.v1")).toBe(null);
     expect(await db.kvGet("mybishbash.morning-summary.seen.v1")).toBe(null);
 
-    // The source remains available for rollback. Legacy-only values are
-    // promoted by the existing shim, but no source key is deleted.
+    // The migration source remains available for explicit legacy mode.
+    // Legacy-only values are promoted by the existing shim, but no source key
+    // is deleted during the one-time import.
     expect(store.get("mybishbash.cards.v1")).toBe(canonicalCards);
     expect(store.get("bishbash.cards.v1")).toBe(shadowedLegacyCards);
     expect(store.get("mybishbash.profile.v1")).toBe(legacyProfile);
@@ -314,13 +315,18 @@ describe("localStorage migration", () => {
 
     expect(storage.getActiveStorageEngine()).toBe("localstorage");
     expect(storage.loadCards()).toEqual([{ id: "legacy-fallback" }]);
-    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toEqual(expect.any(String));
+    // A read-only automatic fallback must not nominate the frozen legacy
+    // snapshot for replay. A genuine fallback-session mutation does that.
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toBeUndefined();
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
     expect(metaGet).not.toHaveBeenCalled();
     expect(reportError).toHaveBeenCalledWith(
       expect.objectContaining({ message: "IndexedDB open timed out" }),
       "storage-engine-fallback",
     );
+
+    storage.saveMood("Fallback mutation");
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toEqual(expect.any(String));
   });
 
   it("keeps recovery pending after a failed forced import, then reconciles exactly", async () => {
@@ -365,8 +371,9 @@ describe("localStorage migration", () => {
     expect(firstStorage.getActiveStorageEngine()).toBe("localstorage");
     expect(imported.get("mybishbash.cards.v1")).toBe('[{"id":"before-failure"}]');
     const failedImportToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
-    expect(failedImportToken).toEqual(expect.any(String));
-    expect(failedImportToken).not.toBe("retry-before-failure");
+    // The genuine legacy mutation that requested recovery remains pending;
+    // the IDB failure itself must not publish a new legacy generation.
+    expect(failedImportToken).toBe("retry-before-failure");
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
 
     firstStorage.saveCards([{ id: "written-during-fallback" }]);
@@ -389,7 +396,7 @@ describe("localStorage migration", () => {
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(latestToken);
   });
 
-  it("does not acknowledge a retry generation created after another hydration sampled state", async () => {
+  it("does not let a read-only IDB fallback invalidate a concurrent healthy hydration", async () => {
     vi.useFakeTimers();
     vi.resetModules();
 
@@ -427,7 +434,7 @@ describe("localStorage migration", () => {
       metaGet: vi.fn(async () => marker),
       metaPut,
     }));
-    store.set("mybishbash.cards.v1", '[{"id":"current-localstorage"}]');
+    store.set("mybishbash.cards.v1", '[{"id":"stale-localstorage"}]');
 
     // Context A will time out, but not until context B has sampled the absence
     // of a retry request and paused on its mirror read.
@@ -442,33 +449,85 @@ describe("localStorage migration", () => {
 
     await vi.advanceTimersByTimeAsync(500);
     await failedHydration;
-    const newRetryToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
-    expect(newRetryToken).toEqual(expect.any(String));
+    expect(failedStorage.getActiveStorageEngine()).toBe("localstorage");
+    expect(failedStorage.loadCards()).toEqual([{ id: "stale-localstorage" }]);
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toBeUndefined();
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
 
     releaseSuccessfulRead();
     await successfulHydration;
-    // Context B must not activate the stale snapshot it read before context A
-    // published a newer generation. It falls back to the current local source
-    // for this session and advances the pending generation once more.
-    expect(successfulStorage.getActiveStorageEngine()).toBe("localstorage");
-    expect(successfulStorage.loadCards()).toEqual([{ id: "current-localstorage" }]);
-    const concurrentFallbackToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
-    expect(concurrentFallbackToken).toEqual(expect.any(String));
-    expect(concurrentFallbackToken).not.toBe(newRetryToken);
+    // The read-only fallback published no legacy authority, so Context B keeps
+    // the newer IndexedDB snapshot instead of importing stale localStorage.
+    expect(successfulStorage.getActiveStorageEngine()).toBe("idb");
+    expect(successfulStorage.loadCards()).toEqual([{ id: "stale-idb" }]);
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
+    expect(kvPut).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a paused healthy hydration after a genuine concurrent fallback mutation", async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
+
+    const marker = { at: "2026-07-30T12:00:00.000Z", appVersion: "test" };
+    const imported = new Map([["mybishbash.cards.v1", '[{"id":"newer-idb"}]']]);
+    let openAttempt = 0;
+    let releaseSuccessfulRead;
+    let readAttempt = 0;
+    const openDb = vi.fn(() => {
+      openAttempt += 1;
+      return openAttempt === 1 ? new Promise(() => {}) : Promise.resolve();
+    });
+    const kvGetAll = vi.fn(() => {
+      readAttempt += 1;
+      if (readAttempt === 1) {
+        return new Promise((resolve) => {
+          releaseSuccessfulRead = () => resolve(new Map(imported));
+        });
+      }
+      return Promise.resolve(new Map(imported));
+    });
+    const kvPut = vi.fn(async (key, value) => imported.set(key, value));
+    const reportError = vi.fn();
+
+    vi.doMock("./services/errors/reporter.js", () => ({ reportError }));
+    vi.doMock("./services/db/index.js", () => ({
+      openDb,
+      flushWrites: vi.fn(async () => {}),
+      kvGetAll,
+      kvPut,
+      kvDelete: vi.fn(async (key) => imported.delete(key)),
+      metaGet: vi.fn(async () => marker),
+      metaPut: vi.fn(async () => {}),
+    }));
+    store.set("mybishbash.cards.v1", '[{"id":"stale-until-mutated"}]');
+
+    const fallbackStorage = await import("./storage.js");
+    const fallbackHydration = fallbackStorage.hydrateLocalData();
+    await vi.advanceTimersByTimeAsync(2500);
+
+    vi.resetModules();
+    const pausedStorage = await import("./storage.js");
+    const pausedHydration = pausedStorage.hydrateLocalData();
+    await vi.waitFor(() => expect(releaseSuccessfulRead).toEqual(expect.any(Function)));
+
+    await vi.advanceTimersByTimeAsync(500);
+    await fallbackHydration;
+    fallbackStorage.saveCards([{ id: "genuine-fallback-mutation" }]);
+    const mutationToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
+    expect(mutationToken).toEqual(expect.any(String));
+
+    releaseSuccessfulRead();
+    await pausedHydration;
+    expect(pausedStorage.getActiveStorageEngine()).toBe("localstorage");
+    expect(pausedStorage.loadCards()).toEqual([{ id: "genuine-fallback-mutation" }]);
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
 
-    // A third context sees the still-pending generation, force-imports the
-    // current localStorage bytes despite the existing marker, then acknowledges
-    // exactly that generation.
-    vi.useRealTimers();
     vi.resetModules();
     const recoveredStorage = await import("./storage.js");
     await recoveredStorage.hydrateLocalData();
-
-    expect(recoveredStorage.loadCards()).toEqual([{ id: "current-localstorage" }]);
-    expect(kvPut).toHaveBeenCalledWith("mybishbash.cards.v1", '[{"id":"current-localstorage"}]');
-    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(concurrentFallbackToken);
+    expect(recoveredStorage.getActiveStorageEngine()).toBe("idb");
+    expect(recoveredStorage.loadCards()).toEqual([{ id: "genuine-fallback-mutation" }]);
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(mutationToken);
   });
 });
 
@@ -525,6 +584,28 @@ describe("load/save round-trips", () => {
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(latestToken);
   });
 
+  it("does not replay a read-only kill-switch snapshot when returning to idb", async () => {
+    store.set("mybishbash.cards.v1", '[{"id":"legacy-snapshot"}]');
+    const first = await loadStorage({ engine: "idb" });
+    first.storage.saveCards([{ id: "newer-idb" }]);
+    await first.db.flushWrites();
+
+    store.set(ENGINE_KEY, "localstorage");
+    vi.resetModules();
+    const legacyStorage = await import("./storage.js");
+    await legacyStorage.hydrateLocalData();
+    expect(legacyStorage.loadCards()).toEqual([{ id: "legacy-snapshot" }]);
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toBeUndefined();
+
+    store.delete(ENGINE_KEY);
+    vi.resetModules();
+    const returnedStorage = await import("./storage.js");
+    await returnedStorage.hydrateLocalData();
+    expect(returnedStorage.getActiveStorageEngine()).toBe("idb");
+    expect(returnedStorage.loadCards()).toEqual([{ id: "newer-idb" }]);
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
+  });
+
   it("idb engine round-trips synchronously off the hydrated mirror", async () => {
     const { storage, db } = await loadStorage({ engine: "idb" });
 
@@ -545,85 +626,98 @@ describe("load/save round-trips", () => {
   });
 });
 
-// ─── Dual-write ─────────────────────────────────────────────────────────────
+// ─── Retired dual-write ─────────────────────────────────────────────────────
 
-describe("dual-write (idb engine)", () => {
-  it("a save lands in the mirror, IndexedDB and localStorage", async () => {
+describe("retired dual-write (idb engine)", () => {
+  it("a save lands in the mirror and IndexedDB while the legacy snapshot stays unchanged", async () => {
+    store.set("mybishbash.mood.v1", "Legacy snapshot");
     const { storage, db } = await loadStorage({ engine: "idb" });
 
     storage.saveMood("Calm");
 
-    // 1. mirror — the synchronous read
     expect(storage.loadMood()).toBe("Calm");
-    // 2. localStorage — the rollback/kill-switch sink
-    expect(store.get("mybishbash.mood.v1")).toBe("Calm");
-    // 3. IndexedDB — the fire-and-forget write, once it has settled
+    expect(store.get("mybishbash.mood.v1")).toBe("Legacy snapshot");
     await db.flushWrites();
     expect(await db.kvGet("mybishbash.mood.v1")).toBe("Calm");
+
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.loadMood()).toBe("Calm");
+    expect(store.get("mybishbash.mood.v1")).toBe("Legacy snapshot");
   });
 
-  it("a removal clears all three sinks", async () => {
+  it("a removal clears the mirror and IndexedDB without mutating the legacy snapshot", async () => {
+    store.set("mybishbash.mood.v1", "Legacy snapshot");
     const { storage, db } = await loadStorage({ engine: "idb" });
 
-    storage.setStorageItem("mybishbash.mood.v1", "Calm");
-    await db.flushWrites();
     storage.removeStorageItem("mybishbash.mood.v1");
 
     expect(storage.getStorageItem("mybishbash.mood.v1")).toBe(null);
-    expect(store.has("mybishbash.mood.v1")).toBe(false);
+    expect(store.get("mybishbash.mood.v1")).toBe("Legacy snapshot");
     await db.flushWrites();
     expect(await db.kvGet("mybishbash.mood.v1")).toBe(null);
-  });
 
-  it("advances a pending recovery generation before an active IDB write can be acknowledged over", async () => {
-    const { storage, db } = await loadStorage({ engine: "idb" });
-    store.set(MIGRATION_RETRY_REQUEST_KEY, "generation-being-imported");
-
-    storage.saveMood("Newer active-context value");
-
-    const advancedToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
-    expect(advancedToken).toEqual(expect.any(String));
-    expect(advancedToken).not.toBe("generation-being-imported");
-    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
-    expect(storage.loadMood()).toBe("Newer active-context value");
-    await db.flushWrites();
-    expect(await db.kvGet("mybishbash.mood.v1")).toBe("Newer active-context value");
-  });
-
-  it("marks exact replay pending when a background IDB put or delete rejects", async () => {
     vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.getStorageItem("mybishbash.mood.v1")).toBe(null);
+    expect(store.get("mybishbash.mood.v1")).toBe("Legacy snapshot");
+  });
+
+  it("reports failed IDB puts and deletes without letting stale localStorage replay", async () => {
+    vi.resetModules();
+    const durableIdb = new Map([["mybishbash.mood.v1", "Durable IDB value"]]);
     const kvPut = vi.fn(() => Promise.reject(new Error("quota put failure")));
     const kvDelete = vi.fn(() => Promise.reject(new Error("transaction delete failure")));
     const flushWrites = vi.fn(async () => {});
+    const reportError = vi.fn();
+    vi.doMock("./services/errors/reporter.js", () => ({ reportError }));
     vi.doMock("./services/db/index.js", () => ({
       openDb: vi.fn(async () => {}),
       flushWrites,
-      kvGetAll: vi.fn(async () => new Map([["mybishbash.mood.v1", "Before"]])),
+      kvGetAll: vi.fn(async () => new Map(durableIdb)),
       kvPut,
       kvDelete,
       metaGet: vi.fn(async () => ({ at: "2026-07-30T12:00:00.000Z", appVersion: "test" })),
       metaPut: vi.fn(async () => {}),
     }));
+    store.set("mybishbash.mood.v1", "Stale localStorage value");
 
     const storage = await import("./storage.js");
     await storage.hydrateLocalData();
 
     storage.saveMood("After failed put");
-    await vi.waitFor(() => expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toEqual(expect.any(String)));
-    const putFailureToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
     expect(storage.loadMood()).toBe("After failed put");
-    expect(store.get("mybishbash.mood.v1")).toBe("After failed put");
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledOnce());
+    expect(reportError).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ message: "quota put failure" }),
+      "storage-idb-write",
+    );
 
     storage.removeStorageItem("mybishbash.mood.v1");
-    await vi.waitFor(() => expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).not.toBe(putFailureToken));
     expect(storage.loadMood()).toBe("Minimal");
-    expect(store.has("mybishbash.mood.v1")).toBe(false);
 
-    // flushWrites intentionally settles failures; the per-write observer above
-    // is what makes the localStorage dual-write recoverable on the next boot.
-    await storage.flushPendingStorageWrites();
-    expect(flushWrites).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledTimes(2));
+    expect(reportError).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ message: "transaction delete failure" }),
+      "storage-idb-write",
+    );
+    expect(store.get("mybishbash.mood.v1")).toBe("Stale localStorage value");
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toBeUndefined();
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
+
+    // A fresh hydration sees the durable IDB value. The failed write/delete did
+    // not nominate stale localStorage for a forced import.
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.loadMood()).toBe("Durable IDB value");
+    expect(store.get("mybishbash.mood.v1")).toBe("Stale localStorage value");
+    expect(kvPut).toHaveBeenCalledOnce();
+    expect(kvDelete).toHaveBeenCalledOnce();
   });
 });
 
@@ -662,19 +756,22 @@ describe("external-navigation write flush", () => {
     expect(settled).toBe(true);
   });
 
-  it("bounds a stalled write flush and leaves exact replay pending", async () => {
+  it("reports a stalled write flush without making stale localStorage authoritative", async () => {
     vi.useFakeTimers();
     vi.resetModules();
     const flushWrites = vi.fn(() => new Promise(() => {}));
+    const reportError = vi.fn();
+    vi.doMock("./services/errors/reporter.js", () => ({ reportError }));
     vi.doMock("./services/db/index.js", () => ({
       openDb: vi.fn(async () => {}),
       flushWrites,
-      kvGetAll: vi.fn(async () => new Map()),
+      kvGetAll: vi.fn(async () => new Map([["mybishbash.mood.v1", "Durable IDB value"]])),
       kvPut: vi.fn(async () => {}),
       kvDelete: vi.fn(async () => {}),
       metaGet: vi.fn(async () => ({ at: "2026-07-30T12:00:00.000Z", appVersion: "test" })),
       metaPut: vi.fn(async () => {}),
     }));
+    store.set("mybishbash.mood.v1", "Stale localStorage value");
 
     const storage = await import("./storage.js");
     await storage.hydrateLocalData();
@@ -683,8 +780,18 @@ describe("external-navigation write flush", () => {
     await vi.advanceTimersByTimeAsync(1000);
     await expect(pending).resolves.toBeUndefined();
     expect(flushWrites).toHaveBeenCalledOnce();
-    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toEqual(expect.any(String));
+    expect(reportError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "IndexedDB write flush timed out" }),
+      "storage-idb-flush",
+    );
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toBeUndefined();
     expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBeUndefined();
+
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.loadMood()).toBe("Durable IDB value");
+    expect(store.get("mybishbash.mood.v1")).toBe("Stale localStorage value");
   });
 
   it("does not touch IndexedDB while the legacy engine is active", async () => {
@@ -733,9 +840,9 @@ describe("legacy-prefix lookup", () => {
     await storage.hydrateLocalData();
 
     expect(storage.loadCards()).toEqual([{ id: "legacy" }]);
-    // Promotion goes through the funnel, so it lands in every sink.
+    // Promotion goes through the active funnel: mirror + IndexedDB only.
     expect(storage.getStorageItem("mybishbash.cards.v1")).toBe('[{"id":"legacy"}]');
-    expect(store.get("mybishbash.cards.v1")).toBe('[{"id":"legacy"}]');
+    expect(store.get("mybishbash.cards.v1")).toBeUndefined();
     await db.flushWrites();
     expect(await db.kvGet("mybishbash.cards.v1")).toBe('[{"id":"legacy"}]');
   });
@@ -775,6 +882,8 @@ describe("clearSharedMyBishBashState", () => {
   }, 15_000);
 
   it("clears mirror, IndexedDB and localStorage under the idb engine", async () => {
+    store.set("mybishbash.cards.v1", '[{"id":"legacy-snapshot"}]');
+    store.set("mybishbash.profile.v1", '{"name":"Legacy snapshot"}');
     const { storage, db } = await loadStorage({ engine: "idb" });
 
     storage.saveCards([{ id: "c1" }]);
@@ -798,6 +907,198 @@ describe("clearSharedMyBishBashState", () => {
     const reloaded = await import("./storage.js");
     await reloaded.hydrateLocalData();
     expect(reloaded.loadCards()).toEqual([]);
+  });
+
+  it("acknowledges a durable clear before later IDB writes so empty localStorage cannot erase them", async () => {
+    store.set("mybishbash.cards.v1", '[{"id":"legacy-before-clear"}]');
+    const { storage, db } = await loadStorage({ engine: "idb" });
+
+    await storage.clearSharedMyBishBashState();
+    const clearToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
+    expect(storage.getActiveStorageEngine()).toBe("idb");
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(clearToken);
+
+    storage.saveCards([{ id: "newer-idb-after-clear" }]);
+    await db.flushWrites();
+    // Even if the retired legacy snapshot later contains stale bytes, the
+    // acknowledged clear generation cannot force them over the newer IDB row.
+    store.set("mybishbash.cards.v1", '[{"id":"stale-after-clear"}]');
+
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.loadCards()).toEqual([{ id: "newer-idb-after-clear" }]);
+    expect(await db.kvGet("mybishbash.cards.v1")).toBe('[{"id":"newer-idb-after-clear"}]');
+  });
+
+  it("reconciles same-session writes made while a successful clear settles", async () => {
+    vi.resetModules();
+    const durableIdb = new Map([["mybishbash.cards.v1", '[{"id":"before-clear"}]']]);
+    let releaseFlush;
+    const flushWrites = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          releaseFlush = resolve;
+        }),
+    );
+    vi.doMock("./services/db/index.js", () => ({
+      openDb: vi.fn(async () => {}),
+      flushWrites,
+      kvGetAll: vi.fn(async () => new Map(durableIdb)),
+      kvPut: vi.fn(async (key, value) => durableIdb.set(key, value)),
+      kvDelete: vi.fn(async (key) => durableIdb.delete(key)),
+      metaGet: vi.fn(async () => ({ at: "2026-07-30T12:00:00.000Z", appVersion: "test" })),
+      metaPut: vi.fn(async () => {}),
+    }));
+
+    const storage = await import("./storage.js");
+    await storage.hydrateLocalData();
+    const clear = storage.clearSharedMyBishBashState();
+    const clearToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
+
+    // The clear temporarily hands authority to the already-cleared legacy
+    // sink. A write while deletes settle advances that generation.
+    storage.saveCards([{ id: "written-during-clear" }]);
+    const mutationToken = store.get(MIGRATION_RETRY_REQUEST_KEY);
+    expect(mutationToken).not.toBe(clearToken);
+
+    releaseFlush();
+    await clear;
+    expect(storage.getActiveStorageEngine()).toBe("idb");
+    expect(storage.loadCards()).toEqual([{ id: "written-during-clear" }]);
+    expect(durableIdb.get("mybishbash.cards.v1")).toBe('[{"id":"written-during-clear"}]');
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(mutationToken);
+
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.getActiveStorageEngine()).toBe("idb");
+    expect(reloaded.loadCards()).toEqual([{ id: "written-during-clear" }]);
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(mutationToken);
+  });
+
+  it("does not acknowledge or overwrite a generation changed by another context during clear", async () => {
+    vi.resetModules();
+    const durableIdb = new Map([["mybishbash.cards.v1", '[{"id":"before-clear"}]']]);
+    let releaseFlush;
+    vi.doMock("./services/db/index.js", () => ({
+      openDb: vi.fn(async () => {}),
+      flushWrites: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            releaseFlush = resolve;
+          }),
+      ),
+      kvGetAll: vi.fn(async () => new Map(durableIdb)),
+      kvPut: vi.fn(async (key, value) => durableIdb.set(key, value)),
+      kvDelete: vi.fn(async (key) => durableIdb.delete(key)),
+      metaGet: vi.fn(async () => ({ at: "2026-07-30T12:00:00.000Z", appVersion: "test" })),
+      metaPut: vi.fn(async () => {}),
+    }));
+
+    const storage = await import("./storage.js");
+    await storage.hydrateLocalData();
+    const clear = storage.clearSharedMyBishBashState();
+    const externalToken = "external-legacy-generation";
+    store.set("mybishbash.cards.v1", '[{"id":"external-legacy-write"}]');
+    store.set(MIGRATION_RETRY_REQUEST_KEY, externalToken);
+
+    releaseFlush();
+    await clear;
+    expect(storage.getActiveStorageEngine()).toBe("localstorage");
+    expect(storage.loadCards()).toEqual([{ id: "external-legacy-write" }]);
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).not.toBe(externalToken);
+
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.getActiveStorageEngine()).toBe("idb");
+    expect(reloaded.loadCards()).toEqual([{ id: "external-legacy-write" }]);
+    expect(store.get(MIGRATION_RETRY_ACK_KEY)).toBe(externalToken);
+  });
+
+  it("reports a failed clear delete and preserves writes made during and after the failed clear", async () => {
+    vi.resetModules();
+    const durableIdb = new Map([
+      ["mybishbash.cards.v1", '[{"id":"before-clear"}]'],
+      ["mybishbash.profile.v1", '{"name":"Before clear"}'],
+    ]);
+    let failDelete = true;
+    const reportError = vi.fn();
+    vi.doMock("./services/errors/reporter.js", () => ({ reportError }));
+    vi.doMock("./services/db/index.js", () => ({
+      openDb: vi.fn(async () => {}),
+      flushWrites: vi.fn(async () => {}),
+      kvGetAll: vi.fn(async () => new Map(durableIdb)),
+      kvPut: vi.fn(async (key, value) => durableIdb.set(key, value)),
+      kvDelete: vi.fn(async (key) => {
+        if (failDelete && key === "mybishbash.profile.v1") throw new Error("clear delete failed");
+        durableIdb.delete(key);
+      }),
+      metaGet: vi.fn(async () => ({ at: "2026-07-30T12:00:00.000Z", appVersion: "test" })),
+      metaPut: vi.fn(async () => {}),
+    }));
+
+    const storage = await import("./storage.js");
+    await storage.hydrateLocalData();
+    const clear = storage.clearSharedMyBishBashState();
+    storage.saveCards([{ id: "written-during-failed-clear" }]);
+    await clear;
+    storage.saveProfile({ name: "Written after failed clear" });
+
+    expect(storage.getActiveStorageEngine()).toBe("localstorage");
+    await vi.waitFor(() => {
+      expect(reportError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "clear delete failed" }),
+        "storage-idb-write",
+      );
+    });
+
+    failDelete = false;
+    store.delete(ENGINE_KEY);
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.loadCards()).toEqual([{ id: "written-during-failed-clear" }]);
+    expect(reloaded.loadProfile().name).toBe("Written after failed clear");
+  });
+
+  it("reports a timed-out clear flush and keeps its during/after writes replay-safe", async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    const durableIdb = new Map([["mybishbash.cards.v1", '[{"id":"before-clear"}]']]);
+    const reportError = vi.fn();
+    vi.doMock("./services/errors/reporter.js", () => ({ reportError }));
+    vi.doMock("./services/db/index.js", () => ({
+      openDb: vi.fn(async () => {}),
+      flushWrites: vi.fn(() => new Promise(() => {})),
+      kvGetAll: vi.fn(async () => new Map(durableIdb)),
+      kvPut: vi.fn(async (key, value) => durableIdb.set(key, value)),
+      kvDelete: vi.fn(async (key) => durableIdb.delete(key)),
+      metaGet: vi.fn(async () => ({ at: "2026-07-30T12:00:00.000Z", appVersion: "test" })),
+      metaPut: vi.fn(async () => {}),
+    }));
+
+    const storage = await import("./storage.js");
+    await storage.hydrateLocalData();
+    const clear = storage.clearSharedMyBishBashState();
+    storage.saveCards([{ id: "written-during-timeout" }]);
+    await vi.advanceTimersByTimeAsync(1000);
+    await clear;
+    storage.saveProfile({ name: "Written after timeout" });
+
+    expect(storage.getActiveStorageEngine()).toBe("localstorage");
+    expect(reportError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "IndexedDB write flush timed out" }),
+      "storage-idb-flush",
+    );
+
+    store.delete(ENGINE_KEY);
+    vi.resetModules();
+    const reloaded = await import("./storage.js");
+    await reloaded.hydrateLocalData();
+    expect(reloaded.loadCards()).toEqual([{ id: "written-during-timeout" }]);
+    expect(reloaded.loadProfile().name).toBe("Written after timeout");
   });
 });
 
@@ -831,11 +1132,15 @@ describe("open-failure fallback", () => {
     expect(reportError.mock.calls[0][0].message).toBe("forced open failure");
     expect(reportError.mock.calls[0][1]).toBe("storage-engine-fallback");
 
-    // The app boots from localStorage — fresh, thanks to dual-write.
+    // The app remains available from the legacy snapshot for this fallback
+    // session; selecting fallback alone does not request a later replay.
     expect(storage.loadCards()).toEqual([{ id: "from-localstorage" }]);
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toBeUndefined();
 
-    // And writes go to localStorage only, with no engine side effects.
+    // A genuine legacy mutation requests reconciliation for the next healthy
+    // IDB boot and still has no current-session engine side effects.
     storage.saveMood("Calm");
     expect(store.get("mybishbash.mood.v1")).toBe("Calm");
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toEqual(expect.any(String));
   });
 });

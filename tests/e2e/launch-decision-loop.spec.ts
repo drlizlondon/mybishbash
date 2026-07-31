@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 /**
  * Regression guard for the launch-decision effect's `events` self-write cycle.
@@ -188,15 +189,16 @@ test('event log keeps growing normally without re-entering the launch decision',
 
   // The recovery path must still log its launcher events — the guards remove
   // the re-trigger, not the logging.
-  const loggedEvents = await page.evaluate(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') ?? '[]');
-    } catch {
-      return [];
-    }
-  });
+  let loggedEvents: Array<Record<string, unknown>> = [];
+  await expect.poll(async () => {
+    loggedEvents = await readIndexedDbJson<Array<Record<string, unknown>>>(
+      page,
+      'mybishbash.event-log.v1',
+      [],
+    );
+    return loggedEvents.length;
+  }).toBeGreaterThan(0);
   expect(Array.isArray(loggedEvents)).toBe(true);
-  expect(loggedEvents.length, 'launcher events should still be written').toBeGreaterThan(0);
 
   // A bounded event log is the other side of the same coin: an unbounded loop
   // writes a new event on every re-fire.

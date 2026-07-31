@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbValues } from './indexeddb';
 
 const SIGNUP_HANDOFF_REFERENCE_KEY = 'mybishbash.signup-handoff-ref.v1';
 const E2E_SIGNUP_HANDOFFS_KEY = 'MYBISHBASH_E2E_SIGNUP_HANDOFFS';
@@ -85,22 +86,14 @@ test('direct signup without validated gate code is blocked', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toHaveCount(0);
 });
 
-test('demo mode can create an account without an access-code field', async ({ page }) => {
+test('production preview does not expose the dev-only demo signup bypass', async ({ page }) => {
   await seedAuthMock(page);
   await page.goto('/mybishbash/demo-signup');
 
-  await expect(page).toHaveURL(/\/mybishbash\/home\?signup=1$/);
-  await expect(page.getByRole('heading', { name: 'Create your myBishBash account' })).toBeVisible();
+  await expect(page).toHaveURL(/\/mybishbash\/demo-signup$/);
+  await expect(page.getByRole('heading', { name: 'myBishBash' })).toBeVisible();
   await expect(page.getByLabel('Access code')).toHaveCount(0);
-  await fillSignup(page);
-
-  await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
-  const authState = await page.evaluate(() => ({
-    authMock: window.localStorage.getItem('MYBISHBASH_E2E_AUTH_MOCK'),
-    session: JSON.parse(window.localStorage.getItem('MYBISHBASH_E2E_AUTH_SESSION') ?? '{}'),
-  }));
-  expect(authState.authMock).toBe('true');
-  expect(authState.session.user.email).toContain('@example.com');
+  await expect(page.getByRole('button', { name: 'Create Account' })).toHaveCount(0);
 });
 
 test('expired validated gate code is blocked at signup', async ({ page }) => {
@@ -296,24 +289,46 @@ test('shared device logout clears prior account state before a new signup starts
   await page.getByRole('button', { name: 'Create Account' }).click();
 
   await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible({ timeout: 10000 });
-  const state = await page.evaluate(() => ({
-    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
-    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
-    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
-    cardPacks: JSON.parse(window.localStorage.getItem('mybishbash.card-packs.v1') ?? '[]'),
-    actionCards: JSON.parse(window.localStorage.getItem('mybishbash.action-cards.v1') ?? '[]'),
-    events: JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') ?? '[]'),
-    offlineQueue: JSON.parse(window.localStorage.getItem('mybishbash.offline-event-queue.v1') ?? '[]'),
-  }));
-
-  expect(state.setupComplete).not.toBe('true');
-  expect(state.profile.name).not.toBe('Previous Device User');
-  expect(state.cards.some((card: Record<string, unknown>) => card.id === 'previous-user-card')).toBe(false);
-  expect(state.cards.some((card: Record<string, unknown>) => card.promptText === 'Previous user private card')).toBe(false);
-  expect(state.cardPacks.some((pack: Record<string, unknown>) => pack.id === 'previous-pack')).toBe(false);
-  expect(state.actionCards.some((card: Record<string, unknown>) => card.id === 'previous-action')).toBe(false);
-  expect(state.events.some((event: Record<string, unknown>) => event.id === 'previous-event')).toBe(false);
-  expect(state.offlineQueue.some((event: Record<string, unknown>) => event.id === 'previous-queued-event')).toBe(false);
+  await expect.poll(async () => {
+    const values = await readIndexedDbValues<string>(page, [
+      'mybishbash.setup-complete.v1',
+      'mybishbash.profile.v1',
+      'mybishbash.cards.v1',
+      'mybishbash.card-packs.v1',
+      'mybishbash.action-cards.v1',
+      'mybishbash.event-log.v1',
+      'mybishbash.offline-event-queue.v1',
+    ]);
+    const parse = <T,>(key: string, fallback: T): T => {
+      const raw = values[key];
+      return raw === null ? fallback : JSON.parse(raw) as T;
+    };
+    const profile = parse<Record<string, unknown>>('mybishbash.profile.v1', {});
+    const cards = parse<Array<Record<string, unknown>>>('mybishbash.cards.v1', []);
+    const cardPacks = parse<Array<Record<string, unknown>>>('mybishbash.card-packs.v1', []);
+    const actionCards = parse<Array<Record<string, unknown>>>('mybishbash.action-cards.v1', []);
+    const events = parse<Array<Record<string, unknown>>>('mybishbash.event-log.v1', []);
+    const offlineQueue = parse<Array<Record<string, unknown>>>('mybishbash.offline-event-queue.v1', []);
+    return {
+      setupComplete: values['mybishbash.setup-complete.v1'] === 'true',
+      previousProfile: profile.name === 'Previous Device User',
+      previousCardId: cards.some((card) => card.id === 'previous-user-card'),
+      previousCardText: cards.some((card) => card.promptText === 'Previous user private card'),
+      previousPack: cardPacks.some((pack) => pack.id === 'previous-pack'),
+      previousAction: actionCards.some((card) => card.id === 'previous-action'),
+      previousEvent: events.some((event) => event.id === 'previous-event'),
+      previousQueuedEvent: offlineQueue.some((event) => event.id === 'previous-queued-event'),
+    };
+  }).toEqual({
+    setupComplete: false,
+    previousProfile: false,
+    previousCardId: false,
+    previousCardText: false,
+    previousPack: false,
+    previousAction: false,
+    previousEvent: false,
+    previousQueuedEvent: false,
+  });
 });
 
 test('direct onboarding route cannot be accessed by unauthorised user', async ({ page }) => {

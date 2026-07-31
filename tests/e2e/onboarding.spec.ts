@@ -1,6 +1,48 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson, readIndexedDbValues } from './indexeddb';
 
 test.setTimeout(60000);
+
+const ONBOARDING_PERSISTED_KEYS = [
+  'mybishbash.setup-complete.v1',
+  'mybishbash.cards.v1',
+  'mybishbash.profile.v1',
+  'mybishbash.event-log.v1',
+  'mybishbash.launcher-behavior-settings.v1',
+];
+
+async function readOnboardingPersistedState(page: Page) {
+  const values = await readIndexedDbValues<string>(page, ONBOARDING_PERSISTED_KEYS);
+  const parse = <T,>(key: string, fallback: T): T => {
+    const raw = values[key];
+    return raw === null ? fallback : JSON.parse(raw) as T;
+  };
+  return {
+    setupComplete: values['mybishbash.setup-complete.v1'],
+    cards: parse<Array<Record<string, unknown>>>('mybishbash.cards.v1', []),
+    profile: parse<Record<string, any>>('mybishbash.profile.v1', {}),
+    events: parse<Array<Record<string, unknown>>>('mybishbash.event-log.v1', []),
+    launcherBehavior: parse<Record<string, any>>('mybishbash.launcher-behavior-settings.v1', {}),
+  };
+}
+
+async function waitForStablePersistedState<T>(
+  readState: () => Promise<T>,
+  isExpected: (state: T) => boolean,
+) {
+  let expectedSince: number | null = null;
+  let latestState!: T;
+  await expect.poll(async () => {
+    latestState = await readState();
+    if (!isExpected(latestState)) {
+      expectedSince = null;
+      return false;
+    }
+    expectedSince ??= Date.now();
+    return Date.now() - expectedSince >= 300;
+  }, { timeout: 5000, intervals: [50, 100, 100] }).toBe(true);
+  return latestState;
+}
 
 async function seedFirstRun(page: Page) {
   await page.addInitScript(() => {
@@ -315,12 +357,21 @@ test('Personal Cards onboarding saves selected cards without starter packs or co
   await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
-  const state = await page.evaluate(() => ({
-    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
-    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
-    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
-    events: JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') ?? '[]'),
-  }));
+  const state = await waitForStablePersistedState(
+    () => readOnboardingPersistedState(page),
+    (current) => current.setupComplete === 'true'
+      && current.profile.selectedStrategyAreaIds?.length === 0
+      && current.profile.onboardingStarterPackId === null
+      && current.profile.onboardingStarterCommitmentId === null
+      && current.profile.onboardingAppContext?.label === 'Every app you choose'
+      && current.profile.onboardingAppContext?.place === 'apps'
+      && current.profile.hasSeenCommitmentCardDemo === true
+      && current.cards.some((card) => card.promptText === 'Have you taken your vitamins?' && !card.sourcePackId)
+      && current.cards.some((card) => card.promptText === 'Have you done something that counts towards your fitness today?' && !card.sourcePackId)
+      && !current.cards.some((card) => card.sourcePackId)
+      && !current.cards.some((card) => String(card.cardKind ?? '').startsWith('commitment'))
+      && !current.events.some((event) => event.event_type === 'pack_activated'),
+  );
 
   expect(state.setupComplete).toBe('true');
   expect(state.profile.selectedStrategyAreaIds).toEqual([]);
@@ -419,13 +470,22 @@ test('faith/reflection onboarding does not create or launch a starter Commitment
   await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
-  const state = await page.evaluate(() => ({
-    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
-    overlayType: document.querySelector('[data-testid="card-overlay-personal"], [data-testid="card-overlay-commitment"]')?.getAttribute('data-testid') ?? null,
-  }));
+  const state = await waitForStablePersistedState(
+    () => readOnboardingPersistedState(page),
+    (current) => current.cards.length > 0
+      && !current.cards.some((card) => String(card.cardKind ?? '').startsWith('commitment'))
+      && !current.cards.some((card) => String(card.promptText ?? '').includes('pray before I go to sleep')),
+  );
+  const uiState = {
+    overlayType: await page.evaluate(() =>
+      document
+        .querySelector('[data-testid="card-overlay-personal"], [data-testid="card-overlay-commitment"]')
+        ?.getAttribute('data-testid') ?? null,
+    ),
+  };
   expect(state.cards.some((card: Record<string, unknown>) => String(card.cardKind ?? '').startsWith('commitment'))).toBe(false);
   expect(state.cards.some((card: Record<string, unknown>) => String(card.promptText ?? '').includes('pray before I go to sleep'))).toBe(false);
-  expect(state.overlayType).toBeNull();
+  expect(uiState.overlayType).toBeNull();
 });
 
 test('personal card selection is required before continuing', async ({ page }) => {
@@ -507,10 +567,13 @@ test('phone trigger selection goes through App Prompt choice, then finishes with
 
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
-  const state = await page.evaluate(() => ({
-    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
-    launcherBehavior: JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'),
-  }));
+  const state = await waitForStablePersistedState(
+    () => readOnboardingPersistedState(page),
+    (current) => current.profile.selectedProtectedApp === 'safari'
+      && current.profile.hasCompletedProtectedAppSetup === false
+      && current.launcherBehavior.safari?.useInterruptionPack === true
+      && current.launcherBehavior.safari?.appEnabled !== true,
+  );
   expect(state.profile.selectedProtectedApp).toBe('safari');
   expect(state.profile.hasCompletedProtectedAppSetup).toBe(false);
   expect(state.launcherBehavior.safari.useInterruptionPack).toBe(true);
@@ -556,10 +619,11 @@ test('App Prompt choice can be backed out before saving setup', async ({ page })
 
   await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Add Safari to your Home Screen' })).toHaveCount(0);
-  const state = await page.evaluate(() => ({
-    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
-    launcherBehavior: JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'),
-  }));
+  const state = await waitForStablePersistedState(
+    () => readOnboardingPersistedState(page),
+    (current) => current.profile.selectedProtectedApp === undefined
+      && current.launcherBehavior.safari?.useInterruptionPack === false,
+  );
   expect(state.profile.selectedProtectedApp).toBeUndefined();
   expect(state.launcherBehavior.safari?.useInterruptionPack).toBe(false);
 });
@@ -671,13 +735,15 @@ test('skipping personal cards continues to Commitment Cards instead of ending on
   await expect(page.getByRole('heading', { name: 'You can set up your phone later.' })).toHaveCount(0);
   await expect(page).toHaveURL(/\/mybishbash\/onboarding$/);
 
-  let state = await page.evaluate(() => ({
-    profile: JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'),
-    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
-  }));
-  expect(state.profile.hasCompletedPersonalCardSetup).toBe(false);
-  expect(state.profile.onboardingSkipped).toBe(true);
-  expect(state.setupComplete).toBe('false');
+  const skippedState = await waitForStablePersistedState(
+    () => readOnboardingPersistedState(page),
+    (current) => current.profile.hasCompletedPersonalCardSetup === false
+      && current.profile.onboardingSkipped === true
+      && current.setupComplete === 'false',
+  );
+  expect(skippedState.profile.hasCompletedPersonalCardSetup).toBe(false);
+  expect(skippedState.profile.onboardingSkipped).toBe(true);
+  expect(skippedState.setupComplete).toBe('false');
 
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
@@ -694,12 +760,12 @@ test('skipping personal cards continues to Commitment Cards instead of ending on
   await expect(page.getByRole('heading', { name: 'Add Instagram to your Home Screen' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Open install page' })).toHaveCount(0);
 
-  state = await page.evaluate(() => ({
-    cards: JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'),
-    setupComplete: window.localStorage.getItem('mybishbash.setup-complete.v1'),
-  }));
-  expect(state.cards).toEqual([]);
-  expect(state.setupComplete).toBe('false');
+  const resetState = await waitForStablePersistedState(
+    () => readOnboardingPersistedState(page),
+    (current) => current.cards.length === 0 && current.setupComplete === 'false',
+  );
+  expect(resetState.cards).toEqual([]);
+  expect(resetState.setupComplete).toBe('false');
 });
 
 test('home spotlight tour supports navigation and persists dismissal after Personal Cards onboarding', async ({ page }) => {
@@ -745,7 +811,10 @@ test('home spotlight tour supports navigation and persists dismissal after Perso
   await tour.getByRole('button', { name: 'Set up Instagram' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
 
-  const profile = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.profile.v1') ?? '{}'));
+  await expect.poll(async () => (
+    await readIndexedDbJson<Record<string, any>>(page, 'mybishbash.profile.v1', {})
+  ).hasCompletedHomeSpotlightTour).toBe(true);
+  const profile = await readIndexedDbJson<Record<string, any>>(page, 'mybishbash.profile.v1', {});
   expect(profile.onboardingRoute).toBe('personal_card_play_by_play');
   expect(profile.hasCompletedHomeSpotlightTour).toBe(true);
 

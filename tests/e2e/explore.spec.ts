@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 // Explore + Library restructure (docs/explore-architecture.md).
 // Runs in e2e/demo mode: globalPacks = [], so Explore renders the static
@@ -107,7 +108,7 @@ test('Explore commitment templates create normal Commitment Cards', async ({ pag
   await expect(page.getByTestId('library-active-packs-section')).not.toContainText('Commitment Starters');
 
   await expect.poll(async () => {
-    const cards = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]'));
+    const cards = await readIndexedDbJson<Array<Record<string, unknown>>>(page, 'mybishbash.cards.v1', []);
     return cards.some((card: Record<string, unknown>) =>
       card.cardKind === 'commitment' &&
       card.promptText === 'go for a walk today' &&

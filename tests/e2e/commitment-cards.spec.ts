@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 const now = '2026-06-01T12:00:00.000Z';
 const todayKey = '2026-06-01';
@@ -145,11 +146,11 @@ async function navigateWithinApp(page: Page, path: string) {
 }
 
 async function storedCards(page: Page) {
-  return page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') || '[]'));
+  return readIndexedDbJson<Array<Record<string, unknown>>>(page, 'mybishbash.cards.v1', []);
 }
 
 async function storedEvents(page: Page) {
-  return page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') || '[]'));
+  return readIndexedDbJson<Array<Record<string, unknown>>>(page, 'mybishbash.event-log.v1', []);
 }
 
 async function expectStoredEvent(page: Page, predicate: (event: any) => boolean) {
@@ -157,6 +158,19 @@ async function expectStoredEvent(page: Page, predicate: (event: any) => boolean)
     const events = await storedEvents(page);
     return events.some(predicate);
   }).toBe(true);
+}
+
+async function expectStoredEventToRemainAbsent(page: Page, predicate: (event: any) => boolean) {
+  let absentSince: number | null = null;
+  await expect.poll(async () => {
+    const events = await storedEvents(page);
+    if (events.some(predicate)) {
+      absentSince = null;
+      return false;
+    }
+    absentSince ??= Date.now();
+    return Date.now() - absentSince >= 300;
+  }, { timeout: 2000, intervals: [50, 100, 100] }).toBe(true);
 }
 
 async function expectStoredCard(page: Page, predicate: (card: any) => boolean) {
@@ -486,8 +500,7 @@ test('I’ll commit after all records made and returns Home from Library', async
   await page.getByTestId('card-action-i-ll-commit-after-all').click();
 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'made');
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_made')).toBe(true);
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_made');
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Nice choice\.\s+We’ll check in later\./ })).toHaveCount(0);
@@ -503,8 +516,7 @@ test('final Not this time from motivation records declined and returns Home from
   await page.getByTestId('card-action-not-this-time').click();
 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_declined')).toBe(true);
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_declined');
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
   await expect(page.getByTestId('home-panel')).toBeVisible();
   await expect(page.getByRole('heading', { name: /That’s okay\.\s+Another day\./ })).toHaveCount(0);
@@ -518,8 +530,7 @@ test('Not this time without motivation records declined and does not automatical
   await page.getByTestId('card-action-not-this-time').click();
 
   await expectStoredCard(page, (card) => card.id === 'commitment-card' && card.commitmentStatusToday === 'declined');
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_declined')).toBe(true);
+  await expectStoredEvent(page, (event) => event.event_type === 'commitment_declined');
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 
   await navigateWithinApp(page, '/intercept/youtube');
@@ -559,8 +570,10 @@ test('check-in does not enter launcher flow after the user commits', async ({ pa
   await navigateWithinApp(page, '/intercept/youtube');
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
   await expect(page.getByText('How’s it going?')).toHaveCount(0);
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_check_in_generated')).toBe(false);
+  await expectStoredEventToRemainAbsent(
+    page,
+    (event) => event.event_type === 'commitment_check_in_generated',
+  );
 });
 
 test('check-in does not appear if the user declines the commitment', async ({ page }) => {
@@ -577,8 +590,10 @@ test('check-in does not appear if the user declines the commitment', async ({ pa
 
   await navigateWithinApp(page, '/card/commitment-card');
   await expect(page.getByText('How’s it going?')).toHaveCount(0);
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_check_in_generated')).toBe(false);
+  await expectStoredEventToRemainAbsent(
+    page,
+    (event) => event.event_type === 'commitment_check_in_generated',
+  );
 });
 
 test('check-in is not generated for a commitment made yesterday', async ({ page }) => {
@@ -599,8 +614,10 @@ test('check-in is not generated for a commitment made yesterday', async ({ page 
 
   await expect(page.getByText('How’s it going?')).toHaveCount(0);
   await expect(page.getByTestId('card-overlay-personal').getByText('TODAY’S COMMITMENT')).toBeVisible();
-  const events = await storedEvents(page);
-  expect(events.some((event: Record<string, unknown>) => event.event_type === 'commitment_check_in_generated')).toBe(false);
+  await expectStoredEventToRemainAbsent(
+    page,
+    (event) => event.event_type === 'commitment_check_in_generated',
+  );
 });
 
 test('check-in waits until the selected check-in time', async ({ page }) => {

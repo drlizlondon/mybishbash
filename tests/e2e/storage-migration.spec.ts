@@ -132,13 +132,10 @@ function promptForCard(cards: StoredCard[], cardId: string) {
   return cards.find((card) => card.id === cardId)?.promptText ?? null;
 }
 
-async function expectCardInBothSinks(page: Page, cardId: string, promptText: string) {
+async function expectCardInIdb(page: Page, cardId: string, promptText: string) {
   await expect
-    .poll(async () => ({
-      idb: promptForCard(await readCardsFromIdb(page), cardId),
-      localStorage: promptForCard(await readCardsFromLocalStorage(page), cardId),
-    }))
-    .toEqual({ idb: promptText, localStorage: promptText });
+    .poll(async () => promptForCard(await readCardsFromIdb(page), cardId))
+    .toBe(promptText);
 }
 
 async function showPersonalSection(page: Page) {
@@ -240,9 +237,9 @@ test('fresh install marks migration and persists a new card in IndexedDB across 
       return createdCardId;
     })
     .toEqual(expect.any(String));
-  await expectCardInBothSinks(page, createdCardId!, 'Fresh IDB card');
+  await expectCardInIdb(page, createdCardId!, 'Fresh IDB card');
+  expect(await page.evaluate((key) => window.localStorage.getItem(key), CARDS_KEY)).toBeNull();
 
-  await page.evaluate((key) => window.localStorage.removeItem(key), CARDS_KEY);
   await page.reload();
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await page.goto('/mybishbash/library');
@@ -253,7 +250,7 @@ test('fresh install marks migration and persists a new card in IndexedDB across 
   expect(await idbGet<MigrationMeta>(page, 'meta', MIGRATION_META_KEY)).toEqual(marker);
 });
 
-test('legacy import survives edits, dual-writes, and round-trips through the kill switch', async ({ page }) => {
+test('legacy import keeps IndexedDB authoritative and round-trips genuine kill-switch edits', async ({ page }) => {
   // This deliberately performs five full document boots plus edits in both
   // engines; WebKit needs more than the suite's 30s default under load.
   test.setTimeout(60_000);
@@ -270,8 +267,12 @@ test('legacy import survives edits, dual-writes, and round-trips through the kil
   expect(promptForCard(await readCardsFromIdb(page), 'migration-card')).toBe('Legacy migration card');
 
   await editCard(page, 'migration-card', 'IDB edit survives reload');
-  await expectCardInBothSinks(page, 'migration-card', 'IDB edit survives reload');
+  await expectCardInIdb(page, 'migration-card', 'IDB edit survives reload');
+  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe(
+    'Legacy migration card',
+  );
 
+  // Re-presenting the unchanged legacy bytes must not overwrite newer IDB state.
   await page.evaluate(
     ({ key, staleBytes }) => window.localStorage.setItem(key, staleBytes),
     { key: CARDS_KEY, staleBytes: legacyCardsBytes },
@@ -281,9 +282,15 @@ test('legacy import survives edits, dual-writes, and round-trips through the kil
   await showPersonalSection(page);
   await expect(page.getByTestId('library-row-migration-card')).toContainText('IDB edit survives reload');
   expect(await idbGet<MigrationMeta>(page, 'meta', MIGRATION_META_KEY)).toEqual(marker);
+  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe(
+    'Legacy migration card',
+  );
 
-  await editCard(page, 'migration-card', 'Rollback-safe edit');
-  await expectCardInBothSinks(page, 'migration-card', 'Rollback-safe edit');
+  await editCard(page, 'migration-card', 'Newer IDB edit');
+  await expectCardInIdb(page, 'migration-card', 'Newer IDB edit');
+  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe(
+    'Legacy migration card',
+  );
 
   const decoyCards = (await readCardsFromIdb(page)).map((card) =>
     card.id === 'migration-card'
@@ -292,15 +299,15 @@ test('legacy import survives edits, dual-writes, and round-trips through the kil
   );
   await idbPutMany(page, [[CARDS_KEY, JSON.stringify(decoyCards)]]);
   expect(promptForCard(await readCardsFromIdb(page), 'migration-card')).toBe('IDB decoy — must not render');
-  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe('Rollback-safe edit');
+  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe('Legacy migration card');
 
   await page.evaluate((key) => window.localStorage.setItem(key, 'localstorage'), ENGINE_KEY);
   await page.reload();
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await showPersonalSection(page);
-  await expect(page.getByTestId('library-row-migration-card')).toContainText('Rollback-safe edit');
+  await expect(page.getByTestId('library-row-migration-card')).toContainText('Legacy migration card');
   await expect(page.getByText('IDB decoy — must not render')).toHaveCount(0);
-  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe('Rollback-safe edit');
+  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe('Legacy migration card');
   expect(promptForCard(await readCardsFromIdb(page), 'migration-card')).toBe('IDB decoy — must not render');
 
   await editCard(page, 'migration-card', 'Legacy-mode edit survives return');
@@ -316,5 +323,8 @@ test('legacy import survives edits, dual-writes, and round-trips through the kil
   await expect(page.getByTestId('library-row-migration-card')).toContainText(
     'Legacy-mode edit survives return',
   );
-  await expectCardInBothSinks(page, 'migration-card', 'Legacy-mode edit survives return');
+  await expectCardInIdb(page, 'migration-card', 'Legacy-mode edit survives return');
+  expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe(
+    'Legacy-mode edit survives return',
+  );
 });

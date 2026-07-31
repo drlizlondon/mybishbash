@@ -7,7 +7,7 @@
  * Requirements enforced:
  *  - Pause button only appears on intercept / fake-launcher flows
  *  - Tapping pause opens a duration modal (no Cancel button, X closes without pausing)
- *  - Selecting a duration writes a future expiry to localStorage and navigates to the app
+ *  - Selecting a duration persists a future expiry and navigates to the app
  *  - Active pause causes the next intercept to bypass cards entirely (one navigation, no card)
  *  - Pause is per-app: pausing safari does not affect youtube
  *  - Expired pauses are ignored; cards are shown as normal
@@ -23,6 +23,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 declare global {
   interface Window {
@@ -37,6 +38,8 @@ const AUTH_MOCK_KEY = 'MYBISHBASH_E2E_AUTH_MOCK';
 const AUTH_SESSION_KEY = 'MYBISHBASH_E2E_AUTH_SESSION';
 const E2E_SHARED_STATE_KEY = 'MYBISHBASH_E2E_SHARED_STATE';
 const SHARED_STATE_SEED_KEY = 'mybishbash.app-prompts-shared-state-seeded.v1';
+const APP_PAUSES_KEY = 'mybishbash.app-pauses.v1';
+const LAUNCHER_BEHAVIOR_KEY = 'mybishbash.launcher-behavior-settings.v1';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -206,6 +209,38 @@ async function getNavigationAttempts(page: Page) {
   return page.evaluate(() => window.__MYBISHBASH_NAVIGATION_ATTEMPTS ?? []);
 }
 
+async function readAppPause(page: Page, appId: string) {
+  const pauses = await readIndexedDbJson<Record<string, string>>(page, APP_PAUSES_KEY, {});
+  return pauses[appId] ?? null;
+}
+
+async function readLauncherBehavior(page: Page, appId: string) {
+  const settings = await readIndexedDbJson<Record<string, Record<string, any>>>(
+    page,
+    LAUNCHER_BEHAVIOR_KEY,
+    {},
+  );
+  return settings[appId] ?? {};
+}
+
+async function waitForStablePersistedState<T>(
+  readState: () => Promise<T>,
+  isExpected: (state: T) => boolean,
+) {
+  let expectedSince: number | null = null;
+  let latestState!: T;
+  await expect.poll(async () => {
+    latestState = await readState();
+    if (!isExpected(latestState)) {
+      expectedSince = null;
+      return false;
+    }
+    expectedSince ??= Date.now();
+    return Date.now() - expectedSince >= 300;
+  }, { timeout: 5000, intervals: [50, 100, 100] }).toBe(true);
+  return latestState;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test('pause-button-appears — pause button visible on intercept route', async ({ page }) => {
@@ -243,13 +278,9 @@ test('pause-selects-30min — selecting 30 minutes writes a future expiry and na
   const attempts = await getNavigationAttempts(page);
   expect(attempts.some((a) => (a.metadata as Record<string, unknown>)['versionId'] === 'safari')).toBe(true);
 
-  // localStorage should have a future expiry for safari
-  const expiry = await page.evaluate(() => {
-    try {
-      const map = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
-      return map['safari'] ?? null;
-    } catch { return null; }
-  });
+  // Canonical persisted state should have a future expiry for safari.
+  await expect.poll(() => readAppPause(page, 'safari')).not.toBeNull();
+  const expiry = await readAppPause(page, 'safari');
   expect(expiry).not.toBeNull();
   expect(new Date(expiry as string).getTime()).toBeGreaterThan(Date.now());
 });
@@ -300,7 +331,7 @@ test('pause-expires-restores-card — expired safari pause shows card as normal'
   expect(attempts).toHaveLength(0);
 });
 
-test('x-button-does-not-pause — closing modal with X leaves no pause in localStorage', async ({ page }) => {
+test('x-button-does-not-pause — closing modal with X leaves no persisted pause', async ({ page }) => {
   await seedState(page, { cards: [personalCard('p7', 'X close card')] });
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
@@ -315,13 +346,11 @@ test('x-button-does-not-pause — closing modal with X leaves no pause in localS
   // Modal closes
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  // No pause in localStorage for safari
-  const expiry = await page.evaluate(() => {
-    try {
-      const map = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
-      return map['safari'] ?? null;
-    } catch { return null; }
-  });
+  // No persisted pause for safari.
+  const expiry = await waitForStablePersistedState(
+    () => readAppPause(page, 'safari'),
+    (current) => current === null,
+  );
   expect(expiry).toBeNull();
 
   // Card is still visible
@@ -625,10 +654,8 @@ test('apps-pause-temporarily — Apps control centre uses the timed app pause fl
   await page.getByRole('button', { name: 'Pause for 30 minutes' }).click();
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Paused until');
   await expect.poll(async () => (await getNavigationAttempts(page)).length, { timeout: 5000 }).toBe(0);
-  const expiry = await page.evaluate(() => {
-    const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
-    return pauses['safari'] ?? null;
-  });
+  await expect.poll(() => readAppPause(page, 'safari')).not.toBeNull();
+  const expiry = await readAppPause(page, 'safari');
   expect(expiry).toBeTruthy();
   expect(new Date(expiry).getTime()).toBeGreaterThan(Date.now());
 });
@@ -756,10 +783,10 @@ test('apps-free-access-gate — free user cannot silently enable a second app', 
   await expect(page.getByText('entitlement')).toHaveCount(0);
   await expect(page.getByText('limit reached')).toHaveCount(0);
 
-  const behavior = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.whatsapp;
-  });
+  const behavior = await waitForStablePersistedState(
+    () => readLauncherBehavior(page, 'whatsapp'),
+    (current) => current.appEnabled === false && current.useInterruptionPack === false,
+  );
   expect(behavior.appEnabled).toBe(false);
   expect(behavior.useInterruptionPack).toBe(false);
 
@@ -803,7 +830,12 @@ test('free-core-reconciliation — multiple active apps must be reduced to one w
   await page.getByRole('button', { name: 'Keep YouTube' }).click();
 
   await expect(page.getByTestId('free-core-reconciliation')).toHaveCount(0);
-  const settingsAfter = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'));
+  await expect.poll(async () => (await readLauncherBehavior(page, 'youtube')).appEnabled).toBe(true);
+  const settingsAfter = await readIndexedDbJson<Record<string, Record<string, any>>>(
+    page,
+    LAUNCHER_BEHAVIOR_KEY,
+    {},
+  );
   expect(settingsAfter.youtube.appEnabled).toBe(true);
   expect(settingsAfter.youtube.useInterruptionPack).toBe(true);
   expect(settingsAfter.youtube.interruptionPackId).toBe('youtube-custom-pack');
@@ -836,7 +868,12 @@ test('apps-free-core-switch — switching active app preserves disabled app setu
   await page.getByRole('button', { name: 'Switch active app' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/apps\/whatsapp$/);
 
-  const settingsAfter = await page.evaluate(() => JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}'));
+  await expect.poll(async () => (await readLauncherBehavior(page, 'whatsapp')).appEnabled).toBe(true);
+  const settingsAfter = await readIndexedDbJson<Record<string, Record<string, any>>>(
+    page,
+    LAUNCHER_BEHAVIOR_KEY,
+    {},
+  );
   expect(settingsAfter.whatsapp.appEnabled).toBe(true);
   expect(settingsAfter.whatsapp.useInterruptionPack).toBe(true);
   expect(settingsAfter.whatsapp.interruptionPackId).toBe('whatsapp-pack');
@@ -891,10 +928,7 @@ test('apps-full-access — full-access user can enable multiple apps', async ({ 
 
   await page.goto('/mybishbash/intercept/whatsapp');
   await expect(page.getByTestId('card-overlay-empty').or(page.getByTestId('continue-to-app-card')).or(page.getByTestId('card-overlay-personal'))).toBeVisible({ timeout: 10000 });
-  await expect.poll(async () => page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.whatsapp?.appEnabled;
-  })).toBe(true);
+  await expect.poll(async () => (await readLauncherBehavior(page, 'whatsapp')).appEnabled).toBe(true);
   await page.evaluate(() => {
     window.history.pushState({}, '', '/mybishbash/apps/whatsapp');
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -903,10 +937,7 @@ test('apps-full-access — full-access user can enable multiple apps', async ({ 
   await expect(page.getByTestId('apps-interruptions-toggle-whatsapp')).not.toBeChecked();
   await expect(page.getByText('Who are you hoping to contact?')).toHaveCount(0);
 
-  const behaviorAfterEnable = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.whatsapp;
-  });
+  const behaviorAfterEnable = await readLauncherBehavior(page, 'whatsapp');
   expect(behaviorAfterEnable.appEnabled).toBe(true);
   expect(behaviorAfterEnable.useInterruptionPack).toBe(false);
 
@@ -961,19 +992,14 @@ test('apps-disabled-app-detail — unavailable app detail does not claim enabled
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Pending setup');
   await expect(page.getByTestId('apps-pause-status-safari')).not.toContainText('Enabled');
   await expect(page.getByTestId('apps-launcher-setup-safari')).toContainText('Open Safari with myBishBash once from your Home Screen to finish setup.');
-  const pendingBehavior = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.safari;
-  });
+  await expect.poll(async () => (await readLauncherBehavior(page, 'safari')).setupState).toBe('pending_setup');
+  const pendingBehavior = await readLauncherBehavior(page, 'safari');
   expect(pendingBehavior.appEnabled).toBe(false);
   expect(pendingBehavior.setupState).toBe('pending_setup');
 
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-empty').or(page.getByTestId('continue-to-app-card')).or(page.getByTestId('card-overlay-personal'))).toBeVisible({ timeout: 10000 });
-  await expect.poll(async () => page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.safari?.appEnabled;
-  })).toBe(true);
+  await expect.poll(async () => (await readLauncherBehavior(page, 'safari')).appEnabled).toBe(true);
   await page.evaluate(() => {
     window.history.pushState({}, '', '/mybishbash/apps/safari');
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -982,10 +1008,7 @@ test('apps-disabled-app-detail — unavailable app detail does not claim enabled
   await expect(page.getByTestId('apps-interruptions-toggle-safari')).not.toBeChecked();
   await expect(page.getByText('Why are you opening Safari right now?')).toHaveCount(0);
 
-  const behavior = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.safari;
-  });
+  const behavior = await readLauncherBehavior(page, 'safari');
   expect(behavior.appEnabled).toBe(true);
   expect(behavior.setupState).toBe('enabled');
   expect(behavior.useInterruptionPack).toBe(false);
@@ -1072,10 +1095,8 @@ test('apps-app-prompts-toggle — prompts off does not disable the app', async (
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Enabled');
   await expect(page.getByText('Pause for 30 minutes')).toBeVisible();
 
-  const behavior = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.safari;
-  });
+  await expect.poll(async () => (await readLauncherBehavior(page, 'safari')).useInterruptionPack).toBe(false);
+  const behavior = await readLauncherBehavior(page, 'safari');
   expect(behavior.appEnabled).toBe(true);
   expect(behavior.useInterruptionPack).toBe(false);
 
@@ -1158,19 +1179,14 @@ test('apps-pause-status-and-end-pause — paused app is visible and can resume m
   await page.goto('/mybishbash/apps/safari');
 
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Paused until');
-  const behaviorWhilePaused = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.safari;
-  });
+  const behaviorWhilePaused = await readLauncherBehavior(page, 'safari');
   expect(behaviorWhilePaused.appEnabled).toBe(true);
 
   await page.getByTestId('apps-end-pause-inline-safari').click();
   await expect(page.getByTestId('apps-pause-status-safari')).toContainText('Enabled');
 
-  const expiry = await page.evaluate(() => {
-    const pauses = JSON.parse(window.localStorage.getItem('mybishbash.app-pauses.v1') ?? '{}');
-    return pauses['safari'] ?? null;
-  });
+  await expect.poll(() => readAppPause(page, 'safari')).toBeNull();
+  const expiry = await readAppPause(page, 'safari');
   expect(expiry).toBeNull();
 
   await page.getByTestId('apps-test-shortcut-safari').click();
@@ -1194,10 +1210,8 @@ test('apps-remove-app — removing an app disables it without using prompt state
   await expect(page.getByTestId('protected-app-safari')).toHaveCount(0);
   await expect(page.getByTestId('apps-option-safari')).toContainText('Not set up');
 
-  const behavior = await page.evaluate(() => {
-    const settings = JSON.parse(window.localStorage.getItem('mybishbash.launcher-behavior-settings.v1') ?? '{}');
-    return settings.safari;
-  });
+  await expect.poll(async () => (await readLauncherBehavior(page, 'safari')).appEnabled).toBe(false);
+  const behavior = await readLauncherBehavior(page, 'safari');
   expect(behavior.appEnabled).toBe(false);
   expect(behavior.useInterruptionPack).toBe(false);
 });

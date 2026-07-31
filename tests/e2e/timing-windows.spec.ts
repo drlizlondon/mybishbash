@@ -198,6 +198,9 @@ test('custom window â€” morning card not eligible when morning shifted to 02:00â
     windowPrefs: unsocialPrefs,
     timezone: 'Europe/London',
   });
+  // Keep this assertion deterministic even when the suite itself runs between
+  // 02:00 and 03:00 in London.
+  await page.clock.setFixedTime('2026-06-01T10:00:00.000Z');
   await page.goto('/mybishbash/intercept/safari');
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);

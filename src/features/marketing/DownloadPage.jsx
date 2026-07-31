@@ -1,7 +1,7 @@
 import "./download.css";
 import { downloadContent } from "../../content/downloadContent";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
-import { loadProfile, saveProfile } from "../../storage";
+import { flushPendingStorageWrites, loadProfile, saveProfile } from "../../storage";
 import { getSession, getSignupHandoffPayload, getSignupHandoffReference, validateAndRememberGateAccessCode } from "../../lib/mybishbashSync";
 import { useEffect, useState } from "react";
 
@@ -91,6 +91,14 @@ function skipInstallForNow() {
     hasSkippedHomeScreenInstallPrompt: true,
     hasCompletedHomeScreenInstall: false,
   });
+}
+
+async function skipInstallForNowAndNavigate(event) {
+  const href = event.currentTarget.href;
+  event.preventDefault();
+  skipInstallForNow();
+  await flushPendingStorageWrites();
+  window.location.assign(href);
 }
 
 function readInstallSuccessState() {
@@ -328,7 +336,7 @@ function DownloadPageContent() {
                 <a className="download-primary" href={APPS_HREF}>
                   <EditableText path="install.loggedIn.primary" />
                 </a>
-                <a className="download-secondary" href={APPS_HREF} onClick={skipInstallForNow}>
+                <a className="download-secondary" href={APPS_HREF} onClick={skipInstallForNowAndNavigate}>
                   <EditableText path="install.loggedIn.secondary" />
                 </a>
               </>
@@ -336,7 +344,7 @@ function DownloadPageContent() {
               <>
                 <h2 id="download-browser-fallback-title"><EditableText path="install.success.fallbackTitle" /></h2>
                 <EditableText as="p" path="install.success.fallbackBody" />
-                <a className="download-secondary" href={SIGNUP_HREF} onClick={skipInstallForNow}>
+                <a className="download-secondary" href={SIGNUP_HREF} onClick={skipInstallForNowAndNavigate}>
                   <EditableText path="install.success.fallbackCta" />
                 </a>
               </>

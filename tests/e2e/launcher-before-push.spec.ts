@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 declare global {
   interface Window {
@@ -488,10 +489,8 @@ test('before-push caught-up on one launcher does not leak into another valid lau
   await expect(page.getByText('Fresh after caught up')).toBeVisible();
   await expect
     .poll(async () =>
-      page.evaluate(() => {
-        const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') || '[]');
-        return cards.some((card: { promptText?: string }) => card.promptText === 'Fresh after caught up');
-      }),
+      (await readIndexedDbJson<Array<{ promptText?: string }>>(page, 'mybishbash.cards.v1', []))
+        .some((card) => card.promptText === 'Fresh after caught up'),
     )
     .toBe(true);
   // This case owns warm-session state isolation. Reload durability is covered
@@ -581,12 +580,10 @@ test('before-push launcher perceived performance stays inside cached-operation b
   expect(labels.filter((label) => label === 'card selection finished'), 'One launcher activation should finish selection once').toHaveLength(1);
   await expect
     .poll(async () =>
-      page.evaluate(() => {
-        const events = JSON.parse(window.localStorage.getItem('mybishbash.event-log.v1') || '[]');
-        return events.filter((event: { event_type?: string }) =>
+      (await readIndexedDbJson<Array<{ event_type?: string }>>(page, 'mybishbash.event-log.v1', []))
+        .filter((event) =>
           event.event_type === 'launcher_session_started' || event.event_type === 'launcher_weighted_session_started',
-        ).length;
-      }),
+        ).length,
     )
     .toBe(1);
 

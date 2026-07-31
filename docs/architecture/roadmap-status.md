@@ -16,7 +16,7 @@ Update this file in the same commit that changes a phase's status.
 | 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
 | 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
 | 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
-| 5 | IndexedDB persistence engine | **Complete** (Commit 6 deferred; dual-write active) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, (this commit) |
+| 5 | IndexedDB persistence engine | **Complete** (dual-write retired 2026-07-31) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, (this commit) |
 | 6 | Sync v2 — entities + mutation queue | Planned | — | 5 | — |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
@@ -177,17 +177,40 @@ Update this file in the same commit that changes a phase's status.
   gate makes the blueprint's key split unnecessary); paged event reads defer
   to Phase 6/9 — the event log stays a single kv value this phase. Blueprint
   §19 Phase 5 carries the same amendments plus R4 as of commit 1.
-- **Commits 1–5 complete 2026-07-30; Commit 6 deferred by its release gate.**
-  The IndexedDB wrapper, mechanically single storage funnel, engine seam,
-  pre-render hydration gate, marker-last migration, default-IDB cutover,
-  dual-write rollback path, kill switch, and Chromium + WebKit migration e2e
-  are landed. The 10,000-event gate measures the second boot after migration:
-  Chromium **832.2 ms** (<1,000 ms) and WebKit **781.0 ms** (<1,000 ms
-  locally; <1,500 ms CI allowance).
-  `test:perf-boot` is wired into `test:release`. Commit 6 may land only after
-  at least one production/staging release cycle on commits 1–5 with no
-  storage-attributed `client_errors` and no tester reports of data loss;
-  dual-write and the kill switch remain active until then.
+- **Commits 1–6 complete 2026-07-31; dual-write retired after its release
+  gate.** The IndexedDB wrapper, mechanically single storage funnel, engine
+  seam, pre-render hydration gate, marker-last migration, default-IDB cutover,
+  kill switch, Chromium + WebKit migration e2e, and the dual-write-retirement
+  guardrail are landed. The 10,000-event gate measures the second boot after
+  migration: Chromium **832.2 ms** (<1,000 ms) and WebKit **781.0 ms**
+  (<1,000 ms locally; <1,500 ms CI allowance). `test:perf-boot` is wired into
+  `test:release`.
+  **Entry-condition evidence:** staging release
+  `preview-086af6b2cc28755b603fe313dc123a68b5aac8b8` (source
+  `086af6b2cc28755b603fe313dc123a68b5aac8b8`; deploy run `30588984252`,
+  staging-check run `30588984247`) completed its release cycle from
+  `2026-07-30T22:58:59.087Z` through `2026-07-30T23:37:26.184893Z`. Review of
+  `client_errors` for that release window found **0 total rows and 0
+  storage-attributed rows**; review of `tester_reports` for the same window
+  found **0 total reports and 0 reports of data loss**. The rollback window
+  closed 2026-07-31. Commit 6 also corrects the recovery authority that changed
+  at retirement: an IDB write or flush failure no longer publishes a replay
+  marker, because localStorage is no longer a current fallback source and
+  replaying it could overwrite newer IDB state. Legacy-engine mutations and
+  all-sink clear remain the only authoritative reasons to request
+  reconciliation; read-only engine selection and fallback do not publish
+  authority. An all-sink clear temporarily serves the already-cleared legacy
+  sink while its observed IDB deletes settle. A fully durable clear either
+  acknowledges an unchanged generation or exactly imports its own same-session
+  reset writes before restoring IDB; a failed, timed-out, or externally
+  superseded clear stays in legacy mode so the replay source remains exact.
+  External-navigation persistence now also flushes the IDB write before the
+  install fallback leaves the document. Unit and source guardrails cover
+  successful clear → newer IDB write → reload, same-session reset writes,
+  delete failure, flush timeout, and an external concurrent generation. This
+  correction belongs to Commit 6 because only dual-write retirement makes the
+  localStorage rollback copy stale. Rollback after this point requires a
+  fix-forward that re-enables dual-write first.
 - **Commit 1.5 landed 2026-07-29 — the funnel is now actually single.** A
   standalone, behaviour-preserving refactor closing the five bypasses the
   audit found (finding 1 below), executed **before** any engine seam so the

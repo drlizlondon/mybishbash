@@ -1,4 +1,5 @@
 import { expect, test, devices } from '@playwright/test';
+import { readIndexedDbJson } from '../tests/e2e/indexeddb.ts';
 
 const requiredEnvVars = [
   'MYBISHBASH_STAGING_URL',
@@ -554,16 +555,15 @@ async function ensurePersonalCardsOpen(page) {
 }
 
 async function collectCardDiagnostics(page, cardName) {
-  return page.evaluate((targetCardName) => {
-    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]');
-    const matchingCards = cards.filter((card) => card?.promptText === targetCardName || card?.dashboardTitle === targetCardName);
+  const cards = await readIndexedDbJson(page, 'mybishbash.cards.v1', []);
+  const matchingCards = cards.filter(
+    (card) => card?.promptText === cardName || card?.dashboardTitle === cardName,
+  );
+  const uiDiagnostics = await page.evaluate((targetCardName) => {
     const visibleRows = Array.from(document.querySelectorAll('[data-testid^="library-row-"]'));
     const personalToggle = document.querySelector('[data-testid="library-personal-section-toggle"]');
     const personalCountText = personalToggle?.parentElement?.innerText ?? '';
     return {
-      localCardCount: cards.length,
-      localMatchCount: matchingCards.length,
-      localMatchIds: matchingCards.map((card) => card.id),
       visibleRowCount: visibleRows.length,
       visibleMatchCount: visibleRows.filter((row) => row.textContent?.includes(targetCardName)).length,
       personalExpanded: personalToggle?.getAttribute('aria-expanded') ?? null,
@@ -571,6 +571,12 @@ async function collectCardDiagnostics(page, cardName) {
       path: window.location.pathname,
     };
   }, cardName);
+  return {
+    persistedCardCount: cards.length,
+    persistedMatchCount: matchingCards.length,
+    persistedMatchIds: matchingCards.map((card) => card.id),
+    ...uiDiagnostics,
+  };
 }
 
 function logCardDiagnostics(label, diagnostics) {

@@ -1,4 +1,5 @@
 import { devices, expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 declare global {
   interface Window {
@@ -695,7 +696,7 @@ test('basic card create, open, complete flow does not immediately reappear', asy
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('newly created card is persisted locally before cloud sync', async ({ page }) => {
+test('newly created card is persisted on-device before cloud sync', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [] });
 
@@ -704,11 +705,9 @@ test('newly created card is persisted locally before cloud sync', async ({ page 
   await page.getByTestId('card-prompt-input').fill('E2E reload-persisted card');
   await page.getByTestId('save-card-button').click();
   await expect(page.getByText('Saved “E2E reload-persisted card”.')).toBeVisible();
-  const localMatchCount = await page.evaluate(() => {
-    const cards = JSON.parse(window.localStorage.getItem('mybishbash.cards.v1') ?? '[]');
-    return cards.filter((card: Record<string, string>) => card.promptText === 'E2E reload-persisted card').length;
-  });
-  expect(localMatchCount).toBe(1);
+  await expect.poll(async () => (
+    await readIndexedDbJson<Array<Record<string, string>>>(page, 'mybishbash.cards.v1', [])
+  ).filter((card) => card.promptText === 'E2E reload-persisted card').length).toBe(1);
   await expectNoConsoleErrors(consoleErrors);
 });
 

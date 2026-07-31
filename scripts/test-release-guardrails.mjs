@@ -19,6 +19,7 @@ const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js"
 const registerServiceWorkerSource = await readFile(new URL("../src/registerServiceWorker.js", import.meta.url), "utf8");
 const serviceWorkerSource = await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8");
 const eventLogSource = await readFile(new URL("../src/eventLog.js", import.meta.url), "utf8");
+const storageSource = await readFile(new URL("../src/storage.js", import.meta.url), "utf8");
 const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import.meta.url), "utf8");
 const generatedCoverModelSource = await readFile(new URL("../src/lib/generatedCover.js", import.meta.url), "utf8");
 const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
@@ -78,11 +79,261 @@ function sourceBetween(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
+// Return the complete brace-balanced block introduced by `marker`. An empty
+// result is deliberate: every assertion using the result then fails instead
+// of silently passing against the wrong or a missing branch.
+function sourceBlock(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex === -1) return "";
+  const blockStart = source.indexOf("{", markerIndex + marker.length);
+  if (blockStart === -1) return "";
+
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = blockStart; index < source.length; index += 1) {
+    const character = source[index];
+    const nextCharacter = source[index + 1];
+
+    if (lineComment) {
+      if (character === "\n") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === "*" && nextCharacter === "/") {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote !== null) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === "/" && nextCharacter === "/") {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "/" && nextCharacter === "*") {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(markerIndex, index + 1);
+    }
+  }
+
+  return "";
+}
+
+function assertMatchCount(label, source, pattern, expectedCount) {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  const count = [...source.matchAll(new RegExp(pattern.source, flags))].length;
+  if (count !== expectedCount) {
+    fail(label, `expected ${expectedCount}, found ${count}`);
+    return;
+  }
+  pass(label);
+}
+
 const rootRouterSource = sourceBetween(rootRouterFileSource, "function RootRouter()", "export default RootRouter;");
 const appBeforeHooksSource = sourceBetween(appSource, "function App()", "const initialState = useMemo");
 const appDebugLogSource = sourceBetween(appSource, "function debugLog(...args)", "const TESTPILOT_CONFIG");
 const registerServiceWorkerDebugLogSource = sourceBetween(registerServiceWorkerSource, "function debugLog(...args)", "export function registerServiceWorker()");
 const launcherDestinationsDebugLogSource = sourceBetween(launcherDestinationsSource, "function debugLog(...args)", "export function getLauncherPlatform()");
+
+// Phase 5 commit 6: IndexedDB is authoritative after the transition release.
+// Inspect the active branches themselves so the check cannot pass merely
+// because a mirror/IDB call exists elsewhere in storage.js. Routine IDB-mode
+// writes must update the synchronous mirror and enqueue the matching IDB
+// mutation, without also mutating the now-stale localStorage rollback copy.
+const setStorageItemSource = sourceBlock(storageSource, "export function setStorageItem(key, value)");
+const activeIdbSetSource = sourceBlock(setStorageItemSource, "if (isMirrorActive())");
+const removeStorageItemSource = sourceBlock(storageSource, "export function removeStorageItem(key)");
+const activeIdbRemoveSource = sourceBlock(removeStorageItemSource, "if (isMirrorActive())");
+const getLocalStorageItemSource = sourceBlock(storageSource, "function getLocalStorageItem(key)");
+const markMigrationRetrySource = sourceBlock(storageSource, "function markMigrationRetry()");
+const markLegacyMutationSource = sourceBlock(storageSource, "function markLegacyMutationForReconciliation()");
+const acknowledgeMigrationRetrySource = sourceBlock(storageSource, "function acknowledgeMigrationRetry(token)");
+const queueIdbWriteSource = sourceBlock(storageSource, "function queueIdbWrite(run)");
+const runHydrationSource = sourceBlock(storageSource, "async function runHydration()");
+const settlePendingStorageWritesSource = sourceBlock(storageSource, "async function settlePendingStorageWrites(observedWrites = [])");
+const reconcileSuccessfulSharedStateClearSource = sourceBlock(
+  storageSource,
+  "async function reconcileSuccessfulSharedStateClear({ clearRecovery, clearToken, clearedMirror })",
+);
+const finishSharedStateClearSource = sourceBlock(
+  storageSource,
+  "async function finishSharedStateClear({ clearRecovery, clearToken, clearedMirror, idbClearWrites, mirrorWasActive })",
+);
+const clearSharedStateSource = sourceBlock(storageSource, "export function clearSharedMyBishBashState()");
+
+assertMatch(
+  "active IDB set branch keeps synchronous mirror and queued IDB put",
+  activeIdbSetSource,
+  /if \(isMirrorActive\(\)\)[\s\S]*mirror\.set\(key, stringValue\)[\s\S]*queueIdbWrite\(\(\) => kvPut\(key, stringValue\)\)[\s\S]*return;/,
+);
+assertNoMatch(
+  "active IDB set branch does not mutate localStorage",
+  activeIdbSetSource,
+  /\blocalStorage\.(?:setItem|removeItem)\(/,
+);
+assertMatch(
+  "active IDB remove branch keeps synchronous mirror and queued IDB delete",
+  activeIdbRemoveSource,
+  /if \(isMirrorActive\(\)\)[\s\S]*mirror\.delete\(key\)[\s\S]*queueIdbWrite\(\(\) => kvDelete\(key\)\)[\s\S]*return;/,
+);
+assertNoMatch(
+  "active IDB remove branch does not mutate localStorage",
+  activeIdbRemoveSource,
+  /\blocalStorage\.(?:setItem|removeItem)\(/,
+);
+assertNoMatch(
+  "active IDB branches never request stale localStorage replay",
+  activeIdbSetSource + activeIdbRemoveSource,
+  /markMigrationRetry|markIdbMutationDuringReconciliation/,
+);
+
+// Once dual-write is gone, an IDB write/flush failure cannot make the old
+// localStorage snapshot authoritative. A retry marker in either failure path
+// would replay stale bytes over newer mirror/IDB state on the next boot.
+assertMatch(
+  "queued IDB writes still execute through the observable write promise",
+  queueIdbWriteSource,
+  /function queueIdbWrite\(run\)[\s\S]*Promise\.resolve\(run\(\)\)/,
+);
+assertNoMatch(
+  "queued IDB write failure never requests stale localStorage replay",
+  queueIdbWriteSource,
+  /markMigrationRetry|markIdbMutationDuringReconciliation/,
+);
+assertMatch(
+  "pending IDB flush still uses the bounded flush path",
+  settlePendingStorageWritesSource,
+  /withTimeout\([\s\S]*await flushWrites\(\)[\s\S]*Promise\.all\(observedWrites\)[\s\S]*WRITE_FLUSH_TIMEOUT_MS[\s\S]*catch/,
+);
+assertNoMatch(
+  "IDB flush failure never requests stale localStorage replay",
+  settlePendingStorageWritesSource,
+  /markMigrationRetry|markIdbMutationDuringReconciliation/,
+);
+assertNoMatch(
+  "retired IDB dual-write reconciliation hook is absent",
+  storageSource,
+  /markIdbMutationDuringReconciliation/,
+);
+assertMatchCount(
+  "legacy authority mutation requests one reconciliation generation",
+  markLegacyMutationSource,
+  /markMigrationRetry\(\)/,
+  1,
+);
+assertMatchCount(
+  "read-only legacy selection and hydration fallback do not publish authority",
+  runHydrationSource,
+  /markMigrationRetry\(\)/,
+  0,
+);
+assertMatchCount(
+  "all-sink clear requests one durable reconciliation generation",
+  clearSharedStateSource,
+  /markMigrationRetry\(\)/,
+  1,
+);
+assertMatch(
+  "all-sink clear demotes while IDB deletes are unsettled",
+  clearSharedStateSource,
+  /if \(mirrorWasActive\)[\s\S]*mirror = null;[\s\S]*activeEngine = "localstorage";/,
+);
+assertMatch(
+  "all-sink clear restores IDB only after durable deletes and safe reconciliation",
+  finishSharedStateClearSource,
+  /!idbClearSucceeded \|\| activeAllSinkClearRecovery !== clearRecovery[\s\S]*reconcileSuccessfulSharedStateClear\(\{ clearRecovery, clearToken, clearedMirror \}\)[\s\S]*if \(reconciledMirror === null\) return;[\s\S]*mirror = reconciledMirror;[\s\S]*activeEngine = "idb";/,
+);
+assertMatch(
+  "all-sink clear reconciles only its own same-session legacy generation",
+  reconcileSuccessfulSharedStateClearSource,
+  /retry\.token === clearToken[\s\S]*acknowledgeMigrationRetry\(clearToken\)[\s\S]*retry\.token !== clearRecovery\.latestLegacyMutationToken[\s\S]*migrateLocalStorageIfNeeded\(\{ force: true \}\)[\s\S]*readMigrationRetry\(\)\.token !== retry\.token[\s\S]*acknowledgeMigrationRetry\(retry\.token\)/,
+);
+assertNoMatch(
+  "all-sink clear failure does not publish a failure-driven replay generation",
+  finishSharedStateClearSource + reconcileSuccessfulSharedStateClearSource,
+  /markMigrationRetry\(\)/,
+);
+assertMatchCount(
+  "migration retry marker is defined once and called only by mutation and all-sink clear",
+  storageSource,
+  /markMigrationRetry\(\)/,
+  3,
+);
+
+// Exhaustive mutation allowlist. Each permitted call is pinned to its owning
+// function and category, then the global count proves there is no seventh,
+// unclassified localStorage writer hidden elsewhere in storage.js.
+const allowedStorageMutations = [
+  {
+    label: "legacy engine set is the only routine localStorage set",
+    source: setStorageItemSource,
+    pattern: /window\.localStorage\.setItem\(key, value\)/,
+  },
+  {
+    label: "legacy engine remove is the only routine localStorage remove",
+    source: removeStorageItemSource,
+    pattern: /window\.localStorage\.removeItem\(key\)/,
+  },
+  {
+    label: "legacy-prefix migration may promote canonical localStorage bytes",
+    source: getLocalStorageItemSource,
+    pattern: /window\.localStorage\.setItem\(key, legacyValue\)/,
+  },
+  {
+    label: "migration retry request remains a localStorage control write",
+    source: markMigrationRetrySource,
+    pattern: /window\.localStorage\.setItem\(MIGRATION_RETRY_REQUEST_KEY, token\)/,
+  },
+  {
+    label: "migration retry acknowledgement remains a localStorage control write",
+    source: acknowledgeMigrationRetrySource,
+    pattern: /window\.localStorage\.setItem\(MIGRATION_RETRY_ACK_KEY, token\)/,
+  },
+  {
+    label: "all-sink clear explicitly removes each canonical and legacy localStorage key",
+    source: clearSharedStateSource,
+    pattern: /window\.localStorage\.removeItem\(key\)/,
+  },
+];
+
+for (const mutation of allowedStorageMutations) {
+  assertMatchCount(mutation.label, mutation.source, mutation.pattern, 1);
+}
+assertMatch(
+  "all-sink clear enumerates canonical and legacy owned keys",
+  clearSharedStateSource,
+  /const keys = \[\.\.\.SHARED_STORAGE_KEYS, \.\.\.LEGACY_SHARED_STORAGE_KEYS\]/,
+);
+assertMatchCount(
+  "storage.js localStorage mutations are exactly the six classified exceptions",
+  storageSource,
+  /\blocalStorage\.(?:setItem|removeItem)\(/,
+  allowedStorageMutations.length,
+);
 
 assertMatch("demo onboarding URL entrypoint is dev-only", appSource, /function shouldStartDemoOnboarding\(\) \{[\s\S]{0,140}!import\.meta\.env\.DEV/);
 assertMatch("demo signup URL entrypoint is dev-only", appSource, /function shouldStartDemoSignup\(\) \{[\s\S]{0,140}!import\.meta\.env\.DEV/);
