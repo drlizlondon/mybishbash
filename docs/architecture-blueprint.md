@@ -161,8 +161,8 @@ Key technology decisions (see §17 for trade-offs):
 |---|---|---|
 | Language | **TypeScript, gradual** (`allowJs`, boundaries first) | Machine-checkable contracts; the best force-multiplier for AI-executed phases |
 | App state | **Zustand stores, one per domain** (~1KB dep) | Removes 132 `useState`; selectors kill re-render cascades; boring, stable, swappable behind our own store interface |
-| Server state | **Custom sync engine** (mutation queue + per-entity LWW) | Our problem is replication of user-owned entities, not request caching — TanStack Query is the wrong shape; a queue is ~300 lines we fully control |
-| Local persistence | **IndexedDB** via a thin `db` service (no ORM) | Async, effectively unbounded, structured; localStorage remains for tiny flags only |
+| Server state | **Custom sync engine** (mutation queue + per-entity LWW) | Our problem is replication of user-owned entities, not request caching — TanStack Query is the wrong shape; the protocol remains explicit and under our control |
+| Local persistence | **IndexedDB** via a thin `db` service (no ORM) | Async, effectively unbounded, structured; localStorage remains only for tiny flags and a bounded sequence-checked emergency write-ahead journal |
 | Routing | **Extract the existing router into `app/router/`**; no library yet | ~12 routes with Capacitor base-path + intercept semantics no library models well; revisit at >20 routes |
 | Styling | **Tailwind for components + tokens.css for design system**; retire styles.css gradually | One system; dead CSS becomes deletable; Tailwind is already installed |
 | Unit tests | **Vitest** | Native to Vite; makes `domain/` and the sync engine testable in ms |
@@ -207,19 +207,23 @@ name what the product *is*:
 
 ### Future domains (design for, don't build)
 
-9. **Documents** — notes, journals, project pages. Model as a new *entity type*
-   on the same spine (id, type, owner, updated_at, body-out-of-band), not a new
-   architecture. Rich bodies live in their own rows/storage, never in a blob.
+9. **Documents** — notes, journals, project pages. Model as a future mutable
+   shared-state type on the same generic entity contract, with rich bodies in
+   their own rows/storage rather than a blob.
 10. **Assistant** — AI planning/search. Consumes Events + entities read-only at
     first; its writes go through the same store actions as the user's.
 11. **Spaces** — future shared workspaces. This is why entities carry
     `owner_id` + (future) `space_id` from Phase 6 onward.
 
-**The entity spine.** Every syncable thing shares:
-`{ id (uuid, client-generated), type, owner_id, created_at, updated_at, deleted_at?, payload }`.
-One spine → one sync engine, one undo system, one permission model, one AI surface.
-New product areas become new `type`s, not new architectures. This is the
-plugin-architecture foundation: a plugin is a registered entity type + renderer.
+**The entity spine.** Mutable shared state uses
+`{ id (server/internal uuid), owner_id, entity_type, entity_key (domain string),
+schema_version, payload, sort_order?, deleted_at?, updated_at (server diagnostics),
+version (server conflict/pull order) }`. Domain identifiers are not rewritten as
+UUIDs. Append-only events remain on `mybishbash_events`; already-normalized and
+device-local data do not enter the generic entity table. One entity contract →
+one sync engine and permission model. New mutable product areas become new
+`entity_type`s, not new architectures; a future plugin can register a type and
+renderer.
 
 ---
 
@@ -297,9 +301,10 @@ Classify every piece of state and give each class exactly one home:
 
 | Class | Home | Persistence | Examples |
 |---|---|---|---|
-| Server-replicated entities | domain stores (Zustand) | IndexedDB + sync queue | cards, packs, events, settings, profile |
+| Shared mutable entities | domain stores + materialized KV | IndexedDB `entities` + mutation queue | cards, packs, action cards, profile, exact shared settings catalogue |
+| Append-only events | event service + capped local log | IndexedDB KV + `event_append` mutations → existing `mybishbash_events` | launches, completions, interruptions, shifts |
 | Session | `sessionStore` | Supabase session storage | auth session, access profile, admin/tester status |
-| Connection lifecycle | `sessionStore` | none | `syncStatus`, `syncError` — pre-Phase-6 boot/connection funnel; distinct from the Phase 6 sync-engine `status`, expected to be renamed (`connectionStatus`) or partially subsumed when `services/sync` lands |
+| Connection lifecycle | `sessionStore` | none | Phase 6 renames `syncStatus`/`syncError` to `connectionStatus`/`connectionError`; it remains separate from replication status and may not gate launcher rendering |
 | Transient UI | `uiStore` / component state | none | overlay stack, composer open, menu open, spotlight |
 | Device-local prefs | `settingsStore` (local-only slice) | IndexedDB | pause clocks, suppression flags, e2e/demo flags |
 | Derived | selectors only — **never stored** | n/a | home stats, eligible cards, usage days, greeting |
@@ -307,21 +312,21 @@ Classify every piece of state and give each class exactly one home:
 **The single write path** (the most important invariant in this document):
 
 ```
-UI event → store action → (1) optimistic state update
-                        → (2) db.put(entity)            [IndexedDB, awaited]
-                        → (3) syncQueue.enqueue(mutation) [pushed when online]
+UI event → synchronous store action: journal intent → optimistic store/mirror
+         → one async IDB transaction: KV + entity + mutation
+                                      + rollback blob outbox (while open)
+         → clear journal record after commit
+         → sync service drains RPC mutations/outbox when online
 ```
 
-No component writes localStorage. No effect uploads state. No debounce refs.
-The queue is the *only* thing that talks to Supabase for user data. This single
-rule replaces `cloudSaveTimerRef` + `cardSaveTimerRef` + `localDirtyRef` +
-`highestKnownCloudTimeRef` + `isApplyingSharedStateRef` + `lastCloudStateStrRef`.
-
-- **Optimistic updates** are the default and free: state updates before network.
-  Rollback = mark mutation failed, re-apply server entity, surface a toast.
-- **Undo** = inverse mutations. Because every change is a mutation record
-  (`{entityType, entityId, patch, inversePatch, ts}`), undo history is a bounded
-  stack of inverses — one mechanism for every feature, including future documents.
+Components perform neither persistence nor network I/O. Public actions remain
+synchronous; an explicit flush observes durability. A dedicated, sequence-
+checked recovery journal handles an IDB transaction failure without making a
+stale shared-state snapshot authoritative. Accepted pulls use an origin-aware
+transaction and never echo into new entity mutations. Network failure leaves a
+mutation durably pending and overlays remote pulls; it does not generically
+reapply server state. The App blob timers/refs retire only at the final Phase 6
+write-retirement gate. Undo/inverse mutations remain later work.
 - **Realtime/collaboration later**: a Supabase Realtime channel feeding the same
   "apply remote entity" path the pull already uses. Collaboration changes the
   *conflict policy* (per-field LWW → CRDT for shared docs), not the architecture.
@@ -330,20 +335,20 @@ rule replaces `cloudSaveTimerRef` + `cardSaveTimerRef` + `localDirtyRef` +
 
 ## 10. Service layer architecture
 
-- `services/db` — ~150 lines over IndexedDB: object stores per entity type +
-  `mutations` + `meta` (schema version, sync cursor). Explicit upgrade path in
-  `onupgradeneeded`, mirroring the discipline of the SQL migrations.
-- `services/sync` — the engine: `enqueue`, `push` (drain queue → Supabase upserts,
-  ordered per entity), `pull` (cursor on `updated_at` → apply remote), conflict
-  policy (per-entity LWW now; per-field later), `status` (`synced | pending(n) |
-  offline | error`) exposed to the UI as a small indicator. Runs on: boot, online
-  event, visibilitychange, post-mutation (debounced ~2s), SW background sync
-  where available.
+- `services/db` — retain Phase 5's `kv`/`meta` stores and add one generic,
+  owner-scoped `entities` store plus `mutations`; cursors and local sequences are
+  per owner/device. A bounded recovery journal is separate from shared-state
+  authority. Upgrades remain explicit in `onupgradeneeded`.
+- `services/sync` — injected transport, idempotent RPC push, bounded pull by
+  server `version`, per-entity queue serialization, pending overlays, retry/
+  backoff, flush, and replication status (`disabled | bootstrapping | synced |
+  pending(n) | offline | error`). Direct Supabase entity upserts and
+  `updated_at` cursors are forbidden.
 - `services/auth` — session lifecycle, handoff references, gate codes. Emits to
   `sessionStore`; nothing else touches `supabase.auth`.
-- `services/analytics` — one `track(event, props)` facade writing to the local
-  event queue → `launcher_events`-style tables. HQ dashboards read Postgres, not
-  the client.
+- `services/analytics` — event reporting adapts the capped local log and generic
+  `event_append` mutation path to the existing `mybishbash_events`; Phase 6 does
+  not introduce a third event spine. HQ dashboards read Postgres, not the client.
 - `services/errors` — global error boundary + `window.onerror` +
   `unhandledrejection` → batched to a `client_errors` table (or Sentry if
   preferred later; the facade makes it swappable). Today production errors are
@@ -353,46 +358,55 @@ rule replaces `cloudSaveTimerRef` + `cardSaveTimerRef` + `localDirtyRef` +
 
 ## 11. Data flow
 
-**Boot:** open IndexedDB → hydrate stores (ms, no network) → render app →
-`auth.getSession()` in background → sync pull → apply remote deltas → push any
-queued mutations. The app is fully usable at step 3 — this *is* offline-first,
-and it also makes cold start effectively instant.
+**Boot:** open IndexedDB → hydrate the materialized KV/stores → render → restore
+auth → resolve the independent server assignment → when assigned shadow/entities,
+complete or verify idempotent bootstrap → drain/pull with pending-overlay
+protection. The app remains usable before network completion.
 
 **Mutation:** as in §9 — action → optimistic → db → queue → push.
 
-**Remote change (second device / future realtime):** pull/channel → compare
-`updated_at` per entity → apply-or-skip → store update → narrow re-render.
+**Remote change (second device / future realtime):** bounded pull after the
+device's owner-scoped server-version cursor → validate/decode → ignore a version
+not newer than the stored entity → origin-aware entity/KV transaction → narrow
+re-render without enqueue echo.
 
-**Reads:** components never fetch. They select from stores. Heavy histories
-(events older than N days, journal bodies) load through paged store actions
-backed by IndexedDB cursors, so memory stays bounded no matter how many years of
-data exist.
+**Reads:** components never fetch. They select from stores. Phase 6 preserves
+the current materialized KV and capped 500-event log; cursor-paged heavy history
+is a Phase 9 target.
 
 ## 12. Supabase architecture
 
-**From blob to entities.** Target schema (all RLS `auth.uid() = owner_id`,
-default-deny):
+**From blob to entities.** `mybishbash_entities` uses internal UUID `id`,
+`owner_id`, `entity_type`, text `entity_key`, `schema_version`, JSONB `payload`,
+optional `sort_order`, hard-tombstone `deleted_at`, diagnostic server
+`updated_at`, and distinct monotonic server `version`. It is unique on
+`(owner_id, entity_type, entity_key)` and `(owner_id, version)`, with a secondary
+owner/type/version index. A receipt table makes mutation IDs idempotent; an
+owner sync-account row
+holds bootstrap/authority/rollback provenance, never a shared device cursor.
+Ordered rollout rules supply independent per-audience modes. The existing
+`mybishbash_events` remains the append-only event spine and gains a text client
+event ID for non-UUID idempotency. Already-normalized access/launcher/global-pack
+tables remain unchanged.
 
-```sql
-entities(id uuid pk, owner_id uuid, type text, payload jsonb,
-         created_at, updated_at, deleted_at)          -- cards, packs, settings…
-events(id uuid pk, owner_id uuid, type text, payload jsonb, occurred_at)
-  -- append-only; partition by month when volume demands
--- existing: user_profiles, access codes/grants, launcher configs, global packs,
--- push subscriptions — already normalized; keep.
-```
+A generic entity table keeps the mutation/pull protocol consistent and makes a
+new mutable entity type a validated catalogue addition. Promote a type to its
+own table only when it needs relational queries or partial-column sync (likely
+future documents with bodies out of band). Entity writes are RPC-only, with
+fixed-search-path functions, minimum authenticated grants, bounded payloads,
+and default-deny owner RLS.
 
-A single generic `entities` table (typed payload, indexed on
-`(owner_id, type, updated_at)`) is deliberately chosen over one-table-per-type:
-it keeps the sync engine generic, makes new entity types (documents, plugins)
-zero-migration, and Postgres handles JSONB payloads at this scale comfortably.
-Promote a type to its own table only when it needs relational queries or
-partial column sync (likely: `documents` for body-out-of-band).
-
-**Migration off the blob (Phase 6)** is dual-write, zero-downtime:
-read blob → explode into entity rows on first login per user → dual-write both
-paths for one release → flip reads to entities → stop writing blob → archive
-table. `updated_at` per entity resolves any dual-write races.
+**Migration off the blob (Phase 6)** moves through `blob → shadow → entity
+reads with rollback open → entity reads with blob read-only`. During rollback-
+open stages, a durable coalesced outbox keeps a provenance-stamped blob current.
+Reads change only at recorded release gates. Blob writes stop only after an
+exercised clean release at 100% entity reads; the blob remains readable evidence
+for at least one further release, and archive/drop is post-Phase-6. Conflict,
+compatibility, and pull order use a locked per-owner transactional version
+counter, not a free-running sequence, client clocks, or `updated_at`.
+Blob-dependent notification/HQ consumers and legacy anonymous profile/state
+policies migrate before broader rollout. The normative contract is
+`docs/architecture/phase-06-sync-v2.md`.
 
 **Other Supabase practices:**
 - Privileged operations (account deletion, access grants, code claims) in Edge
@@ -412,25 +426,24 @@ table. `updated_at` per entity resolves any dual-write races.
 Design so the defaults stay fast at "hundreds of projects, thousands of cards,
 years of events":
 
-1. **Bounded boot.** Hydrate only hot data (active cards, current packs, last 30
-   days of events, settings). Everything else is cursor-paged from IndexedDB on
-   demand. Boot cost stops scaling with account age — the single most important
-   performance property for a decade-old account.
+1. **Bounded boot.** Phase 6 preserves the current materialized KV and 500-event
+   cap. Cursor-paged/last-30-day event hydration is a Phase 9 target, not a
+   prerequisite for the blob migration.
 2. **Selector subscriptions** (Phase 4) replace tree-wide re-renders; this
    supersedes most manual memo work.
 3. **Virtualize long lists** when they exceed ~100 rows (library, event history,
-   HQ tables). Windowing only — no infinite-scroll data model needed since
-   IndexedDB cursors already paginate.
+   HQ tables). Event-history cursor pagination arrives in Phase 9.
 4. **Code splitting by feature**: each `features/*` is a lazy boundary. Target
    initial JS < 200KB gz (marketing pages already split; HQ, composer, explore
    follow). Recharts loads only with screens that chart.
 5. **Network usage**: sync payloads become per-entity deltas (bytes) instead of
-   whole-profile blobs (currently unbounded); pull uses `updated_at > cursor`.
+   whole-profile blobs; pull is bounded and ordered by server monotonic
+   `version`, using each local owner/device cursor.
 6. **Background work** (morning summary, launcher stats, event aggregation) moves
    off the render path into idle-callback jobs; if profiles ever show jank, a
    worker is the escape hatch — don't add one preemptively.
-7. **Memory**: paged event access + capped undo stack + virtualized lists keep
-   heap flat regardless of account size.
+7. **Memory**: Phase 9's paged event access and later capped undo, plus
+   virtualized lists, keep heap flat regardless of account size.
 8. **Budgets in CI**: extend the guardrail script with bundle-size and
    Lighthouse-CI thresholds so regressions fail the build, not the user.
 
@@ -477,21 +490,26 @@ Keep what works (staging branch, guardrails, Cloudflare builds) and add:
 
 1. **CI order**: lint → typecheck → unit → build → guardrails → e2e → deploy
    staging → (manual) promote to production. Typecheck enters CI at Phase 7.
-2. **Feature flags for architecture migrations**: sync-v2, IndexedDB, and store
-   cutover each ship dark behind a flag; flip per-cohort (testers first — the
-   TestPilot infrastructure is ideal); keep one-release rollback by retaining the
-   old path until the flag is deleted.
-3. **Schema version stamps** in both IndexedDB `meta` and the entity payloads,
-   so old clients refuse to write ahead of their schema (prevents downgrade
-   corruption during staged rollouts).
-4. **Client error telemetry (Phase 1)** becomes the release health signal:
-   error-rate diff between staging and production gates promotion.
+2. **Ordered audience rules for Sync v2** default to blob. Each next audience
+   shadows while previously proven audiences may remain on entities; entity
+   reads advance only after exercised evidence. While rollback is open, a
+   two-phase account-wide rollback first proves the blob current. After blob-
+   write retirement, emergency behavior is `paused` local/entity authority plus
+   fix-forward, never stale blob fallback.
+3. **Protocol/schema stamps** live in IndexedDB meta, assignment responses,
+   mutation envelopes, entity rows, and bootstrap provenance. Unsupported
+   clients remain blob-only before entity cutover and refuse entity writes; a
+   cut-over client never silently downgrades to stale blob on assignment failure.
+4. **Release health needs a denominator.** Promotion requires non-vacuous
+   bootstrap/push/pull/edit traffic plus queue age, shadow mismatch, lost-write,
+   two-device/offline, payload, and rollback evidence; client error rate alone
+   is insufficient.
 
 ## 17. Risks and trade-offs
 
 | Decision | Trade-off accepted | Mitigation |
 |---|---|---|
-| Custom sync engine over off-the-shelf (Replicache/PowerSync/ElectricSQL) | We own ~300–500 lines of subtle code | Smallest-possible design (queue + LWW), exhaustive unit tests, upgrade path to per-field merge; vendors here are young/priced/lock-in-heavy — revisit at collaboration time |
+| Custom sync engine over off-the-shelf (Replicache/PowerSync/ElectricSQL) | We own a subtle replication protocol | Fixed entity/mutation contracts, transactional server ordering, exhaustive fake-transport and two-device tests, staged rollout, and an upgrade path to per-field merge; revisit vendors at collaboration time |
 | Zustand (new dep) | One more dependency | ~1KB, huge ecosystem, wrapped in our own store interfaces so it's swappable; alternative (hand-rolled `useSyncExternalStore`) costs more maintenance than it saves |
 | Generic `entities` table | Weaker relational typing in Postgres | Per-type Zod/TS schemas validate payloads at the boundary; promote hot types to real tables when queries demand |
 | Gradual TS (`allowJs`) | Long mixed period | Boundaries first (domain, services, stores) captures 80% of value in 20% of files |
@@ -688,25 +706,26 @@ user-visible change); 5–6 are flagged migrations; 7–10 harvest the value.
     directly. Funnelling them is prerequisite work inside packet commit 2.
 
 ### Phase 6 — Sync v2: entities + mutation queue (the big one)
-- **Objective:** `entities` table + `services/sync` (queue, push, pull,
-  per-entity LWW); blob exploded per user on first login; dual-write blob+entities
-  for one release; then reads flip, blob writes stop.
+- **Objective:** ship generic entities, idempotent mutation receipts/queue,
+  bounded server-version push/pull, and the existing event spine through
+  blob → shadow → entity-read rollout stages.
 - **Reasoning:** the load-bearing migration everything else depends on (§12).
-- **Changes:** migrations (`entities` + indexes + RLS); `services/sync/*`;
-  the last sync refs in App (`highestKnownCloudTimeRef` et al.) deleted;
-  `mergeEntitiesById`/`normalizeSharedState` retire; sync status indicator in
-  Settings.
-- **Risks:** highest of the plan. Mitigations: feature flag per cohort
-  (TestPilot testers → staff → %roll); dual-write with `updated_at` supremacy;
-  blob retained read-only ≥1 release; sync engine unit-tested against a scripted
-  fake transport for the full conflict matrix (offline edit both sides, delete
-  vs edit, clock skew, replay after crash mid-queue).
-- **Acceptance:** two-device convergence e2e (two contexts, interleaved offline
-  edits, both converge); airplane-mode session replays fully on reconnect;
-  payload per typical edit < 2KB (vs whole blob); zero lost-write reports from
-  tester cohort over one release cycle.
-- **Regression:** full release suite + new sync e2e; guardrail asserting blob
-  writes absent post-flip.
+- **Changes:** additive IndexedDB v2; entity/receipt/account/rollout SQL +
+  RLS/RPCs; origin-aware projection; durable rollback blob outbox;
+  entity-aware server consumers; connection/replication status split. Retire
+  App blob timers/merge ownership only at the final blob-write gate, retaining
+  a named read-only compatibility/evidence adapter.
+- **Risks:** server-acceptance conflicts, concurrent bootstrap, stale legacy
+  writes, queue replay, and rollback currency. Mitigate with ordered audience
+  rules, per-audience shadow/read gates, one transactional per-owner
+  sync-version domain, owner-serialized replace bootstrap, scripted two-device
+  tests, and stop-line evidence.
+- **Acceptance:** non-vacuous clean shadow and entity-read windows through 100%;
+  two-device/offline convergence; idempotent response-loss replay; no unresolved
+  mismatch, stuck queue, or lost write; representative edit <2KB; mechanically
+  zero blob writers after retirement.
+- **Regression:** full release/SQL/RLS/browser/native/perf gates. The blob-write
+  guardrail applies only after the final retirement gate.
 - **Impact:** collaboration, realtime, partial sync, AI reads, sharing — all unblocked.
 
 ### Phase 7 — TypeScript at the boundaries

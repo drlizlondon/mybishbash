@@ -4,7 +4,8 @@ Source of truth for progress against `docs/architecture-blueprint.md` §19.
 Update this file in the same commit that changes a phase's status.
 
 **Statuses:** `Complete` · `Ready` (entry criteria met, packet exists) ·
-`In progress` · `Planned` (packet not yet written) · `Blocked` (dependencies unmet)
+`In progress` · `Planned` (packet not yet written) · `Blocked` (entry criteria or
+prerequisites unmet)
 
 | # | Phase | Status | Packet | Depends on | Commits |
 |---|---|---|---|---|---|
@@ -16,8 +17,8 @@ Update this file in the same commit that changes a phase's status.
 | 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
 | 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
 | 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
-| 5 | IndexedDB persistence engine | **Complete** (dual-write retired 2026-07-31) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, (this commit) |
-| 6 | Sync v2 — entities + mutation queue | Planned | — | 5 | — |
+| 5 | IndexedDB persistence engine | **Complete** (dual-write retired 2026-07-31) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a` |
+| 6 | Sync v2 — entities + mutation queue | **Blocked** (packet written; independent rollout rules + hosted tester evidence pending) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: (this commit) |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
 | 9 | Performance & scale hardening | Planned | — | 5, 6 | — |
@@ -333,7 +334,11 @@ Update this file in the same commit that changes a phase's status.
   while the ordering tests are labelled behavioural coverage, not a chain proof.
 
 ### Phase 6 — Sync v2 (entities + mutation queue)
-- **Entry:** Phase 5 complete; tester cohort available; feature flag ready.
+- **Entry:** Phase 5 complete; execution packet exists; a live/contactable
+  tester cohort is evidenced; an independent server-evaluated Sync v2 rollout
+  control is deployed with catch-all `blob` authority and verified fail-closed.
+  Phase 5 and the packet are complete; the hosted cohort evidence and rollout
+  control are still pending, so Phase 6 is **Blocked**, not Ready.
 - **Exit:** `entities` table + queue live for all cohorts; blob dual-write
   retired after ≥1 clean release; two-device convergence e2e; offline replay
   e2e; per-edit payload < 2KB.
@@ -673,3 +678,13 @@ Update this file in the same commit that changes a phase's status.
     established.
   - Phase 4 (`docs/architecture/phase-04-domain-stores.md`) entry
     criteria are now met.
+- **2026-07-31 — Phase 6 packet written; phase remains Blocked.** The audit at
+  `64fa40a` found no prior packet or numbered Sync v2 commit sequence, no
+  independent rollout flag, and no repository evidence of a live/contactable
+  hosted tester cohort. `docs/architecture/phase-06-sync-v2.md` fixes the
+  entity catalogue, server-version conflict order, existing event-table reuse,
+  owner-scoped local schema, blob-authority state machine, RLS/blob-consumer
+  migration, non-vacuous release evidence, nine implementation commits, and an
+  explicit operational cohort-expansion stage. Runtime work may start only
+  after its default-blob rollout preflight is deployed and tester-cohort
+  evidence is recorded.
