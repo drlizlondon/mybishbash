@@ -5,11 +5,16 @@
 **Depends on:** Phase 5 complete; independently switchable Sync v2 audience
 rules deployed with catch-all `blob` authority; a live, contactable tester
 cohort recorded.
-**Status at packet creation:** **Blocked at preflight.** Phase 5 is complete at
-`64fa40a`, and TestPilot targeting/reporting infrastructure exists, but the
-repository does not prove a live hosted tester cohort and contains no Sync v2
-rollout flag. No runtime Phase 6 work may begin by treating `is_tester` itself
-as the missing flag.
+**Status at packet creation:** **Blocked at preflight.** Phase 5 implementation
+is complete at `64fa40a`, and TestPilot targeting/reporting infrastructure
+exists, but the repository did not prove a live hosted tester cohort and
+contained no Sync v2 rollout flag. No runtime Phase 6 work may begin by
+treating `is_tester` itself as the missing flag.
+
+**Hosted database boundary:** staging and production share Supabase project
+`ifcgomivmzwqqxhltfjj`. Every hosted migration, rule change, and probe in this
+packet is production-database work even when the application branch is
+`staging`; staging-only wording below is superseded by this boundary.
 
 ---
 
@@ -60,21 +65,32 @@ queue.
 
 All four items are required before Phase 6 Commit 1:
 
-1. **Phase 5 complete — met.** `64fa40a` retired local-storage dual-write and
-   left `staging` at the IndexedDB authority boundary.
-2. **Execution packet exists — met by this document after it lands.** The
-   roadmap definition of `Ready` requires a packet; the previous tracker had
-   `Packet = —`.
-3. **Independent rollout control deployed — not met.** The preflight commit
-   below must land, its migration must be applied to hosted staging, and the
-   assignment RPC must return catch-all `blob` authority by default. Tester
-   identity is only a targeting input; it is not an on/off switch.
-4. **Tester cohort operationally available — not proved.** Record, without PII,
-   a non-zero count by `tester_group`, evidence that the selected group is
-   contactable/active, and a two-device test account. A seeded tester code proves
-   enrollment capability, not an active cohort.
+1. **Phase 5 complete — implementation met; manual acceptance not fully
+   evidenced.** `64fa40a` retired local-storage dual-write and left `staging`
+   at the IndexedDB authority boundary. CI browser checks, the performance
+   gate, and the Commit 6 release window are recorded, but the manual staging
+   kill-switch and native seeded iOS/WKWebView upgrade exercises remain
+   outstanding.
+2. **Execution packet exists — met.** This document landed at
+   `47ef32c8950d8c3f3495a6dd7775ca1becdd66e7`.
+3. **Independent rollout control deployed — met.** Preflight Commit 0 landed at
+   `def28dc317b065ed6b096023d1ea07d0f37d4304`; its migration is present in the
+   shared hosted database, and 11/11 authenticated/security probes prove every
+   tested audience resolves to `blob`, the table is default-deny, and the exact
+   catch-all default is restored. The dashboard apply did not update the
+   Supabase CLI migration ledger, which must be reconciled through an
+   authenticated CLI workflow before a future `db push` is trusted.
+4. **Tester cohort operationally available — not met.** The privacy-minimised hosted
+   inspection found five tester accounts: two are in a non-null group but were
+   inactive for the prior 30 days; three are unassigned, including the only
+   active tester, who is also the owner/admin operator. Zero accounts are
+   structurally eligible before consent/automation/contactability attestation,
+   and no separate two-device account is recorded. The objective evidence is 0
+   of the required 2 qualifying participants.
 
-The tracker moves from `Blocked` to `Ready` only after items 3–4 are recorded.
+Full evidence is recorded in
+`docs/release-evidence/phase-06/preflight-2026-08-01.md`. The tracker moves from
+`Blocked` to `Ready` only after every hard gate is objectively recorded.
 Before an account has ever recorded entity-read authority, unavailable rollout
 control or assignment failure uses the existing blob path. After cutover, R1's
 durable authority rule applies: failure never silently downgrades to stale blob.
@@ -702,7 +718,8 @@ legacy sync-code surface only after a read-only audit proves no supported client
 uses it. That closure explicitly inventories and removes anonymous grants and
 policies from `public.profiles`, canonical `public.mybishbash_state`, deployed
 legacy state aliases such as `public.bishbash_state`, and any renamed profile/
-state relation still present in hosted staging. Unrelated intentional anonymous
+state relation still present in the shared hosted production database.
+Unrelated intentional anonymous
 surfaces (launcher events, waitlist, access-code validation) are out of this
 closure and must not be revoked accidentally. The source has no supported
 sync-code consumer, but deployed state must be verified. Completing this legacy
@@ -947,6 +964,11 @@ pinned pull high-watermark validation.
 
 ## Preflight Commit 0 — rollout control (before Phase 6 Commit 1)
 
+**Implementation status (2026-08-01):** repository control landed at
+`def28dc317b065ed6b096023d1ea07d0f37d4304`; the shared hosted database was
+migrated and verified in default-blob posture. The cohort and remaining Phase 5
+manual gates below are still blockers, so Commit 1 has not started.
+
 ### `Add default-blob Sync v2 rollout control`
 
 - Add the ordered rollout-rule table and assignment RPC from R1, seeded with a
@@ -963,9 +985,10 @@ pinned pull high-watermark validation.
   neither can force blob/entity authority against a real assignment.
 - Add a schema-contract check for the flag migration and wire it into the
   normal gates.
-- Apply to hosted staging, verify assignment remains `blob` for listed tester,
-  unlisted tester, admin/staff, and normal accounts, and record only aggregate
-  counts/groups — no emails or user IDs.
+- Apply to the shared hosted Supabase project (production database), verify
+  assignment remains `blob` for listed tester, unlisted tester, admin/staff,
+  and normal accounts, and record only aggregate counts/groups — no emails or
+  user IDs.
 - Record one selected non-null tester group, contact/consent attestation, and
   activity within the prior 30 days for at least two real non-admin/non-E2E
   participants. If fewer are available, require an explicit dated product-owner
@@ -1039,8 +1062,9 @@ standalone packet amendment, not an executor assumption.
 - Audit/revoke legacy anonymous blob access only if hosted evidence confirms it
   is unused; otherwise record the blocker and keep this revocation in a separate
   fix-forward before broader rollout.
-- Apply migration to staging and verify with authenticated owner A/owner B
-  isolation probes before any rule can move beyond the catch-all `blob` mode.
+- Apply the migration to the shared hosted Supabase project (production
+  database) and verify with authenticated owner A/owner B isolation probes
+  before any rule can move beyond the catch-all `blob` mode.
 - Commit: `Add the Sync v2 entity spine`.
 
 ### Commit 5 — Queue, push, pull, and conflict engine (dark)
@@ -1206,8 +1230,9 @@ git diff --check
 ```
 
 For SQL commits: local migration reset, schema/RLS contract, owner-isolation
-probes, account-deletion contract, then hosted staging apply + read-only
-verification before enabling any cohort. For integration/read/retirement
+probes, account-deletion contract, then apply to the shared hosted Supabase
+project (production database) + read-only verification before enabling any
+cohort. For integration/read/retirement
 commits: full Chromium Playwright at `--workers=2`, the scoped
 `webkit-smoke` project with explicit Sync v2 inclusion, Cloudflare build,
 Capacitor sync, and `test:perf-boot`.

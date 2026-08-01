@@ -1,8 +1,8 @@
 # MyBishBash Mobile App Wrapper
 
-This project now includes a Capacitor wrapper around the live MyBishBash web app:
+This project includes a Capacitor wrapper around the live MyBishBash web app:
 
-- Live web app: `https://drlizlondon.github.io/mybishbash/`
+- Live web app configured in `capacitor.config.json`: `https://mybishbash.app/`
 - App name: `MyBishBash`
 - App ID: `com.drlizlondon.mybishbash`
 
@@ -63,6 +63,36 @@ If you update Capacitor config or plugins later, run:
 ```bash
 npx cap sync
 ```
+
+`npx cap sync` verifies that the native wrapper and plugins can be
+synchronised. It does **not** prove that stored data survives a bundled
+web-asset upgrade while `server.url` points at the live site: the wrapper loads
+the remote origin instead of the copied `webDir` assets.
+
+## Seeded-data upgrade proof
+
+When an architecture or release gate requires native IndexedDB upgrade
+evidence, use disposable worktrees/wrappers; do not alter the normal live-site
+configuration in the protected checkout.
+
+1. Prepare a legacy build and the candidate build from their exact recorded
+   SHAs in separate disposable worktrees.
+2. Configure both disposable wrappers to use the same stable origin and bundle
+   ID. Do not change the origin between installs because WKWebView storage is
+   origin-scoped.
+3. Build and sync the legacy version, install it, create unique profile, card,
+   and event data, then force-quit and relaunch to prove the seed is durable.
+4. Without uninstalling the app or clearing its data, build and sync the
+   candidate and install it over the legacy version.
+5. Verify every seeded value and the IndexedDB migration metadata through the
+   UI and Safari Web Inspector. Make a new edit, force-quit, relaunch, and
+   verify it again.
+6. Record old/new SHAs, stable origin, `npx cap sync` results, device/simulator,
+   iOS and Xcode versions, UTC timestamps, expected/actual results, and
+   privacy-safe screenshots.
+
+A generic simulator launch or successful sync is not a substitute for this
+install-over-upgrade sequence.
 
 ## iOS notes
 

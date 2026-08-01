@@ -679,7 +679,10 @@ user-visible change); 5–6 are flagged migrations; 7–10 harvest the value.
   true); events store gains paged reads.
 - **Risks:** Safari/Capacitor IndexedDB quirks → e2e on WebKit project;
   migration idempotency → versioned `meta.migratedFrom` flag + keep localStorage
-  data untouched for one release (rollback = flip flag).
+  data current through dual-write for one release. Dual-write retired on
+  2026-07-31, so the flag alone is no longer a safe rollback: localStorage may
+  be stale. Post-retirement rollback requires a fix-forward that first
+  re-enables routine dual-write and re-establishes a current fallback.
 - **Acceptance:** fresh install, upgrade-with-data, and rollback all verified by
   e2e; boot time with 10k synthetic events < 1s (add a perf script); no data loss
   across the migration in a scripted round-trip test.
