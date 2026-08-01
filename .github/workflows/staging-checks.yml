@@ -36,6 +36,9 @@ jobs:
       - name: Feature boundaries
         run: npm run test:boundaries
 
+      - name: Sync v2 rollout preflight contract
+        run: npm run test:sync-v2-rollout-contract
+
       - name: Unit tests
         run: npm run test:unit
 

@@ -5,6 +5,7 @@ const checks = [
   ["Unit tests", ["npm", "run", "test:unit"]],
   ["Launch-session reducer coverage", ["npm", "run", "test:coverage:launch-session"]],
   ["Feature boundaries", ["npm", "run", "test:boundaries"]],
+  ["Sync v2 rollout preflight contract", ["npm", "run", "test:sync-v2-rollout-contract"]],
   ["Build", ["npm", "run", "build"]],
   ["Bundle budget", ["npm", "run", "test:bundle-budget"]],
   ["Release guardrails", ["npm", "run", "test:release-guardrails"]],
