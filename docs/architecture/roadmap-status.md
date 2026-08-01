@@ -17,8 +17,8 @@ prerequisites unmet)
 | 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
 | 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
 | 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
-| 5 | IndexedDB persistence engine | **Complete** (dual-write retired 2026-07-31) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a` |
-| 6 | Sync v2 — entities + mutation queue | **Blocked** (packet written; independent rollout rules + hosted tester evidence pending) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: (this commit) |
+| 5 | IndexedDB persistence engine | **Complete — implementation/automation** (dual-write retired 2026-07-31; two manual acceptance records outstanding) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a` |
+| 6 | Sync v2 — entities + mutation queue | **Blocked** (default-blob rollout control deployed; Phase 5 manual evidence and qualifying tester cohort absent) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: `47ef32c`; preflight 0: `def28dc` |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
 | 9 | Performance & scale hardening | Planned | — | 5, 6 | — |
@@ -212,6 +212,18 @@ prerequisites unmet)
   correction belongs to Commit 6 because only dual-write retirement makes the
   localStorage rollback copy stale. Rollback after this point requires a
   fix-forward that re-enables dual-write first.
+- **Acceptance-evidence reconciliation (2026-08-01):** successful Staging
+  Checks runs `30564529648` at `c839c72` and `30596412262` at `64fa40a`
+  objectively cover the named Chromium migration and WebKit persistence
+  steps. The performance and Commit 6 release-window evidence above are also
+  complete. A current isolated `test:release` (446 Playwright tests),
+  Cloudflare production build, and `npx cap sync` also pass. No dated record
+  exists for the manual staging kill-switch exercise or the native
+  iOS/WKWebView seeded-data install-over-upgrade exercise.
+  `npx cap sync` cannot prove the latter while the wrapper loads a live
+  `server.url`. Those two manual acceptance items remain outstanding and are
+  hard blockers for Phase 6 readiness; see
+  `docs/release-evidence/phase-06/preflight-2026-08-01.md`.
 - **Commit 1.5 landed 2026-07-29 — the funnel is now actually single.** A
   standalone, behaviour-preserving refactor closing the five bypasses the
   audit found (finding 1 below), executed **before** any engine seam so the
@@ -337,8 +349,15 @@ prerequisites unmet)
 - **Entry:** Phase 5 complete; execution packet exists; a live/contactable
   tester cohort is evidenced; an independent server-evaluated Sync v2 rollout
   control is deployed with catch-all `blob` authority and verified fail-closed.
-  Phase 5 and the packet are complete; the hosted cohort evidence and rollout
-  control are still pending, so Phase 6 is **Blocked**, not Ready.
+  The packet is complete at `47ef32c`. Preflight Commit 0 is complete at
+  `def28dc`; its rollout migration and 11/11 hosted probes establish default
+  blob authority on the shared production database. Phase 5's two manual
+  acceptance records remain absent. The hosted cohort inspection found five
+  tester accounts: two grouped but inactive and three unassigned, including
+  the only active tester/owner-admin. This is 0 of the required 2 structurally
+  eligible accounts before human attestation, with no separate two-device
+  account recorded. Phase 6 is therefore
+  **Blocked**, not Ready; Commit 1 has not started.
 - **Exit:** `entities` table + queue live for all cohorts; blob dual-write
   retired after ≥1 clean release; two-device convergence e2e; offline replay
   e2e; per-edit payload < 2KB.
@@ -405,7 +424,8 @@ prerequisites unmet)
   - **Preview smoke:** https://drlizlondon.github.io/mybishbash-preview/home
     serves `version.json` sourceSha `43ba153…` (== HEAD), renders the auth
     gate signed-out, zero console errors, zero telemetry traffic.
-  - **Migration applied to hosted staging (2026-07-12).** Applied via the
+  - **Migration applied to the shared hosted Supabase project (production
+    database, 2026-07-12).** Applied via the
     Supabase dashboard SQL editor (CLI blocked: access token 403 + no
     `SUPABASE_DB_PASSWORD`; automated browser routes unavailable this session).
     Applying `202607100001_client_errors.sql` and running
@@ -688,3 +708,25 @@ prerequisites unmet)
   explicit operational cohort-expansion stage. Runtime work may start only
   after its default-blob rollout preflight is deployed and tester-cohort
   evidence is recorded.
+- **2026-08-01 — Phase 6 Preflight Commit 0 deployed; phase remains Blocked.**
+  `def28dc` adds the independent server-evaluated rollout table/RPC, exact
+  default reset, fail-closed client resolver, and unit/SQL/source-contract
+  gates without adding any Phase 6 runtime path. Migration
+  `202608010001_sync_v2_rollout_control.sql` was applied to shared Supabase
+  project `ifcgomivmzwqqxhltfjj` (the production database). Eleven hosted
+  assignment/security probes passed for distinct listed/unlisted testers,
+  admin/staff-audience membership, ordinary, unauthenticated, table-access,
+  and full-field exact-reset cases; every assignment remained `blob`. The
+  hosted project has no distinct non-admin staff account, so that separate
+  category remains locally proven rather than overstated as hosted evidence.
+  The privacy-minimised cohort inspection found
+  five tester accounts: two grouped but inactive and three unassigned,
+  including the only active tester/owner-admin. That is 0 of the required 2
+  structurally eligible accounts before human attestation, and no separate
+  two-device account is recorded. Phase 5's manual
+  staging kill-switch and native seeded iOS upgrade records are also absent.
+  The dashboard apply did not populate migration version `202608010001` in the
+  Supabase CLI ledger; reconcile it through an authenticated CLI workflow
+  before trusting a future `db push`. Full evidence and exact script hashes are
+  in `docs/release-evidence/phase-06/preflight-2026-08-01.md`. Runtime Commit 1
+  remains prohibited until every hard gate is objectively satisfied.

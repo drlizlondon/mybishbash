@@ -351,11 +351,17 @@ begin
     'one enabled catch-all blob row',
     concat('rows=', count(*), ', exact=', count(*) filter (
       where priority = 1000000 and audience_kind = 'all'
-        and audience_label = 'catch-all-blob' and mode = 'blob' and enabled
+        and audience_value is null
+        and audience_label = 'catch-all-blob' and mode = 'blob'
+        and sync_protocol_version = 1 and entity_schema_version = 1
+        and generation >= 1 and enabled
     )),
     count(*) = 1 and count(*) filter (
       where priority = 1000000 and audience_kind = 'all'
-        and audience_label = 'catch-all-blob' and mode = 'blob' and enabled
+        and audience_value is null
+        and audience_label = 'catch-all-blob' and mode = 'blob'
+        and sync_protocol_version = 1 and entity_schema_version = 1
+        and generation >= 1 and enabled
     ) = 1
   from public.sync_v2_rollout_rules;
 

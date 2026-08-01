@@ -6,6 +6,9 @@
 actions; `storage.js`/`eventLog.js` are the only localStorage writers for
 domain data).
 **Executor:** Claude Sonnet, fresh session, branch `staging`.
+**Current evidence status:** implementation and automated browser/performance
+gates are complete; the manual staging kill-switch and native seeded-upgrade
+checks remain outstanding (see Acceptance criteria).
 
 ---
 
@@ -106,7 +109,19 @@ IDB keys + localStorage (all engines), preserving today's reset semantics.
 
 Failure policy: if `openDb()` rejects or exceeds a 3s timeout at boot →
 log via `services/errors`, set engine = legacy for this session, resolve
-hydration; the app boots from localStorage (fresh, thanks to dual-write).
+hydration; the app boots from the retained localStorage snapshot. While the
+transition release dual-wrote that snapshot and kept it fresh, dual-write was
+retired on 2026-07-31. An IDB write/flush failure must therefore never publish
+legacy replay authority: the retained snapshot may be stale. Only a genuine
+legacy-engine mutation or an explicit all-sink clear can request later
+reconciliation into IDB.
+
+`main.jsx` awaits `hydrateLocalData()` before first render. If an IDB-mode
+storage read or write nevertheless occurs before hydration settles, it is
+served by the legacy engine for that pre-hydration interval and is **not**
+queued or replayed into the mirror. That ordering is intentional: normal boot
+hydrates before any application render, and inventing a second pre-hydration
+replay stream would create competing authority.
 
 ### R3 — Event log stays a single kv value this phase
 
@@ -441,6 +456,12 @@ blueprint §5).
   localStorage assertions (evidence section) in the commit message.
 - Commit: `Migrate local data to IndexedDB with dual-write and kill switch`.
 
+> **Historical test shape.** The bullets above describe Commit 4 while
+> dual-write was active. After Commit 6, `storage-migration.spec.ts` instead
+> proves that stale localStorage cannot overwrite newer IndexedDB state, then
+> proves that a genuine edit made during a legacy-engine session can reconcile
+> back to IDB when the user returns to the default engine.
+
 ### Commit 5 — 10k-event boot perf gate
 - **Create `scripts/perf-boot-10k-events.mjs`:** Playwright (Chromium +
   WebKit): seed localStorage with 10,000 synthetic events (reuse the event
@@ -486,43 +507,61 @@ puts and re-running); `clearSharedMyBishBashState` across engines.
 
 ## Acceptance criteria
 
-- [ ] **Local:** full gate green; unit suite covers both engines; migration
-      round-trip test (seed → migrate → edit → kill-switch rollback → data
-      intact) green — this is the blueprint's "no data loss across the
-      migration in a scripted round-trip".
-- [ ] **CI:** `staging-checks.yml` green including webkit-smoke;
-      `test:release` includes perf gate.
-- [ ] **Production build:** `npm run build` + `npm run build:cloudflare`
-      green; bundle budget green (db layer is ~150 lines, no new deps in the
-      client bundle).
-- [ ] **Capacitor:** `npx cap sync` completes; manual smoke on iOS simulator
-      per `CAPACITOR_TESTING.md` — install with seeded data, upgrade the web
-      assets, confirm cards/events survive (record in the report; this is the
-      WKWebView IndexedDB proof).
-- [ ] **Chromium + WebKit e2e green** (webkit-smoke scope per R4).
-- [ ] **10k-event boot < 1s** (Chromium; WebKit number recorded).
-- [ ] **User-visible behaviour unchanged:** full suite unchanged; e2e
-      localStorage seeding untouched; fresh install, upgrade-with-data, and
-      rollback all verified by e2e (the three blueprint scenarios).
-- [ ] Kill switch verified manually on staging preview (set flag → reload →
-      legacy boot).
-- [ ] Commit 6 lands only after its entry condition; guardrail active after.
+The original unchecked list mixed implementation, automation, release-window,
+and manual evidence. The evidence is reconciled below; a successful CI run is
+not substituted for a human staging or native-upgrade exercise.
+
+| Requirement | Objective evidence | Status |
+|---|---|---|
+| Implementation through dual-write retirement | Commits `d2401d5` through `64fa40a`; recovery authority/source guardrails landed with Commit 6 | Met |
+| Unit and source-contract coverage | Engine, migration, ordering, clear/recovery, and stale-replay guardrails in the repository | Met |
+| Chromium migration + WebKit persistence CI | Staging Checks `30564529648` (`c839c72`) and `30596412262` (`64fa40a`) passed their named browser steps | Met |
+| Current full release gate | Isolated `npm run test:release` passed with 446 Playwright tests | Met |
+| 10k-event second boot | Chromium 832.2 ms; WebKit 781.0 ms at `086af6b` | Met |
+| Commit 6 release entry | Release window 2026-07-30 22:58:59Z–23:37:26Z; 0 client errors and 0 tester reports | Met |
+| Production and Cloudflare builds | Current preflight verification is recorded in `docs/release-evidence/phase-06/preflight-2026-08-01.md`; it does not replace the native check | Met |
+| Capacitor project sync | Current isolated `npx cap sync` completed for Android and iOS; this proves wrapper generation only | Met |
+| Manual staging kill switch | No dated SHA/URL/browser/screenshots/result record exists | **Outstanding** |
+| Native iOS/WKWebView seeded-data upgrade | No install-over-upgrade record exists; `npx cap sync` alone is insufficient for the live-URL wrapper | **Outstanding** |
+
+### Outstanding manual checks
+
+**Staging kill switch:** in a disposable test-only browser profile at an exact
+staging SHA, seed the synthetic legacy fixture, boot normally and confirm IDB
+import, make and reload a unique IDB edit, set
+`mybishbash.storage-engine.v1=localstorage`, reload and make a distinct legacy
+edit, remove the override, then reload twice and confirm only that genuine
+legacy edit reconciles into IDB. Record SHA, URL, UTC time, browser/version,
+expected/actual results, privacy-safe screenshots, and console-error outcome.
+
+**Native seeded upgrade:** use disposable worktrees for the legacy-default and
+candidate SHAs and a disposable wrapper with one stable origin and bundle ID.
+Install the legacy build, seed unique profile/card/event data, force-quit and
+relaunch, then install the candidate over it without uninstalling or clearing
+data. Verify migrated values and migration metadata, make another edit,
+force-quit, and verify a second relaunch. Record both SHAs, the exact origin,
+sync results, Xcode/iOS/simulator versions, UTC times, and privacy-safe
+screenshots. Never perform this build in the checkout containing the protected
+generated `public/` changes.
 
 ## Rollback criteria
 
-Prefer the **kill switch** (no redeploy) for user-facing incidents, then
-revert commits newest-first. Revert rather than patch forward when: any data
-loss is reproducible in the round-trip test; WebKit boots inconsistently
-(hydration timeout firing at any measurable rate in `client_errors`); boot
-time regresses >20% on the perf script with normal data; the migration flag
-logic misfires (double import observed); or `client_errors` shows
-storage-attributed errors from the tester cohort. Because dual-write keeps
-localStorage current until commit 6, reverting commits 4–5 restores the
-previous engine with zero data loss. After commit 6, rollback requires
-re-enabling dual-write first (fix-forward commit) — which is exactly why
-commit 6 waits a full release.
+The kill switch remains useful for diagnosis, explicit engine selection, and
+testing reconciliation. It is **not** a safe post-retirement rollback by
+itself: after 2026-07-31 localStorage may be stale. Revert rather than patch
+forward when data loss is reproducible, WebKit hydration timeouts occur at a
+measurable rate, normal-data boot regresses >20%, the migration flag double
+imports, or storage-attributed client errors appear. During the transition
+release, dual-write made reverting Commits 4–5 safe. After Commit 6, any
+user-facing rollback must first fix forward to re-enable routine dual-write
+and re-establish a current fallback; merely flipping the flag or reverting
+code can expose stale state.
 
-## Sonnet execution prompt
+## Historical Sonnet execution prompt
+
+The following prompt governed the original implementation sequence. It is
+retained as historical evidence, not as current instructions: Commit 6 landed
+at `64fa40a` after its release-cycle gate.
 
 ```
 You are implementing Phase 5 of the myBishBash architecture roadmap on branch
@@ -543,8 +582,8 @@ tests/e2e and e2e/ for localStorage assertions. Attach both lists to your
 report. If any pre-hydration reader touches a SHARED_STORAGE_KEYS key, STOP.
 
 Rules:
-- Commits 1–5 in order (commit 6 is deferred — do NOT implement it now; it
-  ships a release later under its entry condition).
+- Commits 1–5 in order (historical instruction: Commit 6 was deferred until a
+  later release and has since landed at `64fa40a`).
 - storage.js keys, payload strings, and exported API are frozen: the engine
   changes, the data does not.
 - The legacy engine path stays byte-equivalent to today's code until commit 6.
@@ -556,8 +595,8 @@ Rules:
   (both projects) after commit 4; record perf numbers after commit 5.
 - Baseline e2e failures per the Phase 3 packet; anything else failing twice
   on one assertion is stop-the-line.
-- Update roadmap-status.md (Phase 5 → Complete pending commit 6, with the
-  dual-write retirement condition recorded). Push only with all gates green.
+- Update roadmap-status.md (historical target was Complete pending Commit 6;
+  Commit 6 has since landed). Push only with all gates green.
 
 Report: commit hashes, the R1 classification lists, migration/round-trip e2e
 results, WebKit results, perf numbers (both browsers), Capacitor smoke
