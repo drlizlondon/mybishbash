@@ -65,28 +65,42 @@ queue.
 
 All four items are required before Phase 6 Commit 1:
 
-1. **Phase 5 complete — implementation met; manual acceptance not fully
-   evidenced.** `64fa40a` retired local-storage dual-write and left `staging`
-   at the IndexedDB authority boundary. CI browser checks, the performance
-   gate, and the Commit 6 release window are recorded, but the manual staging
+1. **Phase 5 complete — not met.** `64fa40a` retired local-storage dual-write
+   and left `staging` at the IndexedDB authority boundary. CI browser checks,
+   the performance gate, and the Commit 6 release window are recorded, but the
+   manual staging
    kill-switch and native seeded iOS/WKWebView upgrade exercises remain
-   outstanding.
+   outstanding. Precise resumable human procedures were prepared on 2026-08-02
+   in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`;
+   preparing them does not satisfy either check. Inspection and an automated
+   fresh-profile browser reproduction also found that the kill-switch first
+   render performs an unconditional legacy-engine write and advances
+   whole-snapshot replay authority before a human edit. That Phase 5 safety
+   blocker must be corrected and verified before the manual gate can pass.
 2. **Execution packet exists — met.** This document landed at
    `47ef32c8950d8c3f3495a6dd7775ca1becdd66e7`.
 3. **Independent rollout control deployed — met.** Preflight Commit 0 landed at
    `def28dc317b065ed6b096023d1ea07d0f37d4304`; its migration is present in the
    shared hosted database, and 11/11 authenticated/security probes prove every
    tested audience resolves to `blob`, the table is default-deny, and the exact
-   catch-all default is restored. The dashboard apply did not update the
-   Supabase CLI migration ledger, which must be reconciled through an
-   authenticated CLI workflow before a future `db push` is trusted.
+   catch-all default is restored. On 2026-08-02 the authenticated Supabase CLI
+   safely recorded `202608010001` as applied without rerunning SQL; the
+   pre/post rollout-control schema/access fingerprint and blob-only assignment
+   probes were identical. Two older dashboard-applied July migrations remain
+   absent from remote history,
+   so no future real `db push` is permitted until that separate ledger scope is
+   reviewed.
 4. **Tester cohort operationally available — not met.** The privacy-minimised hosted
    inspection found five tester accounts: two are in a non-null group but were
-   inactive for the prior 30 days; three are unassigned, including the only
-   active tester, who is also the owner/admin operator. Zero accounts are
-   structurally eligible before consent/automation/contactability attestation,
-   and no separate two-device account is recorded. The objective evidence is 0
-   of the required 2 qualifying participants.
+   inactive for the prior 30 days; three are unassigned. Within that unassigned
+   aggregate, one row was active and one row was an owner/admin operator, but
+   the privacy-minimised result does not prove whether they are the same row.
+   Zero accounts are structurally eligible before
+   consent/automation/contactability attestation, and no separate two-device
+   account is recorded. The objective evidence is 0 of the required 2
+   qualifying participants. The repository-only
+   candidate-by-candidate decision is
+   `docs/release-evidence/phase-06/tester-cohort-decision-2026-08-02.md`.
 
 Full evidence is recorded in
 `docs/release-evidence/phase-06/preflight-2026-08-01.md`. The tracker moves from
@@ -964,10 +978,13 @@ pinned pull high-watermark validation.
 
 ## Preflight Commit 0 — rollout control (before Phase 6 Commit 1)
 
-**Implementation status (2026-08-01):** repository control landed at
+**Implementation status (updated 2026-08-02):** repository control landed at
 `def28dc317b065ed6b096023d1ea07d0f37d4304`; the shared hosted database was
-migrated and verified in default-blob posture. The cohort and remaining Phase 5
-manual gates below are still blockers, so Commit 1 has not started.
+migrated and verified in default-blob posture, and migration version
+`202608010001` is now recognised by the remote CLI ledger without SQL reapply.
+The unrelated July ledger gaps still prohibit a future real `db push`. The
+cohort and remaining Phase 5 safety/manual gates below are still blockers, so
+Commit 1 has not started.
 
 ### `Add default-blob Sync v2 rollout control`
 
@@ -994,7 +1011,9 @@ manual gates below are still blockers, so Commit 1 has not started.
   participants. If fewer are available, require an explicit dated product-owner
   exception recording the smaller aggregate count and rationale. Record a
   separate two-device test account; it does not count as a real participant.
-  If this evidence is absent, remain `Blocked`; do not begin Commit 1.
+  If this evidence is absent, remain `Blocked`; do not begin Commit 1. The
+  2026-08-02 decision record finds 0 of 2 and provides an unapproved exception
+  template only; no exception exists.
 
 The cohort gate before dark Commits 1–5 is intentionally strict because it is
 the blueprint's Phase 6 entry condition: do not build a load-bearing migration

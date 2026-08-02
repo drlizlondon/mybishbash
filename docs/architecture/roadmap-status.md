@@ -17,8 +17,8 @@ prerequisites unmet)
 | 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
 | 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
 | 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
-| 5 | IndexedDB persistence engine | **Complete — implementation/automation** (dual-write retired 2026-07-31; two manual acceptance records outstanding) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a` |
-| 6 | Sync v2 — entities + mutation queue | **Blocked** (default-blob rollout control deployed; Phase 5 manual evidence and qualifying tester cohort absent) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: `47ef32c`; preflight 0: `def28dc` |
+| 5 | IndexedDB persistence engine | **Blocked** (planned implementation commits landed; kill-switch replay-token correction and two manual records outstanding) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a` |
+| 6 | Sync v2 — entities + mutation queue | **Blocked** (default-blob rollout control deployed and target ledger row reconciled; Phase 5 kill-switch safety/manual evidence and qualifying tester cohort absent) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: `47ef32c`; preflight 0: `def28dc` |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
 | 9 | Performance & scale hardening | Planned | — | 5, 6 | — |
@@ -198,9 +198,11 @@ prerequisites unmet)
   at retirement: an IDB write or flush failure no longer publishes a replay
   marker, because localStorage is no longer a current fallback source and
   replaying it could overwrite newer IDB state. Legacy-engine mutations and
-  all-sink clear remain the only authoritative reasons to request
-  reconciliation; read-only engine selection and fallback do not publish
-  authority. An all-sink clear temporarily serves the already-cleared legacy
+  all-sink clear were intended to remain the only authoritative reasons to
+  request reconciliation; the isolated engine-selection and fallback paths do
+  not publish authority. The 2026-08-02 finding below proves the whole-app
+  kill-switch boot violates that intended boundary through an automatic
+  first-render write. An all-sink clear temporarily serves the already-cleared legacy
   sink while its observed IDB deletes settle. A fully durable clear either
   acknowledges an unchanged generation or exactly imports its own same-session
   reset writes before restoring IDB; a failed, timed-out, or externally
@@ -221,9 +223,16 @@ prerequisites unmet)
   exists for the manual staging kill-switch exercise or the native
   iOS/WKWebView seeded-data install-over-upgrade exercise.
   `npx cap sync` cannot prove the latter while the wrapper loads a live
-  `server.url`. Those two manual acceptance items remain outstanding and are
-  hard blockers for Phase 6 readiness; see
-  `docs/release-evidence/phase-06/preflight-2026-08-01.md`.
+  `server.url`. Precise resumable founder/human procedures were prepared on
+  2026-08-02 in
+  `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`,
+  including a packaged `capacitor://localhost` over-install. No result is
+  recorded. Inspection and an automated fresh-profile browser reproduction at
+  `ec4f715` additionally found that the first kill-switch render
+  unconditionally writes the action-card defaults version, advancing
+  whole-snapshot replay authority before a human edit. The packet records this
+  runtime blocker. The safety issue and two manual acceptance items remain hard
+  blockers for Phase 6 readiness; see the Phase 6 preflight evidence.
 - **Commit 1.5 landed 2026-07-29 — the funnel is now actually single.** A
   standalone, behaviour-preserving refactor closing the five bypasses the
   audit found (finding 1 below), executed **before** any engine seam so the
@@ -351,13 +360,20 @@ prerequisites unmet)
   control is deployed with catch-all `blob` authority and verified fail-closed.
   The packet is complete at `47ef32c`. Preflight Commit 0 is complete at
   `def28dc`; its rollout migration and 11/11 hosted probes establish default
-  blob authority on the shared production database. Phase 5's two manual
-  acceptance records remain absent. The hosted cohort inspection found five
-  tester accounts: two grouped but inactive and three unassigned, including
-  the only active tester/owner-admin. This is 0 of the required 2 structurally
-  eligible accounts before human attestation, with no separate two-device
-  account recorded. Phase 6 is therefore
-  **Blocked**, not Ready; Commit 1 has not started.
+  blob authority on the shared production database. Phase 5's kill-switch
+  replay-token correction and two manual acceptance records remain absent. The
+  hosted cohort inspection found five
+  tester accounts: two grouped but inactive and three unassigned, with one
+  active row and one owner/admin row in the unassigned aggregate; the result
+  does not establish whether those are the same account. This is 0 of the
+  required 2 structurally eligible accounts before human attestation, with no
+  separate two-device account recorded. Phase 6 is therefore
+  **Blocked**, not Ready; Commit 1 has not started. The 2026-08-02
+  candidate-by-candidate decision remains 0 of 2. The authenticated CLI now
+  recognises migration `202608010001` without SQL reapply, with an identical
+  pre/post rollout-control schema/access fingerprint. Two unrelated July
+  dashboard-applied migrations remain missing from remote history, so a future
+  real `db push` is separately prohibited pending reviewed reconciliation.
 - **Exit:** `entities` table + queue live for all cohorts; blob dual-write
   retired after ≥1 clean release; two-device convergence e2e; offline replay
   e2e; per-edit payload < 2KB.
@@ -715,18 +731,38 @@ prerequisites unmet)
   `202608010001_sync_v2_rollout_control.sql` was applied to shared Supabase
   project `ifcgomivmzwqqxhltfjj` (the production database). Eleven hosted
   assignment/security probes passed for distinct listed/unlisted testers,
-  admin/staff-audience membership, ordinary, unauthenticated, table-access,
-  and full-field exact-reset cases; every assignment remained `blob`. The
+  admin/staff-audience membership, non-tester/non-operator, unauthenticated,
+  table-access, and full-field exact-reset cases; every assignment remained
+  `blob`. The
   hosted project has no distinct non-admin staff account, so that separate
   category remains locally proven rather than overstated as hosted evidence.
   The privacy-minimised cohort inspection found
-  five tester accounts: two grouped but inactive and three unassigned,
-  including the only active tester/owner-admin. That is 0 of the required 2
-  structurally eligible accounts before human attestation, and no separate
-  two-device account is recorded. Phase 5's manual
+  five tester accounts: two grouped but inactive and three unassigned, with one
+  active row and one owner/admin row in that aggregate; it does not establish
+  whether those are the same account. That is 0 of the required 2 structurally
+  eligible accounts before human attestation, and no separate two-device
+  account is recorded. Phase 5's manual
   staging kill-switch and native seeded iOS upgrade records are also absent.
   The dashboard apply did not populate migration version `202608010001` in the
   Supabase CLI ledger; reconcile it through an authenticated CLI workflow
   before trusting a future `db push`. Full evidence and exact script hashes are
   in `docs/release-evidence/phase-06/preflight-2026-08-01.md`. Runtime Commit 1
   remains prohibited until every hard gate is objectively satisfied.
+- **2026-08-02 — target migration ledger reconciled; evidence gates remain
+  Blocked.** An authenticated, documented Supabase CLI repair marked only
+  `202608010001` applied. `migration list` now matches that version; the stored
+  ledger name is `sync_v2_rollout_control` with 18 statement metadata entries.
+  The rollout schema/access fingerprint remained
+  `70933e4b483e306e93f79eda306194d6` before and after, the exact one-row
+  catch-all posture remained at generation 8 with `non_blob=0`, and four
+  privacy-safe assignment categories remained `blob`. Normal and include-all
+  dry-runs omitted `202608010001` but exposed the already-known missing July
+  history versions `202607100001` and `202607120001`; they were not repaired or
+  rerun, and no real database push is authorised. Exact manual Phase 5 packets
+  were prepared but remain human-operated/pending. The repository-only cohort
+  decision records all five candidate slots and remains 0 of 2, with no consent,
+  contactability, non-automation, or two-device evidence. Phase 6 Commit 1 is
+  still unstarted and prohibited. The Phase 5 manual-packet review also found
+  an unconditional first-render legacy write that advances the replay token
+  before an operator edit; that safety blocker was documented, not corrected,
+  in this evidence-only work.

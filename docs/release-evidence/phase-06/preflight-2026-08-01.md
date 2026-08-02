@@ -74,12 +74,14 @@ and environment label `Production`.
 - Apply result: `Success. No rows returned`
 - Apply time: `2026-08-01T20:42:01Z` (`21:42:01 BST`)
 
-The dashboard execution did not add version `202608010001` to
-`supabase_migrations.schema_migrations`. The hosted schema and RPCs are present
-and verified, but the migration ledger must be reconciled with an authenticated
-Supabase CLI workflow before a future `db push` is trusted. Do not edit the
-Supabase internal ledger by hand or infer statement metadata. This operational
-follow-up does not permit Phase 6 Commit 1 to begin.
+The dashboard execution did not initially add version `202608010001` to
+`supabase_migrations.schema_migrations`. That exact row was safely reconciled
+through the authenticated Supabase CLI on 2026-08-02; see the dated
+reconciliation addendum below. The CLI did not execute the migration SQL.
+Two older dashboard-applied July migrations remain absent from remote history,
+so a future real `db push` remains prohibited until that separate historical
+scope is reviewed. This operational follow-up does not permit Phase 6 Commit 1
+to begin.
 
 ## Hosted assignment and security probes
 
@@ -99,7 +101,7 @@ All 11 corrected hosted checks passed on the shared production database at
 | Unlisted tester | `blob`, matched catch-all |
 | Admin account | `blob`, matched temporary staff rule |
 | Staff audience | `blob`, matched temporary staff rule through the owner/admin membership |
-| Ordinary account | `blob`, matched catch-all |
+| Non-tester/non-operator account | `blob`, matched catch-all |
 | Unauthenticated assignment | Denied |
 | Non-admin configuration write | Denied |
 | Authenticated direct table read | Denied |
@@ -112,7 +114,8 @@ account, so the staff audience and admin rows are not independent hosted
 people. The 21-check disposable-database verifier separately exercises distinct
 synthetic support and admin accounts. This limitation is recorded rather than
 labelling one hosted person twice. The corrected hosted reset also compares
-every default-row field (with generation permitted to advance):
+every canonical configuration field (generated ID/timestamps excluded, with
+generation permitted to advance):
 `rules=1, exact=1, non_blob=0`.
 
 This proves tester identity is only a targeting input, not an on/off switch;
@@ -139,8 +142,9 @@ Aggregate conclusion:
 - five tester accounts exist;
 - two belong to a non-null tester group, but neither was active in the prior
   30 days;
-- three lack the required non-null group; the only active tester is among
-  those unassigned accounts and is also the owner/admin operator;
+- three lack the required non-null group; that aggregate contains one active
+  row and one owner/admin operator row, but does not establish whether those
+  facts belong to the same account;
 - zero accounts are structurally eligible before human attestation;
 - zero selected participants have dated Sync v2 consent and contactability
   evidence; and
@@ -151,6 +155,10 @@ non-admin/non-staff/non-E2E participants in a selected non-null tester group,
 plus a separate two-device account. The objectively evidenced count is **0 of
 2**, so the cohort gate fails.
 
+The repository-only candidate-by-candidate decision, evidence limitations,
+smallest founder action list, and unapproved owner-exception fallback are in
+`docs/release-evidence/phase-06/tester-cohort-decision-2026-08-02.md`.
+
 ## Phase 5 evidence reconciliation
 
 | Requirement | Evidence | Status |
@@ -159,27 +167,155 @@ plus a separate two-device account. The objectively evidenced count is **0 of
 | Chromium migration + WebKit persistence CI | Staging Checks runs [30564529648](https://github.com/drlizlondon/mybishbash/actions/runs/30564529648) at `c839c72` and [30596412262](https://github.com/drlizlondon/mybishbash/actions/runs/30596412262) at `64fa40a` | Met |
 | 10k-event second boot | Chromium 832.2 ms; WebKit 781.0 ms at `086af6b` | Met |
 | Commit 6 release entry | Release `086af6b`, 2026-07-30 22:58:59Z–23:37:26Z; 0 client errors and 0 tester reports | Met |
-| Stale-localStorage recovery guardrail | Unit/source guards plus `storage-migration.spec.ts` prove stale legacy state cannot replace newer IDB and only a genuine legacy mutation can reconcile | Met |
-| Manual staging kill-switch exercise | No dated browser record | **Outstanding** |
-| Native iOS/WKWebView seeded-data upgrade | No install-over-upgrade record; the current live-URL wrapper does not prove a bundled web-asset upgrade | **Outstanding** |
+| Stale-localStorage recovery guardrails | Unit/source guards plus `storage-migration.spec.ts` cover write/flush failure, normal-IDB stale snapshots, and deliberate legacy edits; they do not cover the full-render kill-switch normalisation write found below | **Partial — whole-app gap open** |
+| Manual staging kill-switch exercise | Resumable human procedure prepared in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`; code review and a fresh-profile browser reproduction found a render-time legacy write advances replay authority before a human edit; no dated human result | **Outstanding — runtime blocker, then founder-operated** |
+| Native iOS/WKWebView seeded-data upgrade | Packaged-asset over-install procedure prepared in the same packet; no dated result | **Outstanding — founder-operated** |
 
 The two CI runs prove their named browser checks, not human staging or native
 upgrade exercises. Zero tester reports proves absence of reports during the
 recorded release window, not active tester participation.
 
-## Evidence still required before Phase 6 Commit 1
+## 2026-08-02 authenticated migration-ledger reconciliation
 
-1. Select one non-null tester group containing at least two real, active,
-   non-admin/non-staff/non-E2E/non-automated participants.
-2. Record dated explicit Sync v2 consent and current contactability for both.
-3. Record a separate two-device account; do not count it as a real participant.
-4. If fewer than two qualifying participants exist, obtain a dated, scoped
-   product-owner exception recording the smaller aggregate count and rationale.
-5. Complete and record the manual staging kill-switch exercise described in
-   the Phase 5 packet.
-6. Complete and record the native iOS/WKWebView seeded-data upgrade exercise.
-7. Reconcile the hosted migration ledger through the authenticated Supabase
-   CLI workflow and verify the linked migration list before a later `db push`.
+### Supported workflow and safety decision
 
-Until every hard gate has objective evidence, the safe next action is evidence
-collection only. Phase 6 Commit 1 remains prohibited.
+Supabase's documented [database-migration
+workflow](https://supabase.com/docs/guides/deployment/database-migrations) and
+[CLI reference](https://supabase.com/docs/reference/cli/supabase-migration-repair)
+state that dashboard SQL changes bypass migration history and that
+`migration repair --status applied` updates only
+`supabase_migrations.schema_migrations`; it does not apply or revert SQL.
+Installed CLI `2.98.2` exposes the same `migration repair [version] ...
+--status applied|reverted --linked` contract. Its matching source records the
+local migration version, name, and parsed statements as ledger metadata without
+calling the migration execution path. The installed-version implementation was
+checked against Supabase CLI
+[`repair.go`](https://raw.githubusercontent.com/supabase/cli/v2.98.2/internal/migration/repair/repair.go)
+and
+[`history.go`](https://raw.githubusercontent.com/supabase/cli/v2.98.2/pkg/migration/history.go).
+
+The CLI had no active token, so the observed `supabase login --no-browser`
+browser-assisted flow was completed; the command and credential-storage
+contract are in the official [CLI login
+reference](https://supabase.com/docs/reference/cli/getting-started). No
+credential, verification code, or token is committed. All Supabase commands
+ran from a disposable archive at `ec4f715`; the shared checkout's tracked
+`.temp` state was not used.
+
+The exact SELECT-only SQL inputs are preserved, with their original filenames
+and SHA-256 values, in
+`docs/release-evidence/phase-06/ledger-reconciliation-readonly-probes-2026-08-02.sql`.
+At `2026-08-02T22:23:27Z`, the repeatable post-reconciliation command record
+from `/private/tmp/mybishbash-ledger.u1l3vp` was:
+
+```text
+/opt/homebrew/bin/supabase db query --linked --file rollout-schema-posture.sql
+/opt/homebrew/bin/supabase db query --linked --file assignment-grouped.sql
+/opt/homebrew/bin/supabase db query --linked --file assignment-unassigned.sql
+/opt/homebrew/bin/supabase db query --linked --file assignment-ordinary.sql
+/opt/homebrew/bin/supabase db query --linked --file assignment-operator.sql
+/opt/homebrew/bin/supabase db query --linked --file ledger-target-postcheck.sql
+/opt/homebrew/bin/supabase migration list --linked
+/opt/homebrew/bin/supabase db push --linked --dry-run
+/opt/homebrew/bin/supabase db push --linked --dry-run --include-all
+```
+
+All six `db query` commands and `migration list` exited 0. The ordinary dry-run
+exited 1 only because the two older July files precede the newest remote
+version; the include-all dry-run exited 0. Both explicitly stated that no
+migration would be pushed, and neither listed `202608010001`.
+
+Before the mutation:
+
+- `supabase projects list --output json` marked only project
+  `ifcgomivmzwqqxhltfjj` as linked and `ACTIVE_HEALTHY`;
+- `supabase migration list --linked` showed local `202608010001` with an empty
+  remote column, and a direct SELECT returned `target_ledger_rows=0`;
+- the local migration was 500 lines / 15,260 bytes with SHA-256
+  `df8d51815b446b3a0dad3043fef9b8bc63e3265cb9340a1d85dd476b730f42de`,
+  matching the dashboard-applied source recorded above;
+- the read-only rollout-control schema/access fingerprint was
+  `70933e4b483e306e93f79eda306194d6`;
+- rollout posture was `total_rules=1`, `exact_default_rules=1`,
+  `non_blob=0`, `generation=8`, all enabled;
+- RLS was enabled and policy count was 0; anonymous and authenticated direct
+  table reads were unavailable; anonymous assignment/admin execution was
+  unavailable; and authenticated had `EXECUTE` on the assignment and admin
+  RPCs as designed. The fingerprint covers the unchanged RPC definitions,
+  including the owner/admin guards inside the security-definer admin bodies;
+- existing grouped tester, unassigned tester, non-tester/non-operator, and
+  operator probes all returned `blob / blob / catch-all-blob`.
+
+The only hosted-database-mutating command was:
+
+```text
+/opt/homebrew/bin/supabase migration repair 202608010001 --status applied --linked
+```
+
+Result: `Repaired migration history: [202608010001] => applied`. No migration
+SQL was rerun and no rollout/profile row was changed.
+
+After the mutation:
+
+- `supabase migration list --linked` showed
+  `202608010001 | 202608010001`;
+- a privacy-safe ledger query returned version `202608010001`, name
+  `sync_v2_rollout_control`, and 18 stored statements without printing their
+  bodies;
+- the rollout-control schema/access fingerprint remained exactly
+  `70933e4b483e306e93f79eda306194d6`;
+- default posture remained `1 / 1 / non_blob=0 / generation=8`, with identical
+  RLS, policies, table grants, and RPC grants; and
+- all four assignment categories again returned
+  `blob / blob / catch-all-blob`.
+
+The documented [`db push --dry-run`
+inspection](https://supabase.com/docs/reference/cli/supabase-db-push) produced
+the following summarised results (not verbatim CLI formatting):
+
+```text
+/opt/homebrew/bin/supabase db push --linked --dry-run
+  exit 1: older local migrations exist before the newest remote version;
+  listed 202607100001 and 202607120001 only.
+
+/opt/homebrew/bin/supabase db push --linked --dry-run --include-all
+  exit 0: would push 202607100001 and 202607120001 only.
+```
+
+Neither dry-run listed `202608010001`; it will not be reapplied. The two July
+migrations are documented as already applied through the dashboard in the
+2026-07-12 roadmap evidence (migration commits `d6bdb22` and `ce78e63`), but
+their ledger rows are outside this authorised reconciliation. They were not
+repaired or rerun. Therefore the **target migration is safely reconciled**,
+while the **global ledger remains operationally inconsistent** and no real
+`db push` may run until a separate, evidence-backed review authorises exact
+treatment of those two versions. Reconciliation completed by
+`2026-08-02T21:51:11Z`; the repeatable postchecks above completed by
+`2026-08-02T22:23:27Z`.
+
+## Exact evidence still required before Phase 6 Commit 1
+
+The execution packet and independent default-blob rollout control are met,
+including the target migration-ledger record above. The remaining hard entry
+gates are:
+
+1. The Phase 5 kill-switch pre-edit replay path documented in
+   `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`
+   must receive a separately reviewed runtime correction or equivalent proof;
+   then a founder/human must complete and date that packet's staging procedure.
+2. A founder/human must complete and date that packet's real native
+   iOS/WKWebView packaged install-over-upgrade procedure.
+3. The founder must evidence two active real, contactable,
+   non-staff/non-admin/non-owner/non-E2E/non-automated participants in one
+   selected non-null group, each with dated Sync v2 consent.
+4. The founder must evidence a separate designated account with two-device
+   availability; it does not count toward the two participants.
+
+Current qualifying tester count remains **0 of 2**. No product-owner exception
+exists. Separately, the two July ledger gaps must be resolved before any later
+real database push, but they do not turn this documentation work into Phase 6
+Commit 1.
+
+Until every hard gate has objective evidence, the safe next work is the
+separately reviewed Phase 5 correction and founder-operated evidence
+collection. Phase 6 Commit 1 remains prohibited.

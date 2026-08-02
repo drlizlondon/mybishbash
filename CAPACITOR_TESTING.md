@@ -75,21 +75,39 @@ When an architecture or release gate requires native IndexedDB upgrade
 evidence, use disposable worktrees/wrappers; do not alter the normal live-site
 configuration in the protected checkout.
 
-1. Prepare a legacy build and the candidate build from their exact recorded
-   SHAs in separate disposable worktrees.
-2. Configure both disposable wrappers to use the same stable origin and bundle
-   ID. Do not change the origin between installs because WKWebView storage is
-   origin-scoped.
-3. Build and sync the legacy version, install it, create unique profile, card,
-   and event data, then force-quit and relaunch to prove the seed is durable.
-4. Without uninstalling the app or clearing its data, build and sync the
-   candidate and install it over the legacy version.
-5. Verify every seeded value and the IndexedDB migration metadata through the
-   UI and Safari Web Inspector. Make a new edit, force-quit, relaunch, and
-   verify it again.
-6. Record old/new SHAs, stable origin, `npx cap sync` results, device/simulator,
-   iOS and Xcode versions, UTC timestamps, expected/actual results, and
+1. Prepare the legacy build and candidate build from their exact recorded SHAs
+   in separate disposable clones or worktrees. If an archive without `.git` is
+   unavoidable, set and verify `VITE_SOURCE_SHA` explicitly; never accept its
+   otherwise-empty `version.json.sourceSha`.
+2. In **both disposable copies**, keep the same `appId` and `webDir`, but remove
+   the complete `server` object (including `server.url`) from
+   `capacitor.config.json` before syncing. This makes both builds load packaged
+   assets from the same `capacitor://localhost` origin. Merely leaving both
+   wrappers pointed at the same live URL does not exercise a native web-asset
+   upgrade.
+3. Run `npm run build` with explicit `VITE_SOURCE_SHA` and
+   `VITE_APP_VERSION` labels, verify both fields in `dist/version.json`, then
+   run `npx cap sync ios` in the legacy copy. Install it, query the packaged
+   `/version.json` through Web Inspector, create unique synthetic profile,
+   card, and event data, then fully terminate and relaunch it to prove the seed
+   is durable.
+4. Run the same build/sync sequence in the candidate copy. Install it over the
+   existing app on the same simulator/device. Do not uninstall, reset the
+   simulator, clear Website Data, change the bundle ID, or change the origin.
+5. Verify the candidate's packaged `/version.json`, every seeded value, and the
+   IndexedDB migration metadata through the UI and Safari Web Inspector. Make
+   a newer candidate edit and deterministic event while the retained
+   localStorage bytes remain stale, fully terminate, and relaunch twice. The
+   newer IndexedDB values must remain authoritative and the stale localStorage
+   values must never render or overwrite them.
+6. Record old/new SHAs, the disposable config diff, exact origin and bundle ID,
+   build and sync results, device/simulator, iOS/Xcode/macOS versions, UTC
+   timestamps, expected/actual results, storage checksums, console logs, and
    privacy-safe screenshots.
+
+The current resumable Phase 5 procedure, fixed baseline/candidate, evidence
+fields, pass/fail criteria, and failure-preservation steps are in
+`docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
 
 A generic simulator launch or successful sync is not a substitute for this
 install-over-upgrade sequence.

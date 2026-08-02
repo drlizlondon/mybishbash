@@ -6,9 +6,12 @@
 actions; `storage.js`/`eventLog.js` are the only localStorage writers for
 domain data).
 **Executor:** Claude Sonnet, fresh session, branch `staging`.
-**Current evidence status:** implementation and automated browser/performance
-gates are complete; the manual staging kill-switch and native seeded-upgrade
-checks remain outstanding (see Acceptance criteria).
+**Current evidence status:** **Blocked.** The planned implementation commits
+and most automated browser/performance gates landed, but 2026-08-02 review
+found a first-render kill-switch write can authorise replay of a stale complete
+localStorage snapshot before a human edit. A runtime correction, the manual
+staging kill-switch result, and the native seeded-upgrade result remain
+outstanding (see Acceptance criteria).
 
 ---
 
@@ -348,11 +351,13 @@ else in `src/**` now fails the build. Commit 2 may begin.
   1.5 it carried a private duplicate of the funnel *including the legacy
   shim* — not the "direct `window.localStorage` calls" this packet originally
   described.
-- Boot order (must survive verbatim): `main.jsx` runs
-  `initDynamicLaunchersFromCache()` → renders `RootRouter` (consumes handoff/
-  demo flags from localStorage) → `App()` first render runs
-  `buildInitialState()` + store initializers synchronously (Phase 4 stores
-  call the same loaders) → intercept boot chain initializers.
+- Historical pre-Commit-3 boot order was
+  `initDynamicLaunchersFromCache()` → render `RootRouter` → `App()` first
+  render. Current `main.jsx` preserves the launcher/flag ordering but now runs
+  `initDynamicLaunchersFromCache()` → registers the service worker → awaits
+  `hydrateLocalData()` → renders `RootRouter` → `App()` synchronously reads the
+  hydrated authority. Every storage.js-owned access must remain below that
+  hydration gate.
 - E2E seeding: specs seed **localStorage** before first navigation. With the
   idb engine, every fresh browser context has empty IndexedDB ⇒ the import
   runs on first boot and picks the seeded keys up. No e2e helper changes are
@@ -458,9 +463,11 @@ blueprint §5).
 
 > **Historical test shape.** The bullets above describe Commit 4 while
 > dual-write was active. After Commit 6, `storage-migration.spec.ts` instead
-> proves that stale localStorage cannot overwrite newer IndexedDB state, then
-> proves that a genuine edit made during a legacy-engine session can reconcile
-> back to IDB when the user returns to the default engine.
+> proves that unchanged stale localStorage is not imported during normal IDB
+> boots, then proves that a deliberate edit made during a legacy-engine session
+> can reconcile back to IDB when the user returns to the default engine. It did
+> not cover the full-render kill-switch normalisation write identified on
+> 2026-08-02; that gap remains open below.
 
 ### Commit 5 — 10k-event boot perf gate
 - **Create `scripts/perf-boot-10k-events.mjs`:** Playwright (Chromium +
@@ -514,35 +521,35 @@ not substituted for a human staging or native-upgrade exercise.
 | Requirement | Objective evidence | Status |
 |---|---|---|
 | Implementation through dual-write retirement | Commits `d2401d5` through `64fa40a`; recovery authority/source guardrails landed with Commit 6 | Met |
-| Unit and source-contract coverage | Engine, migration, ordering, clear/recovery, and stale-replay guardrails in the repository | Met |
+| Unit and source-contract coverage | Engine, migration, ordering, clear/recovery, and isolated stale-replay guardrails are present; they omit the full-render kill-switch normalisation write identified below | **Partial — whole-app gap open** |
 | Chromium migration + WebKit persistence CI | Staging Checks `30564529648` (`c839c72`) and `30596412262` (`64fa40a`) passed their named browser steps | Met |
 | Current full release gate | Isolated `npm run test:release` passed with 446 Playwright tests | Met |
 | 10k-event second boot | Chromium 832.2 ms; WebKit 781.0 ms at `086af6b` | Met |
 | Commit 6 release entry | Release window 2026-07-30 22:58:59Z–23:37:26Z; 0 client errors and 0 tester reports | Met |
 | Production and Cloudflare builds | Current preflight verification is recorded in `docs/release-evidence/phase-06/preflight-2026-08-01.md`; it does not replace the native check | Met |
 | Capacitor project sync | Current isolated `npx cap sync` completed for Android and iOS; this proves wrapper generation only | Met |
-| Manual staging kill switch | No dated SHA/URL/browser/screenshots/result record exists | **Outstanding** |
-| Native iOS/WKWebView seeded-data upgrade | No install-over-upgrade record exists; `npx cap sync` alone is insufficient for the live-URL wrapper | **Outstanding** |
+| Manual staging kill switch | A precise resumable procedure was prepared on 2026-08-02; code review and a fresh-profile browser reproduction found a render-time localStorage write advances replay authority before a human edit, and no dated human result exists | **Outstanding — runtime blocker, then founder-operated** |
+| Native iOS/WKWebView seeded-data upgrade | A packaged-asset install-over-upgrade procedure was prepared on 2026-08-02; no human result exists, and `npx cap sync` alone is insufficient | **Outstanding — founder-operated** |
 
 ### Outstanding manual checks
 
-**Staging kill switch:** in a disposable test-only browser profile at an exact
-staging SHA, seed the synthetic legacy fixture, boot normally and confirm IDB
-import, make and reload a unique IDB edit, set
-`mybishbash.storage-engine.v1=localstorage`, reload and make a distinct legacy
-edit, remove the override, then reload twice and confirm only that genuine
-legacy edit reconciles into IDB. Record SHA, URL, UTC time, browser/version,
-expected/actual results, privacy-safe screenshots, and console-error outcome.
-
-**Native seeded upgrade:** use disposable worktrees for the legacy-default and
-candidate SHAs and a disposable wrapper with one stable origin and bundle ID.
-Install the legacy build, seed unique profile/card/event data, force-quit and
-relaunch, then install the candidate over it without uninstalling or clearing
-data. Verify migrated values and migration metadata, make another edit,
-force-quit, and verify a second relaunch. Record both SHAs, the exact origin,
-sync results, Xcode/iOS/simulator versions, UTC times, and privacy-safe
-screenshots. Never perform this build in the checkout containing the protected
-generated `public/` changes.
+The exact seeded fixture, authority matrix, human checkpoints, evidence fields,
+pass/fail criteria, resumption points, and restoration/recovery steps for both
+checks are frozen in
+`docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
+The staging procedure exercises the real
+`mybishbash.storage-engine.v1=localstorage` switch without Sync v2. The native
+procedure uses legacy SHA `cf69528`, removes `server.url` only in disposable
+wrappers so both installs use packaged assets at `capacitor://localhost`, and
+installs the candidate over the existing app container. A founder or delegated
+human must execute and attest each procedure; preparing the packet does not
+satisfy either acceptance item. Inspection and an automated fresh-profile
+reproduction at `ec4f715` also found that
+`loadActionCards()` performs an unconditional funnel write during the first
+kill-switch render. That advances the whole-snapshot reconciliation token
+before the deliberate manual edit and can nominate stale localStorage data for
+replay. Packet A records the exact blocker; do not record a passing manual run
+until it is resolved and independently verified.
 
 ## Rollback criteria
 
