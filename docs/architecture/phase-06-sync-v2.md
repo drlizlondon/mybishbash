@@ -72,11 +72,12 @@ All four items are required before Phase 6 Commit 1:
    kill-switch and native seeded iOS/WKWebView upgrade exercises remain
    outstanding. Precise resumable human procedures were prepared on 2026-08-02
    in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`;
-   preparing them does not satisfy either check. Inspection and an automated
-   fresh-profile browser reproduction also found that the kill-switch first
-   render performs an unconditional legacy-engine write and advances
-   whole-snapshot replay authority before a human edit. That Phase 5 safety
-   blocker must be corrected and verified before the manual gate can pass.
+   preparing them does not satisfy either check. The kill-switch first-render
+   replay-authority defect found on 2026-08-02 was corrected with focused
+   engine and browser regression proof on 2026-08-03: automatic defaults/theme
+   housekeeping and byte-identical card normalization no longer advance the
+   legacy retry generation, while a deliberate legacy edit still does. The two
+   required founder-operated manual results remain absent.
 2. **Execution packet exists — met.** This document landed at
    `47ef32c8950d8c3f3495a6dd7775ca1becdd66e7`.
 3. **Independent rollout control deployed — met.** Preflight Commit 0 landed at

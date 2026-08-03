@@ -12,6 +12,7 @@ import {
   saveGlobalInterruptionMode,
   saveHomeScreenVersions,
   saveLauncherBehaviorSettings,
+  saveMood,
   saveNotificationSettings,
   saveProfile,
   saveSetupComplete,
@@ -68,7 +69,7 @@ function buildActions(set, get) {
   return {
     setProfile: persistentSetter(set, get, "profile", saveProfile),
     setSetupComplete: persistentSetter(set, get, "setupComplete", saveSetupComplete),
-    setMood: functionalSetter(set, "mood"),
+    setMood: persistentSetter(set, get, "mood", saveMood),
     setHomeScreenVersions: persistentSetter(set, get, "homeScreenVersions", saveHomeScreenVersions),
     setLauncherBehaviorSettings: persistentSetter(set, get, "launcherBehaviorSettings", saveLauncherBehaviorSettings),
     setExplicitLauncherBehaviorSettings: functionalSetter(set, "explicitLauncherBehaviorSettings"),

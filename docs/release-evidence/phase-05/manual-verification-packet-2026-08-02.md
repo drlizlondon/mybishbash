@@ -2,7 +2,8 @@
 
 **Prepared:** 2026-08-02
 **Status:** **Pending founder/human execution — no result is claimed here.**
-Packet A also has the pre-execution blocker recorded below.
+Packet A's pre-execution runtime blocker was corrected on 2026-08-03 as
+recorded below, but the staging procedure itself has not been performed.
 **Candidate source:** `ec4f7159803119ec9c613f98550506adc463022c`
 
 These are the two Phase 5 acceptance checks that automation and
@@ -97,6 +98,21 @@ intentional and makes byte comparison reproducible.
 | A5 | Reload a second time | IndexedDB | `Legacy return <runId>` | Value and migration metadata remain stable; no second stale import occurs |
 
 ### Pre-execution blocker at the candidate SHA
+
+**Corrected in the 2026-08-03 Phase 5 correction commit.** The historical
+finding below describes the blocked candidate. The correction prevents the
+automatic first-render writes identified by the complete browser reproduction:
+action-card defaults-version housekeeping is not persisted through a hydrated
+legacy engine, theme application is visual-only while actual mood changes
+persist through the settings action, and byte-identical card normalization no
+longer schedules persistence.
+A focused engine test proves defaults are returned without publishing a retry
+request and a genuine action-card save still publishes one. The release-smoke
+storage-migration scenario snapshots retry request and acknowledgement before
+the kill-switch reload, proves they are unchanged immediately after first
+render, then proves the deliberate legacy edit advances the request and safely
+round-trips to IDB. This automated evidence removes the pre-execution blocker;
+it does not replace or claim the required founder-operated staging result.
 
 Repository inspection and an automated fresh-profile reproduction on
 2026-08-02 found that the current candidate cannot yet satisfy A2.
@@ -393,6 +409,7 @@ simulator after the failure record is complete.
 ## Current gate state
 
 Both Packet A and Packet B remain **pending founder/human execution** as of
-2026-08-02. Packet A is additionally blocked by the render-time replay-token
-path above. Preparing these instructions does not satisfy either Phase 5
-acceptance item and does not authorise Phase 6 Commit 1.
+2026-08-03. Packet A's render-time replay-token blocker is corrected and
+automatically regression-tested, but Packet A has not been executed on staging.
+Preparing these instructions and correcting the precondition does not satisfy
+either Phase 5 acceptance item and does not authorise Phase 6 Commit 1.

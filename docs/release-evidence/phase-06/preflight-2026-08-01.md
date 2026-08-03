@@ -167,8 +167,8 @@ smallest founder action list, and unapproved owner-exception fallback are in
 | Chromium migration + WebKit persistence CI | Staging Checks runs [30564529648](https://github.com/drlizlondon/mybishbash/actions/runs/30564529648) at `c839c72` and [30596412262](https://github.com/drlizlondon/mybishbash/actions/runs/30596412262) at `64fa40a` | Met |
 | 10k-event second boot | Chromium 832.2 ms; WebKit 781.0 ms at `086af6b` | Met |
 | Commit 6 release entry | Release `086af6b`, 2026-07-30 22:58:59Z–23:37:26Z; 0 client errors and 0 tester reports | Met |
-| Stale-localStorage recovery guardrails | Unit/source guards plus `storage-migration.spec.ts` cover write/flush failure, normal-IDB stale snapshots, and deliberate legacy edits; they do not cover the full-render kill-switch normalisation write found below | **Partial — whole-app gap open** |
-| Manual staging kill-switch exercise | Resumable human procedure prepared in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`; code review and a fresh-profile browser reproduction found a render-time legacy write advances replay authority before a human edit; no dated human result | **Outstanding — runtime blocker, then founder-operated** |
+| Stale-localStorage recovery guardrails | Unit/source guards plus `storage-migration.spec.ts` cover write/flush failure, normal-IDB stale snapshots, deliberate legacy edits, and the full-render kill-switch pre-edit boundary in Chromium and WebKit | **Met — whole-app gap closed 2026-08-03** |
+| Manual staging kill-switch exercise | Resumable human procedure prepared in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`; the render-time replay-authority blocker was corrected with focused engine and browser regression proof on 2026-08-03; no dated human staging result | **Outstanding — founder-operated** |
 | Native iOS/WKWebView seeded-data upgrade | Packaged-asset over-install procedure prepared in the same packet; no dated result | **Outstanding — founder-operated** |
 
 The two CI runs prove their named browser checks, not human staging or native
@@ -299,10 +299,11 @@ The execution packet and independent default-blob rollout control are met,
 including the target migration-ledger record above. The remaining hard entry
 gates are:
 
-1. The Phase 5 kill-switch pre-edit replay path documented in
-   `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`
-   must receive a separately reviewed runtime correction or equivalent proof;
-   then a founder/human must complete and date that packet's staging procedure.
+1. A founder/human must complete and date the Phase 5 kill-switch staging
+   procedure in
+   `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
+   The pre-edit replay path has a runtime correction and automated regression
+   proof as of 2026-08-03; the human staging result is still absent.
 2. A founder/human must complete and date that packet's real native
    iOS/WKWebView packaged install-over-upgrade procedure.
 3. The founder must evidence two active real, contactable,

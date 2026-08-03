@@ -89,6 +89,22 @@ describe("engine selection", () => {
     expect(first).toBe(storage.hydrateLocalData());
     await expect(first).resolves.toBeUndefined();
   });
+
+  it("does not publish replay authority for action-card defaults housekeeping in legacy mode", async () => {
+    const { storage } = await loadStorage({ engine: "localstorage" });
+
+    expect(storage.loadActionCards()).toEqual(
+      storage.DEFAULT_ACTION_CARDS.map((card) => ({
+        ...card,
+        defaultsVersion: "2026-05-13",
+      })),
+    );
+    expect(store.has("mybishbash.action-card-defaults-version.v1")).toBe(false);
+    expect(store.has(MIGRATION_RETRY_REQUEST_KEY)).toBe(false);
+
+    storage.saveActionCards([{ id: "operator-edit" }]);
+    expect(store.get(MIGRATION_RETRY_REQUEST_KEY)).toEqual(expect.any(String));
+  });
 });
 
 // ─── One-time localStorage migration ─────────────────────────────────────────

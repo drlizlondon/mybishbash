@@ -789,12 +789,23 @@ export function loadActionCards() {
         map.set(card.id, { ...card });
       }
     });
-    setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
+    persistActionCardDefaultsVersion();
     return Array.from(map.values());
   } catch {
-    setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
+    persistActionCardDefaultsVersion();
     return DEFAULT_ACTION_CARDS;
   }
+}
+
+function persistActionCardDefaultsVersion() {
+  // This is automatic housekeeping, not an operator mutation. Once hydration
+  // has deliberately selected the legacy engine, writing this marker would
+  // nominate the entire frozen localStorage snapshot for replay and could
+  // overwrite newer IDB state when the kill switch is removed. Keep applying
+  // the defaults in memory, but leave legacy replay authority unchanged until
+  // a genuine save goes through the normal funnel.
+  if (hydrationPromise !== null && getActiveStorageEngine() === "localstorage") return;
+  setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
 }
 
 export function saveActionCards(value) {

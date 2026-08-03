@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { saveMood } from "../../storage";
 import { checkForAppUpdate } from "../../appUpdate";
 import { processEventQueue } from "../../eventLog";
 
@@ -20,13 +19,11 @@ const THEME_COLORS = {
 
 // `mood` state itself stays in App(): it flows through buildSharedState /
 // applySharedState (the cloud sync engine), which is explicitly out of
-// scope for this phase. This hook owns only the side-effect that used to
-// run alongside it — local persistence plus the CSS var / theme-color meta
-// tag update — parameterized by the mood value App() already tracks.
+// scope for this phase. Persistence belongs to the settings-store action so an
+// initial render cannot masquerade as a user mutation. This hook owns only the
+// CSS var / theme-color side effect parameterized by App's current mood.
 export function useThemePreference(mood) {
   useEffect(() => {
-    saveMood(mood);
-
     const activeThemeBackground = THEME_COLORS[mood] || "#F6EBCF";
 
     document.documentElement.style.setProperty("--app-bg", activeThemeBackground);

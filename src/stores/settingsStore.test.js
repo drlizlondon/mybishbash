@@ -108,6 +108,7 @@ describe("settingsStore — action semantics", () => {
 
     actions.setProfile({ name: "Liz" });
     actions.setSetupComplete(true);
+    actions.setMood("Rainbow");
     actions.setHomeScreenVersions({ safari: { id: "safari" } });
     actions.setLauncherBehaviorSettings({ safari: { appEnabled: true } });
     actions.setGlobalInterruptionMode(false);
@@ -123,6 +124,7 @@ describe("settingsStore — action semantics", () => {
     expect(window.localStorage.setItem.mock.calls).toEqual([
       ["mybishbash.profile.v1", JSON.stringify({ name: "Liz" })],
       ["mybishbash.setup-complete.v1", "true"],
+      ["mybishbash.mood.v1", "Rainbow"],
       ["mybishbash.home-screen-versions.v1", JSON.stringify({ safari: { id: "safari" } })],
       ["mybishbash.launcher-behavior-settings.v1", JSON.stringify({ safari: { appEnabled: true } })],
       ["mybishbash.global-interruption-mode.v1", "false"],
@@ -131,10 +133,9 @@ describe("settingsStore — action semantics", () => {
     ]);
   });
 
-  it("does not add persistence for mood or explicit launcher settings", () => {
+  it("does not add persistence for explicit launcher settings", () => {
     const actions = getSettingsActions();
     window.localStorage.setItem.mockClear();
-    actions.setMood("Rainbow");
     actions.setExplicitLauncherBehaviorSettings({ safari: { appEnabled: true } });
     expect(window.localStorage.setItem).not.toHaveBeenCalled();
   });

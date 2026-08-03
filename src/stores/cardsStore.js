@@ -31,7 +31,9 @@ function buildActions(set, get) {
   };
   return {
     setCards: (next) => {
-      const value = typeof next === "function" ? next(get().cards) : next;
+      const current = get().cards;
+      const value = typeof next === "function" ? next(current) : next;
+      if (JSON.stringify(value) === JSON.stringify(current)) return;
       set({ cards: value });
       if (cardsSaveTimer) globalThis.clearTimeout(cardsSaveTimer);
       cardsSaveTimer = globalThis.setTimeout(() => {

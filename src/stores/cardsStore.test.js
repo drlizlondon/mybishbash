@@ -64,6 +64,16 @@ describe("cardsStore", () => {
     );
   });
 
+  it("does not persist a byte-identical card normalization", async () => {
+    const actions = getCardsActions();
+    window.localStorage.setItem.mockClear();
+
+    actions.setCards((cards) => cards.map((card) => ({ ...card })));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(window.localStorage.setItem).not.toHaveBeenCalled();
+  });
+
   it("supports the reload-safe immediate cards write path", () => {
     vi.useFakeTimers();
     const actions = getCardsActions();

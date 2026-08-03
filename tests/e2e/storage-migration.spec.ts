@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 const DB_NAME = 'mybishbash';
 const CARDS_KEY = 'mybishbash.cards.v1';
 const ENGINE_KEY = 'mybishbash.storage-engine.v1';
+const MIGRATION_RETRY_REQUEST_KEY = 'mybishbash.storage-migration-retry.v1';
+const MIGRATION_RETRY_ACK_KEY = 'mybishbash.storage-migration-retry-ack.v1';
 const MIGRATION_META_KEY = 'migratedFromLocalStorage';
 const SEED_SENTINEL_KEY = 'MYBISHBASH_E2E_STORAGE_MIGRATION_SEEDED';
 const now = '2026-07-30T12:00:00.000Z';
@@ -301,20 +303,42 @@ test('legacy import keeps IndexedDB authoritative and round-trips genuine kill-s
   expect(promptForCard(await readCardsFromIdb(page), 'migration-card')).toBe('IDB decoy — must not render');
   expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe('Legacy migration card');
 
+  const retryBeforeKillSwitch = await page.evaluate(
+    ({ requestKey, acknowledgementKey }) => ({
+      request: window.localStorage.getItem(requestKey),
+      acknowledgement: window.localStorage.getItem(acknowledgementKey),
+    }),
+    { requestKey: MIGRATION_RETRY_REQUEST_KEY, acknowledgementKey: MIGRATION_RETRY_ACK_KEY },
+  );
+
   await page.evaluate((key) => window.localStorage.setItem(key, 'localstorage'), ENGINE_KEY);
   await page.reload();
   await expect(page.getByTestId('app-shell')).toBeVisible();
+  await page.waitForTimeout(500);
+  const retryAfterKillSwitchBoot = await page.evaluate(
+      ({ requestKey, acknowledgementKey }) => ({
+        request: window.localStorage.getItem(requestKey),
+        acknowledgement: window.localStorage.getItem(acknowledgementKey),
+      }),
+      { requestKey: MIGRATION_RETRY_REQUEST_KEY, acknowledgementKey: MIGRATION_RETRY_ACK_KEY },
+    );
+  expect(retryAfterKillSwitchBoot).toEqual(retryBeforeKillSwitch);
   await showPersonalSection(page);
   await expect(page.getByTestId('library-row-migration-card')).toContainText('Legacy migration card');
   await expect(page.getByText('IDB decoy — must not render')).toHaveCount(0);
   expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe('Legacy migration card');
   expect(promptForCard(await readCardsFromIdb(page), 'migration-card')).toBe('IDB decoy — must not render');
-
   await editCard(page, 'migration-card', 'Legacy-mode edit survives return');
   expect(promptForCard(await readCardsFromLocalStorage(page), 'migration-card')).toBe(
     'Legacy-mode edit survives return',
   );
   expect(promptForCard(await readCardsFromIdb(page), 'migration-card')).toBe('IDB decoy — must not render');
+  const retryAfterOperatorEdit = await page.evaluate(
+    (key) => window.localStorage.getItem(key),
+    MIGRATION_RETRY_REQUEST_KEY,
+  );
+  expect(retryAfterOperatorEdit).toEqual(expect.any(String));
+  expect(retryAfterOperatorEdit).not.toBe(retryBeforeKillSwitch.request);
 
   await page.evaluate((key) => window.localStorage.removeItem(key), ENGINE_KEY);
   await page.reload();
