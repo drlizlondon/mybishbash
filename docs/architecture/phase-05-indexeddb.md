@@ -6,11 +6,10 @@
 actions; `storage.js`/`eventLog.js` are the only localStorage writers for
 domain data).
 **Executor:** Claude Sonnet, fresh session, branch `staging`.
-**Current evidence status:** **Blocked.** The planned implementation commits
-and most automated browser/performance gates landed, but 2026-08-02 review
-found a first-render kill-switch write can authorise replay of a stale complete
-localStorage snapshot before a human edit. A runtime correction, the manual
-staging kill-switch result, and the native seeded-upgrade result remain
+**Current evidence status:** **Blocked.** The planned implementation commits,
+automated browser/performance gates, and the 2026-08-03 kill-switch
+replay-authority correction landed. The founder-operated staging kill-switch
+and installed iOS Home Screen PWA update-and-persistence results remain
 outstanding (see Acceptance criteria).
 
 ---
@@ -372,9 +371,10 @@ else in `src/**` now fails the build. Commit 2 may begin.
 - Phase 4 gates live: boundaries, bundle budget, launch-session coverage,
   write-path lint rule (its allowlist already names `storage.js`,
   `eventLog.js`, `services/**` — `services/db` is automatically legal).
-- Capacitor 8 iOS/Android shells load the same web assets; IndexedDB in
-  WKWebView persists in the app container (see `CAPACITOR_TESTING.md` for the
-  manual smoke procedure).
+- MyBishBash is deployed as a web PWA. The optional checked-in Capacitor
+  iOS/Android wrapper uses `server.url=https://mybishbash.app/` as a thin
+  live-URL shell; no packaged-native distribution path is established. See
+  `CAPACITOR_TESTING.md` for that boundary.
 
 ## Packages to add
 
@@ -516,20 +516,20 @@ puts and re-running); `clearSharedMyBishBashState` across engines.
 
 The original unchecked list mixed implementation, automation, release-window,
 and manual evidence. The evidence is reconciled below; a successful CI run is
-not substituted for a human staging or native-upgrade exercise.
+not substituted for a human staging or installed-PWA update exercise.
 
 | Requirement | Objective evidence | Status |
 |---|---|---|
 | Implementation through dual-write retirement | Commits `d2401d5` through `64fa40a`; recovery authority/source guardrails landed with Commit 6 | Met |
-| Unit and source-contract coverage | Engine, migration, ordering, clear/recovery, and isolated stale-replay guardrails are present; they omit the full-render kill-switch normalisation write identified below | **Partial — whole-app gap open** |
+| Unit and source-contract coverage | Engine, migration, ordering, clear/recovery, isolated stale-replay, and full-render pre-edit replay-authority guardrails landed through `8c4824d` | Met |
 | Chromium migration + WebKit persistence CI | Staging Checks `30564529648` (`c839c72`) and `30596412262` (`64fa40a`) passed their named browser steps | Met |
 | Current full release gate | Isolated `npm run test:release` passed with 446 Playwright tests | Met |
 | 10k-event second boot | Chromium 832.2 ms; WebKit 781.0 ms at `086af6b` | Met |
 | Commit 6 release entry | Release window 2026-07-30 22:58:59Z–23:37:26Z; 0 client errors and 0 tester reports | Met |
-| Production and Cloudflare builds | Current preflight verification is recorded in `docs/release-evidence/phase-06/preflight-2026-08-01.md`; it does not replace the native check | Met |
-| Capacitor project sync | Current isolated `npx cap sync` completed for Android and iOS; this proves wrapper generation only | Met |
-| Manual staging kill switch | A precise resumable procedure was prepared on 2026-08-02; code review and a fresh-profile browser reproduction found a render-time localStorage write advances replay authority before a human edit, and no dated human result exists | **Outstanding — runtime blocker, then founder-operated** |
-| Native iOS/WKWebView seeded-data upgrade | A packaged-asset install-over-upgrade procedure was prepared on 2026-08-02; no human result exists, and `npx cap sync` alone is insufficient | **Outstanding — founder-operated** |
+| Production and Cloudflare builds | Current preflight verification is recorded in `docs/release-evidence/phase-06/preflight-2026-08-01.md`; it does not replace the installed-PWA check | Met |
+| Optional live-URL Capacitor wrapper sync | Current isolated `npx cap sync` completed for Android and iOS; this proves wrapper generation only and is not evidence of distribution or a packaged-native release target | Met, informational |
+| Manual staging kill switch | The real preview-origin procedure is prepared and the runtime blocker is corrected at `8c4824d`; no dated human result exists | **Outstanding — founder-operated** |
+| Installed iOS Home Screen PWA update and persistence | The representative same-origin staging deploy/service-worker procedure supersedes the synthetic packaged-native gate; no dated real-iPhone result exists | **Outstanding — founder-operated** |
 
 ### Outstanding manual checks
 
@@ -538,18 +538,19 @@ pass/fail criteria, resumption points, and restoration/recovery steps for both
 checks are frozen in
 `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
 The staging procedure exercises the real
-`mybishbash.storage-engine.v1=localstorage` switch without Sync v2. The native
-procedure uses legacy SHA `cf69528`, removes `server.url` only in disposable
-wrappers so both installs use packaged assets at `capacitor://localhost`, and
-installs the candidate over the existing app container. A founder or delegated
-human must execute and attest each procedure; preparing the packet does not
-satisfy either acceptance item. Inspection and an automated fresh-profile
-reproduction at `ec4f715` also found that
-`loadActionCards()` performs an unconditional funnel write during the first
-kill-switch render. That advances the whole-snapshot reconciliation token
-before the deliberate manual edit and can nominate stale localStorage data for
-replay. Packet A records the exact blocker; do not record a passing manual run
-until it is resolved and independently verified.
+`mybishbash.storage-engine.v1=localstorage` switch without Sync v2. The PWA
+procedure installs the real preview to an iPhone Home Screen, preserves one
+origin and data container across a normal `staging` deployment, exercises the
+service-worker/application update flow, and reuses Packet A's supported
+legacy-edit diagnostic. A founder or delegated human must execute and attest
+each procedure; preparing the packet does not satisfy either acceptance item.
+
+The former packaged-native procedure is retained only as a superseded
+historical appendix. It removed `server.url` and manufactured
+`capacitor://localhost` builds, so it did not represent the deployed web PWA or
+the optional live-URL Capacitor shell. It cannot block Phase 6. It becomes
+mandatory only if packaged assets become an explicitly supported release
+target with a documented distribution path.
 
 ## Rollback criteria
 

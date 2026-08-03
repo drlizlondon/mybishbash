@@ -68,10 +68,11 @@ All four items are required before Phase 6 Commit 1:
 1. **Phase 5 complete — not met.** `64fa40a` retired local-storage dual-write
    and left `staging` at the IndexedDB authority boundary. CI browser checks,
    the performance gate, and the Commit 6 release window are recorded, but the
-   manual staging
-   kill-switch and native seeded iOS/WKWebView upgrade exercises remain
-   outstanding. Precise resumable human procedures were prepared on 2026-08-02
-   in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`;
+   manual staging kill-switch and installed iOS Home Screen PWA
+   update-and-persistence exercises remain outstanding. Precise resumable human
+   procedures were prepared on 2026-08-02 and architecture-corrected on
+   2026-08-03 in
+   `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`;
    preparing them does not satisfy either check. The kill-switch first-render
    replay-authority defect found on 2026-08-02 was corrected with focused
    engine and browser regression proof on 2026-08-03: automatic defaults/theme

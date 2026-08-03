@@ -57,8 +57,9 @@ no queue, and no `services/sync` runtime path in this commit.
 The protected shared-checkout `public/` files were fingerprinted before and
 after generated-output checks; all 28 fingerprints remained identical. All
 commands that regenerate assets ran from commit-only disposable copies. The
-successful Capacitor sync verifies wrapper generation only; it is not the
-outstanding native install-over-upgrade proof.
+successful Capacitor sync verifies optional live-URL wrapper generation only.
+It is not evidence of distribution and does not replace the installed Home
+Screen PWA update-and-persistence proof.
 
 ## Hosted migration
 
@@ -169,10 +170,10 @@ smallest founder action list, and unapproved owner-exception fallback are in
 | Commit 6 release entry | Release `086af6b`, 2026-07-30 22:58:59Z–23:37:26Z; 0 client errors and 0 tester reports | Met |
 | Stale-localStorage recovery guardrails | Unit/source guards plus `storage-migration.spec.ts` cover write/flush failure, normal-IDB stale snapshots, deliberate legacy edits, and the full-render kill-switch pre-edit boundary in Chromium and WebKit | **Met — whole-app gap closed 2026-08-03** |
 | Manual staging kill-switch exercise | Resumable human procedure prepared in `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`; the render-time replay-authority blocker was corrected with focused engine and browser regression proof on 2026-08-03; no dated human staging result | **Outstanding — founder-operated** |
-| Native iOS/WKWebView seeded-data upgrade | Packaged-asset over-install procedure prepared in the same packet; no dated result | **Outstanding — founder-operated** |
+| Installed iOS Home Screen PWA update and persistence | Representative same-origin staging deploy/service-worker procedure supersedes the synthetic packaged-native gate; no dated real-iPhone result | **Outstanding — founder-operated** |
 
-The two CI runs prove their named browser checks, not human staging or native
-upgrade exercises. Zero tester reports proves absence of reports during the
+The two CI runs prove their named browser checks, not human staging or installed
+PWA update exercises. Zero tester reports proves absence of reports during the
 recorded release window, not active tester participation.
 
 ## 2026-08-02 authenticated migration-ledger reconciliation
@@ -304,8 +305,9 @@ gates are:
    `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
    The pre-edit replay path has a runtime correction and automated regression
    proof as of 2026-08-03; the human staging result is still absent.
-2. A founder/human must complete and date that packet's real native
-   iOS/WKWebView packaged install-over-upgrade procedure.
+2. A founder/human must complete and date that packet's real installed iOS
+   Home Screen PWA update-and-persistence procedure against the normal staging
+   deployment and service-worker flow.
 3. The founder must evidence two active real, contactable,
    non-staff/non-admin/non-owner/non-E2E/non-automated participants in one
    selected non-null group, each with dated Sync v2 consent.

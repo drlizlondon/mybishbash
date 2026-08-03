@@ -64,53 +64,29 @@ If you update Capacitor config or plugins later, run:
 npx cap sync
 ```
 
-`npx cap sync` verifies that the native wrapper and plugins can be
-synchronised. It does **not** prove that stored data survives a bundled
-web-asset upgrade while `server.url` points at the live site: the wrapper loads
-the remote origin instead of the copied `webDir` assets.
+`npx cap sync` verifies that the optional native wrapper and plugins can be
+synchronised. It does not establish that the wrapper is distributed through an
+App Store, TestFlight, or another production release channel.
 
-## Seeded-data upgrade proof
+## Architecture and acceptance boundary
 
-When an architecture or release gate requires native IndexedDB upgrade
-evidence, use disposable worktrees/wrappers; do not alter the normal live-site
-configuration in the protected checkout.
+MyBishBash is currently deployed as a web PWA. The checked-in Capacitor wrapper
+is a thin optional shell whose `server.url` loads `https://mybishbash.app/`;
+website revisions therefore arrive through the web deployment and service
+worker path, not by replacing packaged native web assets.
 
-1. Prepare the legacy build and candidate build from their exact recorded SHAs
-   in separate disposable clones or worktrees. If an archive without `.git` is
-   unavoidable, set and verify `VITE_SOURCE_SHA` explicitly; never accept its
-   otherwise-empty `version.json.sourceSha`.
-2. In **both disposable copies**, keep the same `appId` and `webDir`, but remove
-   the complete `server` object (including `server.url`) from
-   `capacitor.config.json` before syncing. This makes both builds load packaged
-   assets from the same `capacitor://localhost` origin. Merely leaving both
-   wrappers pointed at the same live URL does not exercise a native web-asset
-   upgrade.
-3. Run `npm run build` with explicit `VITE_SOURCE_SHA` and
-   `VITE_APP_VERSION` labels, verify both fields in `dist/version.json`, then
-   run `npx cap sync ios` in the legacy copy. Install it, query the packaged
-   `/version.json` through Web Inspector, create unique synthetic profile,
-   card, and event data, then fully terminate and relaunch it to prove the seed
-   is durable.
-4. Run the same build/sync sequence in the candidate copy. Install it over the
-   existing app on the same simulator/device. Do not uninstall, reset the
-   simulator, clear Website Data, change the bundle ID, or change the origin.
-5. Verify the candidate's packaged `/version.json`, every seeded value, and the
-   IndexedDB migration metadata through the UI and Safari Web Inspector. Make
-   a newer candidate edit and deterministic event while the retained
-   localStorage bytes remain stale, fully terminate, and relaunch twice. The
-   newer IndexedDB values must remain authoritative and the stale localStorage
-   values must never render or overwrite them.
-6. Record old/new SHAs, the disposable config diff, exact origin and bundle ID,
-   build and sync results, device/simulator, iOS/Xcode/macOS versions, UTC
-   timestamps, expected/actual results, storage checksums, console logs, and
-   privacy-safe screenshots.
+An earlier Phase 5 procedure removed `server.url` in disposable copies and
+installed two manufactured `capacitor://localhost` builds over one another.
+That was technically valid for a packaged-native application, but it did not
+represent this repository's deployed configuration and was superseded on
+2026-08-03. The historical reasoning remains recorded in the Phase 5 manual
+packet; it is not an operative release gate.
 
-The current resumable Phase 5 procedure, fixed baseline/candidate, evidence
-fields, pass/fail criteria, and failure-preservation steps are in
-`docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
-
-A generic simulator launch or successful sync is not a substitute for this
-install-over-upgrade sequence.
+The live-URL Capacitor shell may still receive ordinary smoke testing without
+changing its configuration. Packaged-native install-over-upgrade testing
+becomes mandatory only if packaged web assets are explicitly adopted as a
+supported release target with a documented distribution path. Do not remove
+`server.url` merely to satisfy the current web-PWA acceptance criteria.
 
 ## iOS notes
 

@@ -58,4 +58,8 @@ Use this for real iPhone staging tests:
 https://drlizlondon.github.io/mybishbash-preview/install/safari/
 ```
 
-Delete and reinstall the test PWA after each staging redeploy because iOS may cache Home Screen manifest metadata.
+For ordinary manifest/install testing, delete and reinstall the test PWA after
+a staging redeploy because iOS may cache Home Screen manifest metadata. Do
+**not** reinstall during the Phase 5 update-and-persistence acceptance run: that
+test deliberately keeps one installed Home Screen app and one origin/data
+container across the baseline and candidate deployment.

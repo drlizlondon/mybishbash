@@ -4,7 +4,8 @@
 **Status:** **Pending founder/human execution — no result is claimed here.**
 Packet A's pre-execution runtime blocker was corrected on 2026-08-03 as
 recorded below, but the staging procedure itself has not been performed.
-**Candidate source:** `ec4f7159803119ec9c613f98550506adc463022c`
+**Minimum runtime candidate:** `8c4824d` (`Correct kill-switch replay
+authority`), or a later explicitly frozen staging SHA containing that commit.
 
 These are the two Phase 5 acceptance checks that automation and
 `npx cap sync` cannot replace. Both use synthetic data only. Neither test signs
@@ -17,10 +18,10 @@ runtime path.
 
 - Environment: GitHub Pages staging preview at
   `https://drlizlondon.github.io/mybishbash-preview/`.
-- Required build: `version.json.sourceSha` must equal
-  `ec4f7159803119ec9c613f98550506adc463022c`. On 2026-08-02 the deployed
-  version was `preview-ec4f7159803119ec9c613f98550506adc463022c`, built at
-  `2026-08-01T21:17:00.615Z`.
+- Required build: `version.json.sourceSha` must identify an explicitly frozen
+  staging SHA containing runtime correction `8c4824d`. The earlier candidate
+  `ec4f715` was objectively blocked; its 2026-08-02 deployment evidence is
+  retained in the historical finding below and must not be used for a pass.
 - Operator: a founder or delegated human tester must perform and attest this
   browser exercise. An agent may prepare the fixture and review the record but
   must not claim the manual gate passed.
@@ -215,7 +216,157 @@ A0. After evidence capture, remove the override and clear only the disposable
 preview profile's site data. If the test failed, export logs and storage values
 before clearing them. No hosted rollback or rollout-rule change is required.
 
-## B. Native iOS/WKWebView install-over-upgrade verification
+## B. Installed iOS Home Screen PWA update-and-persistence verification
+
+### Architecture and operator boundary
+
+- Product under test: the installed web PWA served from the permanent staging
+  origin `https://drlizlondon.github.io/mybishbash-preview/`.
+- Installation: a real iPhone using Safari **Add to Home Screen**. Do not use a
+  simulator or the Capacitor Xcode project for this acceptance item.
+- Update path: a normal `staging` push and the repository's **Deploy GitHub
+  Pages Preview** workflow to the same origin, followed by the application's
+  real service-worker/update flow. Do not delete and reinstall the Home Screen
+  app between baseline and candidate.
+- Operator: a founder or delegated human must perform the iPhone installation,
+  Home Screen launches, UI edits, online/offline relaunches, screenshots, and
+  attestation. An agent may freeze revisions, inspect workflow/deployment
+  evidence, prepare diagnostics, and reconcile the result but must not claim
+  the physical-device gate passed.
+- Data: unique synthetic values only; stay signed out and do not use real user
+  data.
+
+Freeze one baseline SHA already deployed to staging and one candidate Phase 5
+SHA before starting. The candidate must be deployed only after checkpoints B0
+through B3 are evidenced. If staging changes unexpectedly, the source SHA is
+ambiguous, the Home Screen app is deleted, or site data is cleared, restart at
+B0 with a new run ID.
+
+### Supported inspection and stale-snapshot method
+
+Use Safari Web Inspector for the installed Home Screen app where the current
+iOS/macOS combination exposes it. The repository already supports these
+diagnostics through Packet A; this procedure adds no production behaviour.
+
+Record the running and deployed revisions with a no-store request:
+
+```js
+fetch("/mybishbash-preview/version.json?phase5=" + Date.now(), {
+  cache: "no-store",
+  headers: { "Cache-Control": "no-cache" },
+}).then((response) => response.json()).then(console.log);
+```
+
+Also record `navigator.serviceWorker.controller?.scriptURL`, the scoped
+registration's active/waiting/installing script URLs and states, `caches.keys()`,
+and the loaded same-origin hashed script/style URLs from the Network panel.
+Because the app does not expose a mutable runtime-SHA global, revision proof is
+the joined evidence of: the successful staging workflow tied to the full SHA;
+the no-store `version.json`; the no-store HTML's content-hashed entry asset;
+and that same entry asset appearing in the installed PWA's running document or
+Performance/Network records. Keep all four; `version.json` alone proves only
+what is deployed, not what the current document executed.
+Where Web Inspector permits, record:
+
+- IndexedDB database `mybishbash`, store `kv`: profile, cards, event log and
+  any reminder/settings keys used by the fixture;
+- IndexedDB store `meta`, key `migratedFromLocalStorage`;
+- localStorage cards/event/profile bytes;
+- `mybishbash.storage-migration-retry.v1` and
+  `mybishbash.storage-migration-retry-ack.v1`.
+
+Seed the baseline with Packet A's existing localStorage fixture, adapted only
+by using the PWA run ID `P5-PWA-YYYYMMDD-HHMMZ` and navigating to
+`/mybishbash-preview/library`. Add one uniquely labelled synthetic event and,
+if the current UI exposes reminders, one uniquely labelled reminder or timing
+setting. On the first baseline launch, the supported migration path imports
+those legacy bytes into IndexedDB. A subsequent UI edit to the card, profile or
+setting, and event log changes IndexedDB while the retained post-migration
+localStorage snapshot remains deliberately stale. Do not invent a new storage
+control or directly mutate IndexedDB for this test.
+
+The genuine legacy-edit proof reuses Packet A's supported kill-switch sequence
+after the candidate is running: set only
+`mybishbash.storage-engine.v1=localstorage`, relaunch, make a deliberate UI edit,
+remove the override, and relaunch. Packet A remains the authoritative
+checkpoint matrix for request/acknowledgement behaviour.
+
+### Checkpoints
+
+| Checkpoint | Founder action | Required result and evidence |
+|---|---|---|
+| B0 — install baseline | On a real iPhone, open the staging install page in Safari, use **Add to Home Screen**, then launch the installed icon while online | Screenshot Home Screen icon and launched app; record device model, iOS version, UTC time, staging URL, baseline workflow/full SHA/version, no-store HTML entry asset, the matching loaded entry asset, service-worker controller/registration state and cache names |
+| B1 — seed representative data | Using the existing Packet A diagnostic fixture, create a unique profile/settings value, card, event and supported reminder/timing value; allow first-boot migration to finish | UI screenshots plus privacy-safe localStorage/IndexedDB values or checksums; `migratedFromLocalStorage` has one valid `{ at, appVersion }` record; no blank shell or duplicate data |
+| B2 — create newer IDB authority | Edit the card and at least one other representative value through supported UI, and create a deterministic event; wait for persistence | IndexedDB contains the newer values while retained localStorage contains the older fixture; record retry request/ack state and migration metadata |
+| B3 — baseline relaunch | Fully close the installed PWA from the app switcher and relaunch it from the Home Screen while online | Newer IndexedDB values and events survive; stale localStorage does not render; migration metadata is unchanged and not duplicated |
+| B4 — normal candidate deploy | Deploy the frozen candidate from `staging` through the normal preview workflow to the same origin; do not reinstall or clear site data | Record candidate commit, workflow/run ID, deployment completion time and direct no-store `version.json` response from the staging origin |
+| B5 — real update flow | Reopen the installed PWA, wait for its update check, and use the product's normal refresh/update action when offered; otherwise background/close and relaunch after the service worker has installed the candidate | Prove the running document loaded the entry asset referenced by the candidate's no-store HTML, joined to the candidate workflow/full SHA and no-store `version.json`; record controller change/registration state, Network responses, new hashed assets and cache names |
+| B6 — post-update authority | Inspect UI and storage after the candidate is running | All representative IndexedDB data survived; newer IDB values remain authoritative; stale localStorage did not overwrite them; migration metadata is byte-identical to B3; no lost/duplicated records or blank shell |
+| B7 — genuine legacy edit | Reuse Packet A A2–A4: set the existing kill switch, relaunch, make one uniquely labelled UI edit, remove the switch and relaunch | First kill-switch render does not advance replay authority; the deliberate edit does; return to IDB acknowledges that request and reconciles the genuine edit without importing unrelated stale values |
+| B8 — online relaunch | Fully close and relaunch the installed PWA again from the Home Screen while online | Candidate revision and B7 state survive; HTML and `version.json` are current; hashed assets resolve; no blank shell, duplicate migration or lost data |
+| B9 — supported offline relaunch | Only if offline launch is an intended capability at execution time, first complete B8 online, enable Airplane Mode, fully close and relaunch from the Home Screen | Record whether the documented offline shell opens and cached assets load. If offline launch is not an intended capability, record `Not applicable` with the supporting product/release reference; do not silently skip it or expand the gate |
+
+### Update/cache assertions
+
+Pass the update boundary only when all of the following are evidenced:
+
+- the successful workflow/full SHA, no-store `version.json`, no-store HTML entry
+  hash and running document's loaded entry hash form one consistent candidate
+  revision proof;
+- the service-worker registration controls the staging scope after update;
+- HTML navigations and `version.json` are not served as the old revision;
+- candidate content-hashed JavaScript/CSS URLs are loaded, while removed old
+  revision assets are not required for the candidate shell;
+- cache names and Network responses are consistent with the candidate service
+  worker; and
+- the update produces no blank shell, uncaught storage error, duplicate card,
+  duplicate event or duplicate migration.
+
+A visual change alone is not revision proof. A fresh Safari tab alone is not
+proof that the installed Home Screen app updated. Deleting/reinstalling the PWA
+invalidates the continuity test.
+
+### Evidence, pass, fail and restoration
+
+Create one dated Markdown result containing the run ID; operator; device model;
+iOS and paired macOS/Safari versions; UTC start/end for B0–B9; baseline and
+candidate full SHAs/versions; staging deployment workflow/run ID; expected and
+observed result at every checkpoint; privacy-safe screenshots; Console and
+Network exports; service-worker/controller/cache evidence; loaded hashed asset
+URLs; relevant localStorage and IndexedDB values/checksums; migration marker;
+and retry request/acknowledgement transitions.
+
+Pass only if the same installed Home Screen PWA and same staging origin retain
+the complete dataset across the real deployment/update, prove the candidate is
+running, reject the stale snapshot, reconcile the deliberate supported legacy
+edit, retain one stable migration marker, load the correct HTML/assets, and
+survive the required online relaunch plus any currently supported offline
+relaunch.
+
+Fail or invalidate the run if the baseline/candidate revision is unproven, the
+PWA is reinstalled, the origin or site data changes, stale localStorage wins,
+any representative value disappears/duplicates, migration replays, old HTML or
+`version.json` remains active, required candidate assets fail, or the shell is
+blank. Preserve evidence before recovery. After a successful or fully recorded
+failed run, restore/remove the kill switch and clear only the disposable
+staging PWA's site data when it is no longer needed.
+
+## Historical appendix — superseded packaged-native procedure
+
+**Superseded 2026-08-03; not an operative Phase 5 gate.** The procedure below
+was prepared when the existence of checked-in Capacitor projects was treated as
+evidence of a packaged-native release target. It removed `server.url` from
+disposable wrappers and manufactured two `capacitor://localhost` installs.
+MyBishBash is deployed as a web PWA, while the optional checked-in Capacitor
+wrapper is configured only as a thin live-URL shell for
+`https://mybishbash.app/`. No App Store, TestFlight or packaged-native release
+path is established in this repository. The procedure is retained verbatim as
+history, but it cannot block Phase 5 or Phase 6. Packaged-native
+install-over-upgrade testing becomes mandatory only if packaged assets are
+explicitly adopted as a supported release target with a documented release
+channel.
+
+### Former native iOS/WKWebView install-over-upgrade verification
 
 ### Fixed builds and native lifecycle
 
@@ -408,8 +559,10 @@ simulator after the failure record is complete.
 
 ## Current gate state
 
-Both Packet A and Packet B remain **pending founder/human execution** as of
-2026-08-03. Packet A's render-time replay-token blocker is corrected and
-automatically regression-tested, but Packet A has not been executed on staging.
-Preparing these instructions and correcting the precondition does not satisfy
-either Phase 5 acceptance item and does not authorise Phase 6 Commit 1.
+Both operative checks—Packet A's staging kill-switch procedure and Packet B's
+installed iOS Home Screen PWA update-and-persistence procedure—remain
+**pending founder/human execution** as of 2026-08-03. Packet A's render-time
+replay-token blocker is corrected and automatically regression-tested, but
+neither founder result exists. The superseded packaged-native appendix is not a
+gate. Correcting the acceptance architecture does not satisfy either operative
+check and does not authorise Phase 6 Commit 1.

@@ -83,6 +83,11 @@ Deploy GitHub Pages Preview
 
 iOS can cache installed PWA metadata aggressively.
 
+The steps below are for ordinary manifest/install verification. They must not
+be used during the Phase 5 installed-PWA update-and-persistence procedure,
+which requires the same Home Screen installation and site data to survive the
+baseline-to-candidate deployment.
+
 After a preview redeploy:
 
 1. Delete the old test Home Screen icon.

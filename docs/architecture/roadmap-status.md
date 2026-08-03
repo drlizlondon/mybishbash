@@ -17,7 +17,7 @@ prerequisites unmet)
 | 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
 | 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
 | 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
-| 5 | IndexedDB persistence engine | **Blocked** (planned implementation and kill-switch replay-authority correction landed; two founder-operated manual records outstanding) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a`, correction: this commit |
+| 5 | IndexedDB persistence engine | **Blocked** (planned implementation and kill-switch replay-authority correction landed; two founder-operated manual records outstanding) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a`, correction: `8c4824d` |
 | 6 | Sync v2 — entities + mutation queue | **Blocked** (default-blob rollout control deployed and target ledger row reconciled; Phase 5 manual evidence and qualifying tester cohort absent) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: `47ef32c`; preflight 0: `def28dc` |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
@@ -219,19 +219,21 @@ prerequisites unmet)
   objectively cover the named Chromium migration and WebKit persistence
   steps. The performance and Commit 6 release-window evidence above are also
   complete. A current isolated `test:release` (446 Playwright tests),
-  Cloudflare production build, and `npx cap sync` also pass. No dated record
-  exists for the manual staging kill-switch exercise or the native
-  iOS/WKWebView seeded-data install-over-upgrade exercise.
-  `npx cap sync` cannot prove the latter while the wrapper loads a live
-  `server.url`. Precise resumable founder/human procedures were prepared on
-  2026-08-02 in
-  `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`,
-  including a packaged `capacitor://localhost` over-install. No result is
-  recorded. Inspection and an automated fresh-profile browser reproduction at
-  `ec4f715` additionally found that the first kill-switch render
-  unconditionally writes the action-card defaults version, advancing
-  whole-snapshot replay authority before a human edit. The packet records this
-  runtime blocker. The safety issue and two manual acceptance items remain hard
+  Cloudflare production build, and `npx cap sync` also pass. The sync proves
+  only that the optional live-URL Capacitor wrapper can be generated; it is not
+  evidence of distribution or a packaged-native release target. No dated
+  record exists for the manual staging kill-switch exercise or the installed
+  iOS Home Screen PWA update-and-persistence exercise.
+  Precise resumable founder/human procedures were prepared on 2026-08-02 and
+  architecture-corrected on 2026-08-03 in
+  `docs/release-evidence/phase-05/manual-verification-packet-2026-08-02.md`.
+  The original packaged `capacitor://localhost` over-install changed the
+  deployed architecture by removing `server.url`; it is retained as
+  superseded history and cannot block Phase 6. The operative replacement uses
+  the real staging origin, installed iPhone PWA, normal deployment and service
+  worker update flow. No founder result is recorded for either operative check.
+  The kill-switch runtime blocker found at `ec4f715` was corrected and
+  regression-tested at `8c4824d`. The two manual acceptance items remain hard
   blockers for Phase 6 readiness; see the Phase 6 preflight evidence.
 - **Commit 1.5 landed 2026-07-29 — the funnel is now actually single.** A
   standalone, behaviour-preserving refactor closing the five bypasses the
@@ -361,7 +363,8 @@ prerequisites unmet)
   The packet is complete at `47ef32c`. Preflight Commit 0 is complete at
   `def28dc`; its rollout migration and 11/11 hosted probes establish default
   blob authority on the shared production database. Phase 5's kill-switch
-  replay-token correction and two manual acceptance records remain absent. The
+  replay-authority correction landed at `8c4824d`, but its staging result and
+  the installed-PWA update acceptance record remain absent. The
   hosted cohort inspection found five
   tester accounts: two grouped but inactive and three unassigned, with one
   active row and one owner/admin row in the unassigned aggregate; the result
@@ -741,8 +744,8 @@ prerequisites unmet)
   active row and one owner/admin row in that aggregate; it does not establish
   whether those are the same account. That is 0 of the required 2 structurally
   eligible accounts before human attestation, and no separate two-device
-  account is recorded. Phase 5's manual
-  staging kill-switch and native seeded iOS upgrade records are also absent.
+  account is recorded. Phase 5's manual staging kill-switch and installed iOS
+  Home Screen PWA update-and-persistence records are also absent.
   The dashboard apply did not populate migration version `202608010001` in the
   Supabase CLI ledger; reconcile it through an authenticated CLI workflow
   before trusting a future `db push`. Full evidence and exact script hashes are
