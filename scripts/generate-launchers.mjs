@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FAKE_APP_LAUNCHERS, buildManifestForLauncher } from "../src/lib/launcherRegistry.js";
+import { BASE, BASE_NO_SLASH } from "../src/lib/basePath.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -41,33 +42,56 @@ function buildInstallHtml(launcher) {
     <meta name="apple-mobile-web-app-title" content="${escapeHtml(launcher.displayName)}" />
     <link rel="manifest" href="${launcher.manifestPath}" />
     <link rel="apple-touch-icon" href="${launcher.iconSrc}" />
-    <link rel="stylesheet" href="/mybishbash/install/install.css" />
-    <title>${escapeHtml(launcher.displayName)} · MyBishBash</title>
+    <link rel="stylesheet" href="${BASE}install/install.css" />
+    <title>${escapeHtml(launcher.displayName)} · myBishBash</title>
   </head>
   <body>
     <main class="install-shell">
       <header class="install-brand">
-        <svg viewBox="0 0 32 32" class="install-heart" aria-hidden="true"><path d="M16 27s-9-6-12-11c-3-5 0-11 6-11 3 0 5 1 6 4 1-3 3-4 6-4 6 0 9 6 6 11-3 5-12 11-12 11z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <h1>MyBishBash</h1>
-        <p>private little messages from your earlier self</p>
+        <img class="install-brand-logo" src="${BASE}icons/mybishbash-logo-mark.png" alt="" />
+        <h1>myBishBash</h1>
+        <p>reminders, commitments and prompts before the apps you already open</p>
       </header>
       <section class="install-card">
-        <a data-launch-link class="install-icon-link" href="/mybishbash${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} launcher">
+        <a data-launch-link class="install-icon-link" href="${BASE_NO_SLASH}${launcher.launchPath}" aria-label="Open ${escapeHtml(launcher.displayName)} with myBishBash">
           <img data-install-icon class="install-icon" src="${launcher.iconSrc}" alt="${escapeHtml(launcher.displayName)} icon" />
         </a>
         <div class="install-copy">
-          <h2 data-version-name>${escapeHtml(launcher.displayName)}</h2>
-          <p>Tap Share, then Add to Home Screen.</p>
-          <p class="install-note">This launcher uses launcherContext "<span data-launcher-context>${launcher.id}</span>" and the same shared MyBishBash state.</p>
+          <h2>Set up <span data-version-name>${escapeHtml(launcher.displayName)}</span> with myBishBash</h2>
+          <p>When you open <span data-version-name-inline>${escapeHtml(launcher.displayName)}</span> this way, myBishBash can appear first with the reminders, commitments and prompts you chose.</p>
         </div>
-        <div class="install-steps">
-          <strong>Install</strong>
-          <p>Tap Share, then Add to Home Screen.</p>
+        <div class="install-steps" data-install-instructions>
+          <section>
+            <strong>iPhone</strong>
+            <ol>
+              <li>Open this page in Safari.</li>
+              <li>Tap Share.</li>
+              <li>Tap Add to Home Screen.</li>
+              <li>Tap Add.</li>
+            </ol>
+          </section>
+          <section>
+            <strong>Android</strong>
+            <ol>
+              <li>Open this page in Chrome.</li>
+              <li>Tap the three dots.</li>
+              <li>Tap Add to Home screen or Install app.</li>
+              <li>Tap Add or Install.</li>
+            </ol>
+          </section>
         </div>
-        <a data-settings-link class="install-settings-link" href="/mybishbash/settings">Back to MyBishBash settings</a>
+        <div class="install-fallback">
+          <button type="button" class="install-copy-link-button" data-copy-setup-link>Copy setup link</button>
+          <p>If you cannot see Share, copy this link and open it in Safari.</p>
+          <p class="install-copy-status" data-copy-setup-status role="status" aria-live="polite"></p>
+        </div>
+        <div class="install-actions">
+          <button type="button" class="install-back-button" data-install-back>Back</button>
+          <button type="button" class="install-complete-button" data-install-complete>I’ve set it up</button>
+        </div>
       </section>
     </main>
-    <script src="/mybishbash/install/install.js"></script>
+    <script src="${BASE}install/install.js"></script>
   </body>
 </html>
 `;

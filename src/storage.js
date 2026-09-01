@@ -1,4 +1,6 @@
 import { FAKE_APP_LAUNCHERS, LAUNCHER_REGISTRY, mergeLauncherConfig } from "./lib/launcherRegistry";
+import { rebase } from "./lib/basePath";
+import { flushWrites, kvDelete, kvGetAll, kvPut, metaGet, metaPut, openDb } from "./services/db/index.js";
 
 const STORAGE_KEY = "mybishbash.cards.v1";
 const SETUP_KEY = "mybishbash.setup-complete.v1";
@@ -15,6 +17,8 @@ const ACTION_CARDS_KEY = "mybishbash.action-cards.v1";
 const ACTION_CARD_DEFAULTS_VERSION_KEY = "mybishbash.action-card-defaults-version.v1";
 const NOTIFICATIONS_KEY = "mybishbash.notifications.v1";
 const NOTIFICATION_SCHEDULE_KEY = "mybishbash.notification-schedule.v1";
+const APP_PAUSES_KEY = "mybishbash.app-pauses.v1";
+const TIMING_WINDOWS_PREFS_KEY = "mybishbash.timing-windows-prefs.v1";
 const ACTION_CARD_DEFAULTS_VERSION = "2026-05-13";
 const STORAGE_PREFIX = "mybishbash";
 const LEGACY_STORAGE_PREFIX = "bish" + "bash";
@@ -23,7 +27,86 @@ function getLegacyStorageKey(key) {
   return key.startsWith(`${STORAGE_PREFIX}.`) ? key.replace(`${STORAGE_PREFIX}.`, `${LEGACY_STORAGE_PREFIX}.`) : null;
 }
 
-function getStorageItem(key) {
+// ─── The single local read/write funnel ─────────────────────────────────────
+// Phase 5 commit 1.5: these three are THE storage funnel for every production
+// storage key in the app. They are exported (rather than module-private) so
+// that eventLog.js, stores/settingsStore.js and lib/mybishbashSync.js route
+// through them instead of carrying private duplicates or direct
+// `window.localStorage` calls — see docs/architecture/phase-05-indexeddb.md
+// "Commit 1.5". Nothing outside this file may touch a production storage key
+// directly; when the persistence engine seam lands (commit 2) these three
+// functions are the only place it has to be introduced.
+
+export function getStorageItem(key) {
+  if (isMirrorActive()) return getMirrorItem(key);
+  return getLocalStorageItem(key);
+}
+
+export function setStorageItem(key, value) {
+  if (isMirrorActive()) {
+    const stringValue = String(value);
+    mirror.set(key, stringValue);
+    queueIdbWrite(() => kvPut(key, stringValue));
+    return;
+  }
+  window.localStorage.setItem(key, value);
+  markLegacyMutationForReconciliation();
+}
+
+export function removeStorageItem(key) {
+  if (isMirrorActive()) {
+    mirror.delete(key);
+    queueIdbWrite(() => kvDelete(key));
+    return;
+  }
+  window.localStorage.removeItem(key);
+  markLegacyMutationForReconciliation();
+}
+
+// ─── The persistence engine seam (Phase 5, commit 2) ─────────────────────────
+//
+// The three funnel functions above route by ENGINE. Everything below is that
+// routing, and nothing above this line in the file has changed shape: the
+// legacy path performs exactly the same localStorage calls, in the same order,
+// with the same arguments, as it did before the seam existed
+// (`src/storage.funnel.bytes.test.js` compares it byte for byte).
+//
+//   "localstorage" — owned-key reads/writes remain `window.localStorage`
+//        byte-for-byte. Once hydration has selected this engine, a genuine
+//        mutation publishes an out-of-band retry generation so a later return
+//        to IDB cannot load stale data; read-only selection publishes nothing.
+//   "idb" (default) — an in-memory mirror seeded by
+//        `hydrateLocalData()`; reads are synchronous Map lookups, writes update
+//        the mirror synchronously, then fire-and-forget `kvPut`/`kvDelete` into
+//        IndexedDB (per-key ordered by services/db's write chain). Routine IDB
+//        mutations no longer update localStorage after the transition release.
+//
+// Engine selection: the kill switch `mybishbash.storage-engine.v1` (values
+// "idb" / "localstorage") wins if present; otherwise DEFAULT_STORAGE_ENGINE.
+// The switch key itself is read straight from localStorage on purpose — it is
+// the thing that decides where owned keys live, so it cannot live behind the
+// decision (Ruling R1: pre-hydration flags stay on localStorage).
+//
+// On the first idb boot, hydration imports the raw localStorage bytes before it
+// seeds the mirror. After that marker exists, localStorage is a legacy snapshot,
+// not a mirror: only a real legacy-engine mutation or an explicit all-sink clear
+// may make it authoritative for a later reconciliation.
+
+const STORAGE_ENGINE_KEY = "mybishbash.storage-engine.v1";
+const MIGRATION_RETRY_REQUEST_KEY = "mybishbash.storage-migration-retry.v1";
+const MIGRATION_RETRY_ACK_KEY = "mybishbash.storage-migration-retry-ack.v1";
+const MIGRATION_META_KEY = "migratedFromLocalStorage";
+const DEFAULT_STORAGE_ENGINE = "idb";
+const HYDRATION_TIMEOUT_MS = 3000;
+const WRITE_FLUSH_TIMEOUT_MS = 1000;
+
+let activeEngine = null;
+let mirror = null;
+let hydrationPromise = null;
+let isClearingSharedState = false;
+let activeAllSinkClearRecovery = null;
+
+function getLocalStorageItem(key) {
   const value = window.localStorage.getItem(key);
   if (value !== null) return value;
 
@@ -33,40 +116,350 @@ function getStorageItem(key) {
   const legacyValue = window.localStorage.getItem(legacyKey);
   if (legacyValue !== null) {
     window.localStorage.setItem(key, legacyValue);
+    markLegacyMutationForReconciliation();
   }
   return legacyValue;
 }
 
-function setStorageItem(key, value) {
-  window.localStorage.setItem(key, value);
+// The mirror's read path is the same contract as the legacy one, including the
+// legacy-prefix shim and its promotion write — promotion goes back through
+// setStorageItem so it lands in every sink the active engine owns.
+function getMirrorItem(key) {
+  const value = mirror.get(key);
+  if (value !== undefined && value !== null) return value;
+
+  const legacyKey = getLegacyStorageKey(key);
+  if (!legacyKey) return null;
+
+  const legacyValue = mirror.get(legacyKey);
+  if (legacyValue === undefined || legacyValue === null) return null;
+  setStorageItem(key, legacyValue);
+  return legacyValue;
 }
 
+function readEngineOverride() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_ENGINE_KEY);
+    return raw === "idb" || raw === "localstorage" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function readMigrationRetry() {
+  try {
+    const token = window.localStorage.getItem(MIGRATION_RETRY_REQUEST_KEY);
+    const acknowledgedToken = window.localStorage.getItem(MIGRATION_RETRY_ACK_KEY);
+    return {
+      token,
+      pending: token !== null && token !== acknowledgedToken,
+    };
+  } catch {
+    return { token: null, pending: false };
+  }
+}
+
+function markMigrationRetry() {
+  try {
+    const token =
+      typeof globalThis.crypto?.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(MIGRATION_RETRY_REQUEST_KEY, token);
+    return token;
+  } catch {
+    // A failed control-key write must not prevent the legacy fallback.
+    return null;
+  }
+}
+
+function markLegacyMutationForReconciliation() {
+  // Production storage access is hydration-gated. Once that gate has selected
+  // legacy mode — explicitly or after an IDB failure — every later mutation
+  // advances the durable generation. A concurrent/future IDB context can only
+  // acknowledge the generation it sampled, so it cannot hide a newer legacy
+  // write. Direct pre-hydration test calls retain the byte-identical legacy
+  // path established by commit 1.5.
+  if (!isClearingSharedState && hydrationPromise !== null && activeEngine === "localstorage") {
+    const token = markMigrationRetry();
+    if (activeAllSinkClearRecovery !== null && token !== null) {
+      activeAllSinkClearRecovery.latestLegacyMutationToken = token;
+    }
+  }
+}
+
+function queueIdbWrite(run) {
+  let observedWrite;
+  try {
+    observedWrite = Promise.resolve(run()).then(
+      () => true,
+      (error) => {
+        void reportStorageEngineError(error, "storage-idb-write");
+        return false;
+      },
+    );
+  } catch (error) {
+    void reportStorageEngineError(error, "storage-idb-write");
+    observedWrite = Promise.resolve(false);
+  }
+  if (activeAllSinkClearRecovery !== null) {
+    activeAllSinkClearRecovery.idbClearWrites.push(observedWrite);
+  }
+  return observedWrite;
+}
+
+function acknowledgeMigrationRetry(token) {
+  if (token === null) return;
+  try {
+    // Never remove the request key. Another tab may write a newer token after
+    // this hydration samples state; acknowledging only the sampled generation
+    // leaves that newer request pending without a cross-context compare/remove
+    // race.
+    window.localStorage.setItem(MIGRATION_RETRY_ACK_KEY, token);
+  } catch {
+    // The successful IDB session remains valid even if cleanup is unavailable.
+  }
+}
+
+/** The engine in force for this session ("idb" | "localstorage"). */
+export function getActiveStorageEngine() {
+  if (activeEngine === null) activeEngine = readEngineOverride() ?? DEFAULT_STORAGE_ENGINE;
+  return activeEngine;
+}
+
+// The mirror is only authoritative once hydration has seeded it. Before that —
+// and after any fallback to legacy — every read and write is plain localStorage,
+// which is exactly today's behaviour. There is deliberately no buffer or replay
+// into the mirror for pre-hydration accesses: main.jsx must keep every
+// storage.js-owned access — including first render — behind hydrateLocalData().
+// Only the R1-classified device-local flags may be touched before that gate.
+function isMirrorActive() {
+  return getActiveStorageEngine() === "idb" && mirror !== null;
+}
+
+async function reportStorageEngineError(error, kind) {
+  try {
+    const { reportError } = await import("./services/errors/reporter.js");
+    reportError(error instanceof Error ? error : new Error(String(error)), kind);
+  } catch {
+    // Reporting must never be able to break boot or a storage mutation.
+  }
+}
+
+function withTimeout(promise, ms, message) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function runHydration() {
+  activeEngine = readEngineOverride() ?? DEFAULT_STORAGE_ENGINE;
+  if (activeEngine !== "idb") {
+    // Selecting the kill switch does not by itself make the frozen legacy
+    // snapshot authoritative. A genuine mutation in this hydrated legacy
+    // session publishes the replay generation through the normal funnel.
+    return;
+  }
+
+  try {
+    // The settled Phase 5 policy bounds database opening only. Once open,
+    // IndexedDB transactions complete or reject without an arbitrary
+    // first-migration deadline that could false-fallback on slower WebKit.
+    await withTimeout(
+      openDb(),
+      HYDRATION_TIMEOUT_MS,
+      "IndexedDB open timed out",
+    );
+    const migrationRetry = readMigrationRetry();
+    await migrateLocalStorageIfNeeded({ force: migrationRetry.pending });
+    const entries = await kvGetAll();
+    // A different context may have selected/written legacy storage while this
+    // one awaited IDB. Never activate a snapshot older than the latest durable
+    // generation; fall back for this session and let the next boot reconcile.
+    if (readMigrationRetry().token !== migrationRetry.token) {
+      throw new Error("IndexedDB hydration invalidated by a concurrent legacy write");
+    }
+    mirror = entries;
+    // Acknowledge only after the complete import + mirror read succeeds.
+    if (migrationRetry.pending) {
+      acknowledgeMigrationRetry(migrationRetry.token);
+    }
+  } catch (error) {
+    // Failure policy (R2): fall back to legacy for this session, report, and
+    // ALWAYS resolve — the app must never hang on boot. A read-only fallback
+    // does not make stale localStorage authoritative; only a later legacy
+    // mutation can request reconciliation.
+    activeEngine = "localstorage";
+    mirror = null;
+    await reportStorageEngineError(error, "storage-engine-fallback");
+  }
+}
+
+/**
+ * Prepare synchronous local reads for this session. Resolves exactly once per
+ * session (success, timeout-fallback, or failure-fallback) and never rejects.
+ * In legacy mode it does no IndexedDB work and resolves immediately; only a
+ * later genuine legacy mutation publishes a reconciliation generation.
+ */
+export function hydrateLocalData() {
+  if (!hydrationPromise) hydrationPromise = runHydration();
+  return hydrationPromise;
+}
+
+/**
+ * Wait for fire-and-forget IndexedDB writes before deliberately leaving the
+ * app document. Normal in-app reads stay synchronous through the mirror.
+ */
+export async function flushPendingStorageWrites() {
+  if (!isMirrorActive()) return;
+  await settlePendingStorageWrites();
+}
+
+async function settlePendingStorageWrites(observedWrites = []) {
+  try {
+    return await withTimeout(
+      (async () => {
+        await flushWrites();
+        const results = await Promise.all(observedWrites);
+        return results.every(Boolean);
+      })(),
+      WRITE_FLUSH_TIMEOUT_MS,
+      "IndexedDB write flush timed out",
+    );
+  } catch (error) {
+    // Navigation/reset must remain available if a transaction stalls. Report
+    // the failure, but never nominate the stale legacy snapshot for replay.
+    await reportStorageEngineError(error, "storage-idb-flush");
+    return false;
+  }
+}
+
+async function reconcileSuccessfulSharedStateClear({ clearRecovery, clearToken, clearedMirror }) {
+  // State setters may run while the clear awaits its IDB deletes. Those writes
+  // intentionally use the temporary legacy engine and advance a token owned by
+  // this clear. Re-import that exact snapshot before returning to IDB. A token
+  // from another context is not ours to acknowledge or overwrite.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const retry = readMigrationRetry();
+    if (retry.token === clearToken) {
+      acknowledgeMigrationRetry(clearToken);
+      if (!readMigrationRetry().pending) return clearedMirror;
+      continue;
+    }
+    if (retry.token === null || retry.token !== clearRecovery.latestLegacyMutationToken) return null;
+
+    await migrateLocalStorageIfNeeded({ force: true });
+    const entries = await kvGetAll();
+    if (readMigrationRetry().token !== retry.token) continue;
+    acknowledgeMigrationRetry(retry.token);
+    if (!readMigrationRetry().pending) return entries;
+  }
+  return null;
+}
+
+async function finishSharedStateClear({ clearRecovery, clearToken, clearedMirror, idbClearWrites, mirrorWasActive }) {
+  const idbClearSucceeded = await settlePendingStorageWrites(idbClearWrites);
+  if (!mirrorWasActive) return;
+
+  // An explicit all-sink clear is the one IDB-session operation allowed to
+  // hand recovery authority to localStorage. The session is demoted while its
+  // deletes settle, so any intervening mutation is a genuine legacy mutation
+  // and keeps that source current. Restore IDB only when every observed delete
+  // completed. Same-session reset writes are reconciled exactly; a failure,
+  // timeout, or generation from another context leaves this session in legacy
+  // mode with its current replay source untouched.
+  if (!idbClearSucceeded || activeAllSinkClearRecovery !== clearRecovery) {
+    if (activeAllSinkClearRecovery === clearRecovery) activeAllSinkClearRecovery = null;
+    return;
+  }
+  try {
+    const reconciledMirror =
+      clearToken === null
+        ? (readMigrationRetry().pending ? null : clearedMirror)
+        : await reconcileSuccessfulSharedStateClear({ clearRecovery, clearToken, clearedMirror });
+    if (reconciledMirror === null) return;
+    mirror = reconciledMirror;
+    activeEngine = "idb";
+  } catch (error) {
+    await reportStorageEngineError(error, "storage-idb-write");
+  } finally {
+    if (activeAllSinkClearRecovery === clearRecovery) {
+      activeAllSinkClearRecovery = null;
+    }
+  }
+}
 
 const SHARED_STORAGE_KEYS = [
   STORAGE_KEY,
   SETUP_KEY,
   MOOD_KEY,
   PROFILE_KEY,
+  HOME_SCREEN_VERSIONS_KEY,
+  HOME_SCREEN_SELECTED_KEY,
   CARD_PACKS_KEY,
   HIDDEN_LIBRARY_PACKS_KEY,
   DISLIKED_PACK_CARD_IDS_KEY,
   GLOBAL_INTERRUPTION_MODE_KEY,
   LAUNCHER_BEHAVIOR_SETTINGS_KEY,
   ACTION_CARDS_KEY,
+  ACTION_CARD_DEFAULTS_VERSION_KEY,
   NOTIFICATIONS_KEY,
+  NOTIFICATION_SCHEDULE_KEY,
+  APP_PAUSES_KEY,
+  TIMING_WINDOWS_PREFS_KEY,
   "mybishbash.event-log.v1",
   "mybishbash.offline-event-queue.v1",
   "mybishbash.user-id.v1",
 ];
 const LEGACY_SHARED_STORAGE_KEYS = SHARED_STORAGE_KEYS.map(getLegacyStorageKey).filter(Boolean);
 
+async function migrateLocalStorageIfNeeded({ force = false } = {}) {
+  const marker = await metaGet(MIGRATION_META_KEY);
+  if (marker !== null && !force) return;
+
+  // Read canonical keys through the existing legacy-prefix shim. A legacy-only
+  // value is promoted to its canonical localStorage key and imported under that
+  // canonical key; payload strings are never parsed or reshaped. This is an
+  // exact reconciliation, so absent source keys delete stale partial/fallback
+  // rows as well as present keys replacing them.
+  for (const key of SHARED_STORAGE_KEYS) {
+    const value = getLocalStorageItem(key);
+    if (value !== null) await kvPut(key, value);
+    else await kvDelete(key);
+  }
+  // Migration always canonicalises legacy-prefix localStorage values. During a
+  // forced recovery, remove any legacy-prefix IDB rows too; otherwise a failed
+  // clear could later fall through to one of those stale rows and resurrect it.
+  if (force) {
+    for (const key of LEGACY_SHARED_STORAGE_KEYS) await kvDelete(key);
+  }
+
+  // This marker is deliberately the final committed write. If boot stops
+  // anywhere above, the next hydration safely replays the whole import from the
+  // untouched localStorage source.
+  await metaPut(MIGRATION_META_KEY, {
+    at: new Date().toISOString(),
+    appVersion: typeof __MYBISHBASH_VERSION__ !== "undefined" ? String(__MYBISHBASH_VERSION__) : "dev",
+  });
+}
+
 export const DEFAULT_HOME_SCREEN_VERSIONS = {
   mybishbash: {
     id: "mybishbash",
-    name: "MyBishBash",
-    installPath: "/mybishbash/install/mybishbash/",
+    name: "myBishBash",
+    installPath: rebase("/mybishbash/install/mybishbash/"),
     launchPath: "/home",
-    iconSrc: "/mybishbash/icons/mybishbash-cover.png",
+    iconSrc: rebase("/mybishbash/icons/mybishbash-cover.png"),
     realAppLabel: "",
     appUrl: "",
     manualUrl: "",
@@ -178,11 +571,19 @@ export function loadProfile() {
       ...stored,
       name: stored?.name ?? "",
       timezone: stored?.timezone ?? "Europe/London",
+      plan: stored?.plan ?? "free",
+      hasSeenCommitmentCardDemo: stored?.hasSeenCommitmentCardDemo ?? false,
+      hasSkippedCommitmentCardDemo: stored?.hasSkippedCommitmentCardDemo ?? false,
+      hasCompletedHomeSpotlightTour: stored?.hasCompletedHomeSpotlightTour ?? false,
     };
   } catch {
     return {
       name: "",
       timezone: "Europe/London",
+      plan: "free",
+      hasSeenCommitmentCardDemo: false,
+      hasSkippedCommitmentCardDemo: false,
+      hasCompletedHomeSpotlightTour: false,
     };
   }
 }
@@ -281,6 +682,7 @@ export function loadHomeScreenVersions() {
             manualUrl: launcherConfig.manualUrl ?? defaults.manualUrl,
             nativeAppUrl: launcherConfig.nativeAppUrl ?? defaults.nativeAppUrl,
             webFallbackUrl: launcherConfig.webFallbackUrl ?? defaults.webFallbackUrl,
+            availabilityStatus: launcherConfig.availabilityStatus ?? defaults.availabilityStatus,
             enabled: launcherConfig.enabled ?? defaults.enabled ?? true,
             hqVisible: launcherConfig.hqVisible ?? defaults.hqVisible ?? true,
             useInterruptionPack:
@@ -387,12 +789,23 @@ export function loadActionCards() {
         map.set(card.id, { ...card });
       }
     });
-    setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
+    persistActionCardDefaultsVersion();
     return Array.from(map.values());
   } catch {
-    setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
+    persistActionCardDefaultsVersion();
     return DEFAULT_ACTION_CARDS;
   }
+}
+
+function persistActionCardDefaultsVersion() {
+  // This is automatic housekeeping, not an operator mutation. Once hydration
+  // has deliberately selected the legacy engine, writing this marker would
+  // nominate the entire frozen localStorage snapshot for replay and could
+  // overwrite newer IDB state when the kill switch is removed. Keep applying
+  // the defaults in memory, but leave legacy replay authority unchanged until
+  // a genuine save goes through the normal funnel.
+  if (hydrationPromise !== null && getActiveStorageEngine() === "localstorage") return;
+  setStorageItem(ACTION_CARD_DEFAULTS_VERSION_KEY, ACTION_CARD_DEFAULTS_VERSION);
 }
 
 export function saveActionCards(value) {
@@ -425,6 +838,147 @@ export function saveNotificationSchedule(value) {
   setStorageItem(NOTIFICATION_SCHEDULE_KEY, JSON.stringify(value));
 }
 
+// ─── Timing-window preferences ──────────────────────────────────────────────
+// Stores the user's custom hour boundaries for morning/day/evening/night.
+// Returns null if nothing is stored or the stored value is invalid — the caller
+// should fall back to DEFAULT_WINDOW_DEFS from utils.js in that case.
+
+export function loadTimingWindowsPrefs() {
+  try {
+    const stored = JSON.parse(getStorageItem(TIMING_WINDOWS_PREFS_KEY));
+    if (
+      Array.isArray(stored) &&
+      stored.length === 4 &&
+      stored.every(
+        (d) =>
+          d &&
+          typeof d.id === "string" &&
+          typeof d.start === "number" &&
+          typeof d.end === "number" &&
+          d.start >= 0 && d.start <= 23 &&
+          d.end >= 0 && d.end <= 23 &&
+          d.start !== d.end,
+      )
+    ) {
+      return stored;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveTimingWindowsPrefs(value) {
+  setStorageItem(TIMING_WINDOWS_PREFS_KEY, JSON.stringify(value));
+}
+
+// ─── App-specific pause storage ─────────────────────────────────────────────
+// Stores per-app pause expiry timestamps under APP_PAUSES_KEY.
+// Format: { "instagram": "2026-06-08T21:00:00.000Z", ... }
+
+function getAppPausesMap() {
+  try {
+    const stored = JSON.parse(getStorageItem(APP_PAUSES_KEY) ?? "{}");
+    return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAppPausesMap(map) {
+  setStorageItem(APP_PAUSES_KEY, JSON.stringify(map));
+}
+
+export function getAppPauseExpiry(appId) {
+  if (!appId) return null;
+  return getAppPausesMap()[appId] ?? null;
+}
+
+export function isAppPaused(appId) {
+  if (!appId) return false;
+  const expiry = getAppPauseExpiry(appId);
+  if (!expiry) return false;
+  return new Date(expiry).getTime() > Date.now();
+}
+
+export function pauseApp(appId, durationMinutes) {
+  if (!appId || !(durationMinutes > 0)) return null;
+  const expiry = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+  const map = getAppPausesMap();
+  map[appId] = expiry;
+  saveAppPausesMap(map);
+  return expiry;
+}
+
+export function clearAppPause(appId) {
+  if (!appId) return;
+  const map = getAppPausesMap();
+  if (map[appId] !== undefined) {
+    delete map[appId];
+    saveAppPausesMap(map);
+  }
+}
+
+export function clearExpiredAppPause(appId) {
+  if (!appId || isAppPaused(appId)) return;
+  const map = getAppPausesMap();
+  if (map[appId] !== undefined) {
+    delete map[appId];
+    saveAppPausesMap(map);
+  }
+}
+
 export function clearSharedMyBishBashState() {
-  [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS].forEach((key) => window.localStorage.removeItem(key));
+  const keys = [...SHARED_STORAGE_KEYS, ...LEGACY_SHARED_STORAGE_KEYS];
+  const mirrorWasActive = isMirrorActive();
+  const clearedMirror = mirrorWasActive ? mirror : null;
+  const idbClearWrites = [];
+  const clearRecovery = mirrorWasActive
+    ? { idbClearWrites, latestLegacyMutationToken: null }
+    : null;
+
+  // Preserve the established localStorage removal order, but publish one
+  // durable invalidation for the atomic clear instead of forty intermediate
+  // generations. Routine IDB deletes do not touch localStorage after dual-write
+  // retirement, so this explicit all-sink clear removes the legacy snapshot too.
+  isClearingSharedState = true;
+  if (mirrorWasActive) activeAllSinkClearRecovery = clearRecovery;
+  try {
+    keys.forEach((key) => {
+      removeStorageItem(key);
+      if (mirrorWasActive) window.localStorage.removeItem(key);
+    });
+  } finally {
+    isClearingSharedState = false;
+  }
+  const clearToken = hydrationPromise !== null ? markMigrationRetry() : null;
+
+  // Until the explicit clear is durable, use the already-cleared legacy sink
+  // for this session. Writes made during a failed or timed-out clear therefore
+  // cannot leave its replay snapshot stale; each is a normal legacy mutation.
+  if (mirrorWasActive) {
+    mirror = null;
+    activeEngine = "localstorage";
+  }
+
+  // In IDB mode removeStorageItem already enqueued every delete. Under the
+  // explicit kill switch or automatic fallback there is no mirror, so clear
+  // the IDB sink directly as well. Observe every rejection through the same
+  // reporter used by routine writes; the pending generation lets the next
+  // healthy IDB boot reconcile from the exact legacy source.
+  if (!mirrorWasActive) {
+    keys.forEach((key) => {
+      idbClearWrites.push(queueIdbWrite(() => kvDelete(key)));
+    });
+  }
+
+  // Synchronous callers still observe the cleared mirror/localStorage
+  // immediately; account/reset flows may await durable IDB settlement.
+  return finishSharedStateClear({
+    clearRecovery,
+    clearToken,
+    clearedMirror,
+    idbClearWrites,
+    mirrorWasActive,
+  });
 }

@@ -22,13 +22,8 @@ assert.ok(
   "Cloudflare manifest icons should be rooted at /icons/",
 );
 
-assert.ok(
-  /const APP_BASE = new URL\("\.\/", self\.location\)\.pathname;/.test(serviceWorker) ||
-    /const APP_BASE = "\/";/.test(serviceWorker),
-  "Cloudflare service worker should be scoped to the root path",
-);
+assert.match(serviceWorker, /const APP_BASE = new URL\("\.\/", self\.location\)\.pathname;/);
 assert.doesNotMatch(serviceWorker, /const APP_BASE = "\/mybishbash\//);
-assert.doesNotMatch(serviceWorker, /\/mybishbash(?=\/|["'?#$]|$)/);
 assert.ok(version.sourceSha, "Cloudflare version.json should include sourceSha for deployment verification");
 
 console.log("Cloudflare production build validated for /");

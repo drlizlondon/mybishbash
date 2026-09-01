@@ -1,4 +1,12 @@
 import { supabase } from "./supabaseClient";
+import {
+  assertKnownLauncherId,
+  isStaticLauncher,
+  validateLauncherDraft,
+} from "./launcherRegistry";
+import { LAUNCHER_AVAILABILITY_STATUSES } from "./launcherAvailability";
+import { isAccessActive } from "./accessCapabilities";
+import { getStorageItem } from "../storage";
 
 function requireSupabase() {
   if (!supabase) {
@@ -11,7 +19,17 @@ const SHARED_STATE_TABLE = "mybishbash_state";
 const LEGACY_SHARED_STATE_TABLE = ("bish" + "bash") + "_state";
 const SHARED_EVENTS_TABLE = "mybishbash_events";
 const LEGACY_SHARED_EVENTS_TABLE = ("bish" + "bash") + "_events";
-export const INVITE_ONLY_ACCESS_ERROR = "MyBishBash is currently invite-only.\nYour access code was not recognised.";
+export const INVITE_ONLY_ACCESS_ERROR = "myBishBash is currently invite-only.\nYour access code was not recognised.";
+const PENDING_ACCESS_CODE_KEY = "MYBISHBASH_PENDING_ACCESS_CODE";
+const VALIDATED_GATE_ACCESS_CODE_KEY = "mybishbash.validated-gate-access-code.v1";
+const VALIDATED_GATE_ACCESS_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+const SIGNUP_HANDOFF_REFERENCE_KEY = "mybishbash.signup-handoff-ref.v1";
+const SIGNUP_HANDOFF_TTL_MS = 30 * 60 * 1000;
+const E2E_AUTH_SESSION_KEY = "MYBISHBASH_E2E_AUTH_SESSION";
+const E2E_FAIL_NEXT_ACCESS_PROFILE_KEY = "MYBISHBASH_E2E_FAIL_NEXT_ACCESS_PROFILE";
+const E2E_FAIL_DELETE_ACCOUNT_KEY = "MYBISHBASH_E2E_FAIL_DELETE_ACCOUNT";
+const E2E_SIGNUP_HANDOFFS_KEY = "MYBISHBASH_E2E_SIGNUP_HANDOFFS";
+const E2E_SHARED_STATE_KEY = "MYBISHBASH_E2E_SHARED_STATE";
 
 function isDemoMode() {
   if (typeof window === "undefined") return false;
@@ -23,6 +41,17 @@ function isDemoMode() {
 
 function isMissingTableError(error) {
   return error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "");
+}
+
+function isTransientFetchError(error) {
+  const message = `${error?.message ?? ""} ${error?.details ?? ""}`;
+  return /Failed to fetch|NetworkError|Load failed/i.test(message);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function selectSharedStateFromTable(client, tableName, userId) {
@@ -41,16 +70,22 @@ async function selectSharedStateFromTable(client, tableName, userId) {
 }
 
 async function upsertSharedStateIntoTable(client, tableName, userId, state) {
-  const { error } = await client
-    .from(tableName)
-    .upsert(
-      {
-        user_id: userId,
-        state_json: state,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+  let error = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await client
+      .from(tableName)
+      .upsert(
+        {
+          user_id: userId,
+          state_json: state,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+    error = result.error;
+    if (!error || !isTransientFetchError(error)) break;
+    await wait(250 * (attempt + 1));
+  }
 
   if (error) {
     if (isMissingTableError(error)) return { missingTable: true };
@@ -60,13 +95,13 @@ async function upsertSharedStateIntoTable(client, tableName, userId, state) {
   return { missingTable: false };
 }
 
-export function getSyncErrorMessage(error, fallback = "Could not sync your MyBishBash profile.") {
+export function getSyncErrorMessage(error, fallback = "Could not sync your myBishBash profile.") {
   if (error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "")) {
-    return "Supabase is connected, but the MyBishBash tables are not installed yet. Apply the SQL migration, then try again.";
+    return "Supabase is connected, but the myBishBash tables are not installed yet. Apply the SQL migration, then try again.";
   }
 
   if (error?.code === "42501" || /permission denied/i.test(error?.message ?? "")) {
-    return "Supabase is connected, but MyBishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
+    return "Supabase is connected, but myBishBash does not have permission to read/write the sync tables yet. Apply the grant SQL, then try again.";
   }
 
   if (error?.message) return error.message;
@@ -75,6 +110,11 @@ export function getSyncErrorMessage(error, fallback = "Could not sync your MyBis
 
 export async function loadSharedState(userId) {
   if (isDemoMode()) return null;
+  if (isE2EAuthMockMode()) {
+    const localSharedState = readE2ELocalSharedState();
+    if (localSharedState) return localSharedState;
+    throw new Error("E2E shared profile has not been created yet.");
+  }
   const client = requireSupabase();
 
   let firstMissingTableError = null;
@@ -98,6 +138,10 @@ export async function loadSharedState(userId) {
 
 export async function saveSharedState(userId, state) {
   if (isDemoMode()) return;
+  if (isE2EAuthMockMode()) {
+    window.localStorage.setItem(E2E_SHARED_STATE_KEY, JSON.stringify(state));
+    return;
+  }
   const client = requireSupabase();
 
   let firstMissingTableError = null;
@@ -114,7 +158,14 @@ export async function saveSharedState(userId, state) {
 
 export async function getSession() {
   if (isDemoMode()) {
+    const isSignupRoute = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("signup") === "1";
+    if (isSignupRoute) return null;
+    const demoSession = readE2EAuthSession();
+    if (demoSession) return demoSession;
     return { user: { id: "demo-user", email: "demo@example.com" } };
+  }
+  if (isE2EAuthMockMode()) {
+    return readE2EAuthSession();
   }
   const client = requireSupabase();
   const { data, error } = await client.auth.getSession();
@@ -122,7 +173,7 @@ export async function getSession() {
   return data.session;
 }
 
-function normalizeAccessCode(accessCode) {
+export function normalizeAccessCode(accessCode) {
   return String(accessCode ?? "").trim().replace(/\s+/g, "").toUpperCase();
 }
 
@@ -138,82 +189,337 @@ function logSupabaseAccessError(operation, error) {
   });
 }
 
-const LOCAL_INVITATION_CODES = [
-  "REDDIT-14",
-  "FAMILY-ALPHA",
-  "FOUNDER-EARLY",
-  "TESTER"
-];
-
-async function validateAccessCode(accessCode) {
-  const client = requireSupabase();
+function rememberPendingAccessCode(accessCode) {
+  if (typeof window === "undefined") return;
   const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return;
+  window.localStorage.setItem(PENDING_ACCESS_CODE_KEY, normalizedAccessCode);
+}
 
+function getAccessCodeStorage() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
+}
+
+export function rememberValidatedGateAccessCode(accessCode, now = Date.now()) {
+  const storage = getAccessCodeStorage();
+  if (!storage) return false;
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
-  if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
-
-  const { data: rpcData, error: rpcError } = await client.rpc("validate_mybishbash_access_code", {
-    access_code: normalizedAccessCode,
-  });
-
-  if (!rpcError) return rpcData === true;
-  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") {
-    logSupabaseAccessError("rpc:validate_mybishbash_access_code", rpcError);
-  }
-
-  const { data, error } = await client
-    .from("access_invitation_codes")
-    .select("code, active, usage_count, max_uses")
-    .eq("code", normalizedAccessCode)
-    .maybeSingle();
-
-  if (error) {
-    logSupabaseAccessError("query:validate_access_code", error);
-    return false;
-  }
-
-  if (!data) return false;
-  if (data.active === false) return false;
-  if (data.max_uses !== null && data.usage_count >= data.max_uses) return false;
-
+  storage.setItem(VALIDATED_GATE_ACCESS_CODE_KEY, JSON.stringify({
+    accessCode: normalizedAccessCode,
+    validatedAt: now,
+  }));
   return true;
 }
 
-async function claimAccessCode(accessCode) {
+export function clearValidatedGateAccessCode() {
+  const storage = getAccessCodeStorage();
+  storage?.removeItem(VALIDATED_GATE_ACCESS_CODE_KEY);
+}
+
+export function clearSignupHandoffReference() {
+  const storage = getAccessCodeStorage();
+  storage?.removeItem(SIGNUP_HANDOFF_REFERENCE_KEY);
+}
+
+export function rememberSignupHandoffReference(handoffRef, expiresAt) {
+  const storage = getAccessCodeStorage();
+  if (!storage || !handoffRef) return false;
+  const expiry = Date.parse(expiresAt) || Date.now() + SIGNUP_HANDOFF_TTL_MS;
+  storage.setItem(SIGNUP_HANDOFF_REFERENCE_KEY, JSON.stringify({
+    handoffRef,
+    expiresAt: new Date(expiry).toISOString(),
+  }));
+  return true;
+}
+
+export function getSignupHandoffPayload(now = Date.now()) {
+  const storage = getAccessCodeStorage();
+  if (!storage) return null;
+  const raw = storage.getItem(SIGNUP_HANDOFF_REFERENCE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const handoffRef = String(parsed?.handoffRef ?? "").trim();
+    const expiresAt = Date.parse(parsed?.expiresAt ?? "");
+    if (!handoffRef || !Number.isFinite(expiresAt) || expiresAt <= now) {
+      clearSignupHandoffReference();
+      return null;
+    }
+    return {
+      handoffRef,
+      expiresAt: new Date(expiresAt).toISOString(),
+    };
+  } catch {
+    clearSignupHandoffReference();
+    return null;
+  }
+}
+
+export function getSignupHandoffReference(now = Date.now()) {
+  return getSignupHandoffPayload(now)?.handoffRef ?? "";
+}
+
+export function getValidatedGateAccessCode(now = Date.now()) {
+  const storage = getAccessCodeStorage();
+  if (!storage) return "";
+  const raw = storage.getItem(VALIDATED_GATE_ACCESS_CODE_KEY);
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    const normalizedAccessCode = normalizeAccessCode(parsed?.accessCode);
+    const validatedAt = Number(parsed?.validatedAt);
+    if (!normalizedAccessCode || !Number.isFinite(validatedAt) || now - validatedAt > VALIDATED_GATE_ACCESS_CODE_TTL_MS) {
+      clearValidatedGateAccessCode();
+      return "";
+    }
+    return normalizedAccessCode;
+  } catch {
+    clearValidatedGateAccessCode();
+    return "";
+  }
+}
+
+async function claimRememberedAccessCode() {
+  if (typeof window === "undefined") return;
+  const pendingAccessCode = normalizeAccessCode(window.localStorage.getItem(PENDING_ACCESS_CODE_KEY));
+  if (!pendingAccessCode) return;
+  const claimed = await claimAccessCode(pendingAccessCode);
+  if (claimed) {
+    window.localStorage.removeItem(PENDING_ACCESS_CODE_KEY);
+  }
+}
+
+// Codes are validated and claimed server-side only. The previous hardcoded
+// LOCAL_INVITATION_CODES bypass (and the never-created access_invitation_codes
+// fallback table) are gone: a code that should work must exist in
+// mybishbash_access_codes, where HQ can manage and deactivate it.
+function isE2EAuthMockMode() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("MYBISHBASH_E2E_AUTH_MOCK") === "true";
+}
+
+function buildE2EAuthSession(email) {
+  const normalizedEmail = String(email ?? "approved@example.com").trim().toLowerCase();
+  return {
+    user: {
+      id: `e2e-access-user:${normalizedEmail}`,
+      email: normalizedEmail,
+    },
+  };
+}
+
+function readE2EAuthSession() {
+  if (!isE2EAuthMockMode()) return null;
+  try {
+    return JSON.parse(window.localStorage.getItem(E2E_AUTH_SESSION_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+function rememberE2EAuthSession(session) {
+  if (!isE2EAuthMockMode() || !session) return session;
+  window.localStorage.setItem(E2E_AUTH_SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+function clearE2EAuthSession() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(E2E_AUTH_SESSION_KEY);
+}
+
+function readE2ELocalJson(key, fallback) {
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    return rawValue ? JSON.parse(rawValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readE2ESignupHandoffs() {
+  if (!isE2EAuthMockMode()) return {};
+  return readE2ELocalJson(E2E_SIGNUP_HANDOFFS_KEY, {});
+}
+
+function writeE2ESignupHandoffs(handoffs) {
+  if (!isE2EAuthMockMode()) return;
+  window.localStorage.setItem(E2E_SIGNUP_HANDOFFS_KEY, JSON.stringify(handoffs));
+}
+
+/**
+ * Reads a PRODUCTION storage key through storage.js's funnel.
+ *
+ * Distinct from readE2ELocalJson, which reads this module's own
+ * `MYBISHBASH_E2E_*` scratch keys: those are e2e-harness flags with no
+ * production meaning and no legacy-prefix history, and they stay on direct
+ * localStorage. Production keys must not be read by a second, private path —
+ * that is the bypass Phase 5 commit 1.5 closed.
+ *
+ * SCOPE NOTE (deliberate, not an oversight): funnelling this bridge says
+ * nothing about whether the shared-state bridge should ultimately operate
+ * *through* the persistence engine. That is a Phase 6 (sync) question and is
+ * explicitly left open here.
+ */
+function readSharedStateJson(key, fallback) {
+  try {
+    const rawValue = getStorageItem(key);
+    return rawValue ? JSON.parse(rawValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readE2ELocalSharedState() {
+  if (!isE2EAuthMockMode()) return null;
+  const savedSharedState = readE2ELocalJson(E2E_SHARED_STATE_KEY, null);
+  if (savedSharedState) return savedSharedState;
+  if (getStorageItem("mybishbash.setup-complete.v1") !== "true") return null;
+  return {
+    version: 1,
+    cards: readSharedStateJson("mybishbash.cards.v1", []),
+    setupComplete: getStorageItem("mybishbash.setup-complete.v1") === "true",
+    mood: getStorageItem("mybishbash.mood.v1") || "Minimal",
+    profile: readSharedStateJson("mybishbash.profile.v1", {
+      name: "",
+      timezone: "Europe/London",
+      plan: "free",
+    }),
+    cardPacks: readSharedStateJson("mybishbash.card-packs.v1", []),
+    homeScreenVersions: readSharedStateJson("mybishbash.home-screen-versions.v1", {}),
+    launcherBehaviorSettings: readSharedStateJson("mybishbash.launcher-behavior-settings.v1", {}),
+    hiddenLibraryPacks: readSharedStateJson("mybishbash.hidden-library-packs.v1", []),
+    dislikedPackCardIds: readSharedStateJson("mybishbash.disliked-pack-card-ids.v1", []),
+    globalInterruptionMode: getStorageItem("mybishbash.global-interruption-mode.v1") !== "false",
+    events: readSharedStateJson("mybishbash.event-log.v1", []),
+    actionCards: readSharedStateJson("mybishbash.action-cards.v1", []),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function validateAccessCode(accessCode) {
+  if (isE2EAuthMockMode()) return getE2EAccessGrant(normalizeAccessCode(accessCode)) !== null;
   const client = requireSupabase();
   const normalizedAccessCode = normalizeAccessCode(accessCode);
   if (!normalizedAccessCode) return false;
-  if (LOCAL_INVITATION_CODES.includes(normalizedAccessCode)) return true;
 
-  const { data: rpcData, error: rpcError } = await client.rpc("claim_mybishbash_access_code", {
+  const { data, error } = await client.rpc("validate_mybishbash_access_code", {
     access_code: normalizedAccessCode,
   });
 
-  if (!rpcError) return rpcData === true;
-  if (!isMissingTableError(rpcError) && rpcError.code !== "PGRST202") {
-    logSupabaseAccessError("rpc:claim_mybishbash_access_code", rpcError);
-  }
-
-  const { data, error: fetchError } = await client
-    .from("access_invitation_codes")
-    .select("usage_count")
-    .eq("code", normalizedAccessCode)
-    .maybeSingle();
-
-  if (fetchError || !data) {
-    logSupabaseAccessError("query:claim_access_code_fetch", fetchError);
+  if (error) {
+    logSupabaseAccessError("rpc:validate_mybishbash_access_code", error);
     return false;
   }
+  return data === true;
+}
 
-  const { error: updateError } = await client
-    .from("access_invitation_codes")
-    .update({ usage_count: (data.usage_count || 0) + 1, updated_at: new Date().toISOString() })
-    .eq("code", normalizedAccessCode);
+async function claimAccessCode(accessCode) {
+  if (isE2EAuthMockMode() || isDemoMode()) {
+    const grant = getE2EAccessGrant(normalizeAccessCode(accessCode));
+    if (!grant) return false;
+    window.localStorage.setItem("MYBISHBASH_E2E_ACCESS_TIER", grant.access_tier);
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", JSON.stringify({ accessCode: normalizeAccessCode(accessCode), ...grant }));
+    return true;
+  }
+  const client = requireSupabase();
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return false;
 
-  if (updateError) {
-    logSupabaseAccessError("update:claim_access_code", updateError);
+  const { data, error } = await client.rpc("claim_mybishbash_access_code", {
+    access_code: normalizedAccessCode,
+  });
+
+  if (error) {
+    logSupabaseAccessError("rpc:claim_mybishbash_access_code", error);
     return false;
   }
+  return data === true;
+}
+
+export async function claimAccessCodeForCurrentUser(accessCode) {
+  return claimAccessCode(accessCode);
+}
+
+async function createSignupHandoff(accessCode) {
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) return null;
+  if (isE2EAuthMockMode()) {
+    const grant = getE2EAccessGrant(normalizedAccessCode);
+    if (!grant) return null;
+    const handoffRef = `e2e-handoff-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const expiresAt = new Date(Date.now() + SIGNUP_HANDOFF_TTL_MS).toISOString();
+    writeE2ESignupHandoffs({
+      ...readE2ESignupHandoffs(),
+      [handoffRef]: {
+        accessCode: normalizedAccessCode,
+        expiresAt,
+        claimed: false,
+      },
+    });
+    return { handoffRef, expiresAt };
+  }
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("create_mybishbash_signup_handoff", {
+    access_code: normalizedAccessCode,
+  });
+  if (error) {
+    logSupabaseAccessError("rpc:create_mybishbash_signup_handoff", error);
+    return null;
+  }
+  const handoffRef = data?.handoff_ref ?? data?.handoffRef;
+  if (!handoffRef) return null;
+  return {
+    handoffRef,
+    expiresAt: data?.expires_at ?? data?.expiresAt ?? new Date(Date.now() + SIGNUP_HANDOFF_TTL_MS).toISOString(),
+  };
+}
+
+function redeemE2ESignupHandoff(handoffRef) {
+  const handoffs = readE2ESignupHandoffs();
+  const handoff = handoffs[handoffRef];
+  if (!handoff || handoff.claimed || Date.parse(handoff.expiresAt) <= Date.now()) return null;
+  const grant = getE2EAccessGrant(handoff.accessCode);
+  if (!grant) return null;
+  handoffs[handoffRef] = { ...handoff, claimed: true };
+  writeE2ESignupHandoffs(handoffs);
+  return {
+    accessCode: handoff.accessCode,
+    ...grant,
+  };
+}
+
+const E2E_ACCESS_GRANTS = {
+  "BETA-VALID": { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: null },
+  FULLMELON: { access_tier: "premium", grant_reason: "premium_code", cohort: "e2e", is_tester: false, tester_group: null },
+  WELCOME: { access_tier: "premium", grant_reason: "early_user", cohort: "e2e", is_tester: false, tester_group: "early_user" },
+  TESTER: { access_tier: "premium", grant_reason: "tester", cohort: "e2e", is_tester: true, tester_group: "tester" },
+  "FRIENDS-FAMILY": { access_tier: "premium", grant_reason: "friends_family", cohort: "e2e", is_tester: false, tester_group: "friends_family" },
+  MEDIA: { access_tier: "premium", grant_reason: "media", cohort: "e2e", is_tester: false, tester_group: "media" },
+  INVESTOR: { access_tier: "premium", grant_reason: "investor", cohort: "e2e", is_tester: false, tester_group: "investor" },
+};
+
+function getE2EAccessGrant(accessCode) {
+  return E2E_ACCESS_GRANTS[normalizeAccessCode(accessCode)] ?? null;
+}
+
+export async function validateAndRememberGateAccessCode(accessCode) {
+  const normalizedAccessCode = normalizeAccessCode(accessCode);
+  if (!normalizedAccessCode) {
+    clearValidatedGateAccessCode();
+    clearSignupHandoffReference();
+    return false;
+  }
+  const handoff = await createSignupHandoff(normalizedAccessCode);
+  if (!handoff) {
+    clearValidatedGateAccessCode();
+    clearSignupHandoffReference();
+    return false;
+  }
+  clearValidatedGateAccessCode();
+  rememberSignupHandoffReference(handoff.handoffRef, handoff.expiresAt);
   return true;
 }
 
@@ -223,32 +529,64 @@ export async function hasAccessEntitlement(userId) {
 
   const { data: profile, error: profileError } = await client
     .from("user_profiles")
-    .select("has_access")
+    .select("has_access,access_tier,access_expires_at")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (!profileError) {
-    if (profile?.has_access === false) return false;
-    if (profile?.has_access === true) return true;
-  } else if (!isMissingTableError(profileError)) {
-    logSupabaseAccessError("query:user_profiles.has_access", profileError);
+  if (profileError) {
+    if (!isMissingTableError(profileError)) {
+      logSupabaseAccessError("query:user_profiles.has_access", profileError);
+    }
+    // Transient/offline errors must not lock out a signed-in user; only an
+    // explicit revoke or expiry below fails closed.
+    return true;
   }
 
-  const { data, error } = await client
-    .from("access_entitlements")
-    .select("has_access")
-    .eq("user_id", userId)
-    .maybeSingle();
-    
-  if (error && error.code !== "PGRST205" && !/Could not find the table/i.test(error.message)) {
-    logSupabaseAccessError("query:access_entitlements.has_access", error);
+  return isAccessActive(profile ?? {});
+}
+
+// Fetch the caller's own access profile for capability checks (premium
+// gating). Returns null on any failure — capability callers treat null as
+// the free tier, so premium installs fail CLOSED, the opposite default to
+// the fail-open session gate above.
+export async function fetchOwnAccessProfile(userId) {
+  if (isE2EAuthMockMode() && window.localStorage.getItem(E2E_FAIL_NEXT_ACCESS_PROFILE_KEY) === "true") {
+    window.localStorage.removeItem(E2E_FAIL_NEXT_ACCESS_PROFILE_KEY);
+    throw new Error("E2E transient access profile failure");
   }
-
-  // If an admin has explicitly revoked access, block them.
-  if (data?.has_access === false) return false;
-
-  // Otherwise, if they have an active session, they passed the access code gate at signup!
-  return true;
+  if (isE2EAuthMockMode() && userId) {
+    const signupAccess = readE2ELocalJson("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", {});
+    const grant = getE2EAccessGrant(signupAccess.accessCode) ?? E2E_ACCESS_GRANTS["BETA-VALID"];
+    return {
+      has_access: true,
+      access_tier: grant.access_tier,
+      membership: grant.membership ?? (grant.access_tier === "premium" ? "premium" : "free"),
+      entitlement_overrides: grant.entitlement_overrides ?? null,
+      access_expires_at: null,
+      grant_reason: grant.grant_reason,
+      cohort: grant.cohort,
+      is_tester: grant.is_tester,
+      tester_group: grant.tester_group,
+    };
+  }
+  if (!userId || isDemoMode()) return null;
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("user_profiles")
+      .select("has_access,access_tier,membership,entitlement_overrides,access_expires_at,is_tester")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      if (!isMissingTableError(error)) {
+        logSupabaseAccessError("query:user_profiles.access_profile", error);
+      }
+      return null;
+    }
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function onAuthStateChange(callback) {
@@ -259,23 +597,40 @@ export function onAuthStateChange(callback) {
   return client.auth.onAuthStateChange(callback);
 }
 
-export async function signUp(email, password, accessCode) {
-  const client = requireSupabase();
-  const normalizedAccessCode = normalizeAccessCode(accessCode);
-  const hasValidAccessCode = await validateAccessCode(normalizedAccessCode);
-
-  if (!hasValidAccessCode) {
-    const error = new Error(INVITE_ONLY_ACCESS_ERROR);
-    error.code = "MYBISHBASH_INVALID_ACCESS_CODE";
-    throw error;
+export async function signUp(email, password, accessCode = null) {
+  let handoffRef = getSignupHandoffReference();
+  if (accessCode && !handoffRef) {
+    const handoff = await createSignupHandoff(accessCode);
+    if (handoff) {
+      rememberSignupHandoffReference(handoff.handoffRef, handoff.expiresAt);
+      handoffRef = handoff.handoffRef;
+    }
   }
-
+  if (!handoffRef) {
+    if (isDemoMode()) {
+      window.localStorage.setItem("MYBISHBASH_E2E_AUTH_MOCK", "true");
+      return rememberE2EAuthSession(buildE2EAuthSession(email));
+    }
+    throw new Error(INVITE_ONLY_ACCESS_ERROR);
+  }
+  if (isE2EAuthMockMode()) {
+    const grant = redeemE2ESignupHandoff(handoffRef);
+    if (!grant) {
+      clearSignupHandoffReference();
+      throw new Error(INVITE_ONLY_ACCESS_ERROR);
+    }
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_SIGNUP_ACCESS", JSON.stringify(grant));
+    clearSignupHandoffReference();
+    return rememberE2EAuthSession(buildE2EAuthSession(email));
+  }
+  const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
     email,
     password,
     options: {
       data: {
-        mybishbash_access_code: normalizedAccessCode,
+        mybishbash_plan: "free",
+        mybishbash_signup_handoff_ref: handoffRef,
       },
     },
   });
@@ -283,24 +638,80 @@ export async function signUp(email, password, accessCode) {
     logSupabaseAccessError("auth.signUp", error);
     throw error;
   }
-  if (data.session?.user) await claimAccessCode(normalizedAccessCode);
+  clearValidatedGateAccessCode();
+  clearSignupHandoffReference();
   return data.session;
 }
 
 export async function logIn(email, password) {
+  if (isE2EAuthMockMode()) {
+    return rememberE2EAuthSession(buildE2EAuthSession(email));
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) {
     logSupabaseAccessError("auth.signInWithPassword", error);
     throw error;
   }
+  await claimRememberedAccessCode();
   return data.session;
 }
 
+export async function resetPassword(email, redirectTo) {
+  if (isE2EAuthMockMode()) {
+    window.localStorage.setItem("MYBISHBASH_E2E_LAST_PASSWORD_RESET", JSON.stringify({ email, redirectTo }));
+    return;
+  }
+  const client = requireSupabase();
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+  if (error) {
+    logSupabaseAccessError("auth.resetPasswordForEmail", error);
+    throw error;
+  }
+}
+
 export async function logOut() {
+  if (isE2EAuthMockMode()) {
+    clearE2EAuthSession();
+    return;
+  }
   const client = requireSupabase();
   const { error } = await client.auth.signOut();
   if (error) throw error;
+}
+
+export async function deleteCurrentAccount() {
+  if (isE2EAuthMockMode()) {
+    await wait(50);
+    if (window.localStorage.getItem(E2E_FAIL_DELETE_ACCOUNT_KEY) === "true") {
+      throw new Error("We could not delete your account just now. Please try again in a moment.");
+    }
+    clearE2EAuthSession();
+    return;
+  }
+
+  const client = requireSupabase();
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  if (sessionError) throw sessionError;
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) {
+    throw new Error("Please log in again before deleting your account.");
+  }
+
+  const { data, error } = await client.functions.invoke("delete-account", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+
+  const { error: signOutError } = await client.auth.signOut({ scope: "local" });
+  if (signOutError) {
+    console.warn("Could not clear Supabase auth storage after account deletion", signOutError);
+  }
 }
 
 export async function savePushSubscription(userId, subscription, userAgent) {
@@ -357,7 +768,7 @@ export async function markNotificationOpened(deliveryId) {
 export async function saveLauncherEvent(payload) {
   if (isDemoMode()) return;
   const client = requireSupabase();
-  const { error } = await client.from("launcher_events").insert({
+  const row = {
     user_id: payload.user_id,
     anonymous_device_id: payload.anonymous_device_id,
     session_id: payload.session_id,
@@ -371,9 +782,35 @@ export async function saveLauncherEvent(payload) {
     app_display_mode: payload.app_display_mode,
     platform: payload.platform,
     metadata: payload.metadata ?? {},
-  });
+  };
 
-  if (error) console.error("[INTERCEPT] Error saving launcher event:", error);
+  let error = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await client.from("launcher_events").insert(row);
+    error = result.error;
+    if (!error || !isTransientFetchError(error)) break;
+    await wait(250 * (attempt + 1));
+  }
+
+  if (error) {
+    const logger = isTransientFetchError(error) ? console.warn : console.error;
+    logger("[INTERCEPT] Error saving launcher event:", error);
+  }
+}
+
+// HQ role model: owner (full control incl. hard delete), admin (add/edit/
+// test/archive), analyst (view only), support (reports/testing notes).
+// Rows created before the role migration default to "admin".
+export async function fetchAdminRole(userId) {
+  if (isDemoMode()) return null;
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("admin_users")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.role ?? "admin";
 }
 
 export async function checkIsAdmin(userId) {
@@ -396,6 +833,17 @@ function mapGlobalPack(pack, cards = []) {
     icon: pack.icon,
     published: pack.published,
     sourceKey: pack.source_key,
+    // Explore metadata (migration 202606120002); defaults cover older schemas.
+    goal: pack.goal ?? "",
+    coverImageUrl: pack.cover_image_url ?? "",
+    whyText: pack.why_text ?? "",
+    isPremium: pack.is_premium === true,
+    isFeatured: pack.is_featured === true,
+    isExperimental: pack.is_experimental === true,
+    contentType: pack.content_type ?? "cards",
+    sourceLabel: pack.source_label ?? "myBishBash",
+    publishedAt: pack.published_at ?? null,
+    sortOrder: pack.sort_order ?? 0,
     entries: cards
       .filter((card) => card.pack_id === pack.id)
       .sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
@@ -407,6 +855,8 @@ function mapGlobalPack(pack, cards = []) {
         sourceUrl: card.source_url,
         frequency: card.frequency,
         timingWindows: card.timing_windows,
+        isPreview: card.is_preview === true,
+        commitmentDefaults: card.commitment_defaults ?? null,
       })),
     isGlobal: true,
   };
@@ -448,20 +898,6 @@ export async function touchUserProfile(user) {
   if (!isMissingTableError(profileError)) {
     logSupabaseAccessError("update:user_profiles.touchUserProfile", profileError);
     console.warn("Could not update user profile heartbeat", profileError);
-    return;
-  }
-
-  const { error } = await client.from("access_entitlements").upsert(
-    {
-      user_id: user.id,
-      email: user.email,
-      last_seen_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
-  if (error) {
-    logSupabaseAccessError("upsert:access_entitlements.touchUserProfile", error);
-    console.warn("Could not update user profile heartbeat", error);
   }
 }
 
@@ -492,6 +928,18 @@ export async function saveAdminGlobalPack(pack, userId) {
     icon: pack.icon || null,
     source_key: pack.sourceKey || null,
     published: Boolean(pack.published),
+    goal: pack.goal?.trim() || null,
+    cover_image_url: null,
+    why_text: pack.whyText?.trim() || null,
+    is_premium: Boolean(pack.isPremium),
+    is_featured: Boolean(pack.isFeatured),
+    is_experimental: Boolean(pack.isExperimental),
+    content_type: pack.contentType || "cards",
+    source_label: pack.sourceLabel?.trim() || "myBishBash",
+    sort_order: Number.isFinite(Number(pack.sortOrder)) ? Number(pack.sortOrder) : 0,
+    // First publish stamps published_at; later edits keep the original date
+    // so "newest first" ordering inside goal sections stays stable.
+    published_at: pack.published ? (pack.publishedAt ?? now) : pack.publishedAt ?? null,
     updated_at: now,
   };
 
@@ -517,6 +965,8 @@ export async function saveAdminGlobalPack(pack, userId) {
       source_url: entry.sourceUrl?.trim() || null,
       frequency: entry.frequency || "once_daily",
       timing_windows: entry.timingWindows?.length ? entry.timingWindows : ["morning", "day", "evening"],
+      is_preview: entry.isPreview === true,
+      commitment_defaults: entry.commitmentDefaults ?? null,
       position: index,
     }))
     .filter((entry) => entry.prompt_text);
@@ -542,6 +992,9 @@ function mapLauncherConfig(row = {}) {
     hqVisible: row.hq_visible,
     useInterruptionPack: row.use_interruption_pack,
     updatedAt: row.updated_at,
+    createdAt: row.created_at,
+    // Rows HQ created itself (not overrides of static registry IDs).
+    isCustom: row.is_custom === true,
   };
   const optionalFields = {
     displayName: row.display_name,
@@ -553,6 +1006,15 @@ function mapLauncherConfig(row = {}) {
     androidIntentUrl: row.android_intent_url,
     webFallbackUrl: row.web_fallback_url,
     interruptionPackId: row.interruption_pack_id,
+    // Columns added by the availability migration; absent on older schemas.
+    availabilityStatus: row.availability_status,
+    iosWebFallbackUrl: row.ios_web_fallback_url,
+    androidWebFallbackUrl: row.android_web_fallback_url,
+    nativeAppUrl: row.native_app_url,
+    appUrl: row.app_url,
+    manualUrl: row.manual_url,
+    qaNotes: row.qa_notes,
+    category: row.category,
   };
   Object.entries(optionalFields).forEach(([key, value]) => {
     if (typeof value === "string" && value.trim()) config[key] = value.trim();
@@ -595,16 +1057,47 @@ export async function fetchAdminLauncherConfigs() {
   return fetchLauncherConfigs();
 }
 
+function isMissingColumnError(error) {
+  return error?.code === "PGRST204" || error?.code === "42703" || /column .* does not exist|Could not find the '.*' column/i.test(error?.message ?? "");
+}
+
 export async function saveAdminLauncherConfig(config, userId) {
+  const isCustom = config?.isCustom === true && !isStaticLauncher(config?.id);
+  if (!isCustom) {
+    // Overrides may only target supported, code-reviewed launcher IDs.
+    assertKnownLauncherId(config?.id);
+  }
+
   const client = requireSupabase();
   const now = new Date().toISOString();
-  const payload = {
+  let availabilityStatus = LAUNCHER_AVAILABILITY_STATUSES.includes(config.availabilityStatus)
+    ? config.availabilityStatus
+    : (config.enabled ? "public" : "disabled");
+  if (isCustom) {
+    // HQ-created launchers are re-validated on every save. Moving one to a
+    // user-facing status additionally requires an https web fallback (the
+    // go-live gate inside validateLauncherDraft), so a deployed app can never
+    // ship a dead Continue-to-app path.
+    const existingConfigs = await fetchLauncherConfigs().catch(() => []);
+    const validation = validateLauncherDraft(config, {
+      existingIds: existingConfigs.map((row) => row.id).filter((id) => id !== config.id),
+      targetStatus: availabilityStatus,
+    });
+    if (!validation.ok) {
+      const error = new Error(validation.errors.join("\n"));
+      error.code = "MYBISHBASH_INVALID_LAUNCHER_DRAFT";
+      throw error;
+    }
+  }
+  const legacyPayload = {
     launcher_id: config.id,
     display_name: config.displayName || config.name || "",
     real_app_label: config.realAppLabel || "",
     icon_src: config.iconSrc || "",
     uploaded_icon_url: config.customIconSrc || "",
-    enabled: Boolean(config.enabled),
+    // Keep the legacy boolean consistent with availability so pre-migration
+    // clients see the same effective state.
+    enabled: availabilityStatus === "public",
     hq_visible: Boolean(config.hqVisible),
     ios_app_url: config.iosAppUrl || "",
     android_intent_url: config.androidIntentUrl || "",
@@ -614,14 +1107,114 @@ export async function saveAdminLauncherConfig(config, userId) {
     updated_at: now,
     updated_by: userId ?? null,
   };
+  const payload = {
+    ...legacyPayload,
+    availability_status: availabilityStatus,
+    ios_web_fallback_url: config.iosWebFallbackUrl || "",
+    android_web_fallback_url: config.androidWebFallbackUrl || "",
+    native_app_url: config.nativeAppUrl || "",
+    app_url: config.appUrl || "",
+    manual_url: config.manualUrl || "",
+    qa_notes: config.qaNotes || "",
+  };
+  if (isCustom) {
+    payload.is_custom = true;
+    payload.category = config.category || "other";
+  }
 
-  const { data, error } = await client
-    .from("hq_launcher_configs")
-    .upsert(payload, { onConflict: "launcher_id" })
-    .select("*")
-    .single();
+  const upsert = (body) =>
+    client
+      .from("hq_launcher_configs")
+      .upsert(body, { onConflict: "launcher_id" })
+      .select("*")
+      .single();
+
+  let { data, error } = await upsert(payload);
+  if (error && isCustom && isMissingColumnError(error)) {
+    // Never silently save a custom app as an unflagged row on an old schema.
+    const schemaError = new Error("HQ-created apps need the custom-apps migration (is_custom/category columns). Apply the latest SQL migration, then try again.");
+    schemaError.code = "MYBISHBASH_CUSTOM_APPS_MIGRATION_MISSING";
+    throw schemaError;
+  }
+  if (error && isMissingColumnError(error)) {
+    // The availability migration has not been applied yet — save the legacy
+    // column set so HQ keeps working against the old schema.
+    console.warn("[HQ LAUNCHERS] availability columns missing; saving legacy launcher config", error.message);
+    ({ data, error } = await upsert(legacyPayload));
+  }
   if (error) throw error;
   return mapLauncherConfig(data);
+}
+
+// Permanent delete is only available for HQ-created (custom) rows. Supported
+// registry launchers are code-defined: archive them instead, or clear their
+// override row manually in Supabase.
+export async function deleteAdminLauncherConfig(launcherId) {
+  if (!launcherId || isStaticLauncher(launcherId)) {
+    throw new Error("Supported registry launchers cannot be deleted — archive them instead.");
+  }
+  const client = requireSupabase();
+  const { error } = await client
+    .from("hq_launcher_configs")
+    .delete()
+    .eq("launcher_id", launcherId)
+    .eq("is_custom", true);
+  if (error) throw error;
+}
+
+// Dependency summary used to warn admins before archive/delete. Historical
+// launcher_events keep their own launcher_name/category snapshot, so they
+// stay renderable after a delete — but new metadata is lost.
+export async function fetchLauncherUsageSummary(launcherId) {
+  const client = requireSupabase();
+  const summary = { launcherEvents: 0, testerReports: 0 };
+  if (!launcherId) return summary;
+
+  const [eventsResult, reportsResult] = await Promise.all([
+    client.from("launcher_events").select("id", { count: "exact", head: true }).eq("launcher_id", launcherId),
+    client.from("tester_reports").select("id", { count: "exact", head: true }).eq("launcher_context", launcherId),
+  ]);
+  if (!eventsResult.error) summary.launcherEvents = eventsResult.count ?? 0;
+  if (!reportsResult.error) summary.testerReports = reportsResult.count ?? 0;
+  return summary;
+}
+
+export const LAUNCHER_ICON_BUCKET = "launcher-icons";
+const LAUNCHER_ICON_ALLOWED_TYPES = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+};
+const LAUNCHER_ICON_MAX_BYTES = 1024 * 1024;
+
+// Upload a launcher icon to Supabase Storage and return its public URL.
+// If the bucket has not been provisioned, fail with a clear message — the
+// custom image URL field remains the manual fallback path.
+export async function uploadLauncherIcon(launcherId, file) {
+  const client = requireSupabase();
+  if (!launcherId) throw new Error("A launcher ID is required to upload an icon.");
+  const extension = LAUNCHER_ICON_ALLOWED_TYPES[file?.type];
+  if (!extension) {
+    throw new Error("Unsupported image type. Use PNG, JPG, WebP or SVG.");
+  }
+  if (file.size > LAUNCHER_ICON_MAX_BYTES) {
+    throw new Error("Icon image must be under 1MB.");
+  }
+
+  const path = `${launcherId}/${Date.now()}.${extension}`;
+  const { error } = await client.storage
+    .from(LAUNCHER_ICON_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: true });
+  if (error) {
+    if (/bucket not found/i.test(error.message ?? "")) {
+      throw new Error(`Icon upload storage is not provisioned yet (missing "${LAUNCHER_ICON_BUCKET}" bucket). Apply the latest SQL migration, or paste an https image URL into the custom icon field instead.`);
+    }
+    throw error;
+  }
+  const { data } = client.storage.from(LAUNCHER_ICON_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error("Could not resolve the uploaded icon URL.");
+  return data.publicUrl;
 }
 
 export async function fetchAdminUsers() {
@@ -630,6 +1223,112 @@ export async function fetchAdminUsers() {
     .from("user_summary")
     .select("*")
     .order("last_seen_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAdminPackAdoptionSummary() {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_pack_adoption_summary");
+  if (error) {
+    if (["PGRST202", "42883", "42501"].includes(error.code)) {
+      console.warn("[HQ PACKS] Could not load saved pack adoption summary", error.message);
+      return [];
+    }
+    throw error;
+  }
+  return data ?? [];
+}
+
+// ── HQ access management (owner/admin only; every call is audit-logged) ─────
+
+// Grant/revoke membership by email. Membership is commercial only
+// (free|founder|premium); is_tester is an orthogonal flag. entitlementOverrides
+// is an optional object merged over the membership defaults.
+export async function hqSetUserAccess({
+  email,
+  grant,
+  membership = "premium",
+  expiresAt = null,
+  reason = null,
+  cohort = null,
+  isTester = null,
+  testerGroup = null,
+  entitlementOverrides = null,
+}) {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_set_user_access", {
+    p_email: email,
+    p_grant: grant,
+    p_membership: membership,
+    p_expires_at: expiresAt,
+    p_reason: reason,
+    p_cohort: cohort,
+    p_is_tester: isTester,
+    p_tester_group: testerGroup,
+    p_entitlement_overrides: entitlementOverrides,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function hqCreateAccessCode({
+  code,
+  label = null,
+  maxUses = null,
+  grantsMembership = "premium",
+  grantReason = null,
+  cohort = null,
+  grantsDurationDays = null,
+  expiresAt = null,
+  grantsTester = false,
+  testerGroup = null,
+  entitlementOverrides = null,
+}) {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_create_access_code", {
+    p_code: code,
+    p_label: label,
+    p_max_uses: maxUses,
+    p_grants_membership: grantsMembership,
+    p_grant_reason: grantReason,
+    p_cohort: cohort,
+    p_grants_duration_days: grantsDurationDays,
+    p_expires_at: expiresAt,
+    p_grants_tester: grantsTester,
+    p_tester_group: testerGroup,
+    p_entitlement_overrides: entitlementOverrides,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function hqSetAccessCodeActive(code, active) {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("hq_set_access_code_active", {
+    p_code: code,
+    p_active: active,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchAccessCodes() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("mybishbash_access_codes")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchPendingAccessGrants() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("pending_access_grants")
+    .select("*")
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
@@ -656,7 +1355,7 @@ export async function fetchAdminAnalytics() {
       .limit(500),
     client
       .from("launch_signups")
-      .select("id,email,country,created_at")
+      .select("id,email,country,source_code,created_at")
       .order("created_at", { ascending: false })
       .limit(1000),
     client

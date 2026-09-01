@@ -1,0 +1,15 @@
+-- Phase 1 fix-forward: grant table privileges on public.client_errors.
+--
+-- 202607100001_client_errors.sql created the table and its RLS policies but
+-- omitted the table-level GRANTs. In PostgreSQL, RLS filters rows only AFTER a
+-- role already holds table privileges — without a GRANT the authenticated role
+-- gets a hard "permission denied for table client_errors" (SQLSTATE 42501)
+-- before any policy is consulted. That would have made the error reporter's
+-- insert fail silently in production (the reporter swallows errors by design),
+-- so telemetry would never persist. RLS then gates what these grants expose:
+--   • INSERT is restricted to own rows by "users can insert their own error reports".
+--   • SELECT is restricted to admins by "admins can read client errors".
+-- No update/delete grant: client error reports are append-only. No anon grant:
+-- reports are authenticated-only. Mirrors the grant pattern used by every other
+-- table in this schema (see 202605120001_create_hq_admin_schema.sql).
+grant select, insert on public.client_errors to authenticated;

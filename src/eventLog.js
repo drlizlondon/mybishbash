@@ -1,35 +1,17 @@
 import { createId } from "./utils";
 import { supabase } from "./lib/supabaseClient";
+import { getStorageItem, setStorageItem } from "./storage";
 
 const EVENT_LOG_KEY = "mybishbash.event-log.v1";
 const USER_ID_KEY = "mybishbash.user-id.v1";
 const OFFLINE_QUEUE_KEY = "mybishbash.offline-event-queue.v1";
 const SUPABASE_EVENTS_TABLE = import.meta.env.VITE_SUPABASE_EVENTS_TABLE || "mybishbash_events";
 const LEGACY_SUPABASE_EVENTS_TABLE = ("bish" + "bash") + "_events";
-const STORAGE_PREFIX = "mybishbash";
-const LEGACY_STORAGE_PREFIX = "bish" + "bash";
 
-function getLegacyStorageKey(key) {
-  return key.startsWith(`${STORAGE_PREFIX}.`) ? key.replace(`${STORAGE_PREFIX}.`, `${LEGACY_STORAGE_PREFIX}.`) : null;
-}
-
-function getStorageItem(key) {
-  const value = window.localStorage.getItem(key);
-  if (value !== null) return value;
-
-  const legacyKey = getLegacyStorageKey(key);
-  if (!legacyKey) return null;
-
-  const legacyValue = window.localStorage.getItem(legacyKey);
-  if (legacyValue !== null) {
-    window.localStorage.setItem(key, legacyValue);
-  }
-  return legacyValue;
-}
-
-function setStorageItem(key, value) {
-  window.localStorage.setItem(key, value);
-}
+// The storage funnel and its legacy-prefix shim live in storage.js. This file
+// carried a byte-for-byte private duplicate until Phase 5 commit 1.5; two
+// copies of one shim is a drift hazard and a second sink the persistence
+// engine would have had to learn about. Keys and payloads are unchanged.
 
 function isMissingTableError(error) {
   return error?.code === "PGRST205" || /Could not find the table/i.test(error?.message ?? "");
@@ -39,7 +21,10 @@ async function insertEventWithFallback(event) {
   let lastError = null;
 
   for (const tableName of [SUPABASE_EVENTS_TABLE, LEGACY_SUPABASE_EVENTS_TABLE]) {
-    const { error } = await supabase.from(tableName).insert([event]);
+    const { error } = await supabase.from(tableName).upsert([event], {
+      onConflict: "id",
+      ignoreDuplicates: true,
+    });
     if (!error || error.code === "23505") return { error: null };
     if (isMissingTableError(error)) {
       lastError = error;

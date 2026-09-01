@@ -1,10 +1,12 @@
 import { devices, expect, test, type Page } from '@playwright/test';
+import { readIndexedDbJson } from './indexeddb';
 
 declare global {
   interface Window {
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
     __MYBISHBASH_LAUNCH_SESSION?: { entrySurface?: string; launcherId?: string | null };
+    __MYBISHBASH_CARD_OVERLAY_MOUNTS?: Array<Record<string, unknown>>;
   }
 }
 
@@ -19,6 +21,7 @@ type SeedOptions = {
   actionCards?: Array<Record<string, unknown>>;
   dislikedPackCardIds?: string[];
   launcherBehaviorSettings?: Record<string, Record<string, unknown>>;
+  homeScreenVersions?: Record<string, Record<string, unknown>>;
   setupComplete?: boolean;
   testerMode?: boolean;
 };
@@ -31,7 +34,7 @@ function smokeCard(id: string, promptText: string) {
     theme: 'Minimal',
     icon: 'heart',
     frequency: 'once_daily',
-    timingWindows: ['morning', 'day', 'evening'],
+    timingWindows: ['morning', 'day', 'evening', 'night'],
     paused: false,
     disliked: false,
     deletedAt: null,
@@ -61,6 +64,30 @@ function actionCard(id: string, title: string, launchUrl: string) {
     deletedAt: null,
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+function currentDateKey() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function commitmentCard(id: string, promptText: string, overrides: Record<string, unknown> = {}) {
+  return {
+    ...smokeCard(id, promptText),
+    cardKind: 'commitment',
+    dashboardTitle: 'Today’s Commitment',
+    commitmentReason: 'Because I said I would.',
+    commitmentTimingMode: 'day',
+    commitmentDecisionDate: currentDateKey(),
+    commitmentDecisionAt: now,
+    ...overrides,
   };
 }
 
@@ -117,18 +144,20 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
     actionCards = [],
     cards = [],
     dislikedPackCardIds = [],
+    homeScreenVersions = {},
     launcherBehaviorSettings = launcherSettings(false),
     setupComplete = true,
     testerMode = false,
   } = options;
   await page.addInitScript(
-    ({ seededActionCards, seededCards, seededDislikedPackCardIds, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
+    ({ seededActionCards, seededCards, seededDislikedPackCardIds, seededHomeScreenVersions, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', String(seededTesterMode));
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
       window.localStorage.setItem('mybishbash.setup-complete.v1', String(seededSetupComplete));
       window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'E2E', timezone: 'Europe/London' }));
       window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(seededCards));
+      window.localStorage.setItem('mybishbash.home-screen-versions.v1', JSON.stringify(seededHomeScreenVersions));
       window.localStorage.setItem('mybishbash.event-log.v1', '[]');
       window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
       window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', JSON.stringify(seededDislikedPackCardIds));
@@ -144,9 +173,38 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
       seededActionCards: actionCards,
       seededCards: cards,
       seededDislikedPackCardIds: dislikedPackCardIds,
+      seededHomeScreenVersions: homeScreenVersions,
       seededLauncherBehaviorSettings: launcherBehaviorSettings,
       seededSetupComplete: setupComplete,
       seededTesterMode: testerMode,
+    },
+  );
+}
+
+async function seedMainDemoState(page: Page, options: Pick<SeedOptions, 'cards' | 'launcherBehaviorSettings'> = {}) {
+  const {
+    cards = [],
+    launcherBehaviorSettings = launcherSettings(false),
+  } = options;
+  const actionCards = hiddenStarterActionCards();
+  await page.addInitScript(
+    ({ seededActionCards, seededCards, seededLauncherBehaviorSettings }) => {
+      window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
+      window.localStorage.removeItem('MYBISHBASH_E2E_MODE');
+      window.localStorage.removeItem('MYBISHBASH_E2E_TESTER_MODE');
+      window.localStorage.setItem('mybishbash.setup-complete.v1', 'true');
+      window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'Demo', timezone: 'Europe/London' }));
+      window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(seededCards));
+      window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+      window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
+      window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', '[]');
+      window.localStorage.setItem('mybishbash.action-cards.v1', JSON.stringify(seededActionCards));
+      window.localStorage.setItem('mybishbash.launcher-behavior-settings.v1', JSON.stringify(seededLauncherBehaviorSettings));
+    },
+    {
+      seededActionCards: actionCards,
+      seededCards: cards,
+      seededLauncherBehaviorSettings: launcherBehaviorSettings,
     },
   );
 }
@@ -157,6 +215,13 @@ async function getNavigationAttempts(page: Page) {
 
 async function gotoApp(page: Page, path: string) {
   await page.goto(`/mybishbash${path}`);
+}
+
+async function navigateWithinApp(page: Page, path: string) {
+  await page.evaluate((nextPath) => {
+    window.history.pushState({}, '', `/mybishbash${nextPath}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
 }
 
 async function simulateStandaloneDisplayMode(page: Page) {
@@ -204,62 +269,45 @@ test('app loads into a safe entry state without console errors', async ({ page }
 
   await gotoApp(page, '/home');
 
-  await expect(page.getByTestId('sync-screen').or(page.getByTestId('app-shell')).or(page.getByText(/Make MyBishBash your gentle pattern interrupt/i))).toBeVisible();
+  await expect(page.getByTestId('sync-screen').or(page.getByTestId('app-shell')).or(page.getByText(/Make myBishBash your gentle pattern interrupt/i))).toBeVisible();
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('in-app fake launchers open real destinations without showing interruption cards', async ({ page }) => {
+test('in-app fake launchers route to caught-up screen when no cards and no pause', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  const expectedDestinations = {
-    safari: safariDesktopDestination,
-    youtube: /^https:\/\/www\.youtube\.com/,
-    instagram: /^https:\/\/www\.instagram\.com/,
-  };
-
-  for (const [launcherId, expectedDestination] of Object.entries(expectedDestinations)) {
-    await page.getByTestId(`fake-launcher-${launcherId}`).click();
-    await expect.poll(async () => (await getNavigationAttempts(page)).length).toBeGreaterThan(0);
-    const attempts = await getNavigationAttempts(page);
-    const latest = attempts[attempts.length - 1];
-    expect(latest.href).toMatch(expectedDestination);
-    expect(latest.metadata).toMatchObject({
-      versionId: launcherId,
-      reason: 'fake_launcher_icon_clicked',
-    });
-    await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-    await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
-  }
-
-  await expectNoConsoleErrors(consoleErrors);
-});
-
-test('Safari desktop fake launcher uses web fallback destination', async ({ page }) => {
-  const consoleErrors = await installConsoleErrorGuard(page);
-  await seedE2EState(page, { cards: [] });
-
-  await gotoApp(page, '/home');
-  await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('fake-launcher-safari').click();
-
-  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
-  const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(safariDesktopDestination);
-  expect(attempt.href).not.toMatch(safariMarketingDestination);
-  expect(attempt.metadata).toMatchObject({
-    versionId: 'safari',
-    reason: 'fake_launcher_icon_clicked',
-  });
+  // Tapping the protected-launch control with no active pause must enter the
+  // card flow, not launch the real app directly.
+  await page.getByTestId('apps-test-shortcut-safari').click();
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester in-app fake launcher shortcuts open destinations without starting intervention', async ({ page }) => {
+test('Safari desktop fake launcher routes to caught-up screen when no cards and no pause', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [], testerMode: true });
+
+  await gotoApp(page, '/apps/safari');
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await page.getByTestId('apps-test-shortcut-safari').click();
+
+  // No active pause → card flow → empty caught-up screen
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('tester in-app fake launcher shortcuts enter card flow (no active pause)', async ({ page }) => {
+  // Per product requirement: direct launch ONLY when there is an active, unexpired pause.
+  // Tester mode does not bypass the card/intervention flow from the fake launcher bar.
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [
@@ -270,60 +318,33 @@ test('tester in-app fake launcher shortcuts open destinations without starting i
     testerMode: true,
   });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
-  const expectedDestinations = {
-    safari: safariDesktopDestination,
-    instagram: /^https:\/\/www\.instagram\.com/,
-    youtube: /^https:\/\/www\.youtube\.com/,
-  };
-
-  for (const [launcherId, expectedDestination] of Object.entries(expectedDestinations)) {
-    const attemptsBefore = (await getNavigationAttempts(page)).length;
-    await page.getByTestId(`fake-launcher-${launcherId}`).click();
-    await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(attemptsBefore + 1);
-    const attempts = await getNavigationAttempts(page);
-    const latest = attempts[attempts.length - 1];
-    expect(latest.href).toMatch(expectedDestination);
-    expect(latest.metadata).toMatchObject({
-      versionId: launcherId,
-      source: 'home_fake_launcher_bar',
-      reason: 'fake_launcher_icon_clicked',
-    });
-    await expect(page).toHaveURL(/\/mybishbash\/home$/);
-    await expect(page.getByTestId('card-overlay-pack')).toHaveCount(0);
-    await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-    await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
-    await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
-    await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.entrySurface)).toBe('mybishbash_home');
-    await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.launcherId ?? null)).toBe(null);
-  }
+  // Tapping a protected launcher with no active pause must enter the card flow,
+  // even in tester mode — direct launch only happens with an active pause.
+  await page.getByTestId('apps-test-shortcut-safari').click();
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
 
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('Safari iOS fake launcher attempts Safari-specific x-safari destination', async ({ browser }) => {
+test('Safari iOS fake launcher routes to caught-up screen when no cards and no pause', async ({ browser }) => {
   const context = await browser.newContext({ ...devices['iPhone 12'] });
   const page = await context.newPage();
   await simulateStandaloneDisplayMode(page);
   const consoleErrors = await installConsoleErrorGuard(page);
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
-  await gotoApp(page, '/home');
+  await gotoApp(page, '/apps/safari');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('fake-launcher-safari').click();
+  await page.getByTestId('apps-test-shortcut-safari').click();
 
-  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
-  const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(safariIOSDestination);
-  expect(attempt.href).not.toMatch(safariMarketingDestination);
-  expect(attempt.metadata).toMatchObject({
-    versionId: 'safari',
-    reason: 'fake_launcher_icon_clicked',
-  });
+  // No active pause → card flow → empty caught-up screen
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
   await expectNoConsoleErrors(consoleErrors);
   await context.close();
 });
@@ -340,6 +361,55 @@ test('intercept route shows interruption flow and does not auto-open destination
   await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_LAUNCH_SESSION?.launcherId ?? null)).toBe('safari');
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(0);
   await expectNoConsoleErrors(consoleErrors);
+});
+
+test.describe('in-card app button bypasses interruption flow', () => {
+  const cases = [
+    { launcherId: 'safari', label: 'Safari', expected: safariDestination },
+    { launcherId: 'instagram', label: 'Instagram', expected: /^instagram:\/\/app$/ },
+    { launcherId: 'youtube', label: 'YouTube', expected: /^youtube:\/\// },
+    { launcherId: 'whatsapp', label: 'WhatsApp', expected: /^https:\/\/api\.whatsapp\.com\/send$/ },
+  ];
+
+  for (const { launcherId, label, expected } of cases) {
+    test(`${label} button opens the real destination from an active card`, async ({ page }) => {
+      const consoleErrors = await installConsoleErrorGuard(page);
+      await seedE2EState(page, {
+        cards: [smokeCard(`${launcherId}-direct-card`, `E2E ${label} direct card`)],
+        homeScreenVersions: {
+          [launcherId]: {
+            availabilityStatus: 'public',
+            enabled: true,
+          },
+        },
+        testerMode: true,
+      });
+
+      await gotoApp(page, `/intercept/${launcherId}`);
+
+      const overlay = page.getByTestId('card-overlay-personal');
+      await expect(overlay).toBeVisible();
+      await expect(overlay.getByRole('heading', { name: `E2E ${label} direct card` })).toBeVisible();
+      await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(1);
+
+      await overlay.getByTestId(`fake-launcher-${launcherId}`).getByText(label, { exact: true }).click();
+
+      await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
+      const [attempt] = await getNavigationAttempts(page);
+      expect(attempt.href).toMatch(expected);
+      expect(attempt.href).not.toContain('/intercept/');
+      expect(attempt.href).not.toContain('/launch/');
+      expect(attempt.metadata).toMatchObject({
+        versionId: launcherId,
+        source: 'in_card_app_button',
+        reason: 'user_pressed_real_app_button',
+      });
+      await expect(page).toHaveURL(new RegExp(`/mybishbash/intercept/${launcherId}$`));
+      await expect.poll(async () => page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS?.length ?? 0)).toBe(1);
+      await expect(page.getByTestId('continue-to-app-card')).toHaveCount(0);
+      await expectNoConsoleErrors(consoleErrors);
+    });
+  }
 });
 
 test('continue-to-app opens the destination from no-card intercept state', async ({ page }) => {
@@ -360,13 +430,14 @@ test('continue-to-app opens the destination from no-card intercept state', async
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('normal Home opens personal cards separately from fake launcher behaviour', async ({ page }) => {
+test('normal Library opens personal cards separately from fake launcher behaviour', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, { cards: [smokeCard('home-card', 'E2E home card')] });
 
-  await gotoApp(page, '/home');
-  await expect(page.getByTestId('home-panel')).toBeVisible();
-  await page.getByTestId('home-card-home-card').click();
+  await gotoApp(page, '/library');
+  await expect(page.getByTestId('library-personal-section-toggle')).toBeVisible();
+  await page.getByTestId('library-personal-section-toggle').click();
+  await page.getByTestId('library-row-home-card').click();
 
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal').getByRole('heading', { name: 'E2E home card' })).toBeVisible();
@@ -387,7 +458,7 @@ test('launcher-origin card completion does not create an immediate card loop', a
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption off shows one Layer 1 card then ContinueToAppCard', async ({ page }) => {
+test('tester personal-first launcher with interruption off shows one Layer 1 card then ContinueToAppCard', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [smokeCard('tester-off-card', 'E2E tester interruption off card')],
@@ -416,7 +487,7 @@ test('tester weighted launcher with interruption off shows one Layer 1 card then
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption off and no Layer 1 card shows caught-up with continue action', async ({ page }) => {
+test('tester personal-first launcher with interruption off and no Layer 1 card shows caught-up with continue action', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [],
@@ -428,6 +499,7 @@ test('tester weighted launcher with interruption off and no Layer 1 card shows c
 
   await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
   await expect(page.getByText("You're all caught up.")).toBeVisible();
+  await expect(page.getByText('See you later.')).toBeVisible();
   await page.getByTestId('card-action-continue-to-app').click();
 
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
@@ -440,7 +512,7 @@ test('tester weighted launcher with interruption off and no Layer 1 card shows c
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption off shows active pack card instead of caught-up', async ({ page }) => {
+test('tester personal-first launcher with interruption off shows active pack card instead of caught-up', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [packSmokeCard('pack-active-card', 'E2E active pack card')],
@@ -470,11 +542,12 @@ test('tester weighted launcher with interruption off shows active pack card inst
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with exhausted personal cards still shows active pack card before caught-up', async ({ page }) => {
+test('tester personal-first launcher with exhausted personal cards still shows active pack card before caught-up', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
+  const futureNotYetUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   await seedE2EState(page, {
     cards: [
-      { ...smokeCard('exhausted-personal-card', 'E2E exhausted personal card'), notYetUntil: '2026-06-03T12:00:00.000Z' },
+      { ...smokeCard('exhausted-personal-card', 'E2E exhausted personal card'), notYetUntil: futureNotYetUntil },
       packSmokeCard('pack-after-exhausted-personal', 'E2E pack after exhausted personal'),
     ],
     launcherBehaviorSettings: launcherSettings(false),
@@ -494,7 +567,7 @@ test('tester weighted launcher with exhausted personal cards still shows active 
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption on shows Layer 1 card then interruption continue opens destination directly', async ({ page }) => {
+test('tester personal-first launcher with interruption on shows Layer 1 card then interruption continue opens destination directly', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [smokeCard('tester-on-card', 'E2E tester interruption on card')],
@@ -523,7 +596,7 @@ test('tester weighted launcher with interruption on shows Layer 1 card then inte
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption on and no Layer 1 card shows interruption directly', async ({ page }) => {
+test('tester personal-first launcher with interruption on and no Layer 1 card shows interruption directly', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [],
@@ -540,7 +613,7 @@ test('tester weighted launcher with interruption on and no Layer 1 card shows in
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher with interruption on and no valid interruption may show caught-up with continue action', async ({ page }) => {
+test('tester personal-first launcher with interruption on and no valid interruption skips caught-up and continues to app', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedE2EState(page, {
     cards: [],
@@ -551,11 +624,10 @@ test('tester weighted launcher with interruption on and no valid interruption ma
 
   await gotoApp(page, '/intercept/safari');
 
-  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
   await expect(page.getByTestId('card-overlay-interruption')).toHaveCount(0);
-  await expect(page.getByText("You're all caught up.")).toBeVisible();
-  await expect(page.getByTestId('card-action-continue-to-app')).toBeVisible();
-  await page.getByTestId('card-action-continue-to-app').click();
+  await expect(page.getByText("You're all caught up.")).toHaveCount(0);
+  await page.getByTestId('card-action-continue-to-safari').click();
 
   await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
   const [attempt] = await getNavigationAttempts(page);
@@ -563,13 +635,13 @@ test('tester weighted launcher with interruption on and no valid interruption ma
   expect(attempt.href).not.toMatch(/example\.com\/e2e-action/);
   expect(attempt.metadata).toMatchObject({
     versionId: 'safari',
-    source: 'empty_card',
-    reason: 'user_pressed_continue_after_no_eligible_cards',
+    source: 'continue_card',
+    reason: 'user_pressed_continue',
   });
   await expectNoConsoleErrors(consoleErrors);
 });
 
-test('tester weighted launcher interruption alternative path opens action URL instead of fake launcher destination', async ({ page }) => {
+test('tester personal-first launcher interruption alternative path opens action URL instead of fake launcher destination', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   const actionUrl = 'https://example.com/e2e-action';
   await seedE2EState(page, {
@@ -610,37 +682,218 @@ test('basic card create, open, complete flow does not immediately reappear', asy
   await page.getByTestId('card-prompt-input').fill('E2E created card');
   await page.getByTestId('save-card-button').click();
 
-  await expect(page.getByText('E2E created card')).toBeVisible();
-  await page.getByText('E2E created card').click();
+  await page.getByTestId('bottom-nav-library').click();
+  await page.getByTestId('library-personal-section-toggle').click();
+  const createdLibraryRow = page.locator('[data-testid^="library-row-"]').filter({ hasText: 'E2E created card' });
+  await expect(createdLibraryRow).toBeVisible();
+  await createdLibraryRow.click();
   await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
   await page.getByTestId('card-action-done').click();
 
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'E2E created card' })).toBeVisible();
+  await expect(page.getByTestId('home-dashboard-summary')).toContainText('All 1 personal card complete today.');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('newly created card is persisted on-device before cloud sync', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+  await page.getByTestId('create-card-button').click();
+  await page.getByTestId('card-prompt-input').fill('E2E reload-persisted card');
+  await page.getByTestId('save-card-button').click();
+  await expect(page.getByText('Saved “E2E reload-persisted card”.')).toBeVisible();
+  await expect.poll(async () => (
+    await readIndexedDbJson<Array<Record<string, string>>>(page, 'mybishbash.cards.v1', [])
+  ).filter((card) => card.promptText === 'E2E reload-persisted card').length).toBe(1);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Home progress denominator uses total Personal Cards, not only currently eligible cards', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  const todayKey = currentDateKey();
+  await seedE2EState(page, {
+    cards: [
+      {
+        ...smokeCard('done-card', 'Done today card'),
+        statusToday: 'doneToday',
+        doneDate: todayKey,
+      },
+      {
+        ...smokeCard('night-only-card', 'Night-only card'),
+        timingWindows: ['night'],
+      },
+    ],
+  });
+
+  await gotoApp(page, '/home');
+  await expect(page.locator('.home-progress-number')).toHaveText('1/2');
+  await expect(page.getByTestId('home-dashboard-summary')).toContainText('1 of 2 cards completed today.');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('main app opens Home directly when no Personal Cards are due', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedMainDemoState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up for now.")).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back home' })).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('main app Personal Card response returns directly Home without caught-up screen', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedMainDemoState(page, {
+    cards: [smokeCard('main-personal-card', 'Drink some water')],
+  });
+
+  await gotoApp(page, '/card/main-personal-card');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Drink some water' })).toBeVisible();
+  await page.getByTestId('card-action-done').click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-empty')).toHaveCount(0);
+  await expect(page.getByText("You're all caught up for now.")).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back home' })).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('main app Commitment Card response returns directly Home without confirmation screen', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedMainDemoState(page, {
+    cards: [commitmentCard('main-commitment-card', 'I will go to the gym today')],
+  });
+
+  await gotoApp(page, '/card/main-commitment-card');
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'I will go to the gym today' })).toBeVisible();
+  await page.getByRole('button', { name: 'I will commit to this' }).click();
+
+  await expect(page).toHaveURL(/\/mybishbash\/home$/);
+  await expect(page.getByTestId('home-panel')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expect(page.getByText('Keep this with you.')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0);
   await expectNoConsoleErrors(consoleErrors);
 });
 
 test('mobile viewport keeps bottom nav and fake launcher destination behaviour working', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await seedE2EState(page, { cards: [] });
+  await seedE2EState(page, { cards: [], testerMode: true });
 
   await gotoApp(page, '/home');
   await expect(page.getByTestId('app-shell')).toBeVisible();
-  await page.getByTestId('bottom-nav-settings').click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.getByTestId('bottom-nav-apps').click();
+  await expect(page.getByTestId('apps-panel')).toBeVisible();
   await page.getByTestId('bottom-nav-home').click();
   await expect(page.getByTestId('home-panel')).toBeVisible();
 
-  await page.getByTestId('fake-launcher-instagram').click();
-  await expect.poll(async () => (await getNavigationAttempts(page)).length).toBe(1);
-  const [attempt] = await getNavigationAttempts(page);
-  expect(attempt.href).toMatch(/^https:\/\/www\.instagram\.com/);
-  expect(attempt.metadata).toMatchObject({
-    versionId: 'instagram',
-    reason: 'fake_launcher_icon_clicked',
-  });
+  await page.getByTestId('bottom-nav-apps').click();
+  await page.getByTestId('apps-option-action-instagram').click();
+  await expect(page).toHaveURL(/\/mybishbash\/install\/instagram\/$/);
+  await page.goto('/mybishbash/apps/instagram?installed=1');
+  await page.getByTestId('apps-test-shortcut-instagram').click();
+  // No active pause → card flow → empty caught-up screen
+  await expect(page.getByTestId('card-overlay-empty')).toBeVisible();
+  expect(await getNavigationAttempts(page)).toHaveLength(0);
   await expect(page.getByTestId('card-overlay-personal')).toHaveCount(0);
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Home empty states use calm copy without stacked zero language', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, { cards: [] });
+
+  await gotoApp(page, '/home');
+  const summary = page.getByTestId('home-dashboard-summary');
+  await expect(summary).toContainText('No Personal Cards yet.');
+  await expect(summary).toContainText('Create one when you are ready.');
+  await expect(summary).toContainText('Your next step');
+  await expect(summary).toContainText('Create your first Personal Card');
+  await expect(summary).toContainText('Choose your first app');
+  await expect(summary).not.toContainText('You’re all clear today');
+  await expect(summary).not.toContainText('Nothing needs your attention.');
+  await expect(summary).not.toContainText('No live commitment');
+  await expect(summary).not.toContainText('Create commitment');
+  await expect(summary).not.toContainText('No personal cards today');
+  await expect(summary).not.toContainText('0 live commitments');
+  await expect(page.getByTestId('home-live-commitment-card')).toHaveCount(0);
+  await expect(page.locator('.home-progress-number')).toHaveText('0');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Home commitment card shows the active commitment state', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+
+  await seedE2EState(page, {
+    cards: [
+      commitmentCard('active-commitment', 'go for a walk today', {
+        commitmentStatusToday: 'made',
+        statusToday: 'doneToday',
+      }),
+    ],
+  });
+  await gotoApp(page, '/home');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('Live Commitment');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('go for a walk today');
+  await expect(page.getByTestId('home-live-commitment-card')).toContainText('1 live commitment');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('Home commitment card omits the completed commitment state', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [
+      commitmentCard('completed-commitment', 'not eat snacks after dinner', {
+        commitmentStatusToday: 'declined',
+        statusToday: 'doneToday',
+      }),
+    ],
+  });
+  await gotoApp(page, '/home');
+  const summary = page.getByTestId('home-dashboard-summary');
+  await expect(page.getByTestId('home-live-commitment-card')).toHaveCount(0);
+  await expect(summary).not.toContainText('Commitments complete');
+  await expect(summary).not.toContainText('No active commitments');
+  await expect(summary).not.toContainText('0 live commitments');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+test('warm launch after app settings keeps fake launcher return target', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await seedE2EState(page, {
+    cards: [
+      packSmokeCard('card-1', 'First task'),
+      packSmokeCard('card-2', 'Second task'),
+    ]
+  });
+
+  await gotoApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  // In fake_launcher, pack cards have 'Continue'. In home, they have 'Back to home'
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+  await expect(page.getByTestId('card-action-back-to-home')).toHaveCount(0);
+
+  await page.getByTestId('dashboard-shortcut').click();
+  await expect(page).toHaveURL(/\/apps\/safari$/);
+  await expect(page.getByTestId('apps-interruptions-toggle-safari')).toBeVisible();
+
+  await navigateWithinApp(page, '/intercept/safari');
+
+  await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
+  await expect(page.getByTestId('card-action-continue')).toBeVisible();
+  await expect(page.getByTestId('card-action-back-to-home')).toHaveCount(0);
+
   await expectNoConsoleErrors(consoleErrors);
 });

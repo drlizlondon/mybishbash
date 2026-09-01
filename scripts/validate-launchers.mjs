@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { FAKE_APP_LAUNCHERS, buildManifestForLauncher, mergeLauncherConfig } from "../src/lib/launcherRegistry.js";
+import {
+  FAKE_APP_LAUNCHERS,
+  assertKnownLauncherId,
+  buildManifestForLauncher,
+  mergeLauncherConfig,
+  mergeLauncherConfigs,
+  resolveLauncherIconSrc,
+  sanitizeLauncherUrl,
+} from "../src/lib/launcherRegistry.js";
+import { BASE, BASE_NO_SLASH, PRODUCTION_ORIGIN } from "../src/lib/basePath.js";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFields = [
@@ -19,18 +28,62 @@ const requiredFields = [
   "enabled",
   "hqVisible",
 ];
+const launcherIds = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
+const liveLauncherIds = ["safari", "youtube", "instagram"];
+const acceptedPhaseTwoLauncherIds = ["chrome", "reddit", "linkedin", "whatsapp", "bbc-news", "duolingo"];
+
+assert.equal(new Set(launcherIds).size, launcherIds.length, "Launcher IDs must be unique");
+for (const id of acceptedPhaseTwoLauncherIds) {
+  assert.equal(launcherIds.includes(id), true, `${id} should be a supported code-reviewed launcher`);
+}
+assert.equal(launcherIds.includes("tiktok"), false, "TikTok should wait for a follow-up branch");
+assert.equal(launcherIds.includes("hinge"), false, "Hinge should wait for a follow-up branch");
+
+for (const id of liveLauncherIds) {
+  const launcher = FAKE_APP_LAUNCHERS.find((item) => item.id === id);
+  assert.equal(launcher?.enabled, true, `${id} should remain enabled`);
+  assert.equal(launcher?.availabilityStatus, "public", `${id} should remain publicly available`);
+  assert.equal(launcher?.hqVisible, true, `${id} should remain visible in HQ`);
+}
+
+for (const id of acceptedPhaseTwoLauncherIds) {
+  const launcher = FAKE_APP_LAUNCHERS.find((item) => item.id === id);
+  assert.equal(launcher?.enabled, false, `${id} should stay disabled until icon/device QA`);
+  assert.equal(launcher?.availabilityStatus, "hidden", `${id} should stay hidden from users until icon/device QA`);
+  assert.equal(launcher?.hqVisible, true, `${id} should stay visible in HQ for review`);
+}
 
 for (const launcher of FAKE_APP_LAUNCHERS) {
   for (const field of requiredFields) {
     assert.notEqual(launcher[field], undefined, `${launcher.id} missing ${field}`);
   }
 
+  const resolvedIconSrc = resolveLauncherIconSrc(launcher);
+  assert.equal(resolvedIconSrc, launcher.iconSrc, `${launcher.id} should use its registry icon as the resolved logo`);
+  if (resolvedIconSrc.startsWith(BASE)) {
+    const iconFilePath = resolve(root, "public", resolvedIconSrc.slice(BASE.length));
+    assert.equal(existsSync(iconFilePath), true, `${launcher.id} icon file missing: ${resolvedIconSrc}`);
+  }
+
+  const generatedManifestPath = resolve(root, "public", "launchers", launcher.id, "manifest.webmanifest");
+  const generatedInstallPath = resolve(root, "public", "install", launcher.id, "index.html");
+  assert.equal(existsSync(generatedManifestPath), true, `${launcher.id} generated manifest file missing`);
+  assert.equal(existsSync(generatedInstallPath), true, `${launcher.id} generated install page missing`);
+
+  const generatedManifest = JSON.parse(readFileSync(generatedManifestPath, "utf8"));
+  assert.equal(generatedManifest.icons?.[0]?.src, resolvedIconSrc, `${launcher.id} manifest should use the registry logo`);
+  assert.match(
+    readFileSync(generatedInstallPath, "utf8"),
+    new RegExp(`src="${escapeRegExp(resolvedIconSrc)}"`),
+    `${launcher.id} install page should use the registry logo`,
+  );
+
   if (!launcher.enabled) continue;
 
-  assert.match(launcher.installPath, new RegExp(`^/mybishbash/install/${launcher.id}/$`));
+  assert.match(launcher.installPath, new RegExp(`^${escapeRegExp(BASE)}install/${launcher.id}/$`));
   assert.equal(launcher.launchPath, `/intercept/${launcher.id}`);
-  assert.equal(launcher.manifestPath, `/mybishbash/launchers/${launcher.id}/manifest.webmanifest`);
-  assert.equal(buildManifestForLauncher(launcher).start_url, `https://drlizlondon.github.io/mybishbash/intercept/${launcher.id}`);
+  assert.equal(launcher.manifestPath, `${BASE}launchers/${launcher.id}/manifest.webmanifest`);
+  assert.equal(buildManifestForLauncher(launcher).start_url, `${PRODUCTION_ORIGIN}${BASE_NO_SLASH}/intercept/${launcher.id}`);
 
   const manifestPath = resolve(root, "public", "launchers", launcher.id, "manifest.webmanifest");
   const installPath = resolve(root, "public", "install", launcher.id, "index.html");
@@ -38,12 +91,27 @@ for (const launcher of FAKE_APP_LAUNCHERS) {
   assert.equal(existsSync(installPath), true, `${launcher.id} install page missing`);
 
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  assert.equal(manifest.start_url, `https://drlizlondon.github.io/mybishbash/intercept/${launcher.id}`);
-  assert.equal(manifest.scope, "https://drlizlondon.github.io/mybishbash/");
+  assert.equal(manifest.start_url, `${PRODUCTION_ORIGIN}${BASE_NO_SLASH}/intercept/${launcher.id}`);
+  assert.equal(manifest.scope, `${PRODUCTION_ORIGIN}${BASE}`);
   assert.equal(manifest.display, "standalone");
 
   const installHtml = readFileSync(installPath, "utf8");
-  assert.match(installHtml, new RegExp(`launcherContext "<span data-launcher-context>${launcher.id}</span>"`));
+  assert.match(
+    installHtml,
+    new RegExp(`Set up [\\s\\S]{0,120}${escapeRegExp(launcher.displayName)}[\\s\\S]{0,120} with myBishBash`),
+  );
+  assert.match(
+    installHtml,
+    new RegExp(`myBishBash can appear first with the reminders, commitments and prompts you chose`),
+  );
+  assert.match(installHtml, /Open this page in Safari/);
+  assert.match(installHtml, /Tap Share/);
+  assert.match(installHtml, /Tap Add to Home Screen/);
+  assert.match(installHtml, /Open this page in Chrome/);
+  assert.match(installHtml, /Tap the three dots/);
+  assert.match(installHtml, /Tap Add to Home screen or Install app/);
+  assert.match(installHtml, /Copy setup link/);
+  assert.match(installHtml, /If you cannot see Share, copy this link and open it in Safari/);
 }
 
 const normalLaunchEvent = { event_type: "app_opened", route: "/home" };
@@ -51,6 +119,7 @@ assert.notEqual(normalLaunchEvent.event_type, "fake_launcher_opened");
 
 const safari = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "safari");
 const instagram = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "instagram");
+const whatsapp = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "whatsapp");
 assert.equal(
   safari.webFallbackUrl,
   "https://www.google.com",
@@ -93,7 +162,126 @@ assert.equal(instagramWithEmptyCloudFields.iosAppUrl, instagram.iosAppUrl);
 assert.equal(instagramWithEmptyCloudFields.androidIntentUrl, instagram.androidIntentUrl);
 assert.equal(instagramWithEmptyCloudFields.webFallbackUrl, instagram.webFallbackUrl);
 
+assert.equal(whatsapp.enabled, false, "WhatsApp must remain disabled until manual iPhone QA passes");
+assert.equal(whatsapp.hqVisible, true, "WhatsApp should remain visible in HQ for manual QA");
+assert.equal(whatsapp.iosAppUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.iosWebFallbackUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.webFallbackUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.manualUrl, "https://api.whatsapp.com/send");
+assert.match(whatsapp.androidIntentUrl, /^intent:\/\/send\/#Intent;scheme=whatsapp;package=com\.whatsapp;/);
+assert.match(whatsapp.androidIntentUrl, /S\.browser_fallback_url=https%3A%2F%2Fapi\.whatsapp\.com%2Fsend;end$/);
+assert.equal(whatsapp.androidWebFallbackUrl, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.qaDestinationCandidates?.preferred, "https://api.whatsapp.com/send");
+assert.equal(whatsapp.qaDestinationCandidates?.fallback, "https://api.whatsapp.com/send");
+assert.equal(
+  whatsapp.qaDestinationCandidates?.ios?.includes("whatsapp://"),
+  true,
+  "WhatsApp QA candidates should document whatsapp:// without making it the default runtime URL",
+);
+assert.equal(
+  whatsapp.qaDestinationCandidates?.ios?.includes("https://web.whatsapp.com/"),
+  true,
+  "WhatsApp QA candidates should keep web.whatsapp.com documented as a weak iPhone comparison case",
+);
+
+const chrome = FAKE_APP_LAUNCHERS.find((launcher) => launcher.id === "chrome");
+assert.equal(chrome.iconSrc, `${BASE}icons/chrome-cover.png`, "Chrome must use its own logo, not the myBishBash placeholder");
+const chromeManifestPath = resolve(root, "public", "launchers", "chrome", "manifest.webmanifest");
+const chromeInstallPath = resolve(root, "public", "install", "chrome", "index.html");
+assert.equal(existsSync(chromeManifestPath), true, "Chrome manifest file missing");
+assert.equal(existsSync(chromeInstallPath), true, "Chrome install page missing");
+const chromeManifest = JSON.parse(readFileSync(chromeManifestPath, "utf8"));
+assert.equal(chromeManifest.icons?.[0]?.src, `${BASE}icons/chrome-cover.png`);
+assert.equal(chromeManifest.icons?.[0]?.type, "image/png");
+assert.match(readFileSync(chromeInstallPath, "utf8"), /icons\/chrome-cover\.png/);
+
+const whatsappManifestPath = resolve(root, "public", "launchers", "whatsapp", "manifest.webmanifest");
+const whatsappInstallPath = resolve(root, "public", "install", "whatsapp", "index.html");
+assert.equal(existsSync(whatsappManifestPath), true, "WhatsApp manifest file missing");
+assert.equal(existsSync(whatsappInstallPath), true, "WhatsApp install page missing");
+const whatsappManifest = JSON.parse(readFileSync(whatsappManifestPath, "utf8"));
+assert.equal(whatsappManifest.start_url, `${PRODUCTION_ORIGIN}${BASE_NO_SLASH}/intercept/whatsapp`);
+assert.equal(whatsappManifest.display, "standalone");
+assert.match(
+  readFileSync(whatsappInstallPath, "utf8"),
+  /Set up [\s\S]{0,120}WhatsApp[\s\S]{0,120} with myBishBash/,
+);
+
+const launchersWithUnknownCloudConfig = mergeLauncherConfigs([
+  {
+    id: "tiktok",
+    displayName: "TikTok",
+    enabled: true,
+    hqVisible: true,
+    webFallbackUrl: "https://www.tiktok.com",
+  },
+  {
+    id: "instagram",
+    displayName: "Instagram Test Name",
+  },
+]);
+assert.equal(
+  launchersWithUnknownCloudConfig.some((launcher) => launcher.id === "tiktok"),
+  false,
+  "Unknown HQ launcher config IDs must not become live launchers",
+);
+assert.equal(
+  launchersWithUnknownCloudConfig.find((launcher) => launcher.id === "instagram")?.displayName,
+  "Instagram Test Name",
+  "Known HQ launcher configs should still override supported launchers",
+);
+
+assert.equal(sanitizeLauncherUrl("googlechromes://www.google.com"), "googlechromes://www.google.com");
+assert.equal(sanitizeLauncherUrl("https://api.whatsapp.com/send"), "https://api.whatsapp.com/send");
+assert.equal(sanitizeLauncherUrl("https://wa.me/"), "https://wa.me/");
+assert.equal(sanitizeLauncherUrl(whatsapp.androidIntentUrl), whatsapp.androidIntentUrl);
+assert.equal(sanitizeLauncherUrl("whatsapp://"), "");
+assert.equal(sanitizeLauncherUrl("tiktok://"), "");
+assert.equal(sanitizeLauncherUrl("hinge://"), "");
+
+assert.throws(
+  () => assertKnownLauncherId("tiktok"),
+  /Only supported launcher IDs can be saved as live launcher configs/,
+  "Unknown launcher IDs must be rejected before Supabase save",
+);
+
 const syncSource = readFileSync(resolve(root, "src", "lib", "mybishbashSync.js"), "utf8");
 assert.match(syncSource, /withTimeout\(query,\s*1200,\s*\{ data: \[\], error: null \}/);
+assert.match(
+  syncSource,
+  /isMissingColumnError\(error\)[\s\S]{0,300}upsert\(legacyPayload\)/,
+  "Launcher config saves must fall back to legacy columns when the availability migration is missing",
+);
+assert.match(
+  syncSource,
+  /availability_status: availabilityStatus/,
+  "Launcher config saves must persist the availability status",
+);
+assert.match(
+  syncSource,
+  /availabilityStatus: row\.availability_status/,
+  "Launcher config fetches must map the availability status when present",
+);
+
+const appSource = readFileSync(resolve(root, "src", "App.jsx"), "utf8");
+assert.match(
+  appSource,
+  /return getAvailableLaunchersForUser\(\{\s*launchers: candidates,\s*testerStatus,\s*context: LAUNCHER_CONTEXTS\.FAKE_LAUNCHER_BAR,\s*\}\);/,
+  "Fake launcher bar options must come from the central availability selector",
+);
+assert.match(
+  appSource,
+  /const visibleVersions = getAvailableLaunchersForUser\(\{\s*launchers: candidates,\s*testerStatus,\s*context: LAUNCHER_CONTEXTS\.SETTINGS,\s*\}\);/,
+  "Apps install options must come from the central availability selector",
+);
+assert.match(
+  appSource,
+  /const appsOptionVersions = candidates\.filter\(\(version\) =>\s*APPS_OPTION_IDS\.includes\(version\.id\) && !visibleVersionIds\.has\(version\.id\)/,
+  "Apps setup must keep supported add options available even before public launcher release",
+);
 
 console.log(`Validated ${FAKE_APP_LAUNCHERS.length} launchers.`);
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

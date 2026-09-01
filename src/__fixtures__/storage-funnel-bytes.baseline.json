@@ -1,0 +1,654 @@
+{
+  "app-pauses": {
+    "writes": [
+      [
+        "set",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\",\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "set",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "set",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\",\"safari\":\"2026-06-01T12:05:00.000Z\"}"
+      ],
+      [
+        "set",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ]
+    ],
+    "reads": [
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\",\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\",\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\",\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\",\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"youtube\":\"2026-06-01T11:00:00.000Z\",\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\",\"safari\":\"2026-06-01T12:05:00.000Z\"}"
+      ],
+      [
+        "get",
+        "mybishbash.app-pauses.v1",
+        "{\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+      ]
+    ],
+    "final": {
+      "mybishbash.app-pauses.v1": "{\"instagram\":\"2026-06-01T12:30:00.000Z\"}"
+    }
+  },
+  "clear-shared-state": {
+    "writes": [
+      [
+        "remove",
+        "mybishbash.cards.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.setup-complete.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.mood.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.profile.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.home-screen-versions.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.home-screen-selected.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.card-packs.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.hidden-library-packs.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.disliked-pack-card-ids.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.global-interruption-mode.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.launcher-behavior-settings.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.action-cards.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.action-card-defaults-version.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.notifications.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.notification-schedule.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.app-pauses.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.timing-windows-prefs.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.event-log.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.offline-event-queue.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.user-id.v1"
+      ],
+      [
+        "remove",
+        "bishbash.cards.v1"
+      ],
+      [
+        "remove",
+        "bishbash.setup-complete.v1"
+      ],
+      [
+        "remove",
+        "bishbash.mood.v1"
+      ],
+      [
+        "remove",
+        "bishbash.profile.v1"
+      ],
+      [
+        "remove",
+        "bishbash.home-screen-versions.v1"
+      ],
+      [
+        "remove",
+        "bishbash.home-screen-selected.v1"
+      ],
+      [
+        "remove",
+        "bishbash.card-packs.v1"
+      ],
+      [
+        "remove",
+        "bishbash.hidden-library-packs.v1"
+      ],
+      [
+        "remove",
+        "bishbash.disliked-pack-card-ids.v1"
+      ],
+      [
+        "remove",
+        "bishbash.global-interruption-mode.v1"
+      ],
+      [
+        "remove",
+        "bishbash.launcher-behavior-settings.v1"
+      ],
+      [
+        "remove",
+        "bishbash.action-cards.v1"
+      ],
+      [
+        "remove",
+        "bishbash.action-card-defaults-version.v1"
+      ],
+      [
+        "remove",
+        "bishbash.notifications.v1"
+      ],
+      [
+        "remove",
+        "bishbash.notification-schedule.v1"
+      ],
+      [
+        "remove",
+        "bishbash.app-pauses.v1"
+      ],
+      [
+        "remove",
+        "bishbash.timing-windows-prefs.v1"
+      ],
+      [
+        "remove",
+        "bishbash.event-log.v1"
+      ],
+      [
+        "remove",
+        "bishbash.offline-event-queue.v1"
+      ],
+      [
+        "remove",
+        "bishbash.user-id.v1"
+      ]
+    ],
+    "reads": [],
+    "final": {
+      "MYBISHBASH_E2E_MODE": "true",
+      "mybishbash.commitmentDebug.v1": "[]"
+    }
+  },
+  "event-log": {
+    "writes": [
+      [
+        "set",
+        "mybishbash.user-id.v1",
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      [
+        "set",
+        "mybishbash.event-log.v1",
+        "[{\"id\":\"e1\",\"created_at\":\"2026-06-01T10:00:00.000Z\"}]"
+      ],
+      [
+        "set",
+        "mybishbash.offline-event-queue.v1",
+        "[{\"id\":\"e1\"}]"
+      ]
+    ],
+    "reads": [
+      [
+        "get",
+        "mybishbash.supabase.auth.v1",
+        null
+      ],
+      [
+        "get",
+        "bishbash.supabase.auth.v1",
+        null
+      ],
+      [
+        "get",
+        "mybishbash.user-id.v1",
+        null
+      ],
+      [
+        "get",
+        "bishbash.user-id.v1",
+        null
+      ],
+      [
+        "get",
+        "mybishbash.user-id.v1",
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      [
+        "get",
+        "mybishbash.event-log.v1",
+        "[{\"id\":\"e1\",\"created_at\":\"2026-06-01T10:00:00.000Z\"}]"
+      ],
+      [
+        "get",
+        "mybishbash.offline-event-queue.v1",
+        "[{\"id\":\"e1\"}]"
+      ]
+    ],
+    "final": {
+      "mybishbash.event-log.v1": "[{\"id\":\"e1\",\"created_at\":\"2026-06-01T10:00:00.000Z\"}]",
+      "mybishbash.offline-event-queue.v1": "[{\"id\":\"e1\"}]",
+      "mybishbash.user-id.v1": "00000000-0000-4000-8000-000000000001"
+    }
+  },
+  "event-log-legacy-user-id": {
+    "writes": [
+      [
+        "set",
+        "mybishbash.user-id.v1",
+        "legacy-user-id"
+      ]
+    ],
+    "reads": [
+      [
+        "get",
+        "mybishbash.user-id.v1",
+        null
+      ],
+      [
+        "get",
+        "bishbash.user-id.v1",
+        "legacy-user-id"
+      ]
+    ],
+    "final": {
+      "bishbash.user-id.v1": "legacy-user-id",
+      "mybishbash.user-id.v1": "legacy-user-id"
+    }
+  },
+  "settings-explicit-launcher-behavior": {
+    "writes": [],
+    "reads": [
+      [
+        "get",
+        "mybishbash.launcher-behavior-settings.v1",
+        "{\"instagram\":{\"interruptionPaused\":true}}"
+      ]
+    ],
+    "final": {
+      "mybishbash.action-card-defaults-version.v1": "2026-05-13",
+      "mybishbash.action-cards.v1": "[{\"id\":\"ac-1\"}]",
+      "mybishbash.app-pauses.v1": "{\"instagram\":\"2099-01-01T00:00:00.000Z\"}",
+      "mybishbash.card-packs.v1": "[{\"id\":\"p1\"}]",
+      "mybishbash.cards.v1": "[{\"id\":\"c1\",\"promptText\":\"breathe\"}]",
+      "mybishbash.disliked-pack-card-ids.v1": "[\"pc1\"]",
+      "mybishbash.event-log.v1": "[{\"id\":\"e1\"}]",
+      "mybishbash.global-interruption-mode.v1": "true",
+      "mybishbash.hidden-library-packs.v1": "[\"p2\"]",
+      "mybishbash.home-screen-selected.v1": "mybishbash",
+      "mybishbash.home-screen-versions.v1": "{\"mybishbash\":{\"id\":\"mybishbash\"}}",
+      "mybishbash.launcher-behavior-settings.v1": "{\"instagram\":{\"interruptionPaused\":true}}",
+      "mybishbash.mood.v1": "Minimal",
+      "mybishbash.notification-schedule.v1": "{\"date\":\"\",\"targets\":[],\"sentCount\":0,\"lastSentAt\":null}",
+      "mybishbash.notifications.v1": "{\"enabled\":false,\"notificationsPerDay\":3}",
+      "mybishbash.offline-event-queue.v1": "[]",
+      "mybishbash.profile.v1": "{\"name\":\"E2E\",\"timezone\":\"Europe/London\",\"plan\":\"free\"}",
+      "mybishbash.setup-complete.v1": "true",
+      "mybishbash.timing-windows-prefs.v1": "[]",
+      "mybishbash.user-id.v1": "user-1"
+    }
+  },
+  "sync-shared-state-bridge": {
+    "writes": [],
+    "reads": [
+      [
+        "get",
+        "MYBISHBASH_DEMO_MODE",
+        null
+      ],
+      [
+        "get",
+        "BISHBASH_DEMO_MODE",
+        null
+      ],
+      [
+        "get",
+        "MYBISHBASH_E2E_AUTH_MOCK",
+        "true"
+      ],
+      [
+        "get",
+        "MYBISHBASH_E2E_AUTH_MOCK",
+        "true"
+      ],
+      [
+        "get",
+        "MYBISHBASH_E2E_SHARED_STATE",
+        null
+      ],
+      [
+        "get",
+        "mybishbash.setup-complete.v1",
+        "true"
+      ],
+      [
+        "get",
+        "mybishbash.cards.v1",
+        "[{\"id\":\"c1\",\"promptText\":\"breathe\"}]"
+      ],
+      [
+        "get",
+        "mybishbash.setup-complete.v1",
+        "true"
+      ],
+      [
+        "get",
+        "mybishbash.mood.v1",
+        "Minimal"
+      ],
+      [
+        "get",
+        "mybishbash.profile.v1",
+        "{\"name\":\"E2E\",\"timezone\":\"Europe/London\",\"plan\":\"free\"}"
+      ],
+      [
+        "get",
+        "mybishbash.card-packs.v1",
+        "[{\"id\":\"p1\"}]"
+      ],
+      [
+        "get",
+        "mybishbash.home-screen-versions.v1",
+        "{\"mybishbash\":{\"id\":\"mybishbash\"}}"
+      ],
+      [
+        "get",
+        "mybishbash.launcher-behavior-settings.v1",
+        "{\"instagram\":{\"interruptionPaused\":true}}"
+      ],
+      [
+        "get",
+        "mybishbash.hidden-library-packs.v1",
+        "[\"p2\"]"
+      ],
+      [
+        "get",
+        "mybishbash.disliked-pack-card-ids.v1",
+        "[\"pc1\"]"
+      ],
+      [
+        "get",
+        "mybishbash.global-interruption-mode.v1",
+        "true"
+      ],
+      [
+        "get",
+        "mybishbash.event-log.v1",
+        "[{\"id\":\"e1\"}]"
+      ],
+      [
+        "get",
+        "mybishbash.action-cards.v1",
+        "[{\"id\":\"ac-1\"}]"
+      ]
+    ],
+    "final": {
+      "MYBISHBASH_E2E_AUTH_MOCK": "true",
+      "mybishbash.action-card-defaults-version.v1": "2026-05-13",
+      "mybishbash.action-cards.v1": "[{\"id\":\"ac-1\"}]",
+      "mybishbash.app-pauses.v1": "{\"instagram\":\"2099-01-01T00:00:00.000Z\"}",
+      "mybishbash.card-packs.v1": "[{\"id\":\"p1\"}]",
+      "mybishbash.cards.v1": "[{\"id\":\"c1\",\"promptText\":\"breathe\"}]",
+      "mybishbash.disliked-pack-card-ids.v1": "[\"pc1\"]",
+      "mybishbash.event-log.v1": "[{\"id\":\"e1\"}]",
+      "mybishbash.global-interruption-mode.v1": "true",
+      "mybishbash.hidden-library-packs.v1": "[\"p2\"]",
+      "mybishbash.home-screen-selected.v1": "mybishbash",
+      "mybishbash.home-screen-versions.v1": "{\"mybishbash\":{\"id\":\"mybishbash\"}}",
+      "mybishbash.launcher-behavior-settings.v1": "{\"instagram\":{\"interruptionPaused\":true}}",
+      "mybishbash.mood.v1": "Minimal",
+      "mybishbash.notification-schedule.v1": "{\"date\":\"\",\"targets\":[],\"sentCount\":0,\"lastSentAt\":null}",
+      "mybishbash.notifications.v1": "{\"enabled\":false,\"notificationsPerDay\":3}",
+      "mybishbash.offline-event-queue.v1": "[]",
+      "mybishbash.profile.v1": "{\"name\":\"E2E\",\"timezone\":\"Europe/London\",\"plan\":\"free\"}",
+      "mybishbash.setup-complete.v1": "true",
+      "mybishbash.timing-windows-prefs.v1": "[]",
+      "mybishbash.user-id.v1": "user-1"
+    }
+  },
+  "demo-reset-signup": {
+    "writes": [
+      [
+        "remove",
+        "MYBISHBASH_E2E_AUTH_MOCK"
+      ],
+      [
+        "remove",
+        "MYBISHBASH_E2E_AUTH_SESSION"
+      ],
+      [
+        "remove",
+        "MYBISHBASH_E2E_MODE"
+      ],
+      [
+        "remove",
+        "MYBISHBASH_E2E_TESTER_MODE"
+      ],
+      [
+        "remove",
+        "mybishbash.cards.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.profile.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.action-cards.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.event-log.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.offline-event-queue.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.onboarding-protected-app-setup-pending.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.signup-onboarding-pending.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.launcher-behavior-settings.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.app-pauses.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.setup-complete.v1"
+      ],
+      [
+        "set",
+        "MYBISHBASH_DEMO_MODE",
+        "true"
+      ]
+    ],
+    "reads": [],
+    "final": {
+      "MYBISHBASH_DEMO_MODE": "true",
+      "mybishbash.action-card-defaults-version.v1": "2026-05-13",
+      "mybishbash.card-packs.v1": "[{\"id\":\"p1\"}]",
+      "mybishbash.commitmentDebug.v1": "[]",
+      "mybishbash.disliked-pack-card-ids.v1": "[\"pc1\"]",
+      "mybishbash.global-interruption-mode.v1": "true",
+      "mybishbash.hidden-library-packs.v1": "[\"p2\"]",
+      "mybishbash.home-screen-selected.v1": "mybishbash",
+      "mybishbash.home-screen-versions.v1": "{\"mybishbash\":{\"id\":\"mybishbash\"}}",
+      "mybishbash.mood.v1": "Minimal",
+      "mybishbash.notification-schedule.v1": "{\"date\":\"\",\"targets\":[],\"sentCount\":0,\"lastSentAt\":null}",
+      "mybishbash.notifications.v1": "{\"enabled\":false,\"notificationsPerDay\":3}",
+      "mybishbash.timing-windows-prefs.v1": "[]",
+      "mybishbash.user-id.v1": "user-1"
+    }
+  },
+  "demo-reset-onboarding": {
+    "writes": [
+      [
+        "remove",
+        "mybishbash.cards.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.profile.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.action-cards.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.event-log.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.offline-event-queue.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.onboarding-protected-app-setup-pending.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.signup-onboarding-pending.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.launcher-behavior-settings.v1"
+      ],
+      [
+        "remove",
+        "mybishbash.app-pauses.v1"
+      ],
+      [
+        "set",
+        "MYBISHBASH_E2E_MODE",
+        "true"
+      ],
+      [
+        "set",
+        "MYBISHBASH_E2E_TESTER_MODE",
+        "true"
+      ],
+      [
+        "set",
+        "MYBISHBASH_DEMO_MODE",
+        "true"
+      ],
+      [
+        "set",
+        "mybishbash.setup-complete.v1",
+        "false"
+      ],
+      [
+        "set",
+        "mybishbash.profile.v1",
+        "{\"name\":\"Demo\",\"timezone\":\"Europe/London\",\"plan\":\"premium\",\"hasSeenCommitmentCardDemo\":false,\"hasSkippedCommitmentCardDemo\":false,\"hasCompletedHomeSpotlightTour\":false}"
+      ]
+    ],
+    "reads": [],
+    "final": {
+      "MYBISHBASH_DEMO_MODE": "true",
+      "MYBISHBASH_E2E_MODE": "true",
+      "MYBISHBASH_E2E_TESTER_MODE": "true",
+      "mybishbash.action-card-defaults-version.v1": "2026-05-13",
+      "mybishbash.card-packs.v1": "[{\"id\":\"p1\"}]",
+      "mybishbash.commitmentDebug.v1": "[]",
+      "mybishbash.disliked-pack-card-ids.v1": "[\"pc1\"]",
+      "mybishbash.global-interruption-mode.v1": "true",
+      "mybishbash.hidden-library-packs.v1": "[\"p2\"]",
+      "mybishbash.home-screen-selected.v1": "mybishbash",
+      "mybishbash.home-screen-versions.v1": "{\"mybishbash\":{\"id\":\"mybishbash\"}}",
+      "mybishbash.mood.v1": "Minimal",
+      "mybishbash.notification-schedule.v1": "{\"date\":\"\",\"targets\":[],\"sentCount\":0,\"lastSentAt\":null}",
+      "mybishbash.notifications.v1": "{\"enabled\":false,\"notificationsPerDay\":3}",
+      "mybishbash.profile.v1": "{\"name\":\"Demo\",\"timezone\":\"Europe/London\",\"plan\":\"premium\",\"hasSeenCommitmentCardDemo\":false,\"hasSkippedCommitmentCardDemo\":false,\"hasCompletedHomeSpotlightTour\":false}",
+      "mybishbash.setup-complete.v1": "false",
+      "mybishbash.timing-windows-prefs.v1": "[]",
+      "mybishbash.user-id.v1": "user-1"
+    }
+  }
+}

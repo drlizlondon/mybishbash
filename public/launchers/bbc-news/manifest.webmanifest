@@ -1,0 +1,17 @@
+{
+  "name": "BBC News",
+  "short_name": "BBC News",
+  "id": "https://mybishbash.app/mybishbash/intercept/bbc-news",
+  "start_url": "https://mybishbash.app/mybishbash/intercept/bbc-news",
+  "scope": "https://mybishbash.app/mybishbash/",
+  "display": "standalone",
+  "background_color": "#F7F2EE",
+  "theme_color": "#F7F2EE",
+  "icons": [
+    {
+      "src": "/mybishbash/icons/mybishbash-cover.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

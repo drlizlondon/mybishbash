@@ -1,0 +1,17 @@
+{
+  "name": "LinkedIn",
+  "short_name": "LinkedIn",
+  "id": "https://mybishbash.app/mybishbash/intercept/linkedin",
+  "start_url": "https://mybishbash.app/mybishbash/intercept/linkedin",
+  "scope": "https://mybishbash.app/mybishbash/",
+  "display": "standalone",
+  "background_color": "#F7F2EE",
+  "theme_color": "#F7F2EE",
+  "icons": [
+    {
+      "src": "/mybishbash/icons/mybishbash-cover.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

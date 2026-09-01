@@ -1,0 +1,3292 @@
+import { useEffect, useMemo, useState, useCallback, useRef, memo } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  deleteAdminGlobalPack,
+  deleteAdminLauncherConfig,
+  fetchAccessCodes,
+  fetchAdminAnalytics,
+  fetchAdminGlobalPacks,
+  fetchAdminLauncherConfigs,
+  fetchAdminLiveActivity,
+  fetchAdminPackAdoptionSummary,
+  fetchAdminRole,
+  fetchAdminUsers,
+  fetchLauncherUsageSummary,
+  hqCreateAccessCode,
+  hqSetAccessCodeActive,
+  hqSetUserAccess,
+  saveAdminGlobalPack,
+  saveAdminLauncherConfig,
+  uploadLauncherIcon,
+} from "../../lib/mybishbashSync";
+import { PACK_GOALS, PACK_CONTENT_TYPES } from "../../lib/packGoals";
+import { parseImportedCards, formatImportedCard } from "../../lib/packImport";
+import GeneratedPackCover from "../../GeneratedPackCover";
+import {
+  fetchAdminTesterReports,
+  updateTesterReportStatus,
+  updateTesterUser,
+} from "../../testing/TestPilot";
+import {
+  FAKE_APP_LAUNCHERS,
+  PLACEHOLDER_ICON_SRC,
+  mergeLauncherConfigs,
+  normalizeLauncherOverride,
+  resolveLauncherIconSrc,
+  validateLauncherDraft,
+} from "../../lib/launcherRegistry";
+import {
+  LAUNCHER_AVAILABILITY_STATUSES,
+  getLauncherAvailabilityStatus,
+  getLauncherAudience,
+  getLauncherLifecycleStatus,
+} from "../../lib/launcherAvailability";
+import { THEMES } from "../../utils";
+
+const EMPTY_PACK_FORM = {
+  id: null,
+  title: "",
+  description: "",
+  theme: "Minimal",
+  published: false,
+  importText: "",
+  sourceKey: null,
+  // Explore cover metadata (docs/explore-architecture.md)
+  goal: "",
+  whyText: "",
+  sourceLabel: "myBishBash",
+  contentType: "cards",
+  isPremium: false,
+  isFeatured: false,
+  isExperimental: false,
+  sortOrder: 0,
+  publishedAt: null,
+};
+
+const NAV_ITEMS = [
+  "recruitment",
+  "live",
+  "launchers",
+  "retention",
+  "tester_reports",
+  "users",
+  "memberships",
+  "access_codes",
+  "packs",
+  "analytics",
+  "events",
+  "settings",
+];
+
+const NAV_LABELS = {
+  recruitment: "Recruitment Funnel",
+  live: "Live Activity",
+  launchers: "Launcher Performance",
+  retention: "User Retention",
+  tester_reports: "Tester Reports",
+  users: "User Timelines",
+  memberships: "Memberships",
+  access_codes: "Access Codes",
+  packs: "Packs",
+  analytics: "Advanced Analytics",
+  events: "Events",
+  settings: "Settings",
+};
+
+const HQ_VIEW_STORAGE_KEY = "mybishbash:hq-active-view";
+
+function isValidHQView(view) {
+  return NAV_ITEMS.includes(view);
+}
+
+function getInitialHQView() {
+  if (typeof window === "undefined") return "recruitment";
+  const params = new URLSearchParams(window.location.search);
+  const viewFromUrl = params.get("view");
+  if (isValidHQView(viewFromUrl)) return viewFromUrl;
+  const storedView = window.localStorage.getItem(HQ_VIEW_STORAGE_KEY);
+  return isValidHQView(storedView) ? storedView : "recruitment";
+}
+
+const TELEMETRY_BLUE = "#2563eb";
+const TELEMETRY_GREEN = "#059669";
+const TELEMETRY_AMBER = "#d97706";
+const TELEMETRY_NAVY = "#0f172a";
+const LIVE_ACTIVITY_REFRESH_MS = 30 * 1000;
+
+function useRenderDiagnostics(componentName) {
+  const renderCount = useRef(0);
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      renderCount.current += 1;
+      console.log(`[Diagnostics] ${componentName} rendered ${renderCount.current} times`);
+    }
+  });
+}
+
+function useStableAnalytics({ isAdmin, setStatus, paused, suppressed }) {
+  const [analytics, setAnalytics] = useState({ summary: [], recent: [], launcherEvents: [], waitlist: [], testerReports: [] });
+  const [isPolling, setIsPolling] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const hasLoadedRef = useRef(false);
+
+  const refreshAnalytics = useCallback(async ({ manual = false } = {}) => {
+    if (!isAdmin) return;
+    if (!manual && (paused || suppressed)) return;
+    try {
+      setIsPolling(true);
+      const analyticsResult = await fetchAdminAnalytics();
+      setAnalytics((current) => (JSON.stringify(current) === JSON.stringify(analyticsResult) ? current : analyticsResult));
+      setLastUpdated(new Date());
+      setStatus("");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not load telemetry.");
+    } finally {
+      setIsPolling(false);
+    }
+  }, [isAdmin, paused, setStatus, suppressed]);
+
+  useEffect(() => {
+    if (!isAdmin || hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+    refreshAnalytics({ manual: true });
+  }, [refreshAnalytics, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || paused || suppressed) return undefined;
+    const intervalId = window.setInterval(() => refreshAnalytics(), 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [refreshAnalytics, isAdmin, paused, suppressed]);
+
+  return { analytics, refreshAnalytics, isPolling, lastUpdated };
+}
+
+function useLiveActivityStream({ enabled, setStatus }) {
+  const [events, setEvents] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const refreshLiveActivity = useCallback(async () => {
+    if (!enabled) return;
+    try {
+      const result = await fetchAdminLiveActivity();
+      const normalizedEvents = [
+        ...normalizeEvents(result.recent),
+        ...normalizeLauncherEvents(result.launcherEvents).map(mapLauncherEventToOperationalEvent),
+      ]
+        .filter(Boolean)
+        .map(normalizeOperationalEvent)
+        .filter(isMeaningfulEvent)
+        .map((event) => ({ ...event, displayLabel: getEventDisplayLabel(event) }))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 100);
+
+      setEvents((current) => {
+        const existingIds = new Set(current.map((event) => event.id));
+        const newEvents = normalizedEvents.filter((event) => !existingIds.has(event.id));
+        if (newEvents.length === 0) return current;
+        return [...newEvents, ...current].slice(0, 120);
+      });
+      setLastUpdated(new Date());
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not load live activity.");
+    }
+  }, [enabled, setStatus]);
+
+  useEffect(() => {
+    refreshLiveActivity();
+  }, [refreshLiveActivity]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const intervalId = window.setInterval(refreshLiveActivity, LIVE_ACTIVITY_REFRESH_MS);
+    return () => window.clearInterval(intervalId);
+  }, [enabled, refreshLiveActivity]);
+
+  return { events, lastUpdated, refreshLiveActivity };
+}
+
+export default function HQPanel({
+  isAdmin,
+  isAdminLoading = false,
+  session,
+  libraryPacks = [],
+  interruptionPacks = [],
+  onGlobalPacksChanged,
+  onBack,
+}) {
+  const [activeView, setActiveView] = useState(getInitialHQView);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const syncViewFromLocation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const nextView = params.get("view");
+      if (isValidHQView(nextView)) setActiveView(nextView);
+    };
+    window.addEventListener("popstate", syncViewFromLocation);
+    return () => window.removeEventListener("popstate", syncViewFromLocation);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(HQ_VIEW_STORAGE_KEY, activeView);
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("view") === activeView) return;
+    currentUrl.searchParams.set("view", activeView);
+    window.history.replaceState(null, "", currentUrl);
+  }, [activeView]);
+
+  if (isAdminLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 p-6 text-white">
+        <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">myBishBash HQ</p>
+          <h2 className="mt-3 text-2xl font-semibold">Checking access</h2>
+          <p className="mt-2 text-sm text-slate-300">Confirming your HQ role.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 p-6 text-white">
+        <div className="mx-auto mt-24 max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">myBishBash HQ</p>
+          <h2 className="mt-3 text-2xl font-semibold">Not authorised</h2>
+          <p className="mt-2 text-sm text-slate-300">You must be an admin to view this telemetry surface.</p>
+          <button className="mt-6 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white" onClick={onBack}>
+            Back home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0,#f8fbff_38%,#ffffff_70%)] text-slate-950">
+      <div className="flex min-h-screen">
+        <HQSidebar activeView={activeView} onNavigate={setActiveView} />
+        <HQContent
+          activeView={activeView}
+          onNavigate={setActiveView}
+          isAdmin={isAdmin}
+          session={session}
+          libraryPacks={libraryPacks}
+          interruptionPacks={interruptionPacks}
+          onGlobalPacksChanged={onGlobalPacksChanged}
+          onBack={onBack}
+        />
+      </div>
+      <HQMobileNav activeView={activeView} onNavigate={setActiveView} />
+    </div>
+  );
+}
+
+const HQContent = memo(function HQContent({
+  activeView,
+  onNavigate,
+  isAdmin,
+  session,
+  libraryPacks,
+  interruptionPacks,
+  onGlobalPacksChanged,
+  onBack,
+}) {
+  useRenderDiagnostics("HQContent");
+
+  const [adminPacks, setAdminPacks] = useState([]);
+  const [launcherConfigs, setLauncherConfigs] = useState([]);
+  // HQ roles: owner (full control incl. hard delete), admin (add/edit/test/
+  // archive), analyst/support (view reports only). Pre-migration rows have no
+  // role column and default to admin.
+  const [adminRole, setAdminRole] = useState("admin");
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    fetchAdminRole(session.user.id)
+      .then((role) => { if (role) setAdminRole(role); })
+      .catch(() => {});
+  }, [session?.user?.id]);
+  const canEditLaunchers = ["owner", "admin"].includes(adminRole);
+  const canHardDeleteLaunchers = adminRole === "owner";
+  const [users, setUsers] = useState([]);
+  const [packAdoptionStats, setPackAdoptionStats] = useState([]);
+  const [search, setSearch] = useState("");
+  const [range, setRange] = useState("7d");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [expandedEventId, setExpandedEventId] = useState(null);
+  const [packForm, setPackForm] = useState(EMPTY_PACK_FORM);
+  const [loadingStatic, setLoadingStatic] = useState(false);
+  const [status, setStatus] = useState("");
+  const [pauseTelemetryUpdates, setPauseTelemetryUpdates] = useState(false);
+  const [liveActivityPaused, setLiveActivityPaused] = useState(false);
+  const isEditingPack = Boolean(packForm.id || packForm.title || packForm.description || packForm.importText || packForm.published);
+  const suppressBackgroundRefresh = isEditingPack || Boolean(expandedEventId);
+
+  const { analytics, refreshAnalytics, isPolling, lastUpdated } = useStableAnalytics({
+    isAdmin,
+    setStatus,
+    paused: pauseTelemetryUpdates,
+    suppressed: suppressBackgroundRefresh,
+  });
+
+  const loadStaticData = useCallback(async () => {
+    if (!isAdmin) return;
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      const [packsResult, usersResult, packAdoptionResult] = await Promise.all([
+        fetchAdminGlobalPacks(),
+        fetchAdminUsers(),
+        fetchAdminPackAdoptionSummary(),
+      ]);
+      setAdminPacks(packsResult);
+      setUsers(usersResult);
+      setPackAdoptionStats(packAdoptionResult);
+      fetchAdminLauncherConfigs()
+        .then(setLauncherConfigs)
+        .catch((error) => console.warn("Could not load HQ launcher configs", error));
+    } catch (error) {
+      setStatus(error?.message ?? "Could not load HQ data.");
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    loadStaticData();
+  }, [loadStaticData]);
+
+  useEffect(() => {
+    if (!isAdmin || pauseTelemetryUpdates || suppressBackgroundRefresh) return undefined;
+    const intervalId = window.setInterval(loadStaticData, 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isAdmin, loadStaticData, pauseTelemetryUpdates, suppressBackgroundRefresh]);
+
+  const handleRefreshData = useCallback(async () => {
+    await Promise.all([loadStaticData(), refreshAnalytics({ manual: true })]);
+  }, [loadStaticData, refreshAnalytics]);
+
+  const telemetry = useMemo(
+    () => buildTelemetryModel({
+      summary: analytics.summary,
+      recent: analytics.recent,
+      launcherEvents: analytics.launcherEvents,
+      users,
+      adminPacks,
+      packAdoptionStats,
+      libraryPacks,
+      interruptionPacks,
+      range,
+      waitlist: analytics.waitlist,
+      testerReports: analytics.testerReports,
+    }),
+    [analytics.summary, analytics.recent, analytics.launcherEvents, analytics.waitlist, analytics.testerReports, users, adminPacks, packAdoptionStats, libraryPacks, interruptionPacks, range],
+  );
+
+  const mergedLaunchers = useMemo(() => mergeLauncherConfigs(launcherConfigs), [launcherConfigs]);
+
+  const handleSaveLauncherConfig = useCallback(async (config) => {
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      const saved = await saveAdminLauncherConfig(
+        {
+          id: config.id,
+          ...normalizeLauncherOverride(config),
+          // Custom (HQ-created) apps carry fields the override normalizer
+          // does not manage; the save path re-validates and clamps them.
+          ...(config.isCustom
+            ? {
+                isCustom: true,
+                category: config.category,
+                availabilityStatus: config.availabilityStatus,
+                webFallbackUrl: config.webFallbackUrl,
+                iosAppUrl: config.iosAppUrl,
+                androidIntentUrl: config.androidIntentUrl,
+                manualUrl: config.manualUrl,
+              }
+            : {}),
+        },
+        session?.user?.id,
+      );
+      setLauncherConfigs((current) => {
+        const rest = current.filter((item) => item.id !== saved.id);
+        return [...rest, saved];
+      });
+      setStatus("Launcher config saved.");
+      return true;
+    } catch (error) {
+      setStatus(error?.message ?? "Could not save launcher config.");
+      return false;
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [session?.user?.id]);
+
+  const handleDeleteLauncherConfig = useCallback(async (launcherId) => {
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      await deleteAdminLauncherConfig(launcherId);
+      setLauncherConfigs((current) => current.filter((item) => item.id !== launcherId));
+      setStatus("App deleted permanently.");
+      return true;
+    } catch (error) {
+      setStatus(error?.message ?? "Could not delete app.");
+      return false;
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, []);
+
+  const filteredEvents = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return telemetry.events.filter((event) => {
+      const matchesType = eventTypeFilter === "all" || event.event_type === eventTypeFilter;
+      if (!matchesType) return false;
+      if (!query) return true;
+      return [
+        event.event_type,
+        event.user_id,
+        event.launcher_context,
+        event.target_app,
+        event.pack_id,
+        event.card_title,
+        event.card_text,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [eventTypeFilter, search, telemetry.events]);
+
+  const handleSavePack = useCallback(async (event) => {
+    event.preventDefault();
+    const entries = parseImportedCards(packForm.importText);
+
+    if (!packForm.title.trim()) {
+      setStatus("Add a pack title first.");
+      return;
+    }
+
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      await saveAdminGlobalPack(
+        {
+          id: packForm.id,
+          title: packForm.title.trim(),
+          description: packForm.description.trim(),
+          theme: packForm.theme,
+          published: packForm.published,
+          sourceKey: packForm.sourceKey ?? null,
+          goal: packForm.goal,
+          whyText: packForm.whyText,
+          sourceLabel: packForm.sourceLabel,
+          contentType: packForm.contentType,
+          isPremium: packForm.isPremium,
+          isFeatured: packForm.isFeatured,
+          isExperimental: packForm.isExperimental,
+          sortOrder: packForm.sortOrder,
+          publishedAt: packForm.publishedAt,
+          entries,
+        },
+        session?.user?.id,
+      );
+      setPackForm(EMPTY_PACK_FORM);
+      await loadStaticData();
+      await refreshAnalytics();
+      await onGlobalPacksChanged?.();
+      setStatus("Pack deployment saved.");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not save pack.");
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [packForm, session?.user?.id, loadStaticData, refreshAnalytics, onGlobalPacksChanged]);
+
+  const handleTogglePublished = useCallback(async (pack) => {
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      await saveAdminGlobalPack({ ...pack, published: !pack.published }, session?.user?.id);
+      await loadStaticData();
+      await refreshAnalytics();
+      await onGlobalPacksChanged?.();
+      setStatus(pack.published ? "Pack moved to draft." : "Pack published.");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not update pack.");
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [session?.user?.id, loadStaticData, refreshAnalytics, onGlobalPacksChanged]);
+
+  const handleDeletePack = useCallback(async (pack) => {
+    if (!window.confirm(`Delete "${pack.title}"? Published users will stop seeing it after refresh.`)) return;
+    setLoadingStatic(true);
+    setStatus("");
+    try {
+      await deleteAdminGlobalPack(pack.id);
+      if (packForm.id === pack.id) setPackForm(EMPTY_PACK_FORM);
+      await loadStaticData();
+      await refreshAnalytics();
+      await onGlobalPacksChanged?.();
+      setStatus("Pack deleted.");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not delete pack.");
+    } finally {
+      setLoadingStatic(false);
+    }
+  }, [packForm.id, loadStaticData, refreshAnalytics, onGlobalPacksChanged]);
+
+  const editPack = useCallback((pack) => {
+    setPackForm({
+      id: pack.id,
+      title: pack.title ?? "",
+      description: pack.description ?? "",
+      theme: pack.theme ?? "Minimal",
+      published: Boolean(pack.published),
+      sourceKey: pack.sourceKey ?? null,
+      goal: pack.goal ?? "",
+      whyText: pack.whyText ?? "",
+      sourceLabel: pack.sourceLabel ?? "myBishBash",
+      contentType: pack.contentType ?? "cards",
+      isPremium: Boolean(pack.isPremium),
+      isFeatured: Boolean(pack.isFeatured),
+      isExperimental: Boolean(pack.isExperimental),
+      sortOrder: pack.sortOrder ?? 0,
+      publishedAt: pack.publishedAt ?? null,
+      importText: pack.entries?.map(formatImportedCard).join("\n") ?? "",
+    });
+    onNavigate("packs");
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [onNavigate]);
+
+  const loading = loadingStatic || isPolling;
+
+  return (
+    <main className="min-w-0 flex-1 pb-28 lg:pb-10">
+      <TelemetryTopBar
+        loading={loading}
+        status={status}
+        range={range}
+        setRange={setRange}
+        search={search}
+        setSearch={setSearch}
+        onBack={onBack}
+        onRefreshData={handleRefreshData}
+        pauseTelemetryUpdates={pauseTelemetryUpdates}
+        setPauseTelemetryUpdates={setPauseTelemetryUpdates}
+        liveActivityPaused={liveActivityPaused}
+        setLiveActivityPaused={setLiveActivityPaused}
+        lastUpdated={lastUpdated}
+        suppressBackgroundRefresh={suppressBackgroundRefresh}
+        eventTypes={telemetry.eventTypes}
+        eventTypeFilter={eventTypeFilter}
+        setEventTypeFilter={setEventTypeFilter}
+      />
+
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+        {activeView === "recruitment" ? <RecruitmentPage telemetry={telemetry} /> : null}
+        {activeView === "live" ? <LiveActivityPage fallbackEvents={telemetry.meaningfulEvents} paused={liveActivityPaused || pauseTelemetryUpdates} setStatus={setStatus} /> : null}
+        {activeView === "launchers" ? (
+          <LaunchersPage
+            telemetry={telemetry}
+            launchers={mergedLaunchers}
+            interruptionPacks={interruptionPacks}
+            onSaveLauncherConfig={handleSaveLauncherConfig}
+            onDeleteLauncherConfig={handleDeleteLauncherConfig}
+            canEdit={canEditLaunchers}
+            canHardDelete={canHardDeleteLaunchers}
+            loading={loading}
+          />
+        ) : null}
+        {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
+        {activeView === "tester_reports" ? <TesterReportsPage /> : null}
+        {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
+        {activeView === "memberships" ? <MembershipsPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
+        {activeView === "access_codes" ? <AccessCodesPage onChanged={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
+        {activeView === "analytics" ? <AnalyticsPage telemetry={telemetry} /> : null}
+        {activeView === "events" ? (
+          <EventsPage
+            events={filteredEvents}
+            expandedEventId={expandedEventId}
+            setExpandedEventId={setExpandedEventId}
+          />
+        ) : null}
+        {activeView === "packs" ? (
+          <PacksPage
+            adminPacks={adminPacks}
+            telemetry={telemetry}
+            packForm={packForm}
+            setPackForm={setPackForm}
+            handleSavePack={handleSavePack}
+            handleTogglePublished={handleTogglePublished}
+            handleDeletePack={handleDeletePack}
+            editPack={editPack}
+            loading={loading}
+            setStatus={setStatus}
+          />
+        ) : null}
+        {activeView === "settings" ? <SettingsPage onRefresh={() => { loadStaticData(); refreshAnalytics(); }} onBack={onBack} loading={loading} /> : null}
+      </div>
+    </main>
+  );
+});
+
+const HQSidebar = memo(function HQSidebar({ activeView, onNavigate }) {
+  useRenderDiagnostics("HQSidebar");
+  return (
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-blue-100/80 bg-white/80 px-4 py-5 shadow-[18px_0_50px_rgba(15,23,42,0.04)] backdrop-blur-xl lg:block">
+      <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-slate-950 to-blue-950 p-4 text-white shadow-xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">myBishBash</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight">HQ</h1>
+        <p className="mt-2 text-xs text-blue-100">Behavioural adoption console</p>
+      </div>
+      <nav className="mt-5 space-y-1" aria-label="HQ sections">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
+              activeView === item
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                : "text-slate-600 hover:bg-blue-50 hover:text-slate-950"
+            }`}
+            onClick={() => onNavigate(item)}
+          >
+            <span>{NAV_LABELS[item] ?? item}</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${activeView === item ? "bg-white" : "bg-blue-300"}`} />
+          </button>
+        ))}
+      </nav>
+    </aside>
+  );
+});
+
+const HQMobileNav = memo(function HQMobileNav({ activeView, onNavigate }) {
+  useRenderDiagnostics("HQMobileNav");
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-blue-100 bg-white/95 px-2 py-2 shadow-2xl backdrop-blur lg:hidden" aria-label="HQ mobile sections">
+      <div className="grid grid-cols-5 gap-1">
+        {["recruitment", "live", "launchers", "tester_reports", "users"].map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onNavigate(item)}
+            className={`rounded-xl px-2 py-2 text-[10px] font-semibold ${
+              activeView === item ? "bg-blue-600 text-white" : "text-slate-600"
+            }`}
+          >
+            {NAV_LABELS[item]?.replace(" ", "\n") ?? item}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+});
+
+const TelemetryTopBar = memo(function TelemetryTopBar({
+  loading,
+  status,
+  range,
+  setRange,
+  search,
+  setSearch,
+  onBack,
+  onRefreshData,
+  pauseTelemetryUpdates,
+  setPauseTelemetryUpdates,
+  liveActivityPaused,
+  setLiveActivityPaused,
+  lastUpdated,
+  suppressBackgroundRefresh,
+  eventTypes,
+  eventTypeFilter,
+  setEventTypeFilter,
+}) {
+  useRenderDiagnostics("TelemetryTopBar");
+  const livePaused = liveActivityPaused || pauseTelemetryUpdates;
+  return (
+    <header className="sticky top-0 z-30 border-b border-blue-100/80 bg-white/80 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">myBishBash HQ</h2>
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              <span className={`h-2 w-2 rounded-full ${livePaused ? "bg-slate-400" : "bg-emerald-500"}`} />
+              {livePaused ? "Live Paused" : "Live On"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Early-access recruitment, onboarding conversion, and behavioural adoption. {status || (suppressBackgroundRefresh ? "Background refresh paused while reviewing." : "Operational")}
+          </p>
+        </div>
+        <div className="grid gap-2 xl:w-[840px]">
+          <div className="flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-blue-100 bg-white/70 p-2 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setLiveActivityPaused((current) => !current)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700"
+            >
+              {livePaused ? "○ Live Paused" : "● Live On"}
+            </button>
+            <button
+              type="button"
+              onClick={onRefreshData}
+              disabled={loading}
+              className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50"
+            >
+              Refresh Data
+            </button>
+            <button
+              type="button"
+              onClick={() => setPauseTelemetryUpdates((current) => !current)}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                pauseTelemetryUpdates
+                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-700"
+              }`}
+            >
+              {pauseTelemetryUpdates ? "Resume Updates" : "Pause Updates"}
+            </button>
+            <span className="text-xs font-medium text-slate-500">
+              Last updated: {formatDateTime(lastUpdated)}
+            </span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_130px_170px_auto]">
+          <label className="sr-only" htmlFor="hq-search">Search telemetry</label>
+          <input
+            id="hq-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search event, launcher, user"
+            className="h-10 rounded-xl border border-blue-100 bg-white/85 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+          />
+          <select
+            value={range}
+            onChange={(event) => setRange(event.target.value)}
+            className="h-10 rounded-xl border border-blue-100 bg-white/85 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            aria-label="Date range"
+          >
+            <option value="24h">24h</option>
+            <option value="7d">7d</option>
+            <option value="30d">30d</option>
+          </select>
+          <select
+            value={eventTypeFilter}
+            onChange={(event) => setEventTypeFilter(event.target.value)}
+            className="h-10 rounded-xl border border-blue-100 bg-white/85 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            aria-label="Event type filter"
+          >
+            <option value="all">All event types</option>
+            {eventTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <button type="button" onClick={onBack} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700">
+            Exit
+          </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+});
+
+const SectionHeader = memo(function SectionHeader({ title, subtitle }) {
+  useRenderDiagnostics("SectionHeader");
+  return (
+    <div className="rounded-2xl border border-blue-100 bg-white/75 px-4 py-3 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
+      <h3 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h3>
+      <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+    </div>
+  );
+});
+
+const RecruitmentPage = memo(function RecruitmentPage({ telemetry }) {
+  useRenderDiagnostics("RecruitmentPage");
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {telemetry.heroMetrics.map((metric) => <HeroMetricCard key={metric.label} metric={metric} />)}
+      </section>
+      <FunnelPanel funnel={telemetry.funnel} />
+      <section className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+        <DistributionPanel title="Waitlist by Source" rows={telemetry.waitlistSources} />
+        <RetentionSnapshot telemetry={telemetry} />
+      </section>
+      <LiveActivityList events={telemetry.meaningfulEvents.slice(0, 8)} />
+    </div>
+  );
+});
+
+const LiveActivityPage = memo(function LiveActivityPage({ fallbackEvents, paused, setStatus }) {
+  useRenderDiagnostics("LiveActivityPage");
+  const { events, lastUpdated } = useLiveActivityStream({ enabled: !paused, setStatus });
+  const displayEvents = events.length > 0 ? events : fallbackEvents;
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Live Activity"
+        subtitle={`${paused ? "Live stream paused" : "Live stream isolated from analytics"} · Last live update: ${formatDateTime(lastUpdated)}`}
+      />
+      <LiveActivityList events={displayEvents} large />
+    </div>
+  );
+});
+
+const RetentionPage = memo(function RetentionPage({ telemetry }) {
+  useRenderDiagnostics("RetentionPage");
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="User Retention"
+        subtitle="Repeated behavioural use, return sessions, and launcher adoption gaps."
+      />
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MiniStat label="Daily active users" value={telemetry.retention.dailyActiveUsers} />
+        <MiniStat label="7-day return users" value={telemetry.retention.returnUsers7d} />
+        <MiniStat label="Avg interruptions / user" value={telemetry.retention.avgInterruptionsPerUser} />
+        <MiniStat label="Avg actions completed" value={telemetry.retention.avgActionsCompleted} />
+        <MiniStat label="Most active launcher" value={telemetry.retention.mostActiveLauncher} />
+        <MiniStat label="Installed, no interruption" value={telemetry.retention.installedNoInterruption} />
+        <MiniStat label="Saw interruption, no Do Something Else" value={telemetry.retention.interruptionNoAction} />
+        <MiniStat label="Repeat users (7d)" value={telemetry.retention.repeatUsers7d} />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <SparklineCard title="Daily Active Users" data={telemetry.activeUsersOverTime} dataKey="users" />
+        <DistributionPanel title="Most Active Launchers" rows={telemetry.topLaunchers} />
+      </section>
+    </div>
+  );
+});
+
+const AnalyticsPage = memo(function AnalyticsPage({ telemetry }) {
+  useRenderDiagnostics("AnalyticsPage");
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Telemetry Analytics"
+        subtitle="Measured event trends, launcher frequency, notification delivery, and pack activation counts."
+      />
+      <section className="grid gap-4 xl:grid-cols-2">
+        <TelemetryChart
+          title="Continue-to-App Trend"
+          subtitle="Measured continuation events by time bucket"
+          data={telemetry.interventionsOverTime}
+          lines={[{ key: "continueToApp", color: TELEMETRY_AMBER, name: "Continue to app" }]}
+        />
+        <TelemetryChart
+          title="Do Something Else Trend"
+          subtitle="Measured Do Something Else events by time bucket"
+          data={telemetry.interventionsOverTime}
+          lines={[{ key: "doSomethingElse", color: TELEMETRY_GREEN, name: "Do Something Else" }]}
+        />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <BarPanel title="Interruptions By Hour" data={telemetry.interruptionsByHour} xKey="hour" yKey="count" />
+        <BarPanel title="Launcher Event Frequency" data={telemetry.topLaunchers} xKey="label" yKey="count" />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <TelemetryChart
+          title="Pack Activation Trend"
+          subtitle="pack_activated events by time bucket"
+          data={telemetry.packActivationTrend}
+          lines={[{ key: "activations", color: TELEMETRY_BLUE, name: "Pack activations" }]}
+        />
+        <TelemetryChart
+          title="Notification Delivery vs Interaction"
+          subtitle="Notification event types grouped by time bucket"
+          data={telemetry.notificationTrend}
+          lines={[
+            { key: "delivered", color: TELEMETRY_BLUE, name: "Delivery events" },
+            { key: "interactions", color: TELEMETRY_GREEN, name: "Interaction events" },
+          ]}
+        />
+      </section>
+    </div>
+  );
+});
+
+const FunnelPanel = memo(function FunnelPanel({ funnel }) {
+  useRenderDiagnostics("FunnelPanel");
+  return (
+    <GlassPanel title="Recruitment Funnel" subtitle="Waitlist to action-card completion">
+      {funnel.every((stage) => stage.count === 0) ? (
+        <EmptyState title="Recruitment data will appear here." body="Waiting for first onboarding sessions." />
+      ) : (
+        <div className="grid gap-2">
+          {funnel.map((stage, index) => (
+            <div key={stage.label}>
+              <div className="grid gap-3 rounded-2xl border border-blue-100 bg-white/75 p-3 sm:grid-cols-[1fr_92px_96px_92px] sm:items-center">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{stage.label}</p>
+                  <div className="mt-2 h-2 rounded-full bg-slate-100">
+                    <div className="h-2 rounded-full bg-blue-600" style={{ width: `${Math.max(stage.conversion, stage.count > 0 ? 6 : 0)}%` }} />
+                  </div>
+                </div>
+                <MetricPill label="Count" value={stage.count} />
+                <MetricPill label="Conv." value={`${stage.conversion}%`} />
+                <MetricPill label="Drop-off" value={`${stage.dropoff}%`} />
+              </div>
+              {index < funnel.length - 1 ? <div className="ml-5 h-4 border-l border-blue-200" /> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </GlassPanel>
+  );
+});
+
+const MetricPill = memo(function MetricPill({ label, value }) {
+  return (
+    <div className="rounded-xl bg-blue-50 px-3 py-2 text-right">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <strong className="text-sm text-slate-950">{value}</strong>
+    </div>
+  );
+});
+
+const LiveActivityList = memo(function LiveActivityList({ events, large = false }) {
+  useRenderDiagnostics("LiveActivityList");
+  const scrollRef = useRef(null);
+  const previousScrollHeightRef = useRef(0);
+  const wasAtLatestRef = useRef(true);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const previousHeight = previousScrollHeightRef.current;
+    const nextHeight = node.scrollHeight;
+    if (!wasAtLatestRef.current && previousHeight > 0) {
+      node.scrollTop += nextHeight - previousHeight;
+    } else if (wasAtLatestRef.current) {
+      node.scrollTop = 0;
+    }
+    previousScrollHeightRef.current = nextHeight;
+  }, [events]);
+
+  return (
+    <GlassPanel title="Live Activity" subtitle="Founder-level product moments">
+      {events.length === 0 ? (
+        <EmptyState title="No live telemetry yet." body="Waiting for first meaningful product moments." />
+      ) : (
+        <div
+          ref={scrollRef}
+          onScroll={(event) => {
+            wasAtLatestRef.current = event.currentTarget.scrollTop < 12;
+          }}
+          className={`grid gap-2 ${large ? "max-h-[720px] overflow-auto" : "max-h-[560px] overflow-auto"}`}
+        >
+          {events.map((event) => (
+            <article key={event.id} className="rounded-2xl border border-blue-100 bg-white/82 p-3 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">{event.displayLabel}</p>
+                  <p className="mt-1 font-mono text-xs text-slate-500">{formatTime(event.created_at)} · {pseudoUser(event.user_id || event.anonymous_device_id)}</p>
+                </div>
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                  {event.launcher_context || event.launcher_id || event.target_app || "app"}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </GlassPanel>
+  );
+});
+
+const RetentionSnapshot = memo(function RetentionSnapshot({ telemetry }) {
+  useRenderDiagnostics("RetentionSnapshot");
+  return (
+    <GlassPanel title="Retention Snapshot" subtitle="Are people coming back and using the mechanic?">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <MiniStat label="Daily active users" value={telemetry.retention.dailyActiveUsers} />
+        <MiniStat label="7-day return users" value={telemetry.retention.returnUsers7d} />
+        <MiniStat label="Avg interventions / user" value={telemetry.retention.avgInterruptionsPerUser} />
+        <MiniStat label="Most active launcher" value={telemetry.retention.mostActiveLauncher} />
+      </div>
+    </GlassPanel>
+  );
+});
+
+const EmptyState = memo(function EmptyState({ title, body }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/50 p-6 text-center">
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      <p className="mt-1 text-sm text-slate-500">{body}</p>
+    </div>
+  );
+});
+
+const LaunchersPage = memo(function LaunchersPage({ telemetry, launchers = [], interruptionPacks = [], onSaveLauncherConfig, onDeleteLauncherConfig, canEdit = true, canHardDelete = false, loading }) {
+  useRenderDiagnostics("LaunchersPage");
+  const [launcherFilter, setLauncherFilter] = useState("all");
+  const [identityFilter, setIdentityFilter] = useState("all");
+  const [displayFilter, setDisplayFilter] = useState("all");
+  const supportedLauncherNames = FAKE_APP_LAUNCHERS.map((launcher) => launcher.displayName).join(", ");
+  const launcherIds = Array.from(new Set(telemetry.events.map(getEventLauncher).filter(Boolean))).sort();
+  const filtered = telemetry.events.filter((event) => {
+    const launcherId = getEventLauncher(event);
+    if (launcherFilter !== "all" && launcherId !== launcherFilter) return false;
+    if (identityFilter === "logged-in" && !event.user_id) return false;
+    if (identityFilter === "anonymous" && event.user_id) return false;
+    if (displayFilter === "standalone" && !event.is_standalone) return false;
+    if (displayFilter === "browser" && event.is_standalone) return false;
+    return true;
+  });
+  const stats = buildLauncherStats(filtered);
+  const testingMatrix = buildLauncherTestingMatrix(filtered);
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Supported Launcher Performance"
+        subtitle="Install views, installs, interruption opens, Do Something Else, Continue to app, and settings for supported launchers."
+      />
+      <GlassPanel title="App Setup" subtitle={`Code-reviewed launchers (${supportedLauncherNames}) can be edited and go live; HQ-created apps stay admin-only drafts until a reviewed release ships their routes. Static registry values remain the fallback if cloud config is unavailable; installed home-screen icons may require users to reinstall a launcher before icon changes appear.`}>
+        <div className="grid gap-4 xl:grid-cols-3">
+          {(launchers.length ? launchers : FAKE_APP_LAUNCHERS).map((launcher) => (
+            <LauncherConfigCard
+              key={launcher.id}
+              onDelete={onDeleteLauncherConfig}
+              launcher={launcher}
+              interruptionPacks={interruptionPacks}
+              onSave={onSaveLauncherConfig}
+              canEdit={canEdit}
+              canHardDelete={canHardDelete}
+              loading={loading}
+            />
+          ))}
+        </div>
+      </GlassPanel>
+      {canEdit ? (
+        <GlassPanel
+          title="Add New Protected App"
+          subtitle="Creates a draft you can configure, test and deploy from HQ: draft → testing (testers) → live (all users) → disabled/archived. Going live requires a valid https web fallback. Home-screen shortcut install still needs a release promotion; everything in-app works immediately."
+        >
+          <AddLauncherForm launchers={launchers} onSave={onSaveLauncherConfig} loading={loading} />
+        </GlassPanel>
+      ) : null}
+      <div className="grid gap-2 md:grid-cols-3">
+        <select value={launcherFilter} onChange={(event) => setLauncherFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="all">All launchers</option>
+          {launcherIds.map((id) => <option key={id} value={id}>{id}</option>)}
+        </select>
+        <select value={identityFilter} onChange={(event) => setIdentityFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="all">Logged-in and anonymous</option>
+          <option value="logged-in">Logged-in only</option>
+          <option value="anonymous">Anonymous only</option>
+        </select>
+        <select value={displayFilter} onChange={(event) => setDisplayFilter(event.target.value)} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="all">Standalone and browser</option>
+          <option value="standalone">Standalone only</option>
+          <option value="browser">Browser only</option>
+        </select>
+      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MiniStat label="Instagram install views" value={telemetry.instagramStats.installViews} />
+        <MiniStat label="Instagram installs" value={telemetry.instagramStats.installs} />
+        <MiniStat label="Interruption opens" value={stats.interruptionOpens} />
+        <MiniStat label="Continue to app" value={stats.continueToApp} />
+        <MiniStat label="Do Something Else" value={stats.doSomethingElse} />
+        <MiniStat label="Do Something Else Rate" value={`${percent(stats.doSomethingElse, stats.resolved)}%`} />
+        <MiniStat label="Continue To App Rate" value={`${percent(stats.continueToApp, stats.resolved)}%`} />
+        <MiniStat label="Unique users/devices" value={stats.uniqueActors} />
+      </section>
+      <section className="grid gap-4 xl:grid-cols-3">
+        <DistributionPanel title="Interruption Opens By Launcher" rows={stats.opensByLauncher} />
+        <DistributionPanel title="Active Users By Launcher" rows={stats.activeUsersByLauncher} />
+        <DistributionPanel title="Install Page Views" rows={stats.installViewsByLauncher} />
+      </section>
+      <GlassPanel title="Launcher Testing Matrix" subtitle="Latest launch outcome per app, platform and display mode — built from launcher_events.">
+        {testingMatrix.length === 0 ? (
+          <EmptyState title="No launch attempts recorded yet." body="Continue-to-app, missing-destination, cross-app-block and pause-bypass events will appear here." />
+        ) : (
+          <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-200">
+            <div className="grid grid-cols-[110px_90px_100px_1fr_120px_130px_1fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              <span>App</span>
+              <span>Platform</span>
+              <span>Display</span>
+              <span>Route / Source</span>
+              <span>Last attempted</span>
+              <span>Outcome</span>
+              <span>Details</span>
+            </div>
+            {testingMatrix.map((row) => (
+              <div key={row.key} className="grid grid-cols-[110px_90px_100px_1fr_120px_130px_1fr] gap-2 border-b border-slate-100 px-3 py-2 text-xs">
+                <span className="font-semibold text-slate-800">{row.launcherName}</span>
+                <span className="text-slate-600">{row.platform}</span>
+                <span className="text-slate-600">{row.displayMode}</span>
+                <span className="truncate text-slate-600">{[row.route, row.source].filter(Boolean).join(" · ") || "—"}</span>
+                <span className="font-mono text-slate-500">{formatTime(row.lastAttemptedAt)}</span>
+                <span className={
+                  row.outcome === "destination_missing" || row.outcome === "cross_app_blocked"
+                    ? "font-semibold text-rose-700"
+                    : "font-semibold text-emerald-700"
+                }>
+                  {row.outcome.replaceAll("_", " ")}
+                </span>
+                <span className="truncate text-slate-500">
+                  {[
+                    row.strategy ? `strategy: ${row.strategy}` : null,
+                    row.details.sourceField ? `field: ${row.details.sourceField}` : null,
+                    row.details.requestedLauncherId ? `requested: ${row.details.requestedLauncherId}` : null,
+                    row.details.usedXSafariPrefix ? "x-safari" : null,
+                  ].filter(Boolean).join(" · ") || "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassPanel>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <DistributionPanel title="Most Used Launcher Versions" rows={stats.mostUsedVersions} />
+        <GlassPanel title="Recent Launcher Events" subtitle={`${filtered.length} rows in current filters`}>
+          <div className="max-h-[460px] overflow-auto rounded-xl border border-slate-200">
+            {filtered.slice(0, 100).map((event) => (
+              <div key={event.id} className="grid gap-2 border-b border-slate-100 px-3 py-2 text-xs md:grid-cols-[120px_1fr_120px_120px]">
+                <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
+                <span className="font-semibold text-slate-800">{getEventDisplayLabel(event)}</span>
+                <span className="text-slate-600">{event.launcher_id}</span>
+                <span className="text-slate-600">{event.app_display_mode || "unknown"}</span>
+              </div>
+            ))}
+          </div>
+        </GlassPanel>
+      </section>
+    </div>
+  );
+});
+
+const EventsPage = memo(function EventsPage({ events, expandedEventId, setExpandedEventId }) {
+  useRenderDiagnostics("EventsPage");
+  return (
+    <GlassPanel title="Live Event Stream" subtitle={`${events.length} events in current filter`}>
+      {events.length === 0 ? (
+        <EmptyState title="No live telemetry yet." body="Events will appear as early-access users move through setup and launchers." />
+      ) : (
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100 shadow-inner">
+        <div className="grid grid-cols-[150px_1.1fr_0.9fr_0.8fr] border-b border-white/10 bg-white/5 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-400">
+          <span>Timestamp</span>
+          <span>Event Type</span>
+          <span>Pseudonymous User ID</span>
+          <span>Context</span>
+        </div>
+        <div className="max-h-[660px] overflow-auto">
+          {events.map((event) => {
+            const expanded = expandedEventId === event.id;
+            return (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => setExpandedEventId(expanded ? null : event.id)}
+                className="block w-full border-b border-white/5 px-4 py-3 text-left font-mono text-xs transition hover:bg-blue-500/10 focus:bg-blue-500/10 focus:outline-none"
+              >
+                <div className="grid gap-2 md:grid-cols-[150px_1.1fr_0.9fr_0.8fr]">
+                  <span className="text-slate-400">{formatTime(event.created_at)}</span>
+                  <span className="font-semibold text-blue-200">{getEventDisplayLabel(event)}</span>
+                  <span className="truncate text-slate-300">{pseudoUser(event.user_id)}</span>
+                  <span className="truncate text-slate-300">{event.launcher_context || event.target_app || event.app_name || "none"}</span>
+                </div>
+                {expanded ? (
+                  <pre className="mt-3 overflow-auto rounded-xl border border-white/10 bg-black/30 p-3 text-[11px] leading-5 text-slate-200">
+                    Payload
+                    {"\n"}
+                    {JSON.stringify(event, null, 2)}
+                  </pre>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      )}
+    </GlassPanel>
+  );
+});
+
+const AVAILABILITY_LABELS = {
+  public: "Live — visible to all users",
+  hidden: "Hidden — HQ only, not shown to users",
+  experimental: "Experimental — testers/experimental flows only",
+  tester_only: "Testing — testers only",
+  disabled: "Disabled — unavailable to users",
+  draft: "Draft — HQ only, not yet released",
+  archived: "Archived — retired, history preserved",
+};
+
+const LIFECYCLE_LABELS = { draft: "Draft", testing: "Testing", live: "Live", disabled: "Disabled", archived: "Archived" };
+const AUDIENCE_LABELS = { admin_only: "Admin only", testers: "Testers", all_users: "All users" };
+
+function LauncherIconPicker({ launcherId, iconSrc, onUploaded, onError, disabled = false }) {
+  const [uploading, setUploading] = useState(false);
+
+  if (disabled) {
+    return <img src={iconSrc || PLACEHOLDER_ICON_SRC} alt="" className="h-12 w-12 rounded-xl object-cover" />;
+  }
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadLauncherIcon(launcherId, file);
+      onUploaded?.(url);
+    } catch (error) {
+      onError?.(error?.message ?? "Could not upload icon.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <label className="group relative block h-12 w-12 cursor-pointer" title="Change image">
+      <img
+        src={iconSrc || PLACEHOLDER_ICON_SRC}
+        alt=""
+        className="h-12 w-12 rounded-xl object-cover"
+        onError={(event) => {
+          if (event.currentTarget.src.endsWith(PLACEHOLDER_ICON_SRC)) return;
+          event.currentTarget.src = PLACEHOLDER_ICON_SRC;
+        }}
+      />
+      <span className="absolute inset-0 hidden items-center justify-center rounded-xl bg-slate-900/60 text-[9px] font-semibold uppercase tracking-wide text-white group-hover:flex">
+        {uploading ? "…" : "Change"}
+      </span>
+      <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFile} disabled={uploading} />
+    </label>
+  );
+}
+
+const LauncherConfigCard = memo(function LauncherConfigCard({ launcher, interruptionPacks, onSave, onDelete, canEdit = true, canHardDelete = false, loading }) {
+  const [form, setForm] = useState(() => launcher);
+  const [cardError, setCardError] = useState("");
+
+  useEffect(() => {
+    setForm(launcher);
+  }, [launcher]);
+
+  const packOptions = interruptionPacks.filter((pack) => pack.targetApp === launcher.id || pack.linkedVersionId === launcher.id);
+  const availabilityStatus = getLauncherAvailabilityStatus(form);
+  const lifecycle = getLauncherLifecycleStatus(form);
+  const audience = getLauncherAudience(form);
+  const needsQa = availabilityStatus !== "public" && availabilityStatus !== "archived" && form.hqVisible !== false;
+
+  async function handleSaveClick() {
+    setCardError("");
+    if (availabilityStatus === "archived" && getLauncherAvailabilityStatus(launcher) !== "archived") {
+      const usage = await fetchLauncherUsageSummary(launcher.id).catch(() => null);
+      const usageNote = usage
+        ? `It has ${usage.launcherEvents} launcher event(s) and ${usage.testerReports} tester report(s); historical data stays readable.`
+        : "Historical data stays readable.";
+      const confirmed = window.confirm(
+        `Archive ${form.displayName || launcher.id}? It will disappear from all user-facing setup, settings and fake launchers. ${usageNote}`,
+      );
+      if (!confirmed) return;
+    }
+    onSave?.(form);
+  }
+
+  async function handleDeleteClick() {
+    setCardError("");
+    const usage = await fetchLauncherUsageSummary(launcher.id).catch(() => null);
+    const usageNote = usage && (usage.launcherEvents > 0 || usage.testerReports > 0)
+      ? `WARNING: this app has ${usage.launcherEvents} launcher event(s) and ${usage.testerReports} tester report(s). `
+      : "";
+    if (usage && (usage.launcherEvents > 0 || usage.testerReports > 0)) {
+      const preferArchive = window.confirm(
+        `${usageNote}Archiving is safer than deleting when an app has history. Press OK to archive instead of deleting, or Cancel to continue with permanent delete.`,
+      );
+      if (preferArchive) {
+        onSave?.({ ...form, availabilityStatus: "archived", enabled: false });
+        return;
+      }
+    }
+    const first = window.confirm(
+      `${usageNote}Permanently delete ${form.displayName || launcher.id}? Historical logs may lose app display metadata (name/icon) unless preserved elsewhere. This cannot be undone.`,
+    );
+    if (!first) return;
+    const second = window.confirm(`Really delete "${launcher.id}" forever? This is the final confirmation.`);
+    if (!second) return;
+    onDelete?.(launcher.id);
+  }
+
+  return (
+    <article className="rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <LauncherIconPicker
+          launcherId={launcher.id}
+          disabled={!canEdit}
+          iconSrc={resolveLauncherIconSrc(form)}
+          onUploaded={(url) => {
+            setCardError("");
+            setForm((current) => ({ ...current, customIconSrc: url }));
+          }}
+          onError={setCardError}
+        />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{launcher.id}{launcher.isCustom ? " · HQ-created" : ""}</p>
+          <h4 className="text-base font-semibold text-slate-950">{form.displayName || form.name}</h4>
+          <p className="text-xs text-slate-500">
+            {LIFECYCLE_LABELS[lifecycle] ?? lifecycle} · {AUDIENCE_LABELS[audience] ?? audience} · {form.hqVisible ? "HQ visible" : "Hidden in HQ"}
+          </p>
+          {launcher.isCustom ? <p className="mt-1 text-xs font-semibold text-violet-700">HQ-created app — deployable from HQ (in-app launcher); home-screen shortcut install needs release promotion</p> : null}
+          {needsQa && !launcher.isCustom ? <p className="mt-1 text-xs font-semibold text-amber-700">Not public — check icon/device QA before going live</p> : null}
+        </div>
+      </div>
+      {cardError ? <p className="mt-2 text-xs font-semibold text-red-600">{cardError}</p> : null}
+      <div className="mt-4 grid gap-2">
+        <input value={form.displayName ?? ""} onChange={(event) => setForm({ ...form, displayName: event.target.value, name: event.target.value })} placeholder="Display name" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.realAppLabel ?? ""} onChange={(event) => setForm({ ...form, realAppLabel: event.target.value })} placeholder="Real app label" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.iconSrc ?? ""} onChange={(event) => setForm({ ...form, iconSrc: event.target.value })} placeholder="Default icon URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.customIconSrc ?? ""} onChange={(event) => setForm({ ...form, customIconSrc: event.target.value })} placeholder="Uploaded icon URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <label className="text-xs font-semibold text-slate-700">
+          Availability
+          <select
+            value={availabilityStatus}
+            onChange={(event) => setForm({ ...form, availabilityStatus: event.target.value, enabled: event.target.value === "public" })}
+            className="mt-1 h-10 w-full rounded-xl border border-blue-100 bg-white px-3 text-sm font-normal"
+          >
+            {LAUNCHER_AVAILABILITY_STATUSES.map((status) => (
+              <option key={status} value={status}>{AVAILABILITY_LABELS[status] ?? status}</option>
+            ))}
+          </select>
+        </label>
+        <input value={form.iosAppUrl ?? ""} onChange={(event) => setForm({ ...form, iosAppUrl: event.target.value })} placeholder="iOS URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.androidIntentUrl ?? ""} onChange={(event) => setForm({ ...form, androidIntentUrl: event.target.value })} placeholder="Android intent URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.webFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, webFallbackUrl: event.target.value })} placeholder="Web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.iosWebFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, iosWebFallbackUrl: event.target.value })} placeholder="iOS web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.androidWebFallbackUrl ?? ""} onChange={(event) => setForm({ ...form, androidWebFallbackUrl: event.target.value })} placeholder="Android web fallback URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.nativeAppUrl ?? ""} onChange={(event) => setForm({ ...form, nativeAppUrl: event.target.value })} placeholder="Native app URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.appUrl ?? ""} onChange={(event) => setForm({ ...form, appUrl: event.target.value })} placeholder="App URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <input value={form.manualUrl ?? ""} onChange={(event) => setForm({ ...form, manualUrl: event.target.value })} placeholder="Manual URL" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        <select value={form.interruptionPackId ?? ""} onChange={(event) => setForm({ ...form, interruptionPackId: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+          <option value="">{`System default pack (${form.defaultInterruptionPackId ?? "none"})`}</option>
+          {packOptions.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
+        </select>
+        <textarea
+          value={form.qaNotes ?? ""}
+          onChange={(event) => setForm({ ...form, qaNotes: event.target.value })}
+          placeholder="QA / testing notes"
+          rows={2}
+          className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm"
+        />
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <input type="checkbox" checked={Boolean(form.hqVisible)} onChange={(event) => setForm({ ...form, hqVisible: event.target.checked })} />
+          HQ visible
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <input type="checkbox" checked={Boolean(form.useInterruptionPack)} onChange={(event) => setForm({ ...form, useInterruptionPack: event.target.checked })} />
+          Use interruption pack by default
+        </label>
+        {canEdit ? (
+          <button type="button" disabled={loading} onClick={handleSaveClick} className="mt-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            Save launcher config
+          </button>
+        ) : (
+          <p className="mt-2 text-xs text-slate-500">View only — your HQ role cannot edit launcher configs.</p>
+        )}
+        {launcher.isCustom && canHardDelete ? (
+          <button type="button" disabled={loading} onClick={handleDeleteClick} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50">
+            Delete permanently…
+          </button>
+        ) : null}
+        {launcher.isCustom && !canHardDelete && canEdit ? (
+          <p className="text-xs text-slate-500">Hard delete is owner-only — archive instead.</p>
+        ) : null}
+      </div>
+    </article>
+  );
+});
+
+const ADD_LAUNCHER_EMPTY_FORM = {
+  id: "",
+  displayName: "",
+  realAppLabel: "",
+  category: "other",
+  customIconSrc: "",
+  iosAppUrl: "",
+  androidIntentUrl: "",
+  webFallbackUrl: "",
+  manualUrl: "",
+  qaNotes: "",
+};
+
+const AddLauncherForm = memo(function AddLauncherForm({ launchers = [], onSave, loading }) {
+  const [form, setForm] = useState(ADD_LAUNCHER_EMPTY_FORM);
+  const [errors, setErrors] = useState([]);
+
+  const field = (key, placeholder) => (
+    <input
+      value={form[key]}
+      onChange={(event) => setForm({ ...form, [key]: event.target.value })}
+      placeholder={placeholder}
+      className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm"
+    />
+  );
+
+  async function handleAdd() {
+    const draft = {
+      ...form,
+      id: form.id.trim().toLowerCase(),
+      isCustom: true,
+      // New apps start safely: admin-only draft, never enabled for users.
+      availabilityStatus: "draft",
+      enabled: false,
+      hqVisible: true,
+      useInterruptionPack: true,
+    };
+    const validation = validateLauncherDraft(draft, { existingIds: launchers.map((launcher) => launcher.id) });
+    if (!validation.ok) {
+      setErrors(validation.errors);
+      return;
+    }
+    setErrors([]);
+    const saved = await onSave?.(draft);
+    if (saved) setForm(ADD_LAUNCHER_EMPTY_FORM);
+  }
+
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {field("id", "App ID / slug (e.g. tiktok)")}
+      {field("displayName", "Display name")}
+      {field("realAppLabel", "Real app label")}
+      {field("category", "Category (e.g. social, video)")}
+      {field("customIconSrc", "Icon image URL (https) — or upload after creating")}
+      {field("iosAppUrl", "iOS app URL")}
+      {field("androidIntentUrl", "Android intent URL")}
+      {field("webFallbackUrl", "Web fallback URL (https) — at least one fallback required")}
+      {field("manualUrl", "Manual URL")}
+      {field("qaNotes", "Notes / testing status")}
+      {errors.length > 0 ? (
+        <ul className="md:col-span-2 list-disc pl-5 text-xs font-semibold text-red-600">
+          {errors.map((error) => <li key={error}>{error}</li>)}
+        </ul>
+      ) : null}
+      <button
+        type="button"
+        disabled={loading}
+        onClick={handleAdd}
+        className="md:col-span-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        Add app as admin-only draft
+      </button>
+    </div>
+  );
+});
+
+const PacksPage = memo(function PacksPage({
+  adminPacks,
+  telemetry,
+  packForm,
+  setPackForm,
+  handleSavePack,
+  handleTogglePublished,
+  handleDeletePack,
+  editPack,
+  loading,
+  setStatus,
+}) {
+  useRenderDiagnostics("PacksPage");
+  return (
+    <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+      <GlassPanel title={packForm.id ? "Edit Pack Deployment" : "Create Pack Deployment"} subtitle="Database-managed content object">
+        <PackEditor form={packForm} setForm={setPackForm} onSubmit={handleSavePack} loading={loading} onError={setStatus} />
+      </GlassPanel>
+      <div className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <MiniStat label="Live packs" value={telemetry.publishedPacks} />
+          <MiniStat label="Draft packs" value={telemetry.draftPacks} />
+          <MiniStat label="Cards indexed" value={telemetry.totalPackCards} />
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {adminPacks.map((pack) => (
+            <PackDeploymentCard
+              key={pack.id}
+              pack={pack}
+              stats={telemetry.packStats.get(pack.id)}
+              onEdit={editPack}
+              onTogglePublished={handleTogglePublished}
+              onDelete={handleDeletePack}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const NotificationsPage = memo(function NotificationsPage({ telemetry }) {
+  useRenderDiagnostics("NotificationsPage");
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <TelemetryChart
+        title="Notification Interaction Rate"
+        subtitle="Notification event counts by time bucket"
+        data={telemetry.notificationTrend}
+        lines={[
+          { key: "delivered", color: TELEMETRY_BLUE, name: "Delivery events" },
+          { key: "interactions", color: TELEMETRY_GREEN, name: "Interaction events" },
+        ]}
+      />
+      <DistributionPanel title="Notification Event Types" rows={telemetry.notificationRows} />
+    </div>
+  );
+});
+
+const TesterReportsPage = memo(function TesterReportsPage() {
+  useRenderDiagnostics("TesterReportsPage");
+  const [reports, setReports] = useState([]);
+  const [filters, setFilters] = useState({ status: "all", severity: "all", reportType: "all", launcher: "all", device: "", search: "" });
+  const [expandedId, setExpandedId] = useState(null);
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const loadReports = useCallback(async () => {
+    setLoading(true);
+    setStatus("");
+    try {
+      setReports(await fetchAdminTesterReports(filters));
+    } catch (error) {
+      setStatus(error?.message ?? "Could not load tester reports.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
+
+  const launcherOptions = Array.from(new Set(reports.map((report) => report.launcher_context).filter(Boolean))).sort();
+
+  async function saveReport(report, updates) {
+    setStatus("Saving report...");
+    try {
+      await updateTesterReportStatus(report.id, updates);
+      await loadReports();
+      setStatus("Report updated.");
+    } catch (error) {
+      setStatus(error?.message ?? "Could not update report.");
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader title="Tester Reports" subtitle="Bugs, feedback, diagnostics, screenshots, and internal follow-up." />
+      <GlassPanel title="Filters" subtitle="Narrow by status, severity, launcher, type, device, or text">
+        <div className="grid gap-2 md:grid-cols-6">
+          <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All status</option><option value="open">Open</option><option value="in_review">In review</option><option value="fixed">Fixed</option><option value="closed">Closed</option><option value="not_reproducible">Not reproducible</option>
+          </select>
+          <select value={filters.severity} onChange={(event) => setFilters({ ...filters, severity: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All severity</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="blocking">Blocking</option>
+          </select>
+          <select value={filters.reportType} onChange={(event) => setFilters({ ...filters, reportType: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All types</option><option value="bug">Bug</option><option value="feedback">Feedback</option><option value="confusion">Confusion</option><option value="idea">Idea</option>
+          </select>
+          <select value={filters.launcher} onChange={(event) => setFilters({ ...filters, launcher: event.target.value })} className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm">
+            <option value="all">All launchers</option>
+            {launcherOptions.map((launcher) => <option key={launcher} value={launcher}>{launcher}</option>)}
+          </select>
+          <input value={filters.device} onChange={(event) => setFilters({ ...filters, device: event.target.value })} placeholder="Device" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+          <input value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search" className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm" />
+        </div>
+        <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
+          <button type="button" onClick={loadReports} disabled={loading} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Refresh</button>
+          {status || `${reports.length} reports`}
+        </div>
+      </GlassPanel>
+      <div className="grid gap-4">
+        {reports.length === 0 && !loading ? <EmptyState title="No tester reports yet." body="Submissions will appear here once testers use Tester Mode." /> : null}
+        {reports.map((report) => (
+          <TesterReportCard
+            key={report.id}
+            report={report}
+            expanded={expandedId === report.id}
+            onToggle={() => setExpandedId(expandedId === report.id ? null : report.id)}
+            onSave={saveReport}
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+const TesterReportCard = memo(function TesterReportCard({ report, expanded, onToggle, onSave }) {
+  const [notes, setNotes] = useState(report.admin_notes ?? "");
+  const screenshot = report.screenshot_urls?.[0] || report.tester_report_attachments?.[0]?.public_url;
+  const userEmail = report.user_profiles?.email || pseudoUser(report.user_id);
+  const testerGroup = report.user_profiles?.tester_group || "No tester group";
+
+  useEffect(() => {
+    setNotes(report.admin_notes ?? "");
+  }, [report.admin_notes]);
+
+  return (
+    <GlassPanel title={report.title || report.description.slice(0, 90)} subtitle={`${userEmail} - ${testerGroup}`}>
+      <div className="grid gap-4 lg:grid-cols-[120px_1fr]">
+        <button type="button" onClick={onToggle} className="overflow-hidden rounded-xl border border-blue-100 bg-white text-left">
+          {screenshot ? <img src={screenshot} alt="Tester screenshot" className="h-28 w-full object-cover" /> : <div className="grid h-28 place-items-center text-xs font-semibold text-slate-400">No screenshot</div>}
+        </button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{report.report_type}</span>
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">{report.severity}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{report.status}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{report.launcher_context || "normal"}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{formatDate(report.created_at)}</span>
+          </div>
+          <p className="text-sm text-slate-700">{report.description}</p>
+          {report.expected || report.actual ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <MiniStat label="Expected" value={report.expected || "Not provided"} />
+              <MiniStat label="Actual" value={report.actual || "Not provided"} />
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {["open", "in_review", "fixed", "closed", "not_reproducible"].map((nextStatus) => (
+              <button key={nextStatus} type="button" onClick={() => onSave(report, { status: nextStatus, admin_notes: notes })} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${report.status === nextStatus ? "bg-blue-600 text-white" : "border border-blue-100 bg-white text-slate-700"}`}>
+                {nextStatus.replace("_", " ")}
+              </button>
+            ))}
+          </div>
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Internal notes" rows={3} className="w-full rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm" />
+          <button type="button" onClick={() => onSave(report, { status: report.status, admin_notes: notes })} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Save notes</button>
+        </div>
+      </div>
+      {expanded ? (
+        <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <div><strong>Route:</strong> {report.route || "Not captured"}</div>
+          <div><strong>Display:</strong> {report.display_mode || "Not captured"}</div>
+          <div><strong>Device:</strong> {report.device_summary || "Not captured"}</div>
+          <pre className="max-h-80 overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] text-slate-100">{JSON.stringify(report.diagnostics_json ?? {}, null, 2)}</pre>
+        </div>
+      ) : null}
+    </GlassPanel>
+  );
+});
+
+const UsersPage = memo(function UsersPage({ users, telemetry, onUserUpdated, setStatus, canManageAccess = false }) {
+  useRenderDiagnostics("UsersPage");
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(null);
+
+  async function handleTesterUpdate(user, fields) {
+    try {
+      setStatus?.("Updating tester access...");
+      await updateTesterUser(user.user_id, fields);
+      await onUserUpdated?.();
+      setStatus?.("Tester access updated.");
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update tester access.");
+    }
+  }
+
+  const enrichedUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    return users
+      .map((user) => {
+        const stats = telemetry.userStats.get(user.user_id) ?? {};
+        const lastActivity = stats.lastMeaningfulActivityAt || user.last_meaningful_activity_at || stats.lastEventAt || user.last_seen_at || user.signed_up_at;
+        const lastSeen = user.last_login_at || user.last_sign_in_at || user.last_seen_at;
+        const searchable = [user.email, user.user_id, user.access_code, user.tester_group, user.access_tier, user.grant_reason, user.cohort].filter(Boolean).join(" ").toLowerCase();
+        return { user, stats, lastActivity, lastSeen, searchable };
+      })
+      .filter((item) => !query || item.searchable.includes(query))
+      .sort((left, right) => new Date(right.lastActivity || 0).getTime() - new Date(left.lastActivity || 0).getTime());
+  }, [telemetry.userStats, userSearch, users]);
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="User Analytics"
+        subtitle="Individual adoption paths: signup, onboarding, launcher install, interruptions, Do Something Else, and action-card completion."
+      />
+      {canManageAccess ? (
+        <p className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-slate-600">
+          Manage codes in <span className="font-semibold">Access Codes</span> and grant memberships in <span className="font-semibold">Memberships</span>. Per-user controls remain on each card below.
+        </p>
+      ) : null}
+      <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+        <input
+          value={userSearch}
+          onChange={(event) => setUserSearch(event.target.value)}
+          placeholder="Search by email, user id, access code, or tester group"
+          className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm"
+        />
+        <span className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-semibold text-slate-600">
+          Sorted by last activity
+        </span>
+      </div>
+      {users.length === 0 ? (
+        <EmptyState title="No user records yet." body="User timelines will appear once early-access accounts are created." />
+      ) : null}
+      {users.length > 0 && enrichedUsers.length === 0 ? (
+        <EmptyState title="No matching users." body="Try another email or user id." />
+      ) : null}
+      <div className="grid gap-4">
+        {enrichedUsers.map(({ user, stats, lastActivity, lastSeen }) => {
+          const usageStatus = getUserUsageStatus(stats);
+          const activeBadge = getUserActivityBadge(lastActivity);
+          const expanded = selectedUserId === user.user_id;
+          return (
+            <GlassPanel key={user.user_id} title={user.email || pseudoUser(user.user_id)} subtitle={`Pseudonymous user ${pseudoUser(user.user_id)}`}>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className={`rounded-full px-2.5 py-1 ${activeBadge.className}`}>{activeBadge.label}</span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{user.is_tester ? `Tester${user.tester_group ? ` · ${user.tester_group}` : ""}` : "Not tester"}</span>
+                  <span className={`rounded-full px-2.5 py-1 ${user.has_access === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{user.has_access === false ? "No access" : "Access granted"}</span>
+                  <span className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">
+                    {formatMembership(user.membership ?? user.access_tier)}
+                    {user.access_expires_at ? ` · until ${formatDate(user.access_expires_at)}` : ""}
+                    {user.grant_reason ? ` · ${user.grant_reason}` : ""}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setSelectedUserId(expanded ? null : user.user_id)} className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
+                  {expanded ? "Hide timeline" : "View timeline"}
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <MiniStat label="Usage status" value={usageStatus} />
+                <MiniStat label="Created" value={formatDate(user.signed_up_at || user.created_at)} />
+                <MiniStat label="Last login / seen" value={formatDate(lastSeen)} />
+                <MiniStat label="Last meaningful activity" value={formatDate(lastActivity)} />
+                <MiniStat label="Last launcher used" value={stats.lastLauncherUsed || "None tracked"} />
+                <MiniStat label="Launcher opens" value={stats.launcherOpens ?? 0} />
+                <MiniStat label="Cards completed" value={stats.actionsCompleted ?? 0} />
+                <MiniStat label="Reports / feedback" value={stats.reportsSubmitted ?? 0} />
+                <MiniStat label="Total events" value={user.event_count ?? stats.latestEvents?.length ?? 0} />
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-5">
+                <LifecyclePill label="Onboarding" active={stats.eventTypes?.includes("onboarding_completed")} />
+                <LifecyclePill label="Launcher" active={(stats.installedLaunchers?.length ?? 0) > 0} />
+                <LifecyclePill label="Interruption" active={(stats.interruptions ?? 0) > 0} />
+                <LifecyclePill label="Do Something Else" active={(stats.doSomethingElse ?? 0) > 0} />
+                <LifecyclePill label="Action done" active={(stats.actionsCompleted ?? 0) > 0} />
+              </div>
+              <UserActivityHeatmap data={stats.hourlyActivity ?? []} />
+              {expanded ? <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Event timeline</p>
+                <div className="space-y-2">
+                  {(stats.latestEvents ?? []).length === 0 ? <p className="text-sm text-slate-500">No recent events available for this user.</p> : null}
+                  {(stats.latestEvents ?? []).map((event) => (
+                    <div key={event.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                      <span className="font-mono text-slate-500">{formatTime(event.created_at)}</span>
+                      <span className="truncate font-semibold text-slate-700">{getEventDisplayLabel(event)}</span>
+                      <span className="truncate text-slate-500">{event.launcher_context || event.target_app || "none"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div> : null}
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-slate-600">
+                Signed up {formatDate(user.signed_up_at)} - Last seen {formatDate(lastSeen)} - {user.event_count ?? 0} total events
+              </div>
+              <TesterUserControls user={user} onUpdate={handleTesterUpdate} />
+              {canManageAccess ? (
+                <AccessUserControls user={user} setStatus={setStatus} onAccessChanged={onUserUpdated} />
+              ) : null}
+            </GlassPanel>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+const TesterUserControls = memo(function TesterUserControls({ user, onUpdate }) {
+  const [group, setGroup] = useState(user.tester_group ?? "");
+  const [notes, setNotes] = useState(user.tester_notes ?? "");
+  useEffect(() => {
+    setGroup(user.tester_group ?? "");
+    setNotes(user.tester_notes ?? "");
+  }, [user.tester_group, user.tester_notes]);
+
+  return (
+    <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700">Tester Mode</p>
+          <p className="text-xs text-slate-600">{user.is_tester ? "Enabled" : "Disabled"}</p>
+        </div>
+        <button type="button" onClick={() => onUpdate(user, { is_tester: !user.is_tester, tester_group: group, tester_notes: notes })} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white">
+          {user.is_tester ? "Remove tester" : "Mark tester"}
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <input value={group} onChange={(event) => setGroup(event.target.value)} placeholder="Tester group" className="h-10 rounded-xl border border-orange-100 bg-white px-3 text-sm" />
+        <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Tester notes" className="h-10 rounded-xl border border-orange-100 bg-white px-3 text-sm" />
+      </div>
+      <button type="button" onClick={() => onUpdate(user, { is_tester: Boolean(user.is_tester), tester_group: group, tester_notes: notes })} className="mt-2 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700">Save tester fields</button>
+    </div>
+  );
+});
+
+// Expiry dates are entered as YYYY-MM-DD and granted until end of that day UTC.
+function accessExpiryToIso(dateValue) {
+  const trimmed = (dateValue ?? "").trim();
+  return trimmed ? `${trimmed}T23:59:59Z` : null;
+}
+
+function describeAccessResult(result, email) {
+  return result?.status === "pending"
+    ? `No account for ${email} yet — access will apply when they sign up.`
+    : `Access updated for ${email}.`;
+}
+
+const AccessUserControls = memo(function AccessUserControls({ user, setStatus, onAccessChanged }) {
+  const initialMembership = user.membership ?? (user.access_tier === "premium" ? "premium" : "free");
+  const [membership, setMembership] = useState(initialMembership);
+  const [expiresAt, setExpiresAt] = useState(user.access_expires_at ? String(user.access_expires_at).slice(0, 10) : "");
+  const [reason, setReason] = useState(user.grant_reason ?? "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setMembership(user.membership ?? (user.access_tier === "premium" ? "premium" : "free"));
+    setExpiresAt(user.access_expires_at ? String(user.access_expires_at).slice(0, 10) : "");
+    setReason(user.grant_reason ?? "");
+  }, [user.membership, user.access_tier, user.access_expires_at, user.grant_reason]);
+
+  async function applyAccess(grant) {
+    if (!user.email) {
+      setStatus?.("This user has no email on record; access can only be changed by email.");
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.(grant ? "Granting membership..." : "Revoking access...");
+      const result = await hqSetUserAccess({
+        email: user.email,
+        grant,
+        membership,
+        expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
+        reason: reason.trim() || null,
+      });
+      await onAccessChanged?.();
+      setStatus?.(grant ? describeAccessResult(result, user.email) : `Access revoked for ${user.email}.`);
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update access.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const currentMembership = user.membership ?? (user.access_tier === "premium" ? "premium" : "free");
+  const isActiveGrant = user.has_access !== false && currentMembership !== "free";
+
+  return (
+    <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Membership</p>
+          <p className="text-xs text-slate-600">
+            {user.has_access === false ? "Revoked" : formatMembership(currentMembership)}
+            {user.access_expires_at ? ` until ${formatDate(user.access_expires_at)}` : ""}
+            {user.cohort ? ` · ${user.cohort}` : ""}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" disabled={busy} onClick={() => applyAccess(true)} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white">
+            {isActiveGrant ? "Update grant" : `Grant ${formatMembership(membership)}`}
+          </button>
+          <button type="button" disabled={busy} onClick={() => applyAccess(false)} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700">
+            Revoke
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <label className="text-xs text-slate-600">
+          Membership
+          <select value={membership} onChange={(event) => setMembership(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm">
+            {MEMBERSHIP_OPTIONS.map((option) => (
+              <option key={option} value={option}>{formatMembership(option)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-slate-600">
+          Expires (blank = lifetime)
+          <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+        </label>
+        <label className="text-xs text-slate-600">
+          Reason (press, founder, promo...)
+          <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason" className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+        </label>
+      </div>
+    </div>
+  );
+});
+
+const MEMBERSHIP_OPTIONS = ["free", "founder", "premium"];
+
+function formatMembership(value) {
+  const membership = MEMBERSHIP_OPTIONS.includes(value)
+    ? value
+    : value === "premium"
+      ? "premium"
+      : "free";
+  return membership.charAt(0).toUpperCase() + membership.slice(1);
+}
+
+// Parse the optional entitlement-override JSON field. Returns { ok, value, error }.
+function parseEntitlementOverrides(raw) {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return { ok: true, value: null };
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ok: true, value: parsed };
+    }
+    return { ok: false, error: "Entitlement overrides must be a JSON object." };
+  } catch {
+    return { ok: false, error: "Entitlement overrides must be valid JSON, e.g. {\"maxPersonalCards\": 50}." };
+  }
+}
+
+const EMPTY_CODE_FORM = {
+  code: "",
+  label: "",
+  maxUses: "",
+  grantsMembership: "premium",
+  grantReason: "",
+  cohort: "",
+  durationDays: "",
+  expiresAt: "",
+  grantsTester: false,
+  testerGroup: "",
+  entitlementOverrides: "",
+};
+
+// ── Memberships / Entitlements: grant a membership by email (orthogonal tester)
+
+const MembershipsPage = memo(function MembershipsPage({ users, telemetry, onUserUpdated, setStatus, canManageAccess = false }) {
+  useRenderDiagnostics("MembershipsPage");
+  const [email, setEmail] = useState("");
+  const [membership, setMembership] = useState("premium");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [reason, setReason] = useState("");
+  const [cohort, setCohort] = useState("");
+  const [grantTester, setGrantTester] = useState(false);
+  const [overrides, setOverrides] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submitAccess(grant) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setStatus?.("Enter an email address first.");
+      return;
+    }
+    const parsedOverrides = parseEntitlementOverrides(overrides);
+    if (!parsedOverrides.ok) {
+      setStatus?.(parsedOverrides.error);
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.(grant ? "Granting membership..." : "Revoking access...");
+      const result = await hqSetUserAccess({
+        email: trimmedEmail,
+        grant,
+        membership,
+        expiresAt: grant ? accessExpiryToIso(expiresAt) : null,
+        reason: reason.trim() || null,
+        cohort: cohort.trim() || null,
+        isTester: grant ? grantTester : null,
+        entitlementOverrides: grant ? parsedOverrides.value : null,
+      });
+      await onUserUpdated?.();
+      setStatus?.(grant ? describeAccessResult(result, trimmedEmail) : `Access revoked for ${trimmedEmail}.`);
+      setEmail("");
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update membership.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const membershipCounts = useMemo(() => {
+    const counts = { free: 0, founder: 0, premium: 0, tester: 0 };
+    for (const user of users ?? []) {
+      const value = user.membership ?? (user.access_tier === "premium" ? "premium" : "free");
+      counts[value] = (counts[value] ?? 0) + 1;
+      if (user.is_tester) counts.tester += 1;
+    }
+    return counts;
+  }, [users]);
+
+  if (!canManageAccess) {
+    return <EmptyState title="Read-only role." body="Owner or admin role required to manage memberships." />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Memberships & Entitlements"
+        subtitle="Membership is commercial only (Free / Founder / Premium). Tester is an orthogonal beta flag. Entitlements are resolved from membership defaults plus optional overrides. Every change is audit-logged."
+      />
+      <div className="grid gap-2 sm:grid-cols-4">
+        <MiniStat label="Free" value={membershipCounts.free} />
+        <MiniStat label="Founder" value={membershipCounts.founder} />
+        <MiniStat label="Premium" value={membershipCounts.premium} />
+        <MiniStat label="Testers" value={membershipCounts.tester} />
+      </div>
+      <GlassPanel title="Grant Membership" subtitle="By email — applies immediately, or on signup if the account does not exist yet.">
+        <div className="grid gap-2">
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@example.com" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <div className="grid gap-2 sm:grid-cols-4">
+            <label className="text-xs text-slate-600">
+              Membership
+              <select value={membership} onChange={(event) => setMembership(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm">
+                {MEMBERSHIP_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{formatMembership(option)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-600">
+              Expires (blank = lifetime)
+              <input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Reason
+              <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="press, founder, promo..." className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Cohort
+              <input value={cohort} onChange={(event) => setCohort(event.target.value)} placeholder="founding-2026" className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={grantTester} onChange={(event) => setGrantTester(event.target.checked)} />
+            Also enable tester mode (orthogonal to membership)
+          </label>
+          <label className="text-xs text-slate-600">
+            Entitlement overrides (optional JSON)
+            <textarea value={overrides} onChange={(event) => setOverrides(event.target.value)} placeholder={'{"maxPersonalCards": 50, "maxConnectedApps": null}'} rows={2} className="mt-1 w-full rounded-xl border border-violet-100 bg-white px-3 py-2 font-mono text-xs" />
+          </label>
+          <div className="flex gap-2">
+            <button type="button" disabled={busy} onClick={() => submitAccess(true)} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Grant {formatMembership(membership)}</button>
+            <button type="button" disabled={busy} onClick={() => submitAccess(false)} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-700">Revoke access</button>
+          </div>
+        </div>
+      </GlassPanel>
+      <p className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-slate-600">
+        Per-user membership, tester, and entitlement override controls remain on each card in <span className="font-semibold">User Timelines</span>.
+      </p>
+    </div>
+  );
+});
+
+// ── Access Codes: invite codes that grant a membership (and optionally tester)
+
+const AccessCodesPage = memo(function AccessCodesPage({ onChanged, setStatus, canManageAccess = false }) {
+  useRenderDiagnostics("AccessCodesPage");
+  const [busy, setBusy] = useState(false);
+  const [codes, setCodes] = useState([]);
+  const [codeForm, setCodeForm] = useState(EMPTY_CODE_FORM);
+
+  const loadCodes = useCallback(async () => {
+    try {
+      setCodes(await fetchAccessCodes());
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not load access codes.");
+    }
+  }, [setStatus]);
+  useEffect(() => { loadCodes(); }, [loadCodes]);
+
+  async function submitCode() {
+    const trimmedCode = codeForm.code.trim();
+    if (!trimmedCode) {
+      setStatus?.("Enter a code first.");
+      return;
+    }
+    const parsedOverrides = parseEntitlementOverrides(codeForm.entitlementOverrides);
+    if (!parsedOverrides.ok) {
+      setStatus?.(parsedOverrides.error);
+      return;
+    }
+    try {
+      setBusy(true);
+      setStatus?.("Creating access code...");
+      await hqCreateAccessCode({
+        code: trimmedCode,
+        label: codeForm.label.trim() || null,
+        maxUses: codeForm.maxUses ? Number(codeForm.maxUses) : null,
+        grantsMembership: codeForm.grantsMembership,
+        grantReason: codeForm.grantReason.trim() || null,
+        cohort: codeForm.cohort.trim() || null,
+        grantsDurationDays: codeForm.durationDays ? Number(codeForm.durationDays) : null,
+        expiresAt: accessExpiryToIso(codeForm.expiresAt),
+        grantsTester: codeForm.grantsTester,
+        testerGroup: codeForm.grantsTester ? (codeForm.testerGroup.trim() || null) : null,
+        entitlementOverrides: parsedOverrides.value,
+      });
+      setCodeForm(EMPTY_CODE_FORM);
+      await loadCodes();
+      await onChanged?.();
+      setStatus?.(`Access code ${trimmedCode.toUpperCase()} created.`);
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not create the access code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleCode(code) {
+    try {
+      setBusy(true);
+      await hqSetAccessCodeActive(code.code, !code.active);
+      await loadCodes();
+      setStatus?.(`Code ${code.code} ${code.active ? "deactivated" : "reactivated"}.`);
+    } catch (error) {
+      setStatus?.(error?.message ?? "Could not update the code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateCodeForm(field, value) {
+    setCodeForm((previous) => ({ ...previous, [field]: value }));
+  }
+
+  if (!canManageAccess) {
+    return <EmptyState title="Read-only role." body="Owner or admin role required to manage access codes." />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Access Codes"
+        subtitle="Invite codes are the door into the gated rollout. A code grants a membership (which may be Free — entry without premium), can flag tester, and may carry optional entitlement overrides. Codes are NOT premium codes."
+      />
+      <GlassPanel title="Create Access Code" subtitle="Duration stamps a membership expiry at claim time; code expiry stops the code being claimable.">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input value={codeForm.code} onChange={(event) => updateCodeForm("code", event.target.value)} placeholder="Code (e.g. PRESS-TIMES)" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.label} onChange={(event) => updateCodeForm("label", event.target.value)} placeholder="Label" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <label className="text-xs text-slate-600">
+            Grants membership
+            <select value={codeForm.grantsMembership} onChange={(event) => updateCodeForm("grantsMembership", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm">
+              {MEMBERSHIP_OPTIONS.map((option) => (
+                <option key={option} value={option}>{formatMembership(option)}</option>
+              ))}
+            </select>
+          </label>
+          <input value={codeForm.maxUses} onChange={(event) => updateCodeForm("maxUses", event.target.value)} placeholder="Max uses (blank = unlimited)" inputMode="numeric" className="mt-auto h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.durationDays} onChange={(event) => updateCodeForm("durationDays", event.target.value)} placeholder="Membership duration days (blank = permanent)" inputMode="numeric" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <label className="text-xs text-slate-600">
+            Code expires (blank = never)
+            <input type="date" value={codeForm.expiresAt} onChange={(event) => updateCodeForm("expiresAt", event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          </label>
+          <input value={codeForm.grantReason} onChange={(event) => updateCodeForm("grantReason", event.target.value)} placeholder="Reason (press, promo...)" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+          <input value={codeForm.cohort} onChange={(event) => updateCodeForm("cohort", event.target.value)} placeholder="Cohort" className="h-10 rounded-xl border border-violet-100 bg-white px-3 text-sm" />
+        </div>
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={codeForm.grantsTester} onChange={(event) => updateCodeForm("grantsTester", event.target.checked)} />
+          Also grants tester mode
+        </label>
+        {codeForm.grantsTester ? (
+          <input value={codeForm.testerGroup} onChange={(event) => updateCodeForm("testerGroup", event.target.value)} placeholder="Tester group" className="mt-2 h-10 w-full rounded-xl border border-orange-100 bg-white px-3 text-sm" />
+        ) : null}
+        <label className="mt-2 block text-xs text-slate-600">
+          Entitlement overrides (optional JSON)
+          <textarea value={codeForm.entitlementOverrides} onChange={(event) => updateCodeForm("entitlementOverrides", event.target.value)} placeholder={'{"maxPersonalCards": 50}'} rows={2} className="mt-1 w-full rounded-xl border border-violet-100 bg-white px-3 py-2 font-mono text-xs" />
+        </label>
+        <button type="button" disabled={busy} onClick={submitCode} className="mt-3 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white">Create code</button>
+      </GlassPanel>
+      <GlassPanel title="Existing Codes" subtitle={`${codes.length} code${codes.length === 1 ? "" : "s"}`}>
+        <div className="space-y-2">
+          {codes.length === 0 ? <p className="text-xs text-slate-500">No access codes yet.</p> : null}
+          {codes.map((code) => (
+            <div key={code.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+              <span className="font-mono font-semibold text-slate-700">{code.code}</span>
+              <span className="text-slate-500">
+                {code.label || code.grant_reason || "—"}
+                {" · "}
+                {formatMembership(code.grants_membership ?? code.grants_tier)}
+                {" · "}
+                {code.use_count ?? 0}{code.max_uses ? `/${code.max_uses}` : ""} used
+                {code.grants_duration_days ? ` · ${code.grants_duration_days}d access` : ""}
+                {code.expires_at ? ` · code expires ${formatDate(code.expires_at)}` : ""}
+                {code.grants_tester ? " · tester" : ""}
+                {code.entitlement_overrides ? " · overrides" : ""}
+              </span>
+              <button type="button" disabled={busy} onClick={() => toggleCode(code)} className={`rounded-lg border px-2.5 py-1 font-semibold ${code.active ? "border-red-200 text-red-700" : "border-emerald-200 text-emerald-700"}`}>
+                {code.active ? "Deactivate" : "Reactivate"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </GlassPanel>
+    </div>
+  );
+});
+
+const DevicesPage = memo(function DevicesPage({ telemetry }) {
+  useRenderDiagnostics("DevicesPage");
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <DistributionPanel title="Launcher Contexts" rows={telemetry.topLaunchers} />
+      <DistributionPanel title="Device Type Signals" rows={telemetry.deviceRows} />
+    </div>
+  );
+});
+
+const LifecyclePill = memo(function LifecyclePill({ label, active }) {
+  return (
+    <span className={`rounded-xl border px-3 py-2 text-center text-[11px] font-semibold ${
+      active
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-slate-50 text-slate-400"
+    }`}>
+      {label}
+    </span>
+  );
+});
+
+const DataPage = memo(function DataPage({ telemetry }) {
+  useRenderDiagnostics("DataPage");
+  return (
+    <div className="grid gap-4 xl:grid-cols-3">
+      <MiniStat label="Event rows sampled" value={telemetry.events.length} />
+      <MiniStat label="Event types" value={telemetry.eventTypes.length} />
+      <MiniStat label="Pack records" value={telemetry.totalPacks} />
+      <GlassPanel title="Schema Signals" subtitle="Fields present in recent telemetry">
+        <div className="flex flex-wrap gap-2">
+          {telemetry.schemaSignals.map((field) => (
+            <span key={field} className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">{field}</span>
+          ))}
+        </div>
+      </GlassPanel>
+    </div>
+  );
+});
+
+const SettingsPage = memo(function SettingsPage({ onRefresh, onBack, loading }) {
+  useRenderDiagnostics("SettingsPage");
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <GlassPanel title="HQ Operations" subtitle="Administrative controls">
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={onRefresh} disabled={loading} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50">
+            Refresh Data
+          </button>
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:text-blue-700">
+            Exit HQ
+          </button>
+        </div>
+      </GlassPanel>
+      <GlassPanel title="Data Policy" subtitle="Objective telemetry only">
+        <ul className="space-y-2 text-sm text-slate-600">
+          <li>Counts are derived from stored event rows and pack/user records.</li>
+          <li>User identifiers are shown as pseudonymous hashes where possible.</li>
+          <li>No subjective classifications or inferred states are computed.</li>
+        </ul>
+      </GlassPanel>
+    </div>
+  );
+});
+
+const HeroMetricCard = memo(function HeroMetricCard({ metric }) {
+  useRenderDiagnostics("HeroMetricCard");
+  return (
+    <article
+      className="transition-transform hover:-translate-y-1 rounded-2xl border border-blue-100/80 bg-white/80 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.08)] backdrop-blur-xl"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{metric.label}</p>
+          <strong className="mt-2 block text-3xl font-semibold tracking-tight text-slate-950">{metric.value}</strong>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${metric.trend >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+          {metric.trend >= 0 ? "+" : ""}{metric.trend}%
+        </span>
+      </div>
+      <div className="mt-3 h-12">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={metric.sparkline}>
+            <Line type="monotone" dataKey="value" stroke={metric.color} strokeWidth={2} dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{metric.comparison}</p>
+    </article>
+  );
+});
+
+const SparklineCard = memo(function SparklineCard({ title, data, dataKey }) {
+  useRenderDiagnostics("SparklineCard");
+  return (
+    <GlassPanel title={title} subtitle="Recent time buckets">
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="sparklineBlue" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="5%" stopColor={TELEMETRY_BLUE} stopOpacity={0.28} />
+                <stop offset="95%" stopColor={TELEMETRY_BLUE} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={32} />
+            <Tooltip content={<ChartTooltip />} />
+            <Area dataKey={dataKey} type="monotone" stroke={TELEMETRY_BLUE} fill="url(#sparklineBlue)" strokeWidth={2} isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassPanel>
+  );
+});
+
+const TelemetryChart = memo(function TelemetryChart({ title, subtitle, data, lines }) {
+  useRenderDiagnostics("TelemetryChart");
+  return (
+    <GlassPanel title={title} subtitle={subtitle}>
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              {lines.map((line) => (
+                <linearGradient key={line.key} id={`${line.key}Gradient`} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor={line.color} stopOpacity={0.24} />
+                  <stop offset="95%" stopColor={line.color} stopOpacity={0} />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={34} />
+            <Tooltip content={<ChartTooltip />} />
+            {lines.map((line) => (
+              <Area
+                key={line.key}
+                type="monotone"
+                dataKey={line.key}
+                name={line.name}
+                stroke={line.color}
+                fill={`url(#${line.key}Gradient)`}
+                strokeWidth={2}
+                isAnimationActive={false}
+              />
+            ))}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassPanel>
+  );
+});
+
+const BarPanel = memo(function BarPanel({ title, data, xKey, yKey }) {
+  useRenderDiagnostics("BarPanel");
+  return (
+    <GlassPanel title={title} subtitle="Counted event rows">
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid stroke="#e2e8f0" vertical={false} />
+            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} stroke="#94a3b8" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={34} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey={yKey} radius={[7, 7, 0, 0]} fill={TELEMETRY_BLUE} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </GlassPanel>
+  );
+});
+
+const HeatmapPanel = memo(function HeatmapPanel({ data }) {
+  useRenderDiagnostics("HeatmapPanel");
+  const max = Math.max(...data.map((item) => item.count), 1);
+  return (
+    <GlassPanel title="Hourly Activity Heatmap" subtitle="Events by weekday and hour">
+      <div className="grid grid-cols-12 gap-1">
+        {data.map((item) => (
+          <div
+            key={`${item.day}-${item.hour}`}
+            title={`${item.day} ${item.hour}:00 - ${item.count} events`}
+            className="h-7 rounded-md border border-white/70"
+            style={{ backgroundColor: `rgba(37, 99, 235, ${0.08 + (item.count / max) * 0.72})` }}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex justify-between text-[11px] font-medium text-slate-500">
+        <span>Low</span>
+        <span>High</span>
+      </div>
+    </GlassPanel>
+  );
+});
+
+const DistributionPanel = memo(function DistributionPanel({ title, rows }) {
+  useRenderDiagnostics("DistributionPanel");
+  const max = Math.max(...rows.map((row) => row.count), 1);
+  return (
+    <GlassPanel title={title} subtitle="Ranked by count">
+      <div className="space-y-3">
+        {rows.length === 0 ? <p className="text-sm text-slate-500">No rows in current range.</p> : null}
+        {rows.map((row) => (
+          <div key={row.label}>
+            <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+              <span className="truncate font-semibold text-slate-700">{row.label}</span>
+              <span className="font-mono text-xs text-slate-500">{row.count}</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100">
+              <div className="h-2 rounded-full bg-blue-600" style={{ width: `${Math.max(4, (row.count / max) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </GlassPanel>
+  );
+});
+
+const PackDeploymentCard = memo(function PackDeploymentCard({ pack, stats = {}, onEdit, onTogglePublished, onDelete }) {
+  useRenderDiagnostics("PackDeploymentCard");
+  const entries = pack.entries ?? [];
+  return (
+    <article
+      className="transition-transform hover:-translate-y-1 rounded-2xl border border-blue-100 bg-white/85 p-4 shadow-[0_18px_55px_rgba(15,23,42,0.06)] backdrop-blur"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">{pack.goal || "No goal"}</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-950">{pack.title}</h3>
+          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{pack.description || "No description"}</p>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {pack.isFeatured ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Start Here</span> : null}
+            {pack.isPremium ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">Premium</span> : null}
+            {pack.isExperimental ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Experimental</span> : null}
+            {pack.contentType && pack.contentType !== "cards" ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{pack.contentType}</span> : null}
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Auto cover</span>
+          </div>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pack.published ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+          {pack.published ? "Live" : "Draft"}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <MiniStat label="Active users" value={stats.activeUsers ?? 0} />
+        <MiniStat label="Users enabled" value={stats.usersEnabled ?? 0} />
+        <MiniStat label="Active user rate" value={`${stats.activeUserRate ?? 0}%`} />
+        <MiniStat label="Interactions Generated" value={stats.interactionCount ?? 0} />
+        <MiniStat label="Cards" value={entries.length} />
+      </div>
+      <div className="mt-4 h-16">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={stats.trend ?? []}>
+            <Line dataKey="value" stroke={TELEMETRY_BLUE} strokeWidth={2} dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Last updated: {formatDate(pack.updated_at || pack.created_at)}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={() => onEdit(pack)} className="rounded-lg border border-blue-100 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-300">Edit</button>
+        <button type="button" onClick={() => onTogglePublished(pack)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+          {pack.published ? "Move to Draft" : "Deploy Pack"}
+        </button>
+        <button type="button" onClick={() => onDelete(pack)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button>
+      </div>
+    </article>
+  );
+});
+
+const PACK_EDITOR_INPUT_CLASS = "h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+const PACK_EDITOR_AREA_CLASS = "rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
+
+function PackCoverPreview({ previewPack }) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-3">
+        <div className="h-24 w-36 overflow-hidden rounded-lg" style={{ aspectRatio: "3 / 2" }} data-testid="hq-generated-cover-preview">
+          <GeneratedPackCover pack={previewPack} variant="grid" />
+        </div>
+        <div className="grid gap-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Auto cover preview</p>
+          <p className="text-[11px] text-slate-500">
+            Generated live from the pack title, description, and card count.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PackEditor = memo(function PackEditor({ form, setForm, onSubmit, loading, onError }) {
+  useRenderDiagnostics("PackEditor");
+  const field = (key) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+  // Live auto-cover preview: regenerates as title/cards are edited.
+  const previewPack = useMemo(() => ({
+    id: form.id ?? form.title,
+    title: form.title.trim() || "Untitled pack",
+    goal: form.goal,
+    isPremium: form.isPremium,
+    entries: parseImportedCards(form.importText),
+  }), [form.id, form.title, form.goal, form.isPremium, form.importText]);
+  return (
+    <form className="grid gap-3" onSubmit={onSubmit}>
+      <input
+        className={PACK_EDITOR_INPUT_CLASS}
+        value={form.title}
+        onChange={field("title")}
+        placeholder="Pack title"
+      />
+      <textarea
+        className={PACK_EDITOR_AREA_CLASS}
+        value={form.description}
+        onChange={field("description")}
+        placeholder="Short description"
+        rows={2}
+      />
+      <input
+        className={PACK_EDITOR_INPUT_CLASS}
+        value={form.whyText}
+        onChange={field("whyText")}
+        placeholder="Why this exists — optional detail note"
+        maxLength={120}
+      />
+      <PackCoverPreview previewPack={previewPack} />
+      <div className="grid gap-3 md:grid-cols-3">
+        <select className={PACK_EDITOR_INPUT_CLASS} value={form.goal} onChange={field("goal")}>
+          <option value="">No goal (hidden from goal sections)</option>
+          {PACK_GOALS.map((goal) => <option key={goal} value={goal}>{goal}</option>)}
+        </select>
+        <select className={PACK_EDITOR_INPUT_CLASS} value={form.contentType} onChange={field("contentType")}>
+          {PACK_CONTENT_TYPES.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
+        </select>
+        <select className={PACK_EDITOR_INPUT_CLASS} value={form.theme} onChange={field("theme")}>
+          {THEMES.map((theme) => <option key={theme} value={theme}>{theme}</option>)}
+        </select>
+      </div>
+      <input
+        className={PACK_EDITOR_INPUT_CLASS}
+        value={form.sourceLabel}
+        onChange={field("sourceLabel")}
+        placeholder="Source label (shown as “by …” on the cover)"
+      />
+      <textarea
+        className="rounded-xl border border-blue-100 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        value={form.importText}
+        onChange={field("importText")}
+        placeholder={"Card text | attribution | source title | source URL\nStart a line with * to mark it as a cover preview card (max 3 shown)."}
+        rows={10}
+      />
+      <div className="flex flex-wrap gap-4">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.published} onChange={field("published")} />
+          Live deployment
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.isFeatured} onChange={field("isFeatured")} />
+          Start Here hero
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.isPremium} onChange={field("isPremium")} />
+          Premium
+        </label>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={form.isExperimental} onChange={field("isExperimental")} />
+          Experimental (testers only)
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50" type="submit" disabled={loading}>
+          {form.id ? "Save deployment" : "Deploy Pack"}
+        </button>
+        {form.id ? (
+          <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700" type="button" onClick={() => setForm(EMPTY_PACK_FORM)}>
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+});
+
+const GlassPanel = memo(function GlassPanel({ title, subtitle, children }) {
+  useRenderDiagnostics("GlassPanel");
+  return (
+    <section className="rounded-2xl border border-blue-100/80 bg-white/78 p-4 shadow-[0_18px_55px_rgba(37,99,235,0.07)] backdrop-blur-xl">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-base font-semibold tracking-tight text-slate-950">{title}</h3>
+          <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+});
+
+const MiniStat = memo(function MiniStat({ label, value }) {
+  useRenderDiagnostics("MiniStat");
+  return (
+    <div className="rounded-xl border border-blue-100 bg-white/85 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <strong className="mt-1 block text-xl font-semibold text-slate-950">{value}</strong>
+    </div>
+  );
+});
+
+const UserActivityHeatmap = memo(function UserActivityHeatmap({ data }) {
+  useRenderDiagnostics("UserActivityHeatmap");
+  const cells = data.length ? data : Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+  const max = Math.max(...cells.map((item) => item.count), 1);
+  return (
+    <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Hourly Activity</p>
+      <div className="grid grid-cols-12 gap-1">
+        {cells.map((item) => (
+          <div
+            key={item.hour}
+            title={`${item.hour}:00 - ${item.count} events`}
+            className="h-6 rounded border border-white/80"
+            style={{ backgroundColor: `rgba(37, 99, 235, ${0.08 + (item.count / max) * 0.72})` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+const ChartTooltip = memo(function ChartTooltip({ active, payload, label }) {
+  useRenderDiagnostics("ChartTooltip");
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-blue-100 bg-white/95 p-3 text-xs shadow-xl">
+      <p className="mb-2 font-semibold text-slate-700">{label}</p>
+      {payload.map((item) => (
+        <p key={item.dataKey} className="flex items-center gap-2 text-slate-600">
+          <span className="h-2 w-2 rounded-full" style={{ background: item.color }} />
+          {item.name || item.dataKey}: <strong className="text-slate-950">{item.value}</strong>
+        </p>
+      ))}
+    </div>
+  );
+});
+
+function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvents, users, adminPacks, packAdoptionStats = [], libraryPacks, interruptionPacks, range, waitlist = [], testerReports = [] }) {
+  const appEvents = normalizeEvents(recent);
+  const launcherEvents = normalizeLauncherEvents(rawLauncherEvents);
+  const events = [...appEvents, ...launcherEvents.map(mapLauncherEventToOperationalEvent)]
+    .filter(Boolean)
+    .map(normalizeOperationalEvent)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const summaryMap = new Map(summary.map((row) => [row.event_type, Number(row.event_count ?? 0)]));
+  const eventCount = (type) => events.filter((event) => event.event_type === type).length || summaryMap.get(type) || 0;
+
+  const signups = users.length;
+  const onboardingStarted = eventCount("onboarding_started");
+  const onboardingCompleted = eventCount("onboarding_completed");
+  const instagramInstallViews = events.filter((event) => event.event_type === "launcher_install_viewed" && getEventLauncher(event) === "instagram").length;
+  const instagramInstalled = events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && getEventLauncher(event) === "instagram").length;
+  const firstInterruptionSeen = eventCount("first_interruption_seen");
+  const totalInterruptions = events.filter((event) => ["first_interruption_seen", "intercept_card_viewed"].includes(event.event_type)).length;
+  const continueToApp = eventCount("intercept_continue_to_app");
+  const doSomethingElse = eventCount("intercept_do_something_else");
+  const resolved = continueToApp + doSomethingElse;
+  const actionsCompleted = eventCount("action_card_completed");
+  const repeatUsers7d = countRepeatUsers(events, 7);
+  const activeLaunchers = new Set(events.map(getEventLauncher).filter(Boolean)).size;
+  const dayCount = range === "24h" ? 1 : range === "30d" ? 30 : 7;
+  const activeActors = new Set(events.map(getActorId).filter(Boolean));
+  const avgInterventionsPerUser = round(totalInterruptions / Math.max(activeActors.size, 1), 1);
+  const publishedPacks = adminPacks.filter((pack) => pack.published).length;
+  const draftPacks = adminPacks.length - publishedPacks;
+  const totalPackCards = adminPacks.reduce((total, pack) => total + (pack.entries?.length ?? 0), 0);
+
+  const interventionsOverTime = bucketEvents(events, (bucket, event) => {
+    if (["first_interruption_seen", "intercept_card_viewed"].includes(event.event_type)) bucket.interruptions += 1;
+    if (event.event_type === "intercept_continue_to_app") bucket.continueToApp += 1;
+    if (event.event_type === "intercept_do_something_else") bucket.doSomethingElse += 1;
+  });
+
+  const packActivationTrend = bucketEvents(events, (bucket, event) => {
+    if (event.event_type === "pack_activated" || event.event_type === "interruption_pack_activated") bucket.activations += 1;
+  }, { activations: 0 });
+
+  const notificationTrend = bucketEvents(events, (bucket, event) => {
+    if (event.event_type?.includes("notification")) {
+      if (event.event_type.includes("open") || event.event_type.includes("toggle")) bucket.interactions += 1;
+      else bucket.delivered += 1;
+    }
+  }, { delivered: 0, interactions: 0 });
+
+  const heroMetrics = [
+    metric("Total Signups", signups, 0, activeUsersSeries(events), "Accounts created", TELEMETRY_BLUE),
+    metric("Onboarding Completion Rate", `${percent(onboardingCompleted, onboardingStarted || signups)}%`, 0, interventionsOverTime.map((item) => item.interruptions), "Completed / started", TELEMETRY_GREEN),
+    metric("Instagram Launcher Install Rate", `${percent(instagramInstalled, instagramInstallViews || onboardingCompleted)}%`, 0, [instagramInstallViews, instagramInstalled], "Installs / install views", TELEMETRY_BLUE),
+    metric("First Interruption Seen", firstInterruptionSeen, 0, interventionsOverTime.map((item) => item.interruptions), "First overlay reached", TELEMETRY_NAVY),
+    metric("Do Something Else Rate", `${percent(doSomethingElse, resolved)}%`, 0, interventionsOverTime.map((item) => item.doSomethingElse), "Do Something Else / resolved", TELEMETRY_GREEN),
+    metric("Repeat Users (7d)", repeatUsers7d, 0, activeUsersSeries(events), "Users active on 2+ days", TELEMETRY_BLUE),
+    metric("Continue To App Rate", `${percent(continueToApp, resolved)}%`, 0, interventionsOverTime.map((item) => item.continueToApp), "Continue / resolved", TELEMETRY_AMBER),
+    metric("Avg Interventions Per User", avgInterventionsPerUser, 0, interventionsOverTime.map((item) => item.interruptions), `Across active users in ${dayCount}d`, TELEMETRY_BLUE),
+  ];
+
+  const rawEventFrequency = rowsFromCounts(countBy(events, (event) => event.event_type || "unknown"));
+  const eventFrequency = rawEventFrequency.map((row) => ({
+    ...row,
+    label: getEventDisplayLabel({ event_type: row.label }),
+  }));
+  const topLaunchers = rowsFromCounts(countBy(events, (event) => getEventLauncher(event) || "unknown"));
+  const notificationRows = eventFrequency.filter((row) => row.label.includes("notification"));
+  const deviceRows = rowsFromCounts(countBy(events, (event) => event.metadata?.deviceType || event.metadata?.platform || "not_reported"));
+  const userStats = buildUserStats(events, testerReports);
+  const packStats = buildPackStats(events, adminPacks, users.length, packAdoptionStats);
+  const activeUsersOverTime = bucketEvents(events, (bucket, event) => {
+    if (event.user_id) bucket.usersSet.add(event.user_id);
+  }, { usersSet: new Set() }).map((bucket) => ({ ...bucket, users: bucket.usersSet.size }));
+
+  return {
+    events,
+    launcherEvents,
+    launcherStats: buildLauncherStats(launcherEvents),
+    eventTypes: Array.from(new Set(events.map((event) => event.event_type).filter(Boolean))).sort(),
+    heroMetrics,
+    interventionsOverTime,
+    packActivationTrend,
+    notificationTrend,
+    eventFrequency,
+    topLaunchers,
+    notificationRows,
+    deviceRows,
+    userStats,
+    packStats,
+    meaningfulEvents: events.filter(isMeaningfulEvent).map((event) => ({ ...event, displayLabel: getEventDisplayLabel(event) })),
+    funnel: buildRecruitmentFunnel({ waitlist, users, events }),
+    waitlistSources: buildWaitlistSources(waitlist),
+    retention: buildRetentionModel({ events, users }),
+    instagramStats: {
+      installViews: instagramInstallViews,
+      installs: instagramInstalled,
+    },
+    hourlyHeatmap: buildHeatmap(events),
+    interruptionsByHour: rowsFromCounts(countBy(events.filter((event) => ["first_interruption_seen", "intercept_card_viewed"].includes(event.event_type)), (event) => new Date(event.created_at).getHours().toString().padStart(2, "0"))).map((row) => ({ hour: `${row.label}:00`, count: row.count })),
+    activeUsersOverTime,
+    publishedPacks,
+    draftPacks,
+    totalPackCards,
+    totalPacks: adminPacks.length,
+    schemaSignals: buildSchemaSignals(events),
+    libraryPacks,
+    interruptionPacks,
+  };
+}
+
+function normalizeEvents(events = []) {
+  return Array.isArray(events) ? events : [];
+}
+
+function normalizeLauncherEvents(events = []) {
+  return Array.isArray(events) ? events : [];
+}
+
+function buildLauncherStats(events) {
+  const normalized = events.map(mapLauncherEventToOperationalEvent).map(normalizeOperationalEvent);
+  const opens = normalized.filter((event) => event.event_type === "first_interruption_seen").length;
+  const installPageViews = normalized.filter((event) => event.event_type === "launcher_install_viewed").length;
+  const installs = normalized.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type)).length;
+  const continueToApp = events.filter((event) => event.event_type === "intercept_continue_to_app").length;
+  const doSomethingElse = events.filter((event) => event.event_type === "intercept_do_something_else").length;
+  const resolved = continueToApp + doSomethingElse;
+  const actorIds = new Set(events.map((event) => event.user_id || event.anonymous_device_id).filter(Boolean));
+
+  const activeUsersByLauncher = rowsFromCounts(countBy(events, (event) => {
+    if (!event.launcher_id) return "unknown";
+    return `${event.launcher_id}:${event.user_id || event.anonymous_device_id || event.session_id || event.id}`;
+  })).reduce((rows, row) => {
+    const launcherId = row.label.split(":")[0] || "unknown";
+    const existing = rows.find((item) => item.label === launcherId);
+    if (existing) existing.count += 1;
+    else rows.push({ label: launcherId, count: 1 });
+    return rows;
+  }, []).sort((left, right) => right.count - left.count);
+
+  return {
+    opens,
+    interruptionOpens: opens,
+    installPageViews,
+    installs,
+    continueToApp,
+    doSomethingElse,
+    resolved,
+    uniqueActors: actorIds.size,
+    opensByLauncher: rowsFromCounts(countBy(normalized.filter((event) => event.event_type === "first_interruption_seen"), (event) => getEventLauncher(event) || "unknown")),
+    activeUsersByLauncher,
+    installViewsByLauncher: rowsFromCounts(countBy(normalized.filter((event) => event.event_type === "launcher_install_viewed"), (event) => getEventLauncher(event) || "unknown")),
+    mostUsedVersions: rowsFromCounts(countBy(events, (event) => event.launcher_name || event.launcher_id || "unknown")),
+  };
+}
+
+// Waitlist attribution: count signups by source_code so HQ can see which
+// audiences/campaigns are driving interest. Signups without a code roll up to
+// "Direct / no code".
+function buildWaitlistSources(waitlist = []) {
+  const counts = new Map();
+  for (const signup of waitlist) {
+    const source = (signup.source_code ?? "").trim() || "Direct / no code";
+    counts.set(source, (counts.get(source) ?? 0) + 1);
+  }
+  return Array.from(counts, ([label, count]) => ({ label, count })).sort((left, right) => right.count - left.count);
+}
+
+function buildRecruitmentFunnel({ waitlist, users, events }) {
+  const count = (type) => events.filter((event) => event.event_type === type).length;
+  const stages = [
+    ["Waitlist", waitlist.length],
+    ["Signup Started", count("signup_started")],
+    ["Signup Completed", users.length || count("signup_completed")],
+    ["Onboarding Started", count("onboarding_started")],
+    ["Onboarding Completed", count("onboarding_completed")],
+    ["Instagram Install Viewed", events.filter((event) => event.event_type === "launcher_install_viewed" && getEventLauncher(event) === "instagram").length],
+    ["Instagram Installed", events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && getEventLauncher(event) === "instagram").length],
+    ["First Interruption Seen", count("first_interruption_seen")],
+    ["Do Something Else Clicked", count("intercept_do_something_else")],
+    ["Action Card Completed", count("action_card_completed")],
+  ];
+
+  return stages.map(([label, stageCount], index) => {
+    const previous = index === 0 ? stageCount : stages[index - 1][1];
+    const conversion = index === 0 ? 100 : percent(stageCount, previous);
+    return {
+      label,
+      count: stageCount,
+      conversion,
+      dropoff: index === 0 ? 0 : Math.max(0, 100 - conversion),
+    };
+  });
+}
+
+function buildRetentionModel({ events, users }) {
+  const actors = new Set(events.map(getActorId).filter(Boolean));
+  const today = new Date().toISOString().slice(0, 10);
+  const dailyActiveUsers = new Set(events.filter((event) => event.created_at?.slice(0, 10) === today).map(getActorId).filter(Boolean)).size;
+  const returnUsers7d = countRepeatUsers(events, 7);
+  const interruptions = events.filter((event) => ["first_interruption_seen", "intercept_card_viewed"].includes(event.event_type));
+  const actionsCompleted = events.filter((event) => event.event_type === "action_card_completed");
+  const installedActors = new Set(events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type)).map(getActorId).filter(Boolean));
+  const interruptedActors = new Set(interruptions.map(getActorId).filter(Boolean));
+  const doSomethingElseActors = new Set(events.filter((event) => event.event_type === "intercept_do_something_else").map(getActorId).filter(Boolean));
+  const topLauncher = rowsFromCounts(countBy(events, (event) => getEventLauncher(event) || "unknown"))[0]?.label ?? "None yet";
+
+  return {
+    dailyActiveUsers,
+    returnUsers7d,
+    repeatUsers7d: returnUsers7d,
+    avgInterruptionsPerUser: round(interruptions.length / Math.max(actors.size || users.length, 1), 1),
+    avgActionsCompleted: round(actionsCompleted.length / Math.max(actors.size || users.length, 1), 1),
+    mostActiveLauncher: topLauncher,
+    installedNoInterruption: Array.from(installedActors).filter((actor) => !interruptedActors.has(actor)).length,
+    interruptionNoAction: Array.from(interruptedActors).filter((actor) => !doSomethingElseActors.has(actor)).length,
+  };
+}
+
+function countRepeatUsers(events, days) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const daysByActor = new Map();
+  events.forEach((event) => {
+    const actor = getActorId(event);
+    const time = new Date(event.created_at).getTime();
+    if (!actor || Number.isNaN(time) || time < cutoff) return;
+    const set = daysByActor.get(actor) ?? new Set();
+    set.add(new Date(event.created_at).toISOString().slice(0, 10));
+    daysByActor.set(actor, set);
+  });
+  return Array.from(daysByActor.values()).filter((daysSet) => daysSet.size >= 2).length;
+}
+
+function getActorId(event) {
+  return event?.user_id || event?.anonymous_device_id || event?.session_id || null;
+}
+
+function getEventLauncher(event) {
+  return event?.launcher_context || event?.launcher_id || event?.target_app || event?.app_id || null;
+}
+
+const TESTING_MATRIX_OUTCOMES = {
+  fake_launcher_real_app_opened: "opened",
+  intercept_continue_to_app: "continue_pressed",
+  fake_launcher_destination_missing: "destination_missing",
+  fake_launcher_cross_app_blocked: "cross_app_blocked",
+  fake_launcher_pause_bypass_used: "pause_bypass",
+};
+
+// One row per app + platform + display mode combination, with the most
+// recent launch outcome — a practical launcher-testing matrix built from
+// the existing launcher_events stream.
+export function buildLauncherTestingMatrix(events = []) {
+  const rows = new Map();
+  for (const event of events) {
+    const outcome = TESTING_MATRIX_OUTCOMES[event?.event_type];
+    if (!outcome) continue;
+    const launcherId = getEventLauncher(event);
+    if (!launcherId) continue;
+    const platform = event.platform || "unknown";
+    const displayMode = event.app_display_mode || (event.is_standalone ? "standalone" : "browser");
+    const key = `${launcherId}|${platform}|${displayMode}`;
+    const existing = rows.get(key);
+    const time = new Date(event.created_at ?? 0).getTime();
+    if (existing && existing.time >= time) continue;
+    const metadata = event.metadata ?? {};
+    rows.set(key, {
+      key,
+      launcherId,
+      launcherName: event.launcher_name || launcherId,
+      platform,
+      displayMode,
+      route: event.route || metadata.route || "",
+      source: metadata.launched_from || event.source || "",
+      strategy: metadata.destination_strategy || null,
+      lastAttemptedAt: event.created_at ?? null,
+      outcome,
+      time,
+      details: {
+        sourceField: metadata.destination_source_field ?? null,
+        fallbackHref: metadata.destination_fallback_href ?? null,
+        usedXSafariPrefix: metadata.used_x_safari_prefix ?? null,
+        requestedLauncherId: metadata.requested_launcher_id ?? null,
+      },
+    });
+  }
+  return Array.from(rows.values()).sort((left, right) => right.time - left.time);
+}
+
+function isMeaningfulEvent(event) {
+  return [
+    "onboarding_completed",
+    "launcher_installed",
+    "launcher_install_clicked",
+    "first_interruption_seen",
+    "intercept_do_something_else",
+    "intercept_continue_to_app",
+    "action_card_completed",
+    "return_session_24h",
+    "return_session_7d",
+  ].includes(event.event_type);
+}
+
+function getEventDisplayLabel(event) {
+  const labels = {
+    onboarding_completed: "User completed onboarding",
+    launcher_installed: "Launcher installed",
+    launcher_install_clicked: "Launcher install clicked",
+    first_interruption_seen: "First interruption shown",
+    intercept_do_something_else: "Do Something Else clicked",
+    intercept_continue_to_app: "Continue to app clicked",
+    action_card_completed: "Action card completed",
+    pack_card_liked: "Really liked",
+    pack_card_disliked: "Hidden card",
+    pack_card_restored: "Restored card",
+    intercept_card_disliked: "Hidden App Prompt",
+    intercept_card_restored: "Restored App Prompt",
+    return_session_24h: "User returned after 24h",
+    return_session_7d: "User returned after 7d",
+  };
+  return labels[event.event_type] ?? event.event_type;
+}
+
+function mapLauncherEventToOperationalEvent(event) {
+  if (!event) return null;
+  const eventType = {
+    fake_launcher_install_page_viewed: "launcher_install_viewed",
+    fake_launcher_install_cta_clicked: "launcher_install_clicked",
+    fake_launcher_opened: "first_interruption_seen",
+  }[event.event_type] ?? event.event_type;
+
+  return {
+    ...event,
+    event_type: eventType,
+    launcher_context: event.launcher_id,
+    target_app: event.launcher_id,
+    app_name: event.launcher_name,
+  };
+}
+
+function normalizeOperationalEvent(event) {
+  const aliases = {
+    action_card_accepted: "action_card_completed",
+    action_card_viewed: "action_card_opened",
+    intercept_card_viewed: "first_interruption_seen",
+  };
+  return {
+    ...event,
+    event_type: aliases[event.event_type] ?? event.event_type,
+  };
+}
+
+function bucketEvents(events, reducer, defaults = { interruptions: 0, continueToApp: 0, doSomethingElse: 0 }) {
+  const buckets = new Map();
+  events.forEach((event) => {
+    const date = new Date(event.created_at);
+    const key = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, "0")}:00`;
+    if (!buckets.has(key)) {
+      buckets.set(key, { label: key, ...cloneDefaults(defaults) });
+    }
+    reducer(buckets.get(key), event);
+  });
+  return Array.from(buckets.values()).reverse().slice(-24);
+}
+
+function cloneDefaults(defaults) {
+  return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, value instanceof Set ? new Set() : value]));
+}
+
+function buildHeatmap(events) {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const counts = new Map();
+  events.forEach((event) => {
+    const date = new Date(event.created_at);
+    const key = `${days[date.getDay()]}-${date.getHours()}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  return days.flatMap((day) =>
+    Array.from({ length: 12 }, (_, index) => {
+      const hour = index * 2;
+      return { day, hour, count: counts.get(`${day}-${hour}`) ?? 0 };
+    }),
+  );
+}
+
+function buildUserStats(events, testerReports = []) {
+  const stats = new Map();
+  function ensure(userId) {
+    const current = stats.get(userId) ?? {
+      interruptions: 0,
+      launcherOpens: 0,
+      continueToApp: 0,
+      doSomethingElse: 0,
+      actionsCompleted: 0,
+      reportsSubmitted: 0,
+      notifications: 0,
+      activeDates: new Set(),
+      launchers: new Set(),
+      installedLaunchers: new Set(),
+      packs: new Set(),
+      eventTypes: new Set(),
+      latestEvents: [],
+      hourlyCounts: new Map(),
+      lastEventAt: null,
+      lastMeaningfulActivityAt: null,
+      lastLauncherUsed: "",
+      lastLauncherUsedAt: null,
+    };
+    stats.set(userId, current);
+    return current;
+  }
+
+  events.forEach((event) => {
+    if (!event.user_id) return;
+    const current = ensure(event.user_id);
+    if (event.event_type) current.eventTypes.add(event.event_type);
+    if (event.event_type?.startsWith("intercept_")) current.interruptions += 1;
+    if (event.event_type === "first_interruption_seen") current.launcherOpens += 1;
+    if (event.event_type === "intercept_continue_to_app") current.continueToApp += 1;
+    if (event.event_type === "intercept_do_something_else") current.doSomethingElse += 1;
+    if (event.event_type === "bash_done" || event.event_type === "action_card_completed") current.actionsCompleted += 1;
+    if (event.event_type?.includes("notification")) current.notifications += 1;
+    current.activeDates.add(new Date(event.created_at).toISOString().slice(0, 10));
+    const launcher = event.launcher_context || event.target_app || event.app_name;
+    if (launcher) {
+      current.launchers.add(launcher);
+      if (!current.lastLauncherUsedAt || new Date(event.created_at).getTime() > new Date(current.lastLauncherUsedAt).getTime()) {
+        current.lastLauncherUsed = launcher;
+        current.lastLauncherUsedAt = event.created_at;
+      }
+    }
+    if (["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && launcher) {
+      current.installedLaunchers.add(launcher);
+    }
+    if (event.pack_id) current.packs.add(event.pack_id);
+    const hour = new Date(event.created_at).getHours();
+    current.hourlyCounts.set(hour, (current.hourlyCounts.get(hour) ?? 0) + 1);
+    current.latestEvents = [event, ...current.latestEvents].slice(0, 8);
+    if (!current.lastEventAt || new Date(event.created_at).getTime() > new Date(current.lastEventAt).getTime()) {
+      current.lastEventAt = event.created_at;
+    }
+    if (isMeaningfulEvent(event) && (!current.lastMeaningfulActivityAt || new Date(event.created_at).getTime() > new Date(current.lastMeaningfulActivityAt).getTime())) {
+      current.lastMeaningfulActivityAt = event.created_at;
+    }
+  });
+
+  testerReports.forEach((report) => {
+    if (!report.user_id) return;
+    const current = ensure(report.user_id);
+    current.reportsSubmitted += 1;
+    current.latestEvents = [
+      {
+        id: report.id,
+        user_id: report.user_id,
+        event_type: `tester_${report.report_type || "report"}_submitted`,
+        created_at: report.created_at,
+        launcher_context: report.launcher_context,
+      },
+      ...current.latestEvents,
+    ].slice(0, 8);
+  });
+  return new Map(Array.from(stats.entries()).map(([key, value]) => [key, {
+    ...value,
+    activeDays: value.activeDates.size,
+    launcherCount: value.launchers.size,
+    installedLaunchers: Array.from(value.installedLaunchers),
+    enabledPacks: value.packs.size,
+    eventTypes: Array.from(value.eventTypes),
+    latestEvents: [...(value.latestEvents ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()).slice(0, 8),
+    hourlyActivity: Array.from({ length: 24 }, (_, hour) => ({ hour, count: value.hourlyCounts.get(hour) ?? 0 })),
+  }]));
+}
+
+function getUserUsageStatus(stats = {}) {
+  const eventTypes = new Set(stats.eventTypes ?? []);
+  if ((stats.actionsCompleted ?? 0) > 0) return "Completing actions";
+  if ((stats.doSomethingElse ?? 0) > 0) return "Choosing alternatives";
+  if ((stats.interruptions ?? 0) > 0) return "Seeing interruptions";
+  if ((stats.installedLaunchers?.length ?? 0) > 0) return "Installed, not used";
+  if (eventTypes.has("onboarding_completed")) return "Onboarded, no launcher use";
+  if (eventTypes.has("onboarding_started")) return "Onboarding started";
+  return "Signed up, no product use";
+}
+
+function getUserActivityBadge(timestamp) {
+  const time = new Date(timestamp || 0).getTime();
+  if (!time || Number.isNaN(time)) {
+    return { label: "inactive", className: "bg-slate-100 text-slate-600" };
+  }
+  const age = Date.now() - time;
+  if (age <= 24 * 60 * 60 * 1000) {
+    return { label: "active today", className: "bg-emerald-50 text-emerald-700" };
+  }
+  if (age <= 7 * 24 * 60 * 60 * 1000) {
+    return { label: "active this week", className: "bg-blue-50 text-blue-700" };
+  }
+  return { label: "inactive", className: "bg-slate-100 text-slate-600" };
+}
+
+function buildPackStats(events, packs, userCount, packAdoptionStats = []) {
+  const stats = new Map();
+  const usersEnabledByPackId = new Map(
+    packAdoptionStats.map((row) => [row.pack_id, Number(row.users_enabled ?? 0)]),
+  );
+  packs.forEach((pack) => {
+    const packEvents = events.filter((event) => event.pack_id === pack.id || event.pack_id === pack.sourceKey);
+    const activeUsers = new Set(packEvents.map((event) => event.user_id).filter(Boolean)).size;
+    const activationCount = packEvents.filter((event) => event.event_type === "pack_activated").length;
+    stats.set(pack.id, {
+      activeUsers,
+      usersEnabled: Math.max(usersEnabledByPackId.get(pack.id) ?? 0, usersEnabledByPackId.get(pack.sourceKey) ?? 0),
+      activeUserRate: percent(activeUsers, userCount),
+      interactionCount: packEvents.length,
+      trend: bucketEvents(packEvents, (bucket) => {
+        bucket.value += 1;
+      }, { value: 0 }),
+      activationCount,
+    });
+  });
+  return stats;
+}
+
+function buildSchemaSignals(events) {
+  const fields = new Set();
+  events.forEach((event) => {
+    Object.entries(event).forEach(([key, value]) => {
+      if (value != null && value !== "") fields.add(key);
+    });
+  });
+  return Array.from(fields).sort();
+}
+
+function countBy(items, selector) {
+  const counts = new Map();
+  items.forEach((item) => {
+    const key = selector(item);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  return counts;
+}
+
+function rowsFromCounts(counts) {
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((left, right) => right.count - left.count);
+}
+
+function activeUsersSeries(events) {
+  return bucketEvents(events, (bucket, event) => {
+    if (event.user_id) bucket.users.add(event.user_id);
+    bucket.value = bucket.users.size;
+  }, { users: new Set(), value: 0 }).map((item) => item.value);
+}
+
+function topLaunchersSeries(events) {
+  return rowsFromCounts(countBy(events, (event) => event.launcher_context || event.target_app || "unknown")).map((row) => row.count);
+}
+
+function metric(label, value, trend, series, comparison, color) {
+  const sparkline = (series.length ? series : [0, 0, 0, 0]).slice(-12).map((item, index) => ({
+    label: index,
+    value: typeof item === "number" ? item : 0,
+  }));
+  return { label, value, trend, sparkline, comparison, color };
+}
+
+function percent(part, total) {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
+}
+
+function round(value, precision = 0) {
+  const multiplier = 10 ** precision;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function pseudoUser(userId) {
+  if (!userId) return "anonymous";
+  return `usr_${String(userId).replace(/-/g, "").slice(0, 10)}`;
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return "unknown";
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function formatDateTime(timestamp) {
+  if (!timestamp) return "Not refreshed yet";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(timestamp));
+}
+
+// parseImportedCards / formatImportedCard → moved to src/lib/packImport.js
+
+function formatDate(timestamp) {
+  if (!timestamp) return "unknown";
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}

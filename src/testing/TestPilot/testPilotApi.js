@@ -7,6 +7,11 @@ function requireSupabase() {
   return supabase;
 }
 
+function isDemoMode() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("MYBISHBASH_DEMO_MODE") === "true";
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -59,6 +64,7 @@ export function buildTesterReportPayload(report = {}) {
 }
 
 export async function fetchTesterStatus(userId) {
+  if (isDemoMode()) return { is_tester: false };
   if (!userId) return { is_tester: false };
   const client = requireSupabase();
   const { data, error } = await client
@@ -190,18 +196,14 @@ export async function updateTesterReportStatus(reportId, updates) {
 
 export async function updateTesterUser(userId, testerFields) {
   const client = requireSupabase();
-  const isTester = testerFields.is_tester === true;
-  const { data, error } = await client
-    .from("user_profiles")
-    .update({
-      is_tester: isTester,
-      tester_group: testerFields.tester_group?.trim() || null,
-      tester_notes: testerFields.tester_notes?.trim() || null,
-      tester_enabled_at: isTester ? (testerFields.tester_enabled_at ?? new Date().toISOString()) : null,
-    })
-    .eq("user_id", userId)
-    .select("user_id,is_tester,tester_group,tester_enabled_at,tester_notes")
-    .single();
+  // Tester changes go through the audited security-definer RPC; direct
+  // user_profiles writes to tester columns are no longer granted.
+  const { data, error } = await client.rpc("hq_set_tester_status", {
+    p_user_id: userId,
+    p_is_tester: testerFields.is_tester === true,
+    p_tester_group: testerFields.tester_group ?? null,
+    p_tester_notes: testerFields.tester_notes ?? null,
+  });
   if (error) throw new Error(getTestPilotErrorMessage(error, "Could not update tester user."));
   return data;
 }

@@ -1,8 +1,8 @@
 # MyBishBash Mobile App Wrapper
 
-This project now includes a Capacitor wrapper around the live MyBishBash web app:
+This project includes a Capacitor wrapper around the live MyBishBash web app:
 
-- Live web app: `https://drlizlondon.github.io/mybishbash/`
+- Live web app configured in `capacitor.config.json`: `https://mybishbash.app/`
 - App name: `MyBishBash`
 - App ID: `com.drlizlondon.mybishbash`
 
@@ -63,6 +63,30 @@ If you update Capacitor config or plugins later, run:
 ```bash
 npx cap sync
 ```
+
+`npx cap sync` verifies that the optional native wrapper and plugins can be
+synchronised. It does not establish that the wrapper is distributed through an
+App Store, TestFlight, or another production release channel.
+
+## Architecture and acceptance boundary
+
+MyBishBash is currently deployed as a web PWA. The checked-in Capacitor wrapper
+is a thin optional shell whose `server.url` loads `https://mybishbash.app/`;
+website revisions therefore arrive through the web deployment and service
+worker path, not by replacing packaged native web assets.
+
+An earlier Phase 5 procedure removed `server.url` in disposable copies and
+installed two manufactured `capacitor://localhost` builds over one another.
+That was technically valid for a packaged-native application, but it did not
+represent this repository's deployed configuration and was superseded on
+2026-08-03. The historical reasoning remains recorded in the Phase 5 manual
+packet; it is not an operative release gate.
+
+The live-URL Capacitor shell may still receive ordinary smoke testing without
+changing its configuration. Packaged-native install-over-upgrade testing
+becomes mandatory only if packaged web assets are explicitly adopted as a
+supported release target with a documented distribution path. Do not remove
+`server.url` merely to satisfy the current web-PWA acceptance criteria.
 
 ## iOS notes
 

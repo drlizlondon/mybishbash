@@ -1,38 +1,74 @@
 import { performance } from "node:perf_hooks";
 import { readFile } from "node:fs/promises";
-import { selectWeightedLauncherCard } from "../src/lib/cardSelection.js";
+import { selectEligibleCard } from "../src/lib/cardSelection.js";
+import { buildLibrarySections } from "../src/lib/librarySections.js";
+import { getCoverModel } from "../src/lib/generatedCover.js";
 
 const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const onboardingSource = await readFile(new URL("../src/features/onboarding/Onboarding.jsx", import.meta.url), "utf8");
+const logPanelSource = await readFile(new URL("../src/components/LogPanel.jsx", import.meta.url), "utf8");
+const logScreenSource = await readFile(new URL("../src/features/log/LogScreen.jsx", import.meta.url), "utf8");
+const downloadSource = await readFile(new URL("../src/features/marketing/DownloadPage.jsx", import.meta.url), "utf8");
+const exploreSource = await readFile(new URL("../src/features/explore/ExplorePanel.jsx", import.meta.url), "utf8");
+const generatedCoverSource = await readFile(new URL("../src/GeneratedPackCover.jsx", import.meta.url), "utf8");
+const hqSource = await readFile(new URL("../src/features/hq/HQPanel.jsx", import.meta.url), "utf8");
+const fakeLauncherBarSource = await readFile(new URL("../src/lib/FakeLauncherBar.jsx", import.meta.url), "utf8");
+const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
+const launcherDestinationsSource = await readFile(new URL("../src/lib/launcherDestinations.js", import.meta.url), "utf8");
+const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const registerServiceWorkerSource = await readFile(new URL("../src/registerServiceWorker.js", import.meta.url), "utf8");
+const serviceWorkerSource = await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8");
+const eventLogSource = await readFile(new URL("../src/eventLog.js", import.meta.url), "utf8");
 const storageSource = await readFile(new URL("../src/storage.js", import.meta.url), "utf8");
 const syncSource = await readFile(new URL("../src/lib/mybishbashSync.js", import.meta.url), "utf8");
-const launcherStateSource = await readFile(new URL("../src/lib/launcherState.js", import.meta.url), "utf8");
-const launcherFlowSource = await readFile(new URL("../src/lib/launcherFlow.js", import.meta.url), "utf8");
-const launcherRegistrySource = await readFile(new URL("../src/lib/launcherRegistry.js", import.meta.url), "utf8");
-const cardSelectionSource = await readFile(new URL("../src/lib/cardSelection.js", import.meta.url), "utf8");
+const generatedCoverModelSource = await readFile(new URL("../src/lib/generatedCover.js", import.meta.url), "utf8");
 const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const launcherEventsMigrationSource = await readFile(new URL("../supabase/migrations/202606130001_allow_authenticated_anonymous_launcher_events.sql", import.meta.url), "utf8");
+const hqPackAdoptionMigrationSource = await readFile(new URL("../supabase/migrations/202606250001_hq_pack_adoption_summary.sql", import.meta.url), "utf8");
+const routesSource = await readFile(new URL("../src/app/router/routes.js", import.meta.url), "utf8");
+const rootRouterFileSource = await readFile(new URL("../src/app/router/RootRouter.jsx", import.meta.url), "utf8");
+const standardLibraryPanelSource = await readFile(new URL("../src/features/library/StandardLibraryPanel.jsx", import.meta.url), "utf8");
+const cardActionsSource = await readFile(new URL("../src/features/cards/useCardActions.js", import.meta.url), "utf8");
+const libraryListRowSource = await readFile(new URL("../src/features/library/LibraryListRow.jsx", import.meta.url), "utf8");
+const expandableCollectionSource = await readFile(new URL("../src/features/library/ExpandableCollection.jsx", import.meta.url), "utf8");
+const composerSource = await readFile(new URL("../src/features/composer/Composer.jsx", import.meta.url), "utf8");
+const appsPanelSource = await readFile(new URL("../src/features/apps/AppsPanel.jsx", import.meta.url), "utf8");
+const appManagementScreenSource = await readFile(new URL("../src/features/apps/AppManagementScreen.jsx", import.meta.url), "utf8");
+const homeSpotlightTourSource = await readFile(new URL("../src/features/home/HomeSpotlightTour.jsx", import.meta.url), "utf8");
+const mastheadSource = await readFile(new URL("../src/app/shell/Masthead.jsx", import.meta.url), "utf8");
+const launchSessionDomainSource = await readFile(new URL("../src/domain/launcher/launchSession.js", import.meta.url), "utf8");
+const overlayBuildersSource = await readFile(new URL("../src/features/launcher/overlayBuilders.js", import.meta.url), "utf8");
+const overlayHostSource = await readFile(new URL("../src/features/launcher/OverlayHost.jsx", import.meta.url), "utf8");
+const actionSuccessOverlaySource = await readFile(new URL("../src/features/launcher/ActionSuccessOverlay.jsx", import.meta.url), "utf8");
+const continueToAppCardSource = await readFile(new URL("../src/features/launcher/ContinueToAppCard.jsx", import.meta.url), "utf8");
 
 const failures = [];
 
-function normalizeSnippet(snippet) {
-  return snippet.replace(/\s+/g, " ").trim();
+function pass(message) {
+  console.log(`PASS ${message}`);
 }
 
-function matchingSnippets(source, pattern) {
-  return [...source.matchAll(pattern)].map((match) => normalizeSnippet(match[0]));
+function fail(message, detail = "") {
+  failures.push({ message, detail });
+  console.error(`FAIL ${message}`);
+  if (detail) console.error(`  ${detail}`);
 }
 
-function findCallWithSource(functionName, source) {
-  const pattern = new RegExp(`${functionName}\\([\\s\\S]{0,400}source:\\s*"${source}"[\\s\\S]{0,240}?\\)`, "g");
-  return matchingSnippets(appSource, pattern);
+function assertMatch(label, source, pattern) {
+  if (!pattern.test(source)) {
+    fail(label);
+    return;
+  }
+  pass(label);
 }
 
-function findFunctionBody(source, functionName) {
-  const startPattern = new RegExp(`function\\s+${functionName}\\s*\\(`);
-  const startMatch = startPattern.exec(source);
-  if (!startMatch) return "";
-
-  const nextFunction = source.indexOf("\n  function ", startMatch.index + 1);
-  return source.slice(startMatch.index, nextFunction === -1 ? source.length : nextFunction);
+function assertNoMatch(label, source, pattern) {
+  const match = source.match(pattern);
+  if (match) {
+    fail(label, match[0].replace(/\s+/g, " ").slice(0, 500));
+    return;
+  }
+  pass(label);
 }
 
 function sourceBetween(source, start, end) {
@@ -43,765 +79,630 @@ function sourceBetween(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
-function pass(message) {
-  console.log(`PASS ${message}`);
-}
+// Return the complete brace-balanced block introduced by `marker`. An empty
+// result is deliberate: every assertion using the result then fails instead
+// of silently passing against the wrong or a missing branch.
+function sourceBlock(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex === -1) return "";
+  const blockStart = source.indexOf("{", markerIndex + marker.length);
+  if (blockStart === -1) return "";
 
-function fail(message, offendingSource = null) {
-  failures.push({ message, offendingSource });
-  console.error(`FAIL ${message}`);
-  if (offendingSource) {
-    console.error(`  Offending source: ${offendingSource}`);
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = blockStart; index < source.length; index += 1) {
+    const character = source[index];
+    const nextCharacter = source[index + 1];
+
+    if (lineComment) {
+      if (character === "\n") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === "*" && nextCharacter === "/") {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote !== null) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === "/" && nextCharacter === "/") {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "/" && nextCharacter === "*") {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(markerIndex, index + 1);
+    }
   }
+
+  return "";
 }
 
-function assertNoInterceptionSource(source) {
-  const calls = findCallWithSource("beginInterceptionFlow", source);
-  if (calls.length > 0) {
-    fail(`${source} must not be wired to beginInterceptionFlow`, calls[0]);
+function assertMatchCount(label, source, pattern, expectedCount) {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  const count = [...source.matchAll(new RegExp(pattern.source, flags))].length;
+  if (count !== expectedCount) {
+    fail(label, `expected ${expectedCount}, found ${count}`);
     return;
   }
-  pass(`${source} is not wired to beginInterceptionFlow`);
+  pass(label);
 }
 
-function assertAppPattern(message, pattern) {
-  const matches = matchingSnippets(appSource, pattern);
-  if (matches.length === 0) {
-    fail(message);
-    return;
+const rootRouterSource = sourceBetween(rootRouterFileSource, "function RootRouter()", "export default RootRouter;");
+const appBeforeHooksSource = sourceBetween(appSource, "function App()", "const initialState = useMemo");
+const appDebugLogSource = sourceBetween(appSource, "function debugLog(...args)", "const TESTPILOT_CONFIG");
+const registerServiceWorkerDebugLogSource = sourceBetween(registerServiceWorkerSource, "function debugLog(...args)", "export function registerServiceWorker()");
+const launcherDestinationsDebugLogSource = sourceBetween(launcherDestinationsSource, "function debugLog(...args)", "export function getLauncherPlatform()");
+
+// Phase 5 commit 6: IndexedDB is authoritative after the transition release.
+// Inspect the active branches themselves so the check cannot pass merely
+// because a mirror/IDB call exists elsewhere in storage.js. Routine IDB-mode
+// writes must update the synchronous mirror and enqueue the matching IDB
+// mutation, without also mutating the now-stale localStorage rollback copy.
+const setStorageItemSource = sourceBlock(storageSource, "export function setStorageItem(key, value)");
+const activeIdbSetSource = sourceBlock(setStorageItemSource, "if (isMirrorActive())");
+const removeStorageItemSource = sourceBlock(storageSource, "export function removeStorageItem(key)");
+const activeIdbRemoveSource = sourceBlock(removeStorageItemSource, "if (isMirrorActive())");
+const getLocalStorageItemSource = sourceBlock(storageSource, "function getLocalStorageItem(key)");
+const markMigrationRetrySource = sourceBlock(storageSource, "function markMigrationRetry()");
+const markLegacyMutationSource = sourceBlock(storageSource, "function markLegacyMutationForReconciliation()");
+const acknowledgeMigrationRetrySource = sourceBlock(storageSource, "function acknowledgeMigrationRetry(token)");
+const queueIdbWriteSource = sourceBlock(storageSource, "function queueIdbWrite(run)");
+const runHydrationSource = sourceBlock(storageSource, "async function runHydration()");
+const settlePendingStorageWritesSource = sourceBlock(storageSource, "async function settlePendingStorageWrites(observedWrites = [])");
+const reconcileSuccessfulSharedStateClearSource = sourceBlock(
+  storageSource,
+  "async function reconcileSuccessfulSharedStateClear({ clearRecovery, clearToken, clearedMirror })",
+);
+const finishSharedStateClearSource = sourceBlock(
+  storageSource,
+  "async function finishSharedStateClear({ clearRecovery, clearToken, clearedMirror, idbClearWrites, mirrorWasActive })",
+);
+const clearSharedStateSource = sourceBlock(storageSource, "export function clearSharedMyBishBashState()");
+
+assertMatch(
+  "active IDB set branch keeps synchronous mirror and queued IDB put",
+  activeIdbSetSource,
+  /if \(isMirrorActive\(\)\)[\s\S]*mirror\.set\(key, stringValue\)[\s\S]*queueIdbWrite\(\(\) => kvPut\(key, stringValue\)\)[\s\S]*return;/,
+);
+assertNoMatch(
+  "active IDB set branch does not mutate localStorage",
+  activeIdbSetSource,
+  /\blocalStorage\.(?:setItem|removeItem)\(/,
+);
+assertMatch(
+  "active IDB remove branch keeps synchronous mirror and queued IDB delete",
+  activeIdbRemoveSource,
+  /if \(isMirrorActive\(\)\)[\s\S]*mirror\.delete\(key\)[\s\S]*queueIdbWrite\(\(\) => kvDelete\(key\)\)[\s\S]*return;/,
+);
+assertNoMatch(
+  "active IDB remove branch does not mutate localStorage",
+  activeIdbRemoveSource,
+  /\blocalStorage\.(?:setItem|removeItem)\(/,
+);
+assertNoMatch(
+  "active IDB branches never request stale localStorage replay",
+  activeIdbSetSource + activeIdbRemoveSource,
+  /markMigrationRetry|markIdbMutationDuringReconciliation/,
+);
+
+// Once dual-write is gone, an IDB write/flush failure cannot make the old
+// localStorage snapshot authoritative. A retry marker in either failure path
+// would replay stale bytes over newer mirror/IDB state on the next boot.
+assertMatch(
+  "queued IDB writes still execute through the observable write promise",
+  queueIdbWriteSource,
+  /function queueIdbWrite\(run\)[\s\S]*Promise\.resolve\(run\(\)\)/,
+);
+assertNoMatch(
+  "queued IDB write failure never requests stale localStorage replay",
+  queueIdbWriteSource,
+  /markMigrationRetry|markIdbMutationDuringReconciliation/,
+);
+assertMatch(
+  "pending IDB flush still uses the bounded flush path",
+  settlePendingStorageWritesSource,
+  /withTimeout\([\s\S]*await flushWrites\(\)[\s\S]*Promise\.all\(observedWrites\)[\s\S]*WRITE_FLUSH_TIMEOUT_MS[\s\S]*catch/,
+);
+assertNoMatch(
+  "IDB flush failure never requests stale localStorage replay",
+  settlePendingStorageWritesSource,
+  /markMigrationRetry|markIdbMutationDuringReconciliation/,
+);
+assertNoMatch(
+  "retired IDB dual-write reconciliation hook is absent",
+  storageSource,
+  /markIdbMutationDuringReconciliation/,
+);
+assertMatchCount(
+  "legacy authority mutation requests one reconciliation generation",
+  markLegacyMutationSource,
+  /markMigrationRetry\(\)/,
+  1,
+);
+assertMatchCount(
+  "read-only legacy selection and hydration fallback do not publish authority",
+  runHydrationSource,
+  /markMigrationRetry\(\)/,
+  0,
+);
+assertMatchCount(
+  "all-sink clear requests one durable reconciliation generation",
+  clearSharedStateSource,
+  /markMigrationRetry\(\)/,
+  1,
+);
+assertMatch(
+  "all-sink clear demotes while IDB deletes are unsettled",
+  clearSharedStateSource,
+  /if \(mirrorWasActive\)[\s\S]*mirror = null;[\s\S]*activeEngine = "localstorage";/,
+);
+assertMatch(
+  "all-sink clear restores IDB only after durable deletes and safe reconciliation",
+  finishSharedStateClearSource,
+  /!idbClearSucceeded \|\| activeAllSinkClearRecovery !== clearRecovery[\s\S]*reconcileSuccessfulSharedStateClear\(\{ clearRecovery, clearToken, clearedMirror \}\)[\s\S]*if \(reconciledMirror === null\) return;[\s\S]*mirror = reconciledMirror;[\s\S]*activeEngine = "idb";/,
+);
+assertMatch(
+  "all-sink clear reconciles only its own same-session legacy generation",
+  reconcileSuccessfulSharedStateClearSource,
+  /retry\.token === clearToken[\s\S]*acknowledgeMigrationRetry\(clearToken\)[\s\S]*retry\.token !== clearRecovery\.latestLegacyMutationToken[\s\S]*migrateLocalStorageIfNeeded\(\{ force: true \}\)[\s\S]*readMigrationRetry\(\)\.token !== retry\.token[\s\S]*acknowledgeMigrationRetry\(retry\.token\)/,
+);
+assertNoMatch(
+  "all-sink clear failure does not publish a failure-driven replay generation",
+  finishSharedStateClearSource + reconcileSuccessfulSharedStateClearSource,
+  /markMigrationRetry\(\)/,
+);
+assertMatchCount(
+  "migration retry marker is defined once and called only by mutation and all-sink clear",
+  storageSource,
+  /markMigrationRetry\(\)/,
+  3,
+);
+
+// Exhaustive mutation allowlist. Each permitted call is pinned to its owning
+// function and category, then the global count proves there is no seventh,
+// unclassified localStorage writer hidden elsewhere in storage.js.
+const allowedStorageMutations = [
+  {
+    label: "legacy engine set is the only routine localStorage set",
+    source: setStorageItemSource,
+    pattern: /window\.localStorage\.setItem\(key, value\)/,
+  },
+  {
+    label: "legacy engine remove is the only routine localStorage remove",
+    source: removeStorageItemSource,
+    pattern: /window\.localStorage\.removeItem\(key\)/,
+  },
+  {
+    label: "legacy-prefix migration may promote canonical localStorage bytes",
+    source: getLocalStorageItemSource,
+    pattern: /window\.localStorage\.setItem\(key, legacyValue\)/,
+  },
+  {
+    label: "migration retry request remains a localStorage control write",
+    source: markMigrationRetrySource,
+    pattern: /window\.localStorage\.setItem\(MIGRATION_RETRY_REQUEST_KEY, token\)/,
+  },
+  {
+    label: "migration retry acknowledgement remains a localStorage control write",
+    source: acknowledgeMigrationRetrySource,
+    pattern: /window\.localStorage\.setItem\(MIGRATION_RETRY_ACK_KEY, token\)/,
+  },
+  {
+    label: "all-sink clear explicitly removes each canonical and legacy localStorage key",
+    source: clearSharedStateSource,
+    pattern: /window\.localStorage\.removeItem\(key\)/,
+  },
+];
+
+for (const mutation of allowedStorageMutations) {
+  assertMatchCount(mutation.label, mutation.source, mutation.pattern, 1);
+}
+assertMatch(
+  "all-sink clear enumerates canonical and legacy owned keys",
+  clearSharedStateSource,
+  /const keys = \[\.\.\.SHARED_STORAGE_KEYS, \.\.\.LEGACY_SHARED_STORAGE_KEYS\]/,
+);
+assertMatchCount(
+  "storage.js localStorage mutations are exactly the six classified exceptions",
+  storageSource,
+  /\blocalStorage\.(?:setItem|removeItem)\(/,
+  allowedStorageMutations.length,
+);
+
+assertMatch("demo onboarding URL entrypoint is dev-only", appSource, /function shouldStartDemoOnboarding\(\) \{[\s\S]{0,140}!import\.meta\.env\.DEV/);
+assertMatch("demo signup URL entrypoint is dev-only", appSource, /function shouldStartDemoSignup\(\) \{[\s\S]{0,140}!import\.meta\.env\.DEV/);
+assertMatch("public marketing route selection lives above App hooks", rootRouterSource, /normalizedPath === "\/early-access"[\s\S]{0,900}normalizedPath === "\/terms"[\s\S]{0,700}EditableLandingPage/);
+assertNoMatch("App does not return marketing routes before hooks", appBeforeHooksSource, /EditableLandingPage|EarlyAccessPage|DownloadPage|AboutPage|LegalPage/);
+assertMatch("App debug logging is dev-only", appDebugLogSource, /import\.meta\.env\.DEV[\s\S]{0,80}console\.log/);
+assertMatch("service worker registration debug logging is dev-only", registerServiceWorkerDebugLogSource, /import\.meta\.env\.DEV[\s\S]{0,80}console\.log/);
+assertNoMatch("launcher destination debug logging is disabled outside app dev runtime", launcherDestinationsDebugLogSource, /console\.log/);
+assertNoMatch("public service worker has no production console.log", serviceWorkerSource, /console\.log/);
+assertNoMatch("LogPanel does not import recharts on the app critical path", logPanelSource, /from ["']recharts["']|BarChart|ResponsiveContainer|XAxis|YAxis|Tooltip/);
+assertMatch("main app screens have memo boundaries", appSource, /const MemoHomePanel = memo\(HomePanel\);[\s\S]{0,260}const MemoAppsPanel = memo\(AppsPanel\);[\s\S]{0,260}const MemoStandardLibraryPanel = memo\(StandardLibraryPanel\);[\s\S]{0,260}const MemoLogPanel = memo\(LogPanel\);[\s\S]{0,260}const MemoExplorePanel = memo\(ExplorePanel\);[\s\S]{0,260}const MemoOverlay = memo\(Overlay\);/);
+assertNoMatch("App render uses memoized main screens", appSource, /<HomePanel(?:\s|\/?>)|<AppsPanel(?:\s|\/?>)|<StandardLibraryPanel(?:\s|\/?>)|<LogPanel(?:\s|\/?>)|<ExplorePanel(?:\s|\/?>)|<Overlay(?:\s|\/?>)/);
+// Re-pointed (Phase 3 R7): the log screen's store container owns this
+// derivation now that App no longer drills the event log into LogPanel. Same
+// assertion, same strength, new home — features/log/LogScreen.jsx.
+assertMatch("Log weekly shift count is memoized", logScreenSource, /const weeklyShiftCount = useMemo\(\(\) => getWeeklyShiftCount\(events\), \[events\]\);/);
+assertMatch("Apps panel clock is isolated below its memo boundary", appsPanelSource, /function AppsPanel\(\{[\s\S]{0,120}return <AppsPanelClock \{\.\.\.props\} \/>;[\s\S]{0,120}\}([\s\S]*?)function AppsPanelClock\(/);
+assertMatch("Apps panel clock owns its live pause interval", appsPanelSource, /function AppsPanelClock\([\s\S]{0,1800}window\.setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1000\)/);
+
+assertMatch("fake launcher sessions never allow Back to home", launchSessionDomainSource, /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/);
+assertMatch("event log retries are idempotent by event id", eventLogSource, /upsert\(\[event\], \{\s*onConflict: "id",\s*ignoreDuplicates: true,\s*\}\)/);
+assertMatch("shared state saves retry transient fetch failures", syncSource, /isTransientFetchError\(error\)[\s\S]{0,160}wait\(250 \* \(attempt \+ 1\)\)/);
+assertMatch("launcher event transient fetch failures are non-fatal", syncSource, /saveLauncherEvent[\s\S]{0,900}isTransientFetchError\(error\) \? console\.warn : console\.error/);
+assertMatch("authenticated launcher event policy permits anonymous pre-session writes", launcherEventsMigrationSource, /user_id is null and anonymous_device_id is not null/);
+assertMatch("in-app fake launcher clicks open real destinations directly", appSource, /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId/);
+assertNoMatch("home fake launcher bar is not wired to beginInterceptionFlow", appSource, /source:\s*"home_fake_launcher_bar"[\s\S]{0,240}beginInterceptionFlow/);
+assertNoMatch("overlay fake launcher is not wired to beginInterceptionFlow", appSource, /source:\s*"overlay_fake_launcher"[\s\S]{0,240}beginInterceptionFlow/);
+assertNoMatch("settings fake launcher is not wired to beginInterceptionFlow", appSource, /source:\s*"settings_fake_launcher"[\s\S]{0,240}beginInterceptionFlow/);
+assertNoMatch("FakeLauncherBar does not navigate by itself", fakeLauncherBarSource, /window\.location\.assign|getVersionOpenHref/);
+assertMatch("/intercept/:launcherId still starts the interception flow", appSource, /beginInterceptionFlow\(route\.versionId/);
+assertMatch("continue-to-app still opens the real destination through openDestinationApp", appSource, /onContinueToApp=\{\(versionId, options\) => openDestinationApp\(versionId, options\)\}/);
+// Security-shaped invariant (Phase 4c): openDestinationApp is the ONE place a
+// resolved launcher destination reaches the browser. The previous form of this
+// check used assertMatch, which is existence-only — it passed unchanged when a
+// second `window.location.assign(href)` was added to App.jsx (proven by
+// mutation 2026-07-27). Uniqueness must be counted, and every navigation sink
+// in App.jsx must be enumerated, or a duplicate sink can be introduced under a
+// different variable name and go unasserted.
+assertMatch("openDestinationApp still performs the destination href assignment", appSource, /window\.location\.assign\(href\)/);
+{
+  const label = "openDestinationApp is the single destination href assignment";
+  const hrefSinks = [...appSource.matchAll(/window\.location\.assign\(href\)/g)].length;
+  if (hrefSinks !== 1) {
+    fail(label, `expected exactly 1 window.location.assign(href) in App.jsx, found ${hrefSinks}`);
+  } else {
+    pass(label);
   }
-  pass(message);
 }
-
-function assertAppDoesNotMatch(message, pattern) {
-  const matches = matchingSnippets(appSource, pattern);
-  if (matches.length > 0) {
-    fail(message, matches[0]);
-    return;
+{
+  // Enumerated navigation sinks in App.jsx. Adding, removing or renaming one is
+  // a deliberate act and must update this list in the same commit.
+  //   href         — openDestinationApp, the single launcher destination sink
+  //   fallbackHref — scheduleNativeSchemeFallback, fed only by openDestinationApp
+  //   url          — openExternalActionUrl, https-validated action-card links
+  const label = "App.jsx navigation sinks are exactly the three enumerated ones";
+  const EXPECTED_SINKS = ["href", "fallbackHref", "url"];
+  const sinks = [...appSource.matchAll(/window\.location\.assign\(([^)]*)\)/g)].map((match) => match[1].trim());
+  if (sinks.length !== EXPECTED_SINKS.length || sinks.some((sink, index) => sink !== EXPECTED_SINKS[index])) {
+    fail(label, `expected [${EXPECTED_SINKS.join(", ")}], found [${sinks.join(", ")}]`);
+  } else {
+    pass(label);
   }
-  pass(message);
 }
+assertMatch(
+  "custom-scheme launches compute the timed-fallback decision",
+  appSource,
+  /const needsTimedFallback = shouldUseTimedWebFallback\(href\) && fallbackHref && fallbackHref !== href/,
+);
+assertMatch(
+  "anchor-default continue links also arm the timed fallback",
+  appSource,
+  /if \(allowDefaultNavigation\) \{[\s\S]{0,500}scheduleNativeSchemeFallback\([\s\S]{0,200}return false;/,
+);
+assertMatch(
+  "scheme fallback cancels on pagehide/blur/hidden so it never double-navigates",
+  appSource,
+  /function scheduleNativeSchemeFallback\(\{[\s\S]{0,900}visibilitychange[\s\S]{0,400}pagehide[\s\S]{0,400}blur[\s\S]{0,900}window\.location\.assign\(fallbackHref\)/,
+);
+assertMatch("fake launcher reveal completion routes terminal state to ContinueToAppCard", appSource, /if \(overlay\.type === "reveal"\) \{[\s\S]{0,2200}const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);[\s\S]{0,450}routing to ContinueToAppCard/);
+assertNoMatch("old weighted launcher selector is not used by the app", appSource, /selectWeightedLauncherCard\(\{/);
+assertNoMatch("old weighted launcher selector is not exported", cardSelectionSource, /selectWeightedLauncherCard|personalWeight|packWeight|weightedFlow/);
+assertMatch("App filters launch selection to non-commitment cards", appSource, /function getLaunchPersonalCardPool\(cards = \[\]\) \{[\s\S]{0,220}!isCommitmentCard\(card\)[\s\S]{0,120}cardKind/);
+assertMatch("App uses Personal Card launch pool for launcher decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedSelectionCards\),[\s\S]{0,500}timezone: profile\.timezone/);
+// Re-pointed (Phase 3 R7): the home decision reads the event log non-reactively
+// (getEventsStore().getState().events) so the launch-decision effect cannot
+// re-trigger itself by logging launcher events. The assertion keeps both
+// load-bearing halves — the Personal Card launch pool AND an events argument.
+assertMatch("App uses Personal Card launch pool for home decisions", appSource, /selectEligibleCard\(\{[\s\S]{0,500}cards: getLaunchPersonalCardPool\(normalizedHomeCards\),[\s\S]{0,500}events: getEventsStore\(\)\.getState\(\)\.events,/);
+assertNoMatch("home launch decision does not depend reactively on the event log", appSource, /globalInterruptionMode, events, authReady/);
+assertNoMatch("App has no legacy selector call sites", appSource, /selectPersonalFirstLauncherCard\(\{/);
+assertNoMatch("App has no manual pack card randomisation path", appSource, /source\[Math\.floor\(Math\.random\(\) \* source\.length\)\]/);
+assertMatch("fake launcher event metadata records personal-first fallback", appSource, /selectedPath: "personal_first_fallback"/);
+assertMatch("canonical card shown events are logged", appSource, /event_type: CARD_EVENT_TYPES\.SHOWN/);
+// Phase 3 R7 re-point: this assertion's subject moved from App() into
+// features/cards/useCardActions.js in Phase 4b. Re-pointed at the new home,
+// with an assertNoMatch proving it was MOVED and not duplicated.
+assertMatch("canonical card completed and ignored events are logged", cardActionsSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+assertNoMatch("card completed/ignored logging does not remain in App", appSource, /event_type: action === "done" \? CARD_EVENT_TYPES\.COMPLETED : CARD_EVENT_TYPES\.IGNORED/);
+assertMatch("Library renders Personal Cards section", standardLibraryPanelSource, /title="Personal Cards"[\s\S]{0,160}Cards you have written for yourself\./);
+assertMatch("Library renders Commitment Cards section", standardLibraryPanelSource, /title="Commitment Cards"[\s\S]{0,160}Promises you've made to yourself\./);
+assertMatch("Library renders Active Packs section", standardLibraryPanelSource, /title="Active Packs"[\s\S]{0,160}Packs you've added to your library\./);
+assertMatch("Library renders Do Instead Cards section", standardLibraryPanelSource, /title="Do Instead Cards"[\s\S]{0,160}Things to do instead of opening an app\./);
+assertMatch("Library default open states match product shape", standardLibraryPanelSource, /useState\(\{\s*personal: false,\s*commitments: false,\s*activePacks: false,\s*doInstead: false,\s*\}\)/);
+assertMatch("Library uses compact list rows", libraryListRowSource, /function LibraryListRow[\s\S]{0,1500}className=\{`library-list-row/);
+// "View all" footer is intentional — part of ExpandableCollection (shows when items > maxPreview)
+assertMatch("Library View all footer is gated on hasMore", expandableCollectionSource, /hasMore[\s\S]{0,160}collection-view-all/);
+assertMatch("Personal Library plus opens personal composer", appSource, /onCreatePersonal=\{\(\) => openCardComposerFromCurrentRoute\("personal"\)\}/);
+assertMatch("Commitment Library plus opens commitment composer", appSource, /onCreateCommitment=\{\(\) => openCardComposerFromCurrentRoute\("commitment"\)\}/);
+assertMatch("Active Packs Library plus opens Explore", appSource, /onAddPack=\{\(\) => navigateTo\("\/explore"\)\}/);
+assertMatch("Composer can open in section-specific creation modes", composerSource, /function Composer\(\{ initialCard, initialKind = "personal"/);
+assertMatch("Library section plus has its own click target", expandableCollectionSource, /className="library-section-add"[\s\S]{0,220}data-testid=\{`\$\{testId\}-add`\}[\s\S]{0,80}>\s*\+/);
+assertMatch("Library section toggle remains separate from plus", expandableCollectionSource, /className="library-section-toggle"[\s\S]{0,220}aria-expanded=\{isOpen\}[\s\S]{0,120}data-testid=\{`\$\{testId\}-toggle`\}/);
+// Explore replaced the Packs tab (docs/explore-architecture.md): discovery in
+// ExplorePanel, app behaviour in Apps, action cards in Library →
+// Do Instead Cards.
+assertNoMatch("old PacksPanel is gone", appSource, /function PacksPanel\(/);
+assertMatch("Explore tab renders memoized ExplorePanel", appSource, /activeTab === "explore" \? \(\s*<MemoExplorePanel/);
+assertMatch("/packs redirects to Explore", routesSource, /normalized === "\/packs"\) return \{ kind: "explore", path: "\/explore", tab: "explore" \}/);
+assertMatch("bottom nav exposes Explore", homeSpotlightTourSource, /data-testid="bottom-nav-explore"/);
+assertMatch("bottom nav order is Home, Library, Log, Explore, Apps", appSource, /const BOTTOM_NAV_ITEMS = \[[\s\S]*testId: "bottom-nav-home"[\s\S]*testId: "bottom-nav-library"[\s\S]*testId: "bottom-nav-log"[\s\S]*testId: "bottom-nav-explore"[\s\S]*testId: "bottom-nav-apps"[\s\S]*\];/);
+assertNoMatch("bottom nav no longer exposes Packs", appSource, /data-testid="bottom-nav-packs"/);
+assertNoMatch("bottom nav no longer exposes Settings", appSource, /data-testid="bottom-nav-settings"/);
+assertMatch("Settings is reachable from the masthead affordance", mastheadSource, /data-testid="settings-gear"/);
+assertMatch("Explore commitment templates open the normal commitment composer", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,360}setComposerInitialKind\("commitment"\)/);
+assertMatch("Explore commitment templates return to Library after save", appSource, /function takeCommitmentTemplate\(template\)[\s\S]{0,900}composerReturnPathRef\.current = "\/library"/);
+assertNoMatch("PR3 does not introduce installed commitments", appSource + exploreSource, /installedCommitment|commitmentInstall|activateCommitment|installed commitment/i);
+assertNoMatch("Settings no longer owns app behaviour management", appSource, /data-testid=\{`settings-interruption-messages-\$\{version\.id\}`\}/);
+assertMatch("Apps owns app behaviour management", appsPanelSource, /data-testid="apps-list"/);
+assertMatch("Apps exposes app interruption toggles", appManagementScreenSource, /data-testid=\{`apps-interruptions-toggle-\$\{version\.id\}`\}/);
+assertNoMatch("Activation copy avoids legacy fake-launcher language", onboardingSource + downloadSource, />[^<]*(fake launcher|interruption pack|library pack)/i);
+assertMatch("Explore detail keeps a sticky install CTA", exploreSource, /data-testid="explore-install-button"/);
+assertMatch("Explore renders a commitments rail", exploreSource, /data-testid="explore-commitments-rail"/);
+assertMatch("Explore commitment CTA says Take this commitment", exploreSource, /Take this commitment/);
+// Generated covers are the standard cover system. Uploaded artwork remains a
+// data-level override, but the default path needs no manual cover design.
+assertMatch("Explore renders uploaded covers as an override before generated covers", exploreSource, /if \(pack\?\.coverImageUrl\) \{[\s\S]{0,160}return <img[\s\S]{0,220}return <GeneratedPackCover/);
+assertNoMatch("Explore cover override does not assume pack is defined", exploreSource, /if \(pack\.coverImageUrl\)/);
+assertMatch("Generated covers use the fixed premium palette", generatedCoverModelSource, /COVER_PALETTES[\s\S]{0,1600}plum[\s\S]{0,1600}navy[\s\S]{0,1600}teal[\s\S]{0,1600}forest[\s\S]{0,1600}burgundy[\s\S]{0,1600}copper[\s\S]{0,1600}charcoal[\s\S]{0,1600}midnight-blue/);
+assertNoMatch("Generated covers do not define texture or accent systems", generatedCoverModelSource + generatedCoverSource + stylesSource, /COVER_TEXTURES|COVER_ACCENTS|generated-cover-texture|generated-cover-accent-|cover-accent/);
+assertNoMatch("Generated covers do not depend on goals, themes, or categories", generatedCoverModelSource + generatedCoverSource, /pack\.(goal|theme|category)|getGoalStyle|GOAL_STYLES/);
+assertNoMatch("Generated cover art does not typeset preview quotes", generatedCoverModelSource + generatedCoverSource, /promptText|isPreview|getHookQuote|generated-cover-quote/);
+assertMatch("GeneratedPackCover catches cover model failures before app render can crash", generatedCoverSource, /function getSafeCoverModel[\s\S]{0,900}try \{[\s\S]{0,900}catch \{/);
+assertMatch("GeneratedPackCover has component-level fallback palette", generatedCoverSource, /FALLBACK_PALETTE[\s\S]{0,240}charcoal/);
+assertNoMatch("HQ never frames a missing upload as a defect", hqSource, /No cover|Missing cover|Cover required/i);
+assertNoMatch("HQ auto cover copy does not imply goal or preview quote inputs", hqSource, /Auto cover[^"]*(goal|first preview|preview card)/i);
+assertMatch("HQ labels covers as Auto cover only", hqSource, />Auto cover<\/span>/);
+assertNoMatch("HQ does not steer authors toward manual cover uploads", hqSource, /Upload custom cover|Custom cover|No cover|Missing cover|Cover required/i);
+assertMatch("HQ pack form previews the generated cover live", hqSource, /data-testid="hq-generated-cover-preview"[\s\S]{0,120}<GeneratedPackCover pack=\{previewPack\}/);
+assertMatch("HQ pack telemetry users are labelled as active users", hqSource, /MiniStat label="Active users" value=\{stats\.activeUsers \?\? 0\}/);
+assertMatch("HQ pack adoption is labelled as users enabled", hqSource, /MiniStat label="Users enabled" value=\{stats\.usersEnabled \?\? 0\}/);
+assertMatch("HQ pack adoption loads from saved state RPC", syncSource, /fetchAdminPackAdoptionSummary[\s\S]{0,240}hq_pack_adoption_summary/);
+assertMatch("HQ pack adoption counts saved non-deleted pack cards", hqPackAdoptionMigrationSource, /state_json -> 'cards'[\s\S]{0,360}sourcePackId[\s\S]{0,240}deletedAt/);
 
-function assertSourcePattern(label, source, message, pattern) {
-  const matches = matchingSnippets(source, pattern);
-  if (matches.length === 0) {
-    fail(`${label}: ${message}`);
-    return;
+const generatedCoverTitleCases = [
+  "COURAGE",
+  "APPLY PRESSURE",
+  "PUT YOURSELF OUT THERE",
+  "WHAT TO DO WHEN EVERYTHING FEELS LIKE IT IS FALLING APART",
+  "11+",
+  "A&E",
+  "5AM",
+  "GPT",
+];
+for (const [index, title] of generatedCoverTitleCases.entries()) {
+  const model = getCoverModel({
+    id: `guardrail-cover-${index}`,
+    title,
+    description: index % 2 === 0 ? "A useful one-line description for the cover card." : "",
+    entries: Array.from({ length: 30 }, (_, cardIndex) => ({ id: `card-${cardIndex}` })),
+  });
+  const rebuiltTitle = model.titleLines.join(" ");
+  if (rebuiltTitle === title && !rebuiltTitle.includes("…") && !rebuiltTitle.includes("...")) {
+    pass(`generated cover preserves full title: ${title}`);
+  } else {
+    fail(`generated cover preserves full title: ${title}`, JSON.stringify(model));
   }
-  pass(`${label}: ${message}`);
-}
-
-function assertSourceDoesNotMatch(label, source, message, pattern) {
-  const matches = matchingSnippets(source, pattern);
-  if (matches.length > 0) {
-    fail(`${label}: ${message}`, matches[0]);
-    return;
+  if (/^\d+(\.\d+)?cqw$/.test(model.titleSize) && Number.parseFloat(model.titleSize) > 0) {
+    pass(`generated cover computes responsive title size: ${title}`);
+  } else {
+    fail(`generated cover computes responsive title size: ${title}`, JSON.stringify(model));
   }
-  pass(`${label}: ${message}`);
 }
 
-function assertLessThanOrEqual(message, actual, expected) {
-  if (actual > expected) {
-    fail(`${message}: ${actual.toFixed(2)}ms > ${expected}ms`);
-    return;
-  }
-  pass(`${message}: ${actual.toFixed(2)}ms <= ${expected}ms`);
-}
+assertMatch("Explore Founding Access CTA is Coming Soon, not a payment flow", exploreSource, /Founding Access — Coming Soon/);
+assertMatch("Premium install fails closed in activatePack", appSource, /pack\.isPremium === true && !canUsePremiumContent\) return;/);
+assertMatch("fake launcher interruption remains planned as second layer", appSource, /const plannedInterruption = interruption;/);
+assertNoMatch("interruption must not be disabled by old weighted activation state", appSource, /const plannedInterruption = useWeightedFlow && !selected \? null : interruption/);
+assertNoMatch("interruption on with no layer-one card uses caught-up instead of direct continue", appSource, /if \(interruptionEnabled\) \{[\s\S]{0,620}buildFakeLauncherContinueOverlay\(versionId, activationKey\)/);
+assertMatch("fake launcher empty state uses caught-up headline", overlayHostSource, /headline=\{isIntercept \? "You're all caught up\." : "You're all caught up for now\."\}/);
+assertMatch("fake launcher empty state has launcher-specific Continue", overlayHostSource, /label: `Continue to \$\{appName\}`/);
+assertMatch("real app empty state stays softer than fake launcher empty state", overlayHostSource, /subtitle=\{isIntercept \? "See you later\." : ""\}/);
+assertNoMatch("action success does not continue to the original launcher", appSource, /source: "action_card_success"[\s\S]{0,220}onContinueToApp/);
+assertMatch("action success returns home after no-url alternatives", actionSuccessOverlaySource, /function ActionSuccessOverlay[\s\S]{0,180}label: "Back home"/);
 
-function assertTruthy(message, value) {
-  if (!value) {
-    fail(message);
-    return;
-  }
-  pass(message);
-}
-
-const launcherCardActionsSource = sourceBetween(appSource, "function getLauncherCardActions", "function buildEmptyOverlay");
-if (!launcherCardActionsSource) {
-  fail("central launcher card actions are discoverable for feedback guardrails");
-} else {
-  pass("central launcher card actions are discoverable for feedback guardrails");
-}
-assertSourcePattern(
-  "App",
-  launcherCardActionsSource,
-  "pack overlay primary action uses the normalized session action",
-  /label: normalizedSession\.primaryAction === LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/g,
-);
-assertAppPattern(
-  "pack overlay uses the central action helper",
-  /const cardActionConfig = getLauncherCardActions\(\{ launchSession, cardType \}\);/g,
-);
-assertAppPattern(
-  "fake launcher sessions never allow Back to home",
-  /entrySurface === "fake_launcher"[\s\S]{0,280}allowBackHome: false/g,
-);
-const actionSuccessOverlaySource = sourceBetween(appSource, "function ActionSuccessOverlay", "function CustomPackOverlay");
-assertSourcePattern(
-  "App",
-  actionSuccessOverlaySource,
-  "action-success Back-home CTA is gated by allowBackHome",
-  /\.\.\.\(allowBackHome \? \[\{ label: "Back home", variant: "secondary", onClick: onClose \}\] : \[\]\)/g,
-);
-assertSourceDoesNotMatch(
-  "App",
-  actionSuccessOverlaySource,
-  "action-success must not hardcode the dashboard-era home button on",
-  /showHomeButton/g,
-);
-assertAppPattern(
-  "card screens expose the persistent dashboard shortcut",
-  /function PremiumDashboardShortcut[\s\S]{0,900}aria-label="Open dashboard"[\s\S]{0,300}data-testid="dashboard-shortcut"/g,
-);
-assertAppPattern(
-  "card reveal template renders the dashboard shortcut independently",
-  /\{showDashboardShortcut \? <PremiumDashboardShortcut href=\{dashboardHref\} onClick=\{onDashboard\} \/> : null\}/g,
-);
-assertAppDoesNotMatch(
-  "legacy top-right home icon component is not rendered",
-  /<PremiumHomeButton/g,
-);
-assertAppDoesNotMatch(
-  "legacy top-right home icon class is not rendered",
-  /premium-home-button/g,
-);
-assertSourcePattern(
-  "App",
-  launcherCardActionsSource,
-  "pack overlay positive action says I really like this one",
-  /label: "I really like this one", variant: "secondary"/g,
-);
-assertSourceDoesNotMatch(
-  "App",
-  launcherCardActionsSource,
-  "pack overlay never renders Dislike",
-  /label: "Dislike"/g,
-);
-assertSourceDoesNotMatch(
-  "App",
-  launcherCardActionsSource,
-  "pack overlay never renders Like",
-  /label: "Like"/g,
-);
-assertSourceDoesNotMatch(
-  "App",
-  launcherCardActionsSource,
-  "pack overlay does not expose old negative replacement wording",
-  /label: "(Not for me|Hide this)"/g,
-);
+const launcherCardActionsSource = sourceBetween(overlayBuildersSource, "function getLauncherCardActions", "function buildEmptyOverlay");
+assertMatch("pack card positive action says I really like this one", launcherCardActionsSource, /label: "I really like this one", variant: "secondary"/);
+assertMatch("pack card primary action says Continue in launcher sessions", launcherCardActionsSource, /LAUNCH_PRIMARY_ACTIONS\.CONTINUE_TO_APP \? "Continue" : "Back to home"/);
+assertNoMatch("pack overlay never renders Dislike", launcherCardActionsSource, /label: "Dislike"/);
+assertNoMatch("pack overlay never renders old Like", launcherCardActionsSource, /label: "Like"/);
 
 const packContinueHandlerSource = sourceBetween(appSource, "onPackContinue={() => {", "onPackLike={() => {");
-assertSourcePattern(
-  "App",
-  packContinueHandlerSource,
-  "Continue uses neutral reveal completion",
-  /handleRevealCompletion\(\{ completedCardId: activeRevealCard\?\.id \}\);/g,
-);
-assertSourceDoesNotMatch(
-  "App",
-  packContinueHandlerSource,
-  "Continue does not hide, dislike, pause, delete, or suppress pack cards",
-  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|dislikedPackCardIds|hiddenPackCardIdsCompat|deletedAt|paused|disliked:/g,
-);
+assertMatch("pack Continue uses neutral reveal completion", packContinueHandlerSource, /handleRevealCompletion\(\{ completedCardId: activeRevealCard\?\.id \}\);/);
+assertNoMatch("pack Continue does not hide/dislike/delete the card", packContinueHandlerSource, /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|deletedAt|paused|disliked:/);
 
 const packPositiveHandlerSource = sourceBetween(appSource, "onPackLike={() => {", "onChooseElse={() => {");
-assertSourcePattern(
-  "App",
-  packPositiveHandlerSource,
-  "I really like this one logs the existing positive pack-card event",
-  /event_type: "pack_card_liked"[\s\S]{0,700}action_taken: "liked"/g,
-);
-assertSourceDoesNotMatch(
-  "App",
-  packPositiveHandlerSource,
-  "I really like this one does not hide the pack card",
-  /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|hidePackCardCompat|pack_card_disliked|deletedAt|paused|disliked:/g,
-);
-assertAppPattern(
-  "intentional hide/restore behaviour still exists in pack detail settings",
-  /function setPackCardHidden\(packId, text, hidden\)[\s\S]*\{hidden \? "Restore card" : "Hide card"\}/g,
-);
-assertAppPattern(
-  "non-pack personal card actions are unchanged",
-  /\{ id: "not_done", label: "Not done", variant: "secondary" \},\s*\{ id: "do_now", label: "I’ll do it now", variant: "secondary" \},\s*\{ id: "done", label: "Done", variant: "primary" \}/g,
-);
-assertSourcePattern(
-  "HQ",
-  await readFile(new URL("../src/HQPanel.jsx", import.meta.url), "utf8"),
-  "positive pack feedback displays as Really liked",
-  /pack_card_liked: "Really liked"/g,
-);
-
-assertAppPattern(
-  "fake launcher handler exists",
-  /function handleFakeLauncherLaunch\(versionId, source\)/g,
-);
-
-assertAppPattern(
-  "in-app fake launcher sources are classified separately from installed launcher entries",
-  /const IN_APP_SHORTCUT_SOURCES = new Set\(\[[\s\S]{0,180}"home_fake_launcher_bar"[\s\S]{0,180}"overlay_fake_launcher"[\s\S]{0,180}"settings_fake_launcher"[\s\S]{0,120}\]\);[\s\S]{0,260}const INSTALLED_FAKE_LAUNCHER_ENTRY_SOURCES = new Set\(\[[\s\S]{0,180}"route"[\s\S]{0,180}"home_screen_resume"[\s\S]{0,180}"standalone_home_recovery"/g,
-);
-
-assertAppPattern(
-  "in-app fake launcher clicks open real destinations directly",
-  /function handleFakeLauncherLaunch\(versionId, source\) \{[\s\S]{0,260}if \(!isInAppShortcutClick\(source\)\)[\s\S]{0,420}openDestinationApp\(versionId,[\s\S]{0,100}source,[\s\S]{0,120}reason: "fake_launcher_icon_clicked"/g,
-);
-
-assertNoInterceptionSource("home_fake_launcher_bar");
-assertNoInterceptionSource("overlay_fake_launcher");
-assertNoInterceptionSource("settings_fake_launcher");
-
-assertAppDoesNotMatch(
-  "tester in-app fake launcher clicks must not start interception",
-  /if \(testerStatus\?\.is_tester === true\) \{[\s\S]{0,420}beginInterceptionFlow\(versionId/g,
-);
-
-assertAppPattern(
-  "home fake launcher bar uses the shared fake launcher handler",
-  /handleFakeLauncherLaunch\(versionId, "home_fake_launcher_bar"\)/g,
-);
-
-assertAppPattern(
-  "overlay fake launcher uses the shared fake launcher handler",
-  /handleFakeLauncherLaunch\(versionId, "overlay_fake_launcher"\)/g,
-);
-
-assertAppPattern(
-  "settings fake launcher uses the shared fake launcher handler",
-  /handleFakeLauncherLaunch\(versionId, "settings_fake_launcher"\)/g,
-);
-
-assertAppPattern(
-  "openDestinationApp still calls window.location.assign(href)",
-  /function openDestinationApp[\s\S]{0,2400}window\.location\.assign\(href\)/g,
-);
-
-const openDestinationAppBody = findFunctionBody(appSource, "openDestinationApp");
-if (!openDestinationAppBody) {
-  fail("openDestinationApp function still exists");
-} else {
-  pass("openDestinationApp function still exists");
-
-  if (!/getVersionOpenHref\(version,\s*\{\s*preferFastDestination\s*\}\)/.test(openDestinationAppBody)) {
-    fail("openDestinationApp still resolves the real destination href from launcher state with the fast-destination flag", normalizeSnippet(openDestinationAppBody));
-  } else {
-    pass("openDestinationApp still resolves the real destination href from launcher state with the fast-destination flag");
-  }
-
-  if (!/const preferFastDestination = reason === "fake_launcher_icon_clicked";/.test(openDestinationAppBody)) {
-    fail("in-app fake launcher clicks still prefer fast app-capable destinations", normalizeSnippet(openDestinationAppBody));
-  } else {
-    pass("in-app fake launcher clicks still prefer fast app-capable destinations");
-  }
-
-  if (!/logLauncherEvent\("intercept_continue_to_app"/.test(openDestinationAppBody)) {
-    fail("openDestinationApp still logs intercept_continue_to_app", normalizeSnippet(openDestinationAppBody));
-  } else {
-    pass("openDestinationApp still logs intercept_continue_to_app");
-  }
-
-  if (!/logLauncherEvent\("fake_launcher_real_app_opened"/.test(openDestinationAppBody)) {
-    fail("openDestinationApp still logs fake_launcher_real_app_opened", normalizeSnippet(openDestinationAppBody));
-  } else {
-    pass("openDestinationApp still logs fake_launcher_real_app_opened");
-  }
-
-  if (!/if \(href\)[\s\S]{0,720}window\.location\.assign\(href\)/.test(openDestinationAppBody)) {
-    fail("openDestinationApp only attempts navigation when href exists", normalizeSnippet(openDestinationAppBody));
-  } else {
-    pass("openDestinationApp only attempts navigation when href exists");
-  }
-}
-
-assertAppPattern(
-  "/intercept/:launcherId still calls beginInterceptionFlow",
-  /if \(route\.kind === "intercept"\)[\s\S]{0,7000}beginInterceptionFlow\(route\.versionId,[\s\S]{0,240}source:\s*isResumeInterceptLaunch \? "home_screen_resume" : "route"/g,
-);
-
-assertAppPattern(
-  "/intercept/:launcherId still waits for launcher readiness before interception",
-  /if \(route\.kind === "intercept"\)[\s\S]{0,2200}if \(!launcherReadiness\.ready\)/g,
-);
-
-assertAppPattern(
-  "/intercept/:launcherId still writes launcher context while waiting for readiness",
-  /if \(route\.kind === "intercept"\)[\s\S]{0,2600}if \(!launcherReadiness\.ready\)[\s\S]{0,160}setLauncherContext\(route\.versionId\)/g,
-);
-
-assertAppPattern(
-  "beginInterceptionFlow rejects non-installed sources before setting launcher context",
-  /function beginInterceptionFlow\(versionId,[\s\S]{0,180}if \(!isInstalledFakeLauncherEntry\(source\)\)[\s\S]{0,900}setLauncherContext\(versionId\)/g,
-);
-
-assertAppPattern(
-  "continue-to-app still calls openDestinationApp",
-  /onContinueToApp=\{\(versionId,\s*options\)\s*=>\s*openDestinationApp\(versionId,\s*options\)\}/g,
-);
-
-assertAppPattern(
-  "continue card button still delegates to onContinueToApp",
-  /onContinueToApp\?\.\(version\?\.id,\s*\{[\s\S]{0,180}source:\s*"continue_card",[\s\S]{0,120}reason:\s*"user_pressed_continue",[\s\S]{0,120}allowDefaultNavigation:\s*Boolean\(continueHref\)[\s\S]{0,80}\}\)/g,
-);
-
-assertAppPattern(
-  "interruption continue button still delegates to onContinueToApp",
-  /onContinueToApp\?\.\(version\.id,\s*\{[\s\S]{0,180}source:\s*"interruption_card",[\s\S]{0,120}reason:\s*"user_pressed_continue",[\s\S]{0,120}allowDefaultNavigation:\s*Boolean\(continueHref\)[\s\S]{0,80}\}\)/g,
-);
-
-assertAppPattern(
-  "home auto-launch suppression still prevents card loops after intentional in-app actions",
-  /if \(isHomeRoute && shouldLaunchOverlay\)[\s\S]{0,240}if \(suppressNextHomeAutoLaunchRef\.current\)[\s\S]{0,260}setShouldLaunchOverlay\(false\)/g,
-);
-
-assertAppPattern(
-  "resume handler suppresses home auto-launch after launcher destination",
-  /if \(suppressResumeHomeAutoLaunchRef\.current\) \{[\s\S]{0,260}setShouldLaunchOverlay\(false\);[\s\S]{0,120}\} else \{[\s\S]{0,180}setShouldLaunchOverlay\(true\);/g,
-);
-
-assertAppPattern(
-  "continuing to destination marks home resume for launcher suppression",
-  /if \(href\) \{[\s\S]{0,120}markHomeAutoLaunchSuppressedAfterDestination\(\);[\s\S]{0,120}suppressResumeHomeAutoLaunchRef\.current = true;[\s\S]{0,120}suppressNextHomeAutoLaunchRef\.current = true;[\s\S]{0,120}setShouldLaunchOverlay\(false\);/g,
-);
-
-assertAppPattern(
-  "destination suppression is consumed while building initial state",
-  /const suppressInitialHomeLaunch =[\s\S]{0,260}consumeHomeAutoLaunchSuppressedAfterDestination\(\);/g,
-);
-
-assertAppPattern(
-  "initial state exposes destination suppression",
-  /suppressInitialHomeLaunch,/g,
-);
-
-assertAppPattern(
-  "initial home launch is disabled when destination suppression is present",
-  /const \[shouldLaunchOverlay, setShouldLaunchOverlay\] = useState\(initialState\.setupComplete && !initialState\.suppressInitialHomeLaunch\);/g,
-);
-
-assertAppPattern(
-  "non-launcher completion still suppresses the next home auto-launch",
-  /debugLaunch\("\[CONTINUE_DECISION\] home -> falling back to home"\);[\s\S]{0,160}suppressNextHomeAutoLaunchRef\.current = true;[\s\S]{0,120}setShouldLaunchOverlay\(false\)/g,
-);
-
-assertAppPattern(
-  "launcher completion records completed card ids for the current activation",
-  /launchCompletedCardIdsRef\.current = new Set\(\[\.\.\.launchCompletedCardIdsRef\.current, completedCardId\]\);[\s\S]{0,500}const excludedCardIds = launchCompletedCardIdsRef\.current/g,
-);
-
-assertAppPattern(
-  "fake launcher reveal cards route to ContinueToAppCard after handling instead of another card",
-  /if \(overlay\.type === "reveal"\) \{/g,
-);
-
-assertAppPattern(
-  "overlay key includes overlay type so launcher cards remount before continue/interruption",
-  /key=\{`\$\{overlay\.type\}:\$\{overlay\.versionId \?\? ""\}:\$\{overlay\.cardId \?\? ""\}:\$\{overlay\.packId \?\? ""\}:\$\{overlay\.activationKey \?\? ""\}`\}/g,
-);
-
-assertSourcePattern(
-  "styles",
-  stylesSource,
-  "launcher interception card pieces render atomically without staggered reveal",
-  /\.premium-card-screen\.launcher-interception-card \.premium-greeting,[\s\S]{0,500}animation:\s*none;/g,
-);
-
-assertAppPattern(
-  "tester weighted flow keeps interruption planned as the second layer",
-  /const plannedInterruption = interruption;/g,
-);
-
-assertAppDoesNotMatch(
-  "tester weighted flow must not disable interruption when no weighted card is selected",
-  /const plannedInterruption = useWeightedFlow && !selected \? null : interruption;/g,
-);
-
-assertAppPattern(
-  "fake launcher reveal completion routes to interruption first when configured",
-  /activation\?\.interruption && activation\.versionId === versionId && activation\.activationKey === activationKey[\s\S]{0,1200}buildCustomPackOverlay\(activation\.interruption\.pack, activation\.interruption\.activeIndex, "intercept-pack"\)[\s\S]{0,1200}\[CONTINUE_DECISION\] launcher handled card -> routing to interruption card[\s\S]{0,400}return;/g,
-);
-
-assertAppPattern(
-  "fake launcher reveal completion still builds ContinueToAppCard overlay when no interruption is configured",
-  /const nextOverlay = buildFakeLauncherContinueOverlay\(versionId, activationKey\);/g,
-);
-
-assertAppPattern(
-  "fake launcher reveal completion still logs ContinueToAppCard transition",
-  /\[CONTINUE_DECISION\] launcher handled card -> routing to ContinueToAppCard/g,
-);
-
-assertAppDoesNotMatch(
-  "fake launcher handled-card completion must not depend on weighted activation state",
-  /if \(activation\?\.weightedFlowUsed && activation\.versionId === versionId && activation\.activationKey === activationKey\)/g,
-);
-
-assertAppDoesNotMatch(
-  "weighted launcher completion must not route to another weighted card",
-  /\[CONTINUE_DECISION\] weighted intercept -> routing to next weighted card/g,
-);
-
-assertAppDoesNotMatch(
-  "weighted launcher completion must not use active-pack fallback after a handled card",
-  /\[WEIGHTED_GUARD\] Active pack cards remained after selector returned empty/g,
-);
-
-assertAppPattern(
-  "local card changes still persist through saveCards(cards)",
-  /saveCards\(cards\);/g,
-);
-
-assertAppPattern(
-  "sync status still has a ready-gated cloud save path",
-  /syncStatus !== "ready"[\s\S]{0,1600}saveSharedState\(session\.user\.id, stateToSave\)/g,
-);
-
-assertAppPattern(
-  "offline event queue is still processed when sync is ready",
-  /if \(syncStatus === "ready"\) \{\s*void processEventQueue\(\);/g,
-);
-
-assertAppPattern(
-  "sync load still applies cloud shared state after login",
-  /loadSharedState\(session\.user\.id\)[\s\S]{0,600}applySharedState\(sharedState/g,
-);
-
-assertAppPattern(
-  "polling still skips cloud loads while local changes are dirty",
-  /if \(localDirtyRef\.current\) \{[\s\S]{0,180}\[POLLING\] skipped: local state has unsynced changes/g,
-);
-
-assertAppPattern(
-  "polling still rejects stale cloud state",
-  /incomingTime < highestKnownCloudTimeRef\.current[\s\S]{0,160}\[POLLING\] skipped: stale cloud state/g,
-);
-
-assertAppPattern(
-  "shared state merge still merges local and cloud cards by id",
-  /setCards\(\(currentCards\) => \{[\s\S]{0,180}mergeEntitiesById\(currentCards, next\.cards\)/g,
-);
-
-assertAppPattern(
-  "shared state merge still merges action cards by id",
-  /setActionCards\(\(current\) => \{[\s\S]{0,160}mergeEntitiesById\(current, next\.actionCards\)/g,
-);
-
-assertAppPattern(
-  "shared state merge still preserves offline events",
-  /setEvents\(\(currentEvents\) => \{[\s\S]{0,160}mergeEventsById\(currentEvents, next\.events\)/g,
-);
-
-assertAppPattern(
-  "entity merge still preserves newer local tombstones",
-  /if \(localItem\.deletedAt\) console\.log\(`\[MERGE\] Tombstone preserved/g,
-);
-
-assertAppPattern(
-  "entity merge still rejects stale cloud tombstones",
-  /else if \(cloudItem\.deletedAt\) console\.log\(`\[MERGE\] Rejecting stale cloud tombstone/g,
-);
-
-assertAppPattern(
-  "login handler still uses logIn and sets the returned session",
-  /async function handleLogIn\(email, password\)[\s\S]{0,220}await logIn\(email, password\)[\s\S]{0,260}setSession\(nextSession\)/g,
-);
-
-assertAppPattern(
-  "invalid login path still sets a safe sync error instead of throwing through the UI",
-  /async function handleLogIn\(email, password\)[\s\S]{0,700}catch \(error\)[\s\S]{0,180}setSyncError\(getSyncErrorMessage\(error, "Could not log in\."\)\)/g,
-);
-
-assertAppPattern(
-  "logout handler still calls logOut and clears session",
-  /async function handleLogOut\(\)[\s\S]{0,280}await logOut\(\)[\s\S]{0,240}setSession\(null\)/g,
-);
-
-assertSourcePattern(
-  "storage",
-  storageSource,
-  "offline event queue key still exists",
-  /mybishbash\.offline-event-queue\.v1/g,
-);
-
-assertSourcePattern(
-  "sync",
-  syncSource,
-  "cloud state save helper still exists",
-  /export async function saveSharedState\(userId, state\)/g,
-);
-
-assertSourcePattern(
-  "sync",
-  syncSource,
-  "login helper still exists",
-  /export async function logIn\(email, password\)/g,
-);
-
-assertSourcePattern(
-  "sync",
-  syncSource,
-  "logout helper still exists",
-  /export async function logOut\(\)/g,
-);
-
-assertSourcePattern(
-  "launcherState",
-  launcherStateSource,
-  "destination href helper still exists",
-  /export function getVersionOpenHref\(version,\s*\{\s*preferFastDestination = false\s*\} = \{\}\)/g,
-);
-
-assertSourcePattern(
-  "launcherState",
-  launcherStateSource,
-  "iOS Safari fast launcher destinations preserve x-safari before web fallback",
-  /if \(preferFastDestination\) \{[\s\S]{0,180}merged\.id === "safari" && platform === "ios"[\s\S]{0,220}merged\.iosAppUrl[\s\S]{0,260}return href;/g,
-);
-
-assertSourcePattern(
-  "launcherState",
-  launcherStateSource,
-  "fast launcher destinations use app-capable web fallbacks before slow native deep links",
-  /if \(preferFastDestination\) \{[\s\S]{0,500}merged\.webFallbackUrl[\s\S]{0,500}return href;/g,
-);
-
-assertSourcePattern(
-  "launcherState",
-  launcherStateSource,
-  "fast launcher destinations strip x-safari prefixes",
-  /function normalizeWebHref\(value\)[\s\S]{0,180}x-safari-/g,
-);
-
-assertSourcePattern(
-  "launcherRegistry",
-  launcherRegistrySource,
-  "Safari default destinations distinguish desktop web fallback from iOS x-safari launch",
-  /id:\s*"safari"[\s\S]{0,900}webFallbackUrl:\s*"https:\/\/www\.google\.com"[\s\S]{0,260}iosAppUrl:\s*"x-safari-https:\/\/www\.google\.com"/g,
-);
-
-assertSourcePattern(
-  "launcherRegistry",
-  launcherRegistrySource,
-  "Safari default block does not point at the Apple Safari marketing page",
-  /id:\s*"safari"(?:(?!id:\s*"youtube")[\s\S])*manualUrl:\s*"x-safari-https:\/\/www\.google\.com"/g,
-);
-
-assertSourcePattern(
-  "launcherState",
-  launcherStateSource,
-  "intercept launcher context guard still exists",
-  /route\.kind === "intercept" && isInterruptionLauncherContext\(route\.versionId\)/g,
-);
-
-assertSourcePattern(
-  "launcherFlow",
-  launcherFlowSource,
-  "intercept readiness has a sub-300ms wait budget",
-  /export const LAUNCHER_DATA_WAIT_TIMEOUT_MS = 300;/g,
-);
-
-assertSourcePattern(
-  "launcherFlow",
-  launcherFlowSource,
-  "intercept readiness timeout releases pending auth or sync",
-  /if \(waitExpired\) return \{ ready: true, reason: "wait_expired" \};[\s\S]{0,180}if \(!authReady\)/g,
-);
-
-assertAppPattern(
-  "intercept routes render preparing overlay from initial state",
-  /initialRoute\.kind === "intercept" \? buildFakeLauncherPreparingOverlay\(initialRoute\.versionId\) : null/g,
-);
-
-assertAppPattern(
-  "launcher tester timing instrumentation covers route through final overlay",
-  /recordLaunchTiming\("route detected"[\s\S]{0,1800}recordLaunchTiming\("first overlay visible"[\s\S]{0,2400}recordLaunchTiming\("final overlay type rendered"/g,
-);
-
-assertAppPattern(
-  "launcher selection timing instrumentation surrounds the existing selector",
-  /recordLaunchTiming\("card selection started"[\s\S]{0,700}selectWeightedLauncherCard\(\{[\s\S]{0,1200}recordLaunchTiming\("card selection finished"/g,
-);
-
-assertSourcePattern(
-  "cardSelection",
-  cardSelectionSource,
-  "selection builds one card exposure lookup per selection cycle",
-  /export function buildCardExposureLookup\(cards = \[\], events = \[\]\)[\s\S]{0,900}return exposureByCardId;/g,
-);
-
-assertSourceDoesNotMatch(
-  "cardSelection",
-  cardSelectionSource,
-  "selection must not scan event history inside each card exposure lookup",
-  /function getLastCardExposure\(card,[\s\S]{0,260}\.reduce\(/g,
-);
-
-const weightedSelectorCalls = [...appSource.matchAll(/selectWeightedLauncherCard\(\{/g)].length;
-if (weightedSelectorCalls !== 1) {
-  fail(`App should call selectWeightedLauncherCard only for the initial launcher decision; found ${weightedSelectorCalls}`);
-} else {
-  pass("App calls selectWeightedLauncherCard only for the initial launcher decision");
-}
-
-assertAppPattern(
-  "intercept route reuses active launcher overlays before rebuilding selection",
-  /if \(!isResumeInterceptLaunch && \["intercept-pack", "continue-to-app"\]\.includes\(overlay\?\.type\) && overlay\?\.versionId === route\.versionId\)[\s\S]{0,420}return;[\s\S]{0,1500}beginInterceptionFlow\(route\.versionId/g,
-);
-
-assertAppPattern(
-  "intercept route reuses reveal and empty overlays before rebuilding selection",
-  /if \(!isResumeInterceptLaunch && \["reveal", "empty"\]\.includes\(overlay\?\.type\) && overlay\?\.versionId === route\.versionId\) \{[\s\S]{0,80}return;[\s\S]{0,1500}beginInterceptionFlow\(route\.versionId/g,
-);
-
-assertAppPattern(
-  "intercept route does not rebuild selection while a preparing overlay has an activation",
-  /overlay\?\.type === "launcher-preparing"[\s\S]{0,180}interceptActivationRef\.current\?\.versionId === route\.versionId[\s\S]{0,420}skipped duplicate rebuild while launcher decision is settling[\s\S]{0,220}return;/g,
-);
-
-function createPerfCards(now) {
-  const earlier = (minutesAgo) => new Date(now.getTime() - minutesAgo * 60 * 1000).toISOString();
-  const personalCards = Array.from({ length: 100 }, (_, index) => ({
-    id: `perf-personal-${index}`,
-    promptText: `Personal ${index}`,
-    dashboardTitle: `Personal ${index}`,
-    timingWindows: ["day"],
-    paused: false,
-    disliked: false,
-    deletedAt: null,
-    sourcePackId: null,
-    doneDate: null,
-    notYetUntil: null,
-    lastShownAt: null,
-    statusToday: "fresh",
-  }));
-  const packCards = Array.from({ length: 500 }, (_, index) => ({
-    id: `perf-pack-${index}`,
-    promptText: `Pack ${index}`,
-    dashboardTitle: `Pack ${index}`,
-    timingWindows: ["morning"],
-    paused: false,
-    disliked: false,
-    hidden: false,
-    deletedAt: null,
-    sourcePackId: `perf-pack-group-${Math.floor(index / 25)}`,
-    lastShownAt: index % 11 === 0 ? earlier(45 + index) : null,
-  }));
-  return [...personalCards, ...packCards];
-}
-
-function createPerfEvents(now, count = 20000) {
-  return Array.from({ length: count }, (_, index) => {
-    const isPack = index % 3 !== 0;
-    const cardId = isPack ? `perf-pack-${index % 500}` : `perf-personal-${index % 100}`;
-    return {
-      id: `perf-event-${index}`,
-      event_type: isPack ? "first_interruption_seen" : "bash_done",
-      card_id: cardId,
-      bash_id: cardId,
-      created_at: new Date(now.getTime() - ((index % 1440) * 60 * 1000 + Math.floor(index / 1440) * 1000)).toISOString(),
-    };
-  });
-}
-
-function measureSelection(label, select, { thresholdMs }) {
+assertMatch("I really like this one logs positive feedback", packPositiveHandlerSource, /event_type: "pack_card_liked"[\s\S]{0,700}action_taken: "liked"/);
+assertMatch("I really like this one completes the reveal instead of cycling pack cards", packPositiveHandlerSource, /handleRevealCompletion\(\);/);
+assertNoMatch("I really like this one does not hide/dislike/delete the card", packPositiveHandlerSource, /setDislikedPackCardIds|dislikePackCard|setHiddenPackCardIdsCompat|deletedAt|paused|disliked:/);
+assertNoMatch("launcherState keeps interruption logic separate from library pack availability", launcherStateSource, /isPackCardAvailable/);
+
+const continueCardSource = continueToAppCardSource;
+assertMatch("ContinueToAppCard renders the continue-to-app test id", continueCardSource, /data-testid="continue-to-app-card"/);
+assertNoMatch("ContinueToAppCard does not assign window.location directly", continueCardSource, /window\.location\.assign/);
+
+assertMatch("update banner is suppressed while overlays are active", appSource, /const showAppUpdateBanner = appUpdate\.updateAvailable && !overlay;/);
+assertMatch("update banner uses deferred visibility guard", appSource, /\{showAppUpdateBanner \? \(/);
+const serviceWorkerInstallSource = sourceBetween(serviceWorkerSource, 'self.addEventListener("install"', 'self.addEventListener("activate"');
+const serviceWorkerFetchSource = sourceBetween(serviceWorkerSource, 'self.addEventListener("fetch"', 'self.addEventListener("push"');
+const serviceWorkerHtmlSource = sourceBetween(serviceWorkerSource, "async function networkFirstHtml", "async function networkFirst");
+assertNoMatch("service worker install does not force skipWaiting", serviceWorkerInstallSource, /self\.skipWaiting\(\)/);
+assertNoMatch("service worker activate does not always claim clients", serviceWorkerSource, /\.then\(\(\) => self\.clients\.claim\(\)\)/);
+assertMatch("service worker only claims clients after explicit update", serviceWorkerSource, /shouldClaimClients \? self\.clients\.claim\(\) : undefined/);
+assertMatch("service worker cache-firsts immutable build assets", serviceWorkerFetchSource, /const fetchStrategy = isImmutableBuildAsset\(url\.pathname\) \? cacheFirst : networkFirst;[\s\S]{0,120}fetchStrategy\(event\.request, RUNTIME_CACHE\)/);
+assertMatch("service worker only treats hashed JS and CSS assets as immutable", serviceWorkerSource, /function isImmutableBuildAsset\(pathname\) \{[\s\S]{0,220}\/\\\/assets\\\/\[\^\/\]\+-\[A-Za-z0-9_-\]\{8,\}\\\.\(\?:js\|css\)\$\/\.test\(pathname\)/);
+assertMatch("service worker keeps HTML network-first with no-store", serviceWorkerHtmlSource, /fetch\(request, \{ cache: "no-store" \}\)/);
+assertMatch("service worker keeps version.json network-only", serviceWorkerFetchSource, /version\.json[\s\S]{0,140}fetch\(event\.request, \{ cache: "no-store" \}\)/);
+
+const now = new Date("2026-01-01T13:00:00.000Z");
+const personal = (id, overrides = {}) => ({
+  id,
+  promptText: id,
+  dashboardTitle: id,
+  sourcePackId: null,
+  deletedAt: null,
+  paused: false,
+  disliked: false,
+  doneDate: null,
+  statusToday: "fresh",
+  notYetUntil: null,
+  lastShownAt: null,
+  timingWindows: ["day"],
+  ...overrides,
+});
+const pack = (id, overrides = {}) => ({
+  id,
+  promptText: id,
+  dashboardTitle: id,
+  sourcePackId: "pack-a",
+  deletedAt: null,
+  paused: false,
+  disliked: false,
+  hidden: false,
+  lastShownAt: null,
+  timingWindows: ["day"],
+  ...overrides,
+});
+
+function measureSelection(label, select, thresholdMs) {
   select();
   const runs = [];
   let result = null;
   for (let index = 0; index < 5; index += 1) {
-    const startedAt = performance.now();
+    const started = performance.now();
     result = select();
-    runs.push(performance.now() - startedAt);
+    runs.push(performance.now() - started);
   }
   const max = Math.max(...runs);
-  const avg = runs.reduce((total, value) => total + value, 0) / runs.length;
-  console.log(`PERF ${label}: avg=${avg.toFixed(2)}ms max=${max.toFixed(2)}ms runs=${runs.map((value) => value.toFixed(2)).join(",")}`);
-  assertLessThanOrEqual(label, max, thresholdMs);
+  if (max > thresholdMs) {
+    fail(`${label}: ${max.toFixed(2)}ms > ${thresholdMs}ms`);
+  } else {
+    pass(`${label}: ${max.toFixed(2)}ms <= ${thresholdMs}ms`);
+  }
   return result;
 }
 
-const perfNow = new Date("2026-01-01T13:00:00.000Z");
-const perfCards = createPerfCards(perfNow);
-const perfEvents = createPerfEvents(perfNow, 20000);
-const excludedPerfIds = new Set(["perf-pack-0", "perf-pack-25", "perf-personal-0"]);
+const perfCards = [
+  ...Array.from({ length: 100 }, (_, index) => personal(`personal-${index}`)),
+  ...Array.from({ length: 500 }, (_, index) => pack(`pack-${index}`, { sourcePackId: `pack-${Math.floor(index / 25)}` })),
+];
+const perfEvents = Array.from({ length: 20000 }, (_, index) => ({
+  id: `event-${index}`,
+  event_type: "card_seen",
+  card_id: index % 3 === 0 ? `personal-${index % 100}` : `pack-${index % 500}`,
+  created_at: new Date(now.getTime() - index * 1000).toISOString(),
+}));
 
 const largeSelection = measureSelection(
-  "selectWeightedLauncherCard handles 100 personal, 500 pack, and 20k events under 50ms",
-  () =>
-    selectWeightedLauncherCard({
-      cards: perfCards,
-      timezone: "Europe/London",
-      events: perfEvents,
-      excludedCardIds: excludedPerfIds,
-      now: perfNow,
-      random: () => 0.99,
-    }),
-  { thresholdMs: 50 },
+  "selectPersonalFirstLauncherCard handles large event history under 50ms",
+  () => selectEligibleCard({
+    cards: perfCards,
+    timezone: "Europe/London",
+    events: perfEvents,
+    now,
+    settings: { personalCardCooldownMs: 0 },
+    random: () => 0.99,
+  }),
+  50,
 );
-assertTruthy("large event-history selection returns a valid card", largeSelection.selected);
-assertTruthy("large event-history selection respects excluded cards", !excludedPerfIds.has(largeSelection.selected?.id));
+if (largeSelection.selectedSource === "personal" && largeSelection.selectedPriority === "primary") {
+  pass("large selection stays personal-first when personal cards exist");
+} else {
+  fail("large selection stays personal-first when personal cards exist", JSON.stringify(largeSelection));
+}
 
-const packOnlyAfterPersonalExhausted = selectWeightedLauncherCard({
-  cards: [
-    ...perfCards.slice(0, 100).map((card) => ({ ...card, doneDate: "2026-01-01", statusToday: "doneToday" })),
-    ...perfCards.slice(100, 110),
-  ],
+const packFallback = selectEligibleCard({
+  cards: [personal("done", { doneDate: "2026-01-01", statusToday: "doneToday" }), pack("pack-fallback")],
   timezone: "Europe/London",
-  events: perfEvents,
-  now: perfNow,
-  random: () => 0.99,
+  now,
 });
-assertTruthy(
-  "personal exhausted plus active pack cards returns a pack card, not caught-up",
-  packOnlyAfterPersonalExhausted.selectedSource === "pack" && packOnlyAfterPersonalExhausted.selected,
-);
+if (packFallback.selectedSource === "pack" && packFallback.selectionReason === "no_eligible_primary_cards") {
+  pass("pack fallback is used only when no primary cards are eligible");
+} else {
+  fail("pack fallback is used only when no primary cards are eligible", JSON.stringify(packFallback));
+}
 
-const insideTimeoutFallback = selectWeightedLauncherCard({
-  cards: [
-    { ...perfCards[100], id: "timeout-pack-a", sourcePackId: "timeout-pack" },
-    { ...perfCards[101], id: "timeout-pack-b", sourcePackId: "timeout-pack" },
-  ],
+const caughtUp = selectEligibleCard({
+  cards: [personal("paused", { paused: true }), pack("hidden", { hidden: true })],
   timezone: "Europe/London",
-  events: [
-    { card_id: "timeout-pack-a", created_at: "2026-01-01T12:55:00.000Z" },
-    { card_id: "timeout-pack-b", created_at: "2026-01-01T12:50:00.000Z" },
-  ],
-  now: perfNow,
-  random: () => 0,
+  now,
 });
-assertTruthy(
-  "active pack cards inside timeout still use fallback pack behaviour",
-  insideTimeoutFallback.selectedSource === "pack" &&
-    insideTimeoutFallback.eligiblePackCount === 0 &&
-    insideTimeoutFallback.selected?.id === "timeout-pack-b",
-);
+if (!caughtUp.selected && caughtUp.selectionReason === "no_eligible_primary_or_fallback_cards") {
+  pass("caught-up only occurs when no primary or fallback cards are eligible");
+} else {
+  fail("caught-up only occurs when no primary or fallback cards are eligible", JSON.stringify(caughtUp));
+}
 
-const completionSelection = measureSelection(
-  "completion flow next-card selection stays under 50ms",
-  () =>
-    selectWeightedLauncherCard({
-      cards: perfCards,
-      timezone: "Europe/London",
-      events: perfEvents,
-      excludedCardIds: new Set(["perf-pack-10", "perf-pack-11", "perf-personal-3"]),
-      now: perfNow,
-      random: () => 0.99,
-    }),
-  { thresholdMs: 50 },
-);
-assertTruthy("completion flow quickly returns the next card", completionSelection.selected);
-
-const fakeLauncherDecisionStartedAt = performance.now();
-const fakeLauncherDecision = selectWeightedLauncherCard({
-  cards: perfCards,
-  timezone: "Europe/London",
-  events: perfEvents,
-  excludedCardIds: new Set(),
-  now: perfNow,
-  random: () => 0.99,
+const libraryCards = [
+  personal("personal-library"),
+  personal("commitment-library", { cardKind: "commitment", commitmentReason: "Because I said I would." }),
+  pack("active-pack-a", { sourcePackId: "pack-alpha" }),
+  pack("active-pack-b", { sourcePackId: "pack-alpha" }),
+  pack("active-pack-hidden-deleted", { sourcePackId: "pack-beta", deletedAt: now.toISOString() }),
+  personal("deleted-personal", { deletedAt: now.toISOString() }),
+  ...Array.from({ length: 50 }, (_, index) => personal(`many-personal-${index}`)),
+];
+const librarySections = buildLibrarySections({
+  cards: libraryCards,
+  libraryPacks: [{ id: "pack-alpha", title: "Alpha Pack" }],
 });
-const fakeLauncherDecisionMs = performance.now() - fakeLauncherDecisionStartedAt;
-console.log(`PERF fake launcher local decision: ${fakeLauncherDecisionMs.toFixed(2)}ms`);
-assertTruthy("fake launcher decision returns reveal/pack/continue input", fakeLauncherDecision.selected || fakeLauncherDecision.selectedSource === "none");
-assertLessThanOrEqual("fake launcher local decision stays within 250ms experience budget", fakeLauncherDecisionMs, 250);
+if (
+  librarySections.personal.some((item) => item.id === "personal-library") &&
+  librarySections.personal.some((item) => item.id === "many-personal-49") &&
+  !librarySections.personal.some((item) => item.id === "commitment-library") &&
+  !librarySections.personal.some((item) => item.id === "pack-alpha") &&
+  librarySections.personal.length === 51
+) {
+  pass("personal cards appear only in Personal Cards and include all 50+ items");
+} else {
+  fail("personal cards appear only in Personal Cards and include all 50+ items", JSON.stringify(librarySections.personal));
+}
+if (
+  librarySections.commitments.length === 1 &&
+  librarySections.commitments[0].id === "commitment-library" &&
+  !librarySections.commitments.some((item) => item.id === "personal-library")
+) {
+  pass("commitment cards appear only in Commitment Cards");
+} else {
+  fail("commitment cards appear only in Commitment Cards", JSON.stringify(librarySections.commitments));
+}
+if (
+  librarySections.activePacks.length === 1 &&
+  librarySections.activePacks[0].id === "pack-alpha" &&
+  librarySections.activePacks[0].count === 2 &&
+  librarySections.activePacks[0].representative.promptText === "Alpha Pack"
+) {
+  pass("active packs appear only in Active Packs with correct counts");
+} else {
+  fail("active packs appear only in Active Packs with correct counts", JSON.stringify(librarySections.activePacks));
+}
 
 if (failures.length > 0) {
   console.error(`\nRelease guardrails failed: ${failures.length}`);

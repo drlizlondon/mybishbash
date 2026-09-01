@@ -4,6 +4,10 @@ declare global {
   interface Window {
     __MYBISHBASH_NAVIGATION_ATTEMPTS?: Array<{ href: string; metadata: Record<string, unknown> }>;
     __MYBISHBASH_E2E_CAPTURE_NAVIGATION?: (href: string, metadata: Record<string, unknown>) => boolean;
+    __MYBISHBASH_CARD_OVERLAY_MOUNTS?: Array<{ variant: string; at: string; route: string }>;
+    __MYBISHBASH_CONTINUE_CARD_MOUNTS?: Array<{ appName: string; href: string; at: string; route: string }>;
+    __MYBISHBASH_VISIBLE_OVERLAY_SEQUENCE?: string[];
+    __MYBISHBASH_VISIBLE_OVERLAY_OBSERVER?: MutationObserver;
   }
 }
 
@@ -26,7 +30,7 @@ function personalCard(id: string, title: string) {
     theme: 'Minimal',
     icon: 'heart',
     frequency: 'once_daily',
-    timingWindows: ['morning', 'day', 'evening'],
+    timingWindows: ['morning', 'day', 'evening', 'night'],
     paused: false,
     disliked: false,
     deletedAt: null,
@@ -92,9 +96,12 @@ async function seedLauncherQaState(
 
 async function openFromFakeHomeLauncher(page: Page) {
   await page.goto('/mybishbash/safari/index.html');
-  await expect(page.getByRole('link', { name: 'Open Safari launcher' })).toBeVisible();
-  await page.getByRole('link', { name: 'Open Safari launcher' }).click();
-  await expect(page).toHaveURL(/\/mybishbash\/intercept\/safari$/);
+  const safariLauncherLink = page.getByRole('link', { name: 'Open Safari with myBishBash' });
+  await expect(safariLauncherLink).toBeVisible();
+  await safariLauncherLink.click();
+  await expect(page).toHaveURL(/\/mybishbash(?:-preview)?\/intercept\/safari$/);
+  await expect(page.getByText('Getting your card ready...', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('One moment.', { exact: true })).toHaveCount(0);
 }
 
 async function readVisibleStep(page: Page): Promise<OverlayStep> {
@@ -127,6 +134,41 @@ async function readVisibleStep(page: Page): Promise<OverlayStep> {
       subtitle: null,
       actions: [],
     };
+  });
+}
+
+async function installVisibleOverlayObserver(page: Page) {
+  await page.evaluate(() => {
+    const selectors = [
+      ['personal', '[data-testid="card-overlay-personal"]'],
+      ['pack', '[data-testid="card-overlay-pack"]'],
+      ['interruption', '[data-testid="card-overlay-interruption"]'],
+      ['continue-to-app', '[data-testid="continue-to-app-card"]'],
+      ['caught-up', '[data-testid="card-overlay-empty"]'],
+      ['action-card', '[data-testid="card-overlay-action"]'],
+    ] as const;
+
+    function visibleOverlay() {
+      for (const [type, selector] of selectors) {
+        if (document.querySelector(selector)) return type;
+      }
+      return 'none';
+    }
+
+    window.__MYBISHBASH_VISIBLE_OVERLAY_SEQUENCE = [];
+    let last = '';
+    const record = () => {
+      const next = visibleOverlay();
+      if (next !== last) {
+        window.__MYBISHBASH_VISIBLE_OVERLAY_SEQUENCE?.push(next);
+        last = next;
+      }
+    };
+
+    window.__MYBISHBASH_VISIBLE_OVERLAY_OBSERVER?.disconnect();
+    window.__MYBISHBASH_VISIBLE_OVERLAY_OBSERVER = new MutationObserver(record);
+    window.__MYBISHBASH_VISIBLE_OVERLAY_OBSERVER.observe(document.body, { childList: true, subtree: true });
+    record();
   });
 }
 
@@ -220,4 +262,49 @@ test('QA trace: fake home launcher, interruption ON, pack card then interruption
     firstActionTestId: 'card-action-continue',
     interruptionOn: true,
   });
+});
+
+test('fake launcher reveal-to-continue does not flicker when an update is available', async ({ page }) => {
+  await page.route('**/version.json?**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        version: 'preview-newer-than-current',
+        sourceSha: 'newer-than-current',
+        builtAt: now,
+      }),
+    });
+  });
+  await seedLauncherQaState(page, {
+    cards: [personalCard('qa-no-flicker', 'QA no flicker before continue')],
+    interruptionOn: false,
+  });
+
+  await openFromFakeHomeLauncher(page);
+  await expect(page.getByTestId('card-overlay-personal')).toBeVisible();
+  await expect(page.getByText('Update available')).toHaveCount(0);
+
+  await installVisibleOverlayObserver(page);
+  let documentLoads = 0;
+  page.on('load', () => {
+    documentLoads += 1;
+  });
+  await page.waitForLoadState('networkidle');
+  documentLoads = 0;
+
+  await page.getByTestId('card-action-done').click();
+
+  await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
+  await expect(page.getByText('Update available')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/mybishbash(?:-preview)?\/intercept\/safari$/);
+
+  const sequence = await page.evaluate(() => window.__MYBISHBASH_VISIBLE_OVERLAY_SEQUENCE ?? []);
+  expect(sequence).toEqual(['personal', 'continue-to-app']);
+
+  const continueMounts = await page.evaluate(() => window.__MYBISHBASH_CONTINUE_CARD_MOUNTS ?? []);
+  expect(continueMounts).toHaveLength(1);
+
+  const overlayMounts = await page.evaluate(() => window.__MYBISHBASH_CARD_OVERLAY_MOUNTS ?? []);
+  expect(overlayMounts.filter((mount) => mount.variant === 'personal')).toHaveLength(1);
+  expect(documentLoads, 'reveal-to-continue should not trigger a document reload').toBe(0);
 });

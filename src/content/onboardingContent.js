@@ -1,83 +1,153 @@
 // Local Edit Mode can save directly back to this file in development.
 // The edit panel can also copy the current JSON as a manual fallback.
 export const onboardingContent = {
-  brand: "MyBishBash",
-  back: "Back",
-  welcome: {
-    title: "Build your first MyBishBash.",
-    body: "Start with one clear setup. You can add more shortcuts and card types later.",
-    primary: "Start setup",
+  "brand": "myBishBash",
+  "common": {
+    "back": "Back",
+    "continue": "Continue",
+    "next": "Next"
   },
-  route: {
-    title: "How do you want to use MyBishBash first?",
-    body: "This is just your first setup. You can add the other shortcut type later.",
-    frequent: {
-      title: "Reminders during everyday phone use",
-      body: "Surface personal reminders throughout the day while browsing or checking your phone.",
-      meta: "Recommended shortcut: Safari",
+  "steps": {
+    "learn": {
+      "title": "Start with your Personal Cards",
+      "body": "You already open your favourite apps multiple times every day. myBishBash uses those moments to show Personal Cards for the things you genuinely mean to do each day.",
+      "primary": "Set up my Personal Cards",
+      "secondary": "I’ll do this later"
     },
-    pause: {
-      title: "Pause before scrolling",
-      body: "Create a small intentional moment before social media or video apps open.",
-      meta: "Popular shortcuts: Instagram, TikTok, YouTube",
+    "example": {
+      "title": "This is a Personal Card",
+      "body": "It is a reminder you choose for yourself. myBishBash can bring it up before the apps you already open.",
+      "primary": "Create my first cards",
+      "secondary": "Skip setup for now"
     },
+    "strategy": {
+      "title": "What would you like to remember?",
+      "body": "Choose up to 3 areas. We’ll suggest Personal Cards next.",
+      "primary": "Continue",
+      "secondary": "Skip setup for now",
+      "emptyMessage": "Choose at least one area so we can suggest cards that fit you."
+    },
+    "intention": {
+      "title": "Let’s start with a few things you’d like to remember more often.",
+      "body": "Choose up to 5. You can edit them or write your own.",
+      "primary": "Continue",
+      "secondary": "Skip personal cards",
+      "selectedLabel": "selected",
+      "limitMessage": "You can choose up to five.",
+      "deselectMessage": "Deselect one card first.",
+      "duplicateMessage": "That card is already selected.",
+      "tooLongMessage": "Keep it a bit shorter.",
+      "writeOwn": "Write my own",
+      "customPlaceholder": "Write your own reminder",
+      "addCustom": "Add card"
+    },
+    "personalSuccess": {
+      "title": "Great. Your Personal Cards are ready.",
+      "body": "You’ll now start seeing reminders about the things that matter to you before the apps you choose.",
+      "personalLabel": "Personal Cards",
+      "personalBody": "help you remember.",
+      "commitmentLabel": "Commitment Cards",
+      "commitmentBody": "help you follow through.",
+      "nextLine": "Next, let’s see how Commitment Cards help you keep commitments to yourself.",
+      "primary": "Continue"
+    },
+    "commitmentDemo": {
+      "title": "See how Commitment Cards work",
+      "body": "A Commitment Card helps you follow through without setting anything up right now.",
+      "note": "You won’t make one now. You can create Commitment Cards later in the app.",
+      "primary": "Continue"
+    },
+    "protectedApp": {
+      "title": "Where should myBishBash appear first?",
+      "body": "Choose one app you open often. You can add more later.",
+      "primary": "Continue",
+      "secondary": "Choose an app later",
+      "ariaLabel": "Choose your first app"
+    },
+    "protectedDemo": {
+      "titlePrefix": "Add an extra",
+      "titleSuffix": "prompt?",
+      "bodyPrefix": "App Prompts add one extra question before",
+      "bodySuffix": "opens.",
+      "primaryPrefix": "Continue",
+      "primarySuffix": "",
+      "secondary": "Choose an app later",
+      "note": "This is an example of an App Prompt.",
+      "toggleLabel": "Extra {appName} App Prompt",
+      "on": "On",
+      "off": "Off",
+      "later": "You can change this later.",
+      "continuePrefix": "Continue to",
+      "notNow": "Not now"
+    },
+    "protectedSetup": {
+      "confirmedSuffix": "",
+      "installPrefix": "Set up",
+      "installSuffix": "with myBishBash",
+      "confirmedTitle": "{appName} with myBishBash is nearly ready.",
+      "confirmedBody": "Open {appName} with myBishBash once from your Home Screen to finish setup.",
+      "confirmedBodySuffix": "with myBishBash is nearly ready.",
+      "continueHome": "Go to Home",
+      "saved": "I’ve set it up",
+      "secondary": "Choose an app later",
+      "markedSaved": "Marked as pending setup",
+      "homeScreenLauncher": "Home Screen icon",
+      "launcherReadySuffix": "setup ready",
+      "moveLauncherPrefix": "Move the myBishBash",
+      "moveLauncherMiddle": "icon to where",
+      "moveLauncherSuffix": "normally sits on your Home Screen. Put the original {appName} app in a folder so you open myBishBash first.",
+      "addLauncherPrefix": "Add the",
+      "addLauncherSuffix": "Home Screen icon.",
+      "addLauncherBody": "Add this Home Screen icon. Use it instead of the original {appName} icon when you want myBishBash to appear first.",
+      "returnNote": "Once it is set up, return to myBishBash to continue.",
+      "steps": [
+        "iPhone: tap Share, then Add to Home Screen.",
+        "Android: open the menu, then Add to Home screen or Install app.",
+        "Use the new icon when you want myBishBash to appear first.",
+        "Tap I’ve set it up on the setup page to continue."
+      ]
+    },
+    "skip": {
+      "title": "You can set up your phone later.",
+      "body": "When you are ready, choose the Personal Cards and apps you want myBishBash to connect.",
+      "primary": "Go to Home"
+    }
   },
-  personalCards: {
-    title: "Create your first MyBishBash cards",
-    body: "What do you want to remember during everyday phone use?",
-    primary: "Continue",
-    add: "Create my own",
+  "tutorialDemo": {
+    "instagram": "Instagram",
+    "whatsapp": "WhatsApp",
+    "safari": "Safari",
+    "openingInstagram": "Opening Instagram",
+    "openingWhatsApp": "Opening WhatsApp",
+    "vitaminTitle": "Have you done something that counts towards your fitness today?",
+    "vitaminBody": "",
+    "sunscreenTitle": "Have you put your sunscreen on today?",
+    "sunscreenBody": "Your phone becomes a trigger for what you chose.",
+    "done": "Done",
+    "doNow": "I’ll do it now",
+    "notDone": "Not done",
+    "ready": "Ready",
+    "continueInstagram": "Continue to Instagram",
+    "continueWhatsApp": "Continue to WhatsApp",
+    "instagramOpens": "Instagram opens",
+    "whatsappOpens": "WhatsApp opens",
+    "finalLine": "For the things you genuinely mean to do.",
+    "replay": "Replay demo"
   },
-  safariLauncher: {
-    title: "Set up your Safari shortcut",
-    body: "This lets your reminders appear during everyday phone use.",
-    primary: "Set up Safari",
-    quiet: "Skip Safari setup",
-    supporting: "You can add social-media pause shortcuts later.",
+  "demoCard": {
+    "kicker": "Personal Card",
+    "body": "A specific reminder before the next app-opening moment.",
+    "done": "Done",
+    "doNow": "I’ll do it now",
+    "notDone": "Not done",
+    "words": "Your words"
   },
-  context: {
-    title: "Where do you want more intentional pause moments?",
-    body: "Choose the kind of shortcut you want to set up first.",
-    primary: "Continue",
+  "personalPreview": {
+    "label": "Personal Card",
+    "when": "When",
+    "where": "Where"
   },
-  interrupters: {
-    title: "Choose 3 interrupter cards",
-    body: "These are the messages you’ll see before opening your launcher.",
-    primary: "Continue",
-    add: "Create my own",
-  },
-  actions: {
-    title: "Choose 3 action cards",
-    body: "If you choose ‘Do something else’, these quick actions will appear.",
-    primary: "Continue",
-    add: "Create my own",
-  },
-  launcher: {
-    title: "Set up your first launcher",
-    bodyPrefix: "Start with",
-    bodySuffix: "You can add more shortcuts later.",
-    primaryPrefix: "Set up",
-    quietPrefix: "Skip",
-    quietSuffix: "setup",
-  },
-  install: {
-    titlePrefix: "Add your",
-    titleSuffix: "shortcut",
-    safariBody: "This creates a home-screen shortcut for everyday browsing and phone checks.",
-    pauseBodyPrefix: "This creates a home-screen shortcut that helps you pause before opening",
-    primary: "I’ve added it",
-    quiet: "Skip this for now",
-    steps: ["Tap Share", "Tap Add to Home Screen", "Name it", "Open it when you’re about to browse", "Open it when you’re about to scroll"],
-    safariTip: "Tip: move your Safari app into a folder, then put MyBishBash Safari where Safari used to be.",
-  },
-  done: {
-    frequentTitle: "Your Safari reminders are ready",
-    pauseTitle: "Your interruption layer is ready",
-    frequentBody: "Next time you tap your Safari shortcut, MyBishBash can surface one of your personal reminders during everyday phone use.",
-    pauseBody: "Next time you tap your launcher, you’ll see one of your interrupter cards. Choose ‘Do something else’ to see your action cards, or continue to the app.",
-    primary: "Try it now",
-    secondary: "Go to home",
-    frequentSupporting: "Also available: pause moments before social media and video apps.",
-    pauseSupporting: "Also available: reminders throughout everyday phone use.",
-  },
+  "done": {
+    "primary": "Open setup"
+  }
 };

@@ -1,5 +1,5 @@
 import { DEFAULT_HOME_SCREEN_VERSIONS } from "../storage";
-import { LAUNCHER_IDS, getLauncherConfig, isKnownLauncher } from "./launcherRegistry";
+import { LAUNCHER_IDS, isKnownLauncher } from "./launcherRegistry";
 
 export const NORMAL_LAUNCHER_CONTEXT = "normal";
 export const INTERRUPTION_LAUNCHER_CONTEXTS = LAUNCHER_IDS;
@@ -46,111 +46,87 @@ export const DEFAULT_INTERRUPTION_PACKS = {
       "What would actually help you more than another video?",
     ],
   },
+  chrome: {
+    id: "chrome-interruption",
+    type: "interruption",
+    targetApp: "chrome",
+    active: true,
+    name: "Chrome Interruptions",
+    linkedVersionId: "chrome",
+    messages: [
+      "What were you hoping to find online just now?",
+      "Is this search for something specific, or just a pull?",
+      "What would count as enough before you open Chrome?",
+    ],
+  },
+  reddit: {
+    id: "reddit-interruption",
+    type: "interruption",
+    targetApp: "reddit",
+    active: true,
+    name: "Reddit Interruptions",
+    linkedVersionId: "reddit",
+    messages: [
+      "Are you looking for an answer, or for another thread to disappear into?",
+      "What question are you actually bringing to Reddit?",
+      "Would one saved search be kinder than a long scroll?",
+    ],
+  },
+  linkedin: {
+    id: "linkedin-interruption",
+    type: "interruption",
+    targetApp: "linkedin",
+    active: true,
+    name: "LinkedIn Interruptions",
+    linkedVersionId: "linkedin",
+    messages: [
+      "Are you checking something useful, or comparing lives?",
+      "What would make this LinkedIn visit worth your attention?",
+      "Could you do one real career action before opening the feed?",
+    ],
+  },
+  whatsapp: {
+    id: "whatsapp-interruption",
+    type: "interruption",
+    targetApp: "whatsapp",
+    active: true,
+    name: "WhatsApp Interruptions",
+    linkedVersionId: "whatsapp",
+    messages: [
+      "Is there someone specific you want to message?",
+      "Would replying with care take less energy than hovering?",
+      "What conversation actually needs you right now?",
+    ],
+  },
+  "bbc-news": {
+    id: "bbc-news-interruption",
+    type: "interruption",
+    targetApp: "bbc-news",
+    active: true,
+    name: "BBC News Interruptions",
+    linkedVersionId: "bbc-news",
+    messages: [
+      "Are you checking the news, or checking for certainty?",
+      "What update would be enough for now?",
+      "Could you read one story, then come back to your day?",
+    ],
+  },
+  duolingo: {
+    id: "duolingo-interruption",
+    type: "interruption",
+    targetApp: "duolingo",
+    active: true,
+    name: "Duolingo Interruptions",
+    linkedVersionId: "duolingo",
+    messages: [
+      "Is this a lesson you want to do, or a streak you are anxious about?",
+      "Could one focused lesson be enough?",
+      "What language goal are you choosing right now?",
+    ],
+  },
 };
 
-function getLauncherPlatform() {
-  const ua = navigator.userAgent || navigator.vendor || "";
-  const isAndroid = /android/i.test(ua);
-  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-
-  if (isAndroid) return "android";
-  if (isIOS) return "ios";
-  return "desktop";
-}
-
-function firstNonEmpty(...values) {
-  return values.find((value) => typeof value === "string" && value.trim()) || "";
-}
-
-function normalizeWebHref(value) {
-  if (!value) return "";
-  return value.startsWith("x-safari-") ? value.replace(/^x-safari-/, "") : value;
-}
-
-export function getVersionOpenHref(version, { preferFastDestination = false } = {}) {
-  if (!version) return "";
-
-  const launcher = getLauncherConfig(version.id) ?? getLauncherConfig(version.type);
-  const merged = { ...(launcher ?? {}), ...(version ?? {}) };
-  const platform = getLauncherPlatform();
-
-  let href = "";
-
-  if (preferFastDestination) {
-    if (merged.id === "safari" && platform === "ios") {
-      href = firstNonEmpty(merged.iosAppUrl, merged.manualUrl, merged.webFallbackUrl);
-      if (href) {
-        console.log("[LAUNCHER_URL_RESOLVED]", {
-          versionId: merged.id,
-          platform,
-          href,
-          preferFastDestination,
-        });
-        return href;
-      }
-    }
-
-    href = normalizeWebHref(firstNonEmpty(
-      merged.webFallbackUrl,
-      merged.iosWebFallbackUrl,
-      merged.androidWebFallbackUrl,
-      merged.manualUrl
-    ));
-    if (href) {
-      console.log("[LAUNCHER_URL_RESOLVED]", {
-        versionId: merged.id,
-        platform,
-        href,
-        preferFastDestination,
-      });
-      return href;
-    }
-  }
-
-  if (platform === "android") {
-    href = firstNonEmpty(
-      merged.androidIntentUrl,
-      merged.androidWebFallbackUrl,
-      merged.webFallbackUrl,
-      merged.manualUrl
-    );
-
-    // Critical safety: never return iOS-only Safari scheme on Android.
-    if (href.startsWith("x-safari-")) {
-      href = href.replace(/^x-safari-/, "");
-    }
-    if (!href) href = "https://www.google.com";
-  } else if (platform === "ios") {
-    if (merged.id === "safari") {
-      href = firstNonEmpty(merged.iosAppUrl, merged.manualUrl, merged.webFallbackUrl);
-    } else {
-      href = firstNonEmpty(
-        merged.iosAppUrl,
-        merged.appUrl,
-        merged.nativeAppUrl,
-        merged.iosWebFallbackUrl,
-        merged.webFallbackUrl,
-        merged.manualUrl
-      );
-    }
-  } else {
-    href = firstNonEmpty(
-      merged.webFallbackUrl,
-      merged.manualUrl,
-      merged.androidWebFallbackUrl,
-      merged.iosWebFallbackUrl
-    );
-  }
-
-  console.log("[LAUNCHER_URL_RESOLVED]", {
-    versionId: merged.id,
-    platform,
-    href,
-    preferFastDestination,
-  });
-
-  return href;
-}
+export { resolveLauncherDestination, getVersionOpenHref } from "./launcherDestinations";
 
 export function isInterruptionLauncherContext(value) {
   return isKnownLauncher(value);
@@ -250,7 +226,7 @@ export function buildInterruptionFolder(targetApp, versions, behaviors, customPa
     linkedVersionId: targetApp,
     active: Boolean(globalEnabled && version.useInterruptionPack),
     name: `${version.name} Interruptions`,
-    description: `Cards shown only when launcherContext is "${targetApp}".`,
+    description: `Shown before ${version.name} opens.`,
     editable: true,
     cards,
     messages: cards.map((card) => card.text),
@@ -278,7 +254,6 @@ export function getInterruptionPackForLauncher(
 export function resolveVersionConfig(version, behavior = {}) {
   return {
     launchPath: "/home",
-    interruptionPackId: "",
     ...version,
     useInterruptionPack: behavior.useInterruptionPack ?? version?.useInterruptionPack ?? false,
     interruptionPaused: behavior.interruptionPaused ?? version?.interruptionPaused ?? false,

@@ -1,11 +1,20 @@
-const CACHE_PREFIX = "mybishbash-";
+// Derive the app base from the worker's own URL so it works at the production
+// root ("/") and under a sub-path like "/mybishbash/" (staging/GitHub Pages),
+// without hardcoding either. e.g. ".../service-worker.js" -> "/", and
+// ".../mybishbash/service-worker.js" -> "/mybishbash/".
+const APP_BASE = new URL("./", self.location).pathname;
+const APP_BASE_SLUG = APP_BASE.replace(/^\/+|\/+$/g, "") || "root";
+const SERVICE_WORKER_VERSION = "dev";
+const CACHE_PREFIX = `mybishbash-${APP_BASE_SLUG}-`;
 const LEGACY_CACHE_PREFIX = "bish" + "bash-";
 const LEGACY_APP_BASE = "/" + "bish" + "bash/";
-const HTML_CACHE = `${CACHE_PREFIX}html-v1`;
-const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-v1`;
-const MEDIA_CACHE = `${CACHE_PREFIX}media-v1`;
-const APP_BASE = "/mybishbash/";
-const INDEX_URL = "/mybishbash/index.html";
+const HTML_CACHE = `${CACHE_PREFIX}html-${SERVICE_WORKER_VERSION}`;
+const RUNTIME_CACHE = `${CACHE_PREFIX}runtime-${SERVICE_WORKER_VERSION}`;
+const MEDIA_CACHE = `${CACHE_PREFIX}media-${SERVICE_WORKER_VERSION}`;
+const INDEX_URL = `${APP_BASE}index.html`;
+let shouldClaimClients = false;
+
+function debugLog() {}
 
 const MEDIA_EXTENSIONS = [
   ".avif",
@@ -20,6 +29,7 @@ const MEDIA_EXTENSIONS = [
 ];
 
 self.addEventListener("install", (event) => {
+  debugLog("[SERVICE_WORKER] install", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
   event.waitUntil(
     caches
       .open(HTML_CACHE)
@@ -31,11 +41,15 @@ self.addEventListener("install", (event) => {
           })
           .catch(() => undefined),
       )
-      .then(() => self.skipWaiting()),
   );
 });
 
 self.addEventListener("activate", (event) => {
+  debugLog("[SERVICE_WORKER] activate", {
+    version: SERVICE_WORKER_VERSION,
+    appBase: APP_BASE,
+    shouldClaimClients,
+  });
   event.waitUntil(
     caches
       .keys()
@@ -46,12 +60,14 @@ self.addEventListener("activate", (event) => {
             .map((key) => caches.delete(key)),
         ),
       )
-      .then(() => self.clients.claim()),
+      .then(() => (shouldClaimClients ? self.clients.claim() : undefined)),
   );
 });
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
+    shouldClaimClients = true;
+    debugLog("[SERVICE_WORKER] skip waiting requested", { version: SERVICE_WORKER_VERSION, appBase: APP_BASE });
     self.skipWaiting();
     return;
   }
@@ -78,7 +94,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isScriptOrStyle(event.request)) {
-    event.respondWith(networkFirst(event.request, RUNTIME_CACHE));
+    const fetchStrategy = isImmutableBuildAsset(url.pathname) ? cacheFirst : networkFirst;
+    event.respondWith(fetchStrategy(event.request, RUNTIME_CACHE));
     return;
   }
 
@@ -89,13 +106,13 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
-  console.log("[NOTIFICATIONS] Push received", data);
+  debugLog("[NOTIFICATIONS] Push received", data);
 
   event.waitUntil(
-    self.registration.showNotification(data.title || "Tiny MyBishBash moment?", {
+    self.registration.showNotification(data.title || "Tiny myBishBash moment?", {
       body: data.body || "Something you said mattered.",
-      icon: "/mybishbash/icons/icon-192.svg",
-      badge: "/mybishbash/icons/icon-192.svg",
+      icon: `${APP_BASE}icons/mybishbash-cover.png`,
+      badge: `${APP_BASE}icons/mybishbash-cover.png`,
       data,
     }),
   );
@@ -105,7 +122,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const urlToOpen = normalizeNotificationUrl(event.notification.data?.url);
-  console.log("[NOTIFICATIONS] Notification clicked", urlToOpen);
+  debugLog("[NOTIFICATIONS] Notification clicked", urlToOpen);
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
@@ -128,26 +145,26 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 function normalizeNotificationUrl(rawUrl) {
-  const fallback = new URL("/mybishbash/home", self.location.origin);
+  const fallback = new URL(`${APP_BASE}home`, self.location.origin);
 
   try {
     const url = new URL(rawUrl || fallback.toString(), self.location.origin);
     if (url.origin !== self.location.origin) return fallback.toString();
 
-    if (url.pathname === "/mybishbash/" || url.pathname === "/mybishbash/index.html") {
+    if (url.pathname === APP_BASE || url.pathname === `${APP_BASE}index.html`) {
       const route = url.searchParams.get("route");
       if (route) {
         const normalizedRoute = route.startsWith("/") ? route : `/${route}`;
-        url.pathname = `/mybishbash${normalizedRoute}`;
+        url.pathname = `${APP_BASE.replace(/\/$/, "")}${normalizedRoute}`;
         url.searchParams.delete("route");
       }
     }
 
     if (url.pathname.startsWith(LEGACY_APP_BASE)) {
-      url.pathname = url.pathname.replace(LEGACY_APP_BASE, "/mybishbash/");
+      url.pathname = url.pathname.replace(LEGACY_APP_BASE, APP_BASE);
     }
 
-    if (!url.pathname.startsWith("/mybishbash/")) return fallback.toString();
+    if (!url.pathname.startsWith(APP_BASE)) return fallback.toString();
     return url.toString();
   } catch (error) {
     console.warn("[NOTIFICATIONS] Invalid notification URL", rawUrl, error);
@@ -206,6 +223,11 @@ function acceptsHtml(request) {
 
 function isScriptOrStyle(request) {
   return request.destination === "script" || request.destination === "style";
+}
+
+function isImmutableBuildAsset(pathname) {
+  const assetsPrefix = `${APP_BASE}assets/`;
+  return pathname.startsWith(assetsPrefix) && /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$/.test(pathname);
 }
 
 function isCacheableMedia(pathname) {

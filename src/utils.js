@@ -10,11 +10,24 @@ export const THEMES = [
   "Starry Sky",
 ];
 
+export const COMMITMENT_TIMING_OPTIONS = [
+  { id: "anytime", label: "Anytime today", timingWindows: ["morning", "day", "evening", "night"] },
+  { id: "morning", label: "Morning", timingWindows: ["morning"] },
+  { id: "afternoon", label: "Afternoon", timingWindows: ["day"] },
+  { id: "evening", label: "Evening", timingWindows: ["evening"] },
+  { id: "custom", label: "Custom time window", timingWindows: ["morning", "day", "evening", "night"] },
+];
+
+export function resolveTheme(theme) {
+  if (theme === "Paper Cut") return "Soft Bloom";
+  return THEMES.includes(theme) ? theme : THEMES[0];
+}
+
 export const PACKS = [
   {
     id: "encouraging-bible-verses",
     title: "Bible Verse",
-    description: "Gentle scripture-based MyBishBashes for the day.",
+    description: "Gentle scripture-based myBishBash cards for the day.",
     theme: "Soft Bloom",
     icon: "book",
     entries: [
@@ -67,6 +80,157 @@ export const PACKS = [
         promptText: "Action is a great restorer and builder of confidence.",
         attribution: "Norman Vincent Peale",
       },
+    ],
+  },
+  {
+    id: "commitment-starters",
+    title: "Commitment Starters",
+    description: "Simple commitment templates you can make your own.",
+    theme: "Minimal",
+    icon: "star",
+    contentType: "commitments",
+    entries: [
+      {
+        id: "walk-today",
+        promptText: "go for a walk today",
+        attribution: "A small reset for body and mind.",
+        commitmentDefaults: {
+          commitmentReason: "A small reset for body and mind.",
+          commitmentTimingMode: "day",
+        },
+      },
+      {
+        id: "no-snacks-after-dinner",
+        promptText: "not eat snacks after dinner",
+        attribution: "Evening routines feel easier when they are decided in advance.",
+        commitmentDefaults: {
+          commitmentReason: "Evening routines feel easier when they are decided in advance.",
+          commitmentTimingMode: "evening",
+          commitmentCheckInEnabled: true,
+          commitmentCheckInTime: "20:30",
+        },
+      },
+      {
+        id: "patient-with-children",
+        promptText: "be patient with the children",
+        attribution: "A cue for steadiness when the house gets loud.",
+        commitmentDefaults: {
+          commitmentReason: "A cue for steadiness when the house gets loud.",
+          commitmentTimingMode: "anytime",
+        },
+      },
+    ],
+  },
+  {
+    id: "healthier-daily-basics",
+    title: "Healthier Daily Basics",
+    description: "Practical reminders for water, food, movement and basic care.",
+    theme: "Minimal",
+    icon: "heart",
+    entries: [
+      { promptText: "Have you drunk a glass of water today?" },
+      { promptText: "Have you eaten vegetables today?" },
+      { promptText: "Have you moved your body today?" },
+      { promptText: "Have you taken your vitamins today?" },
+      { promptText: "Have you been outside today?" },
+    ],
+  },
+  {
+    id: "better-bedtime",
+    title: "Better Bedtime",
+    description: "A setup for winding down before your phone keeps you up.",
+    theme: "Starry Sky",
+    icon: "moon",
+    entries: [
+      { promptText: "Have you started winding down?" },
+      { promptText: "Have you put your phone away for bedtime?" },
+      { promptText: "Have you brushed your teeth before getting too tired?" },
+      { promptText: "Have you charged your phone away from the bed?" },
+      { promptText: "Have you got into bed on time?" },
+    ],
+  },
+  {
+    id: "stop-being-late",
+    title: "Stop Being Late",
+    description: "Small phone cues for leaving on time and reducing morning scramble.",
+    theme: "Pop Art",
+    icon: "star",
+    entries: [
+      { promptText: "Have you checked what time you need to leave?" },
+      { promptText: "Have you packed your bag?" },
+      { promptText: "Have you put your keys somewhere obvious?" },
+      { promptText: "Have you checked the route?" },
+      { promptText: "Have you left 10 minutes earlier than usual?" },
+    ],
+  },
+  {
+    id: "more-present-with-my-people",
+    title: "More Present With My People",
+    description: "Cues for giving attention to the people in front of you.",
+    theme: "Soft Bloom",
+    icon: "heart",
+    entries: [
+      { promptText: "Have you put your phone down during dinner?" },
+      { promptText: "Have you given someone your full attention today?" },
+      { promptText: "Have you messaged someone you care about?" },
+      { promptText: "Have you told your partner you love them today?" },
+      { promptText: "Have you had a proper conversation today?" },
+    ],
+  },
+  {
+    id: "be-more-confident",
+    title: "Be More Confident",
+    description: "Concrete reminders for posture, voice and small brave actions.",
+    theme: "Rainbow",
+    icon: "star",
+    entries: [
+      { promptText: "Have you stood up straight today?" },
+      { promptText: "Have you spoken clearly today?" },
+      { promptText: "Have you said what you actually think?" },
+      { promptText: "Have you worn something that makes you feel good?" },
+      { promptText: "Have you done one small brave thing today?" },
+    ],
+  },
+  {
+    id: "faith-and-steadiness",
+    title: "Faith and Steadiness",
+    description: "A faith-centred setup for prayer, scripture and steadier reactions.",
+    theme: "Minimal",
+    icon: "book",
+    entries: [
+      { promptText: "Have you prayed today?" },
+      { promptText: "Have you read your Bible today?" },
+      { promptText: "Have you had a quiet moment with God today?" },
+      { promptText: "Have you listened to something uplifting today?" },
+      { promptText: "Have you reflected before reacting?" },
+    ],
+  },
+  {
+    id: "feel-more-put-together",
+    title: "Feel More Put Together",
+    description: "Useful prompts for the small standards that help you feel ready.",
+    theme: "Soft Bloom",
+    icon: "heart",
+    entries: [
+      { promptText: "Have you washed your face today?" },
+      { promptText: "Have you moisturised today?" },
+      { promptText: "Have you put SPF on today?" },
+      { promptText: "Have you flossed today?" },
+      { promptText: "Have you put on something that makes you feel good?" },
+    ],
+  },
+  {
+    id: "phone-use-reality-check",
+    title: "Phone Use Reality Check",
+    description: "A practical check before your phone use turns automatic.",
+    theme: "Minimal",
+    icon: "star",
+    entries: [
+      { promptText: "Do you actually want to open this app right now?" },
+      { promptText: "Are you opening this app for a reason?" },
+      { promptText: "Could this wait until later?" },
+      { promptText: "Are you choosing this, or did your thumb just take you here?" },
+      { promptText: "Is this helping what you meant to do?" },
     ],
   },
   {
@@ -261,6 +425,46 @@ export const TIME_WINDOWS = [
   { id: "night", label: "At night" },
 ];
 
+/** Default hour boundaries for each time window (24-hour, inclusive start, exclusive end). */
+export const DEFAULT_WINDOW_DEFS = [
+  { id: "morning", label: "Morning",       start: 5,  end: 12 },
+  { id: "day",     label: "During the day", start: 12, end: 18 },
+  { id: "evening", label: "Evening",       start: 18, end: 23 },
+  { id: "night",   label: "At night",      start: 23, end: 5  }, // wraps midnight
+];
+
+/**
+ * Validates a window-defs array.  Returns true only when the value is an array
+ * of exactly 4 items each with a matching id, numeric start/end in [0,23].
+ */
+export function isValidWindowDefs(defs) {
+  const REQUIRED_IDS = ["morning", "day", "evening", "night"];
+  if (!Array.isArray(defs) || defs.length !== 4) return false;
+  return defs.every(
+    (d, i) =>
+      d &&
+      d.id === REQUIRED_IDS[i] &&
+      typeof d.start === "number" &&
+      typeof d.end === "number" &&
+      d.start >= 0 && d.start <= 23 &&
+      d.end >= 0 && d.end <= 23 &&
+      d.start !== d.end,
+  );
+}
+
+// Module-level singleton — set once on boot and updated whenever the user saves prefs.
+let _activeWindowDefs = DEFAULT_WINDOW_DEFS;
+
+/** Replace the active window definitions used by getCurrentWindow. */
+export function setWindowDefs(defs) {
+  _activeWindowDefs = isValidWindowDefs(defs) ? defs : DEFAULT_WINDOW_DEFS;
+}
+
+/** Return the current active window definitions. */
+export function getWindowDefs() {
+  return _activeWindowDefs;
+}
+
 export const FREQUENCY_OPTIONS = [
   { id: "once_daily", label: "Once a day" },
   { id: "multi_daily", label: "More than once a day" },
@@ -290,9 +494,10 @@ function getDateContext(date = new Date(), timeZone) {
     return {
       year: date.getFullYear(),
       month: date.getMonth() + 1,
-      day: date.getDate(),
-      hour: date.getHours(),
-    };
+    day: date.getDate(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+  };
   }
 
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -301,6 +506,7 @@ function getDateContext(date = new Date(), timeZone) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     hour12: false,
   }).formatToParts(date);
 
@@ -310,6 +516,7 @@ function getDateContext(date = new Date(), timeZone) {
     month: Number(map.month),
     day: Number(map.day),
     hour: Number(map.hour),
+    minute: Number(map.minute),
   };
 }
 
@@ -331,19 +538,285 @@ export function getGreeting(date = new Date(), timeZone) {
 
 export function getCurrentWindow(date = new Date(), timeZone) {
   const { hour } = getDateContext(date, timeZone);
-  if (hour >= 5 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 18) return "day";
-  if (hour >= 18 && hour < 23) return "evening";
-  return "night";
+  for (const def of _activeWindowDefs) {
+    if (def.start < def.end) {
+      // Normal window (e.g. morning 5–12)
+      if (hour >= def.start && hour < def.end) return def.id;
+    } else {
+      // Midnight-crossing window (e.g. night 23–5)
+      if (hour >= def.start || hour < def.end) return def.id;
+    }
+  }
+  // Fallback — should never occur if defs form a complete 24-hour partition.
+  return _activeWindowDefs[_activeWindowDefs.length - 1].id;
+}
+
+function getTimeOfDayMinutes(date = new Date(), timeZone) {
+  const context = getDateContext(date, timeZone);
+  return context.hour * 60 + context.minute;
+}
+
+export function parseTimeStringToMinutes(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+export function getCommitmentCheckInId(card, date = new Date(), timeZone) {
+  return `checkin:${card.id}:${getTodayKey(date, timeZone)}`;
+}
+
+export function getCommitmentEncouragementId(card, date = new Date(), timeZone) {
+  return `encouragement:${card.id}:${getTodayKey(date, timeZone)}`;
+}
+
+export function getCommitmentReviewId(card, date = new Date(), timeZone) {
+  return `review:${card.id}:${getTodayKey(date, timeZone)}`;
+}
+
+export function isCommitmentCheckInCard(card) {
+  return card?.cardKind === "commitment_check_in";
+}
+
+export function isCommitmentEncouragementCard(card) {
+  return card?.cardKind === "commitment_encouragement";
+}
+
+export function isCommitmentReviewCard(card) {
+  return card?.cardKind === "commitment_review";
+}
+
+const COMMITMENT_DASHBOARD_TITLE = "Today’s Commitment";
+const COMMITMENT_COMPATIBILITY_FIELDS = [
+  "commitmentReason",
+  "commitmentTimingMode",
+  "commitmentStartWindow",
+  "commitmentCustomStartTime",
+  "commitmentCustomEndTime",
+  "commitmentCheckInEnabled",
+  "commitmentCheckInTime",
+  "commitmentStatusToday",
+  "commitmentDecisionDate",
+  "commitmentDecisionAt",
+  "commitmentLifecycleStatus",
+  "commitmentCheckInShownDate",
+  "commitmentEncouragementRequestedDate",
+  "commitmentEncouragementCompletedDate",
+  "commitmentClosedEarlyDate",
+  "commitmentReviewDueDate",
+  "commitmentReviewResponse",
+  "commitmentReviewResponseDate",
+  "commitmentFinalOutcome",
+];
+
+export function isCommitmentLikeCard(card) {
+  if (!card || card.sourcePackId) return false;
+  if (card.cardKind === "commitment") return true;
+  if (card.dashboardTitle === COMMITMENT_DASHBOARD_TITLE) return true;
+  return COMMITMENT_COMPATIBILITY_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(card, field));
+}
+
+export function isCommitmentCard(card) {
+  return isCommitmentLikeCard(card);
+}
+
+export function getCommitmentStartWindow(timingWindows = []) {
+  const orderedWindowIds = TIME_WINDOWS.map((item) => item.id);
+  return orderedWindowIds.find((windowId) => timingWindows.includes(windowId)) ?? "day";
+}
+
+export function getCommitmentTimingOptionId(card) {
+  const validTimingIds = new Set(COMMITMENT_TIMING_OPTIONS.map((option) => option.id));
+  if (!card) return "anytime";
+  if (validTimingIds.has(card.commitmentTimingMode)) return card.commitmentTimingMode;
+  const windows = card?.timingWindows ?? [];
+  if (windows.includes("morning") && windows.includes("day") && windows.includes("evening") && windows.includes("night")) return "anytime";
+  if (windows.length === 1 && windows[0] === "morning") return "morning";
+  if (windows.length === 1 && windows[0] === "day") return "afternoon";
+  if (windows.length === 1 && windows[0] === "evening") return "evening";
+  const startWindow = getCommitmentStartWindow(windows);
+  if (startWindow === "day") return "afternoon";
+  if (startWindow === "night") return "anytime";
+  return validTimingIds.has(startWindow) ? startWindow : "anytime";
+}
+
+export function getCommitmentTimingConfig(mode) {
+  return COMMITMENT_TIMING_OPTIONS.find((option) => option.id === mode) ?? COMMITMENT_TIMING_OPTIONS[0];
+}
+
+export function isCommitmentCheckInEligible(card, date = new Date(), timeZone) {
+  if (!card || card.sourcePackId) return false;
+  if (!isCommitmentLikeCard(card)) return false;
+  if (card.paused || card.disliked || card.deletedAt) return false;
+  if (!card.commitmentCheckInEnabled || !card.commitmentCheckInTime) return false;
+
+  const todayKey = getTodayKey(date, timeZone);
+  if (card.commitmentStatusToday !== "made" || card.commitmentDecisionDate !== todayKey) return false;
+  if (card.commitmentLifecycleStatus === "closed_early" || card.commitmentLifecycleStatus === "reviewed") return false;
+  if (card.commitmentCheckInResponseDate === todayKey) return false;
+  if (card.commitmentCheckInShownDate === todayKey) return false;
+
+  const checkInMinutes = parseTimeStringToMinutes(card.commitmentCheckInTime);
+  if (checkInMinutes == null) return false;
+  return getTimeOfDayMinutes(date, timeZone) >= checkInMinutes;
+}
+
+export function buildCommitmentCheckInCard(card, date = new Date(), timeZone) {
+  return {
+    id: getCommitmentCheckInId(card, date, timeZone),
+    cardKind: "commitment_check_in",
+    parentCommitmentCardId: card.id,
+    promptText: card.promptText,
+    dashboardTitle: "Check-in",
+    theme: card.theme,
+    icon: card.icon ?? "heart",
+    statusToday: "fresh",
+    createdAt: card.commitmentDecisionAt ?? card.createdAt,
+    updatedAt: card.updatedAt,
+    lastShownAt: null,
+    notYetUntil: null,
+    doneDate: null,
+    frequency: "once_daily",
+    timingWindows: ["morning", "day", "evening", "night"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+  };
+}
+
+export function isCommitmentEncouragementEligible(card, date = new Date(), timeZone) {
+  if (!card || card.sourcePackId) return false;
+  if (!isCommitmentLikeCard(card)) return false;
+  if (card.paused || card.disliked || card.deletedAt) return false;
+  const todayKey = getTodayKey(date, timeZone);
+  return (
+    card.commitmentStatusToday === "made" &&
+    card.commitmentDecisionDate === todayKey &&
+    card.commitmentCheckInResponseDate === todayKey &&
+    card.commitmentCheckInResponse === "somewhat_on_track" &&
+    card.commitmentEncouragementRequestedDate === todayKey &&
+    card.commitmentEncouragementCompletedDate !== todayKey &&
+    card.commitmentLifecycleStatus !== "closed_early" &&
+    card.commitmentLifecycleStatus !== "reviewed"
+  );
+}
+
+export function buildCommitmentEncouragementCard(card, date = new Date(), timeZone) {
+  return {
+    id: getCommitmentEncouragementId(card, date, timeZone),
+    cardKind: "commitment_encouragement",
+    parentCommitmentCardId: card.id,
+    promptText: "You said you wanted to do this.",
+    dashboardTitle: "Commitment reminder",
+    commitmentText: card.promptText,
+    theme: card.theme,
+    icon: card.icon ?? "heart",
+    statusToday: "fresh",
+    createdAt: card.commitmentCheckInResponseAt ?? card.updatedAt,
+    updatedAt: card.updatedAt,
+    lastShownAt: null,
+    notYetUntil: null,
+    doneDate: null,
+    frequency: "once_daily",
+    timingWindows: ["morning", "day", "evening", "night"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+  };
+}
+
+export function isCommitmentReviewEligible(card, date = new Date(), timeZone) {
+  if (!card || card.sourcePackId) return false;
+  if (!isCommitmentLikeCard(card)) return false;
+  if (card.paused || card.disliked || card.deletedAt) return false;
+  const todayKey = getTodayKey(date, timeZone);
+  return (
+    card.commitmentStatusToday === "made" &&
+    card.commitmentDecisionDate === todayKey &&
+    card.commitmentCheckInResponseDate === todayKey &&
+    card.commitmentReviewDueDate === todayKey &&
+    card.commitmentReviewResponseDate !== todayKey &&
+    card.commitmentLifecycleStatus !== "closed_early" &&
+    card.commitmentLifecycleStatus !== "reviewed" &&
+    (!card.commitmentEncouragementRequestedDate || card.commitmentEncouragementCompletedDate === todayKey)
+  );
+}
+
+export function buildCommitmentReviewCard(card, date = new Date(), timeZone) {
+  return {
+    id: getCommitmentReviewId(card, date, timeZone),
+    cardKind: "commitment_review",
+    parentCommitmentCardId: card.id,
+    promptText: card.promptText,
+    dashboardTitle: "Commitment review",
+    theme: card.theme,
+    icon: card.icon ?? "heart",
+    statusToday: "fresh",
+    createdAt: card.commitmentDecisionAt ?? card.createdAt,
+    updatedAt: card.updatedAt,
+    lastShownAt: null,
+    notYetUntil: null,
+    doneDate: null,
+    frequency: "once_daily",
+    timingWindows: ["morning", "day", "evening", "night"],
+    paused: false,
+    disliked: false,
+    deletedAt: null,
+    sourcePackId: null,
+  };
+}
+
+export function buildEligibleCommitmentLifecycleCards(cards = [], date = new Date(), timeZone) {
+  return [
+    ...cards
+      .filter((card) => isCommitmentEncouragementEligible(card, date, timeZone))
+      .map((card) => buildCommitmentEncouragementCard(card, date, timeZone)),
+    ...cards
+      .filter((card) => isCommitmentReviewEligible(card, date, timeZone))
+      .map((card) => buildCommitmentReviewCard(card, date, timeZone)),
+    ...cards
+      .filter((card) => isCommitmentCheckInEligible(card, date, timeZone))
+      .map((card) => buildCommitmentCheckInCard(card, date, timeZone)),
+  ];
+}
+
+export function buildEligibleCommitmentCheckInCards(cards = [], date = new Date(), timeZone) {
+  return buildEligibleCommitmentLifecycleCards(cards, date, timeZone)
+    .filter((card) => isCommitmentCheckInCard(card));
+}
+
+function isWithinCustomTimeWindow(card, date = new Date(), timeZone) {
+  if (card.commitmentTimingMode !== "custom") return true;
+  const start = parseTimeStringToMinutes(card.commitmentCustomStartTime);
+  const end = parseTimeStringToMinutes(card.commitmentCustomEndTime);
+  if (start == null || end == null) return false;
+  const current = getTimeOfDayMinutes(date, timeZone);
+  if (start === end) return true;
+  if (start < end) return current >= start && current <= end;
+  return current >= start || current <= end;
+}
+
+function wasCardDoneToday(card, todayKey) {
+  if (card.doneDate === todayKey) return true;
+  if (card.doneDate && card.doneDate !== todayKey) return false;
+  return card.statusToday === "doneToday";
 }
 
 export function isEligible(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const isPackCard = Boolean(card.sourcePackId);
+  const isCommitmentCard = isCommitmentLikeCard(card);
   if (card.paused) return false;
   if (card.disliked) return false;
   if (card.deletedAt) return false;
-  if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) return false;
+  if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) return false;
+  if (!isPackCard && wasCardDoneToday(card, todayKey)) return false;
   if (
     !isPackCard &&
     card.lastShownAt &&
@@ -354,6 +827,7 @@ export function isEligible(card, date = new Date(), timeZone) {
   if (!isPackCard && card.notYetUntil && new Date(card.notYetUntil).getTime() > date.getTime()) {
     return false;
   }
+  if (!isPackCard && isCommitmentCard && !isWithinCustomTimeWindow(card, date, timeZone)) return false;
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
   if (!windows.includes(getCurrentWindow(date, timeZone))) return false;
   return true;
@@ -387,6 +861,32 @@ export function normalizeCards(cards, date = new Date(), timeZone) {
     if (!next.frequency) {
       next.frequency = "once_daily";
     }
+    if (isCommitmentLikeCard(next)) {
+      next.cardKind = "commitment";
+      next.dashboardTitle = COMMITMENT_DASHBOARD_TITLE;
+      next.commitmentReason = next.commitmentReason ?? "";
+      next.commitmentTimingMode = next.commitmentTimingMode ?? "anytime";
+      next.commitmentStartWindow = next.commitmentStartWindow ?? next.commitmentTimingMode ?? "anytime";
+      next.commitmentCustomStartTime = next.commitmentCustomStartTime ?? "";
+      next.commitmentCustomEndTime = next.commitmentCustomEndTime ?? "";
+      next.commitmentCheckInEnabled = Boolean(next.commitmentCheckInEnabled);
+      next.commitmentCheckInTime = next.commitmentCheckInTime ?? "";
+      next.commitmentCheckInPendingDate = next.commitmentCheckInPendingDate ?? null;
+      next.commitmentCheckInResponse = next.commitmentCheckInResponse ?? null;
+      next.commitmentCheckInResponseDate = next.commitmentCheckInResponseDate ?? null;
+      next.commitmentCheckInResponseAt = next.commitmentCheckInResponseAt ?? null;
+      if (next.commitmentDecisionDate !== todayKey) {
+        next.commitmentStatusToday = null;
+      }
+      if (next.commitmentCheckInPendingDate !== todayKey) {
+        next.commitmentCheckInPendingDate = null;
+      }
+      if (next.commitmentCheckInResponseDate !== todayKey) {
+        next.commitmentCheckInResponse = null;
+        next.commitmentCheckInResponseDate = null;
+        next.commitmentCheckInResponseAt = null;
+      }
+    }
     if (typeof next.disliked !== "boolean") {
       next.disliked = false;
     }
@@ -414,11 +914,16 @@ export function pickRandomEligible(cards, date = new Date()) {
   return eligible[index];
 }
 
+export function isCardDoneToday(card, todayKey) {
+  return card?.doneDate === todayKey || (!card?.doneDate && card?.statusToday === "doneToday");
+}
+
 export function getStatusMeta(card, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
   const currentWindow = getCurrentWindow(date, timeZone);
   const windows = card.timingWindows ?? ["morning", "day", "evening"];
   const isPackCard = Boolean(card.sourcePackId);
+  const isCommitmentCard = isCommitmentLikeCard(card);
 
   if (card.paused) {
     return { badge: "paused", detail: "hidden for now" };
@@ -428,7 +933,13 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
     return { badge: "paused", detail: "hidden for now" };
   }
 
-  if (!isPackCard && (card.doneDate === todayKey || card.statusToday === "doneToday")) {
+  if (!isPackCard && isCommitmentCard && card.commitmentDecisionDate === todayKey) {
+    return card.commitmentStatusToday === "declined"
+      ? { badge: "done", detail: "not committed today" }
+      : { badge: "done", detail: "committed today" };
+  }
+
+  if (!isPackCard && wasCardDoneToday(card, todayKey)) {
     return { badge: "done", detail: "see you tomorrow" };
   }
 
@@ -441,6 +952,13 @@ export function getStatusMeta(card, date = new Date(), timeZone) {
 
   if (isPackCard) {
     return { badge: "ready", detail: "available from active pack" };
+  }
+
+  if (!isPackCard && isCommitmentCard && !isWithinCustomTimeWindow(card, date, timeZone)) {
+    return {
+      badge: "upcoming",
+      detail: "waits for custom time",
+    };
   }
 
   if (!windows.includes(currentWindow)) {

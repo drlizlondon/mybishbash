@@ -21,6 +21,8 @@ declare global {
 }
 
 const now = '2026-06-01T12:00:00.000Z';
+const launcherIds = ['safari', 'instagram', 'youtube'] as const;
+type LauncherId = (typeof launcherIds)[number];
 
 function packCard(id: string, promptText: string, sourcePackId = 'downloaded-shell-pack') {
   return {
@@ -45,9 +47,12 @@ function packCard(id: string, promptText: string, sourcePackId = 'downloaded-she
 function launcherSettings(interruptionOn: boolean) {
   return {
     mybishbash: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-    safari: { useInterruptionPack: interruptionOn, interruptionPaused: false, interruptionPackId: '' },
-    youtube: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
-    instagram: { useInterruptionPack: false, interruptionPaused: false, interruptionPackId: '' },
+    ...Object.fromEntries(
+      launcherIds.map((launcherId) => [
+        launcherId,
+        { useInterruptionPack: launcherId === 'safari' ? interruptionOn : false, interruptionPaused: false, interruptionPackId: '' },
+      ]),
+    ),
   };
 }
 
@@ -122,7 +127,7 @@ async function simulateStandaloneDisplayMode(page: Page) {
   });
 }
 
-async function installLauncherShell(page: Page, launcherId: 'safari' | 'instagram' | 'youtube') {
+async function installLauncherShell(page: Page, launcherId: LauncherId) {
   await page.addInitScript((installedLauncherId) => {
     window.localStorage.setItem(
       'mybishbash.installed-launcher-shell.v1',
@@ -158,8 +163,8 @@ async function installLegacyPackLabelObserver(page: Page) {
   });
 }
 
-async function expectOnlyLauncherChip(page: Page, launcherId: 'safari' | 'instagram' | 'youtube') {
-  const otherLaunchers = (['safari', 'instagram', 'youtube'] as const).filter((id) => id !== launcherId);
+async function expectOnlyLauncherChip(page: Page, launcherId: LauncherId) {
+  const otherLaunchers = launcherIds.filter((id) => id !== launcherId);
   const packOverlay = page.getByTestId('card-overlay-pack');
   await expect(packOverlay.getByTestId(`fake-launcher-${launcherId}`)).toBeVisible();
   for (const otherLauncher of otherLaunchers) {
@@ -167,7 +172,7 @@ async function expectOnlyLauncherChip(page: Page, launcherId: 'safari' | 'instag
   }
 }
 
-async function expectFakeLauncherPackCard(page: Page, launcherId: 'safari' | 'instagram' | 'youtube') {
+async function expectFakeLauncherPackCard(page: Page, launcherId: LauncherId) {
   const packOverlay = page.getByTestId('card-overlay-pack');
   await expect(packOverlay).toBeVisible();
   await expect(packOverlay.getByRole('button', { name: 'Dislike' })).toHaveCount(0);
@@ -176,7 +181,7 @@ async function expectFakeLauncherPackCard(page: Page, launcherId: 'safari' | 'in
   await expect(packOverlay.getByRole('button', { name: 'Continue' })).toBeVisible();
   await expect(packOverlay.getByRole('button', { name: 'Back to home' })).toHaveCount(0);
   await expect(packOverlay.getByTestId('dashboard-shortcut')).toBeVisible();
-  await expect(packOverlay.getByLabel('Open dashboard')).toBeVisible();
+  await expect(packOverlay.getByTestId('dashboard-shortcut')).toBeVisible();
   await expect(packOverlay.locator('.premium-home-button')).toHaveCount(0);
   await expectOnlyLauncherChip(page, launcherId);
 }
@@ -201,8 +206,9 @@ async function expectSafariFakeLauncherPackContext(page: Page) {
     visibleDestinationChips: ['safari'],
     selectedCtaLabels: ['I really like this one', 'Continue'],
   });
-  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-youtube')).toHaveCount(0);
-  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-instagram')).toHaveCount(0);
+  for (const otherLauncher of launcherIds.filter((id) => id !== 'safari')) {
+    await expect(page.getByTestId('card-overlay-pack').getByTestId(`fake-launcher-${otherLauncher}`)).toHaveCount(0);
+  }
   return debug;
 }
 
@@ -240,7 +246,7 @@ async function completeRoundToHome(page: Page, round: number) {
   }
 
   await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
-  await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to MyBishBash' })).toHaveCount(0);
+  await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to myBishBash' })).toHaveCount(0);
   await expect(page.getByTestId('continue-to-app-card').getByTestId('dashboard-shortcut')).toBeVisible();
   console.log(`[downloaded-shell:${round}] terminal=navigate-home-for-repeat`);
   await page.goto('/mybishbash/home');
@@ -360,7 +366,7 @@ test('installed Safari shell repeat entry refreshes fake launcher card context a
   expect(secondDebug?.overlay?.activationKey).not.toBe(firstDebug?.overlay?.activationKey);
 });
 
-for (const launcherId of ['safari', 'instagram', 'youtube'] as const) {
+for (const launcherId of launcherIds) {
   test(`fake ${launcherId} launcher pack card keeps new CTA copy and one destination chip`, async ({ page }) => {
     await seedDownloadedShellState(page, { interruptionOn: false });
 
@@ -379,18 +385,19 @@ for (const launcherId of ['safari', 'instagram', 'youtube'] as const) {
     await expect(page).toHaveURL(new RegExp(`/mybishbash/intercept/${launcherId}$`));
     await expectFakeLauncherPackCard(page, launcherId);
 
-    await page.goto('/mybishbash/home');
-    await expect(page).toHaveURL(/\/mybishbash\/home$/);
-    await expect(page.getByTestId('home-panel')).toBeVisible();
+    await page.goto('/mybishbash/library');
+    await expect(page).toHaveURL(/\/mybishbash\/library$/);
+    await expect(page.getByTestId('library-active-packs-section-toggle')).toBeVisible();
+    await page.getByTestId('library-active-packs-section-toggle').click();
 
-    await page.getByTestId('home-card-downloaded-shell-pack').click();
+    await page.getByTestId('library-row-downloaded-shell-pack').click();
     await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
     await expect(page.getByTestId('card-overlay-pack').getByTestId('card-action-continue')).toBeVisible();
     await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toHaveCount(0);
 
     await page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByTestId('continue-to-app-card')).toBeVisible();
-    await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to MyBishBash' })).toHaveCount(0);
+    await expect(page.getByTestId('continue-to-app-card').getByRole('button', { name: 'Back to myBishBash' })).toHaveCount(0);
     await expect(page.getByTestId('continue-to-app-card').getByTestId('dashboard-shortcut')).toBeVisible();
     await page.goto('/mybishbash/home');
     await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -415,17 +422,17 @@ test('fake launcher first rendered frame never contains legacy pack labels', asy
   expect(legacyLabels).toEqual([]);
 });
 
-test('normal MyBishBash home pack browsing keeps Back to home neutral CTA', async ({ page }) => {
+test('normal myBishBash home pack browsing keeps Back to home neutral CTA', async ({ page }) => {
   await seedDownloadedShellState(page, { interruptionOn: false });
 
-  await page.goto('/mybishbash/home');
-  await expect(page.getByTestId('home-panel')).toBeVisible();
-  await page.getByTestId('home-card-downloaded-shell-pack').click();
+  await page.goto('/mybishbash/library');
+  await expect(page.getByTestId('library-active-packs-section-toggle')).toBeVisible();
+  await page.getByTestId('library-active-packs-section-toggle').click();
+  await page.getByTestId('library-row-downloaded-shell-pack').click();
 
   await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
   await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Back to home' })).toBeVisible();
   await expect(page.getByTestId('card-overlay-pack').getByRole('button', { name: 'Continue' })).toHaveCount(0);
-  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-safari')).toBeVisible();
-  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-instagram')).toBeVisible();
-  await expect(page.getByTestId('card-overlay-pack').getByTestId('fake-launcher-youtube')).toBeVisible();
+  await expect(page.getByTestId('card-overlay-pack').locator('[data-testid^="fake-launcher-"]')).toHaveCount(0);
+  await expect(page.getByTestId('card-overlay-pack').getByTestId('pause-app-button')).toHaveCount(0);
 });

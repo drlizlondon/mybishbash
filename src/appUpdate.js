@@ -1,8 +1,12 @@
+import { BASE_NO_SLASH } from "./lib/basePath";
+
 const CURRENT_VERSION = typeof __MYBISHBASH_VERSION__ === "string" ? __MYBISHBASH_VERSION__ : "dev";
+const CURRENT_SOURCE_SHA = import.meta.env.VITE_SOURCE_SHA || import.meta.env.VITE_GIT_SHA || "";
 const LEGACY_CACHE_PREFIX = "bish" + "bash-";
 
-export async function checkForAppUpdate(basePath = "/mybishbash") {
-  if (!basePath) return { updateAvailable: false, currentVersion: CURRENT_VERSION };
+// basePath has no trailing slash and is "" at the root domain.
+export async function checkForAppUpdate(basePath = BASE_NO_SLASH) {
+  if (basePath == null) return { updateAvailable: false, currentVersion: CURRENT_VERSION };
 
   try {
     const response = await fetch(`${basePath}/version.json?ts=${Date.now()}`, {
@@ -18,18 +22,21 @@ export async function checkForAppUpdate(basePath = "/mybishbash") {
 
     const deployed = await response.json();
     const deployedVersion = deployed?.version;
-
-    return {
+    const result = {
       currentVersion: CURRENT_VERSION,
+      currentSourceSha: CURRENT_SOURCE_SHA,
       deployedVersion,
+      sourceSha: deployed?.sourceSha ?? "",
       updateAvailable: Boolean(deployedVersion && deployedVersion !== CURRENT_VERSION),
     };
+
+    return result;
   } catch {
     return { updateAvailable: false, currentVersion: CURRENT_VERSION };
   }
 }
 
-export async function refreshMyBishBashAppShell(basePath = "/mybishbash") {
+export async function refreshMyBishBashAppShell(basePath = BASE_NO_SLASH) {
   await clearMyBishBashCaches();
   await updateServiceWorkers(basePath);
   window.location.reload();

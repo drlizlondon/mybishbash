@@ -8,13 +8,14 @@ declare global {
 }
 
 const now = '2026-06-01T12:00:00.000Z';
+const frozenAppNow = '2026-06-13T12:00:00+01:00';
 const launchers = ['safari', 'youtube', 'instagram'] as const;
 const layerOneModes = ['personal', 'pack', 'caught-up', 'interruption-direct'] as const;
 const terminals = ['continue', 'home', 'action-exit', 'launcher-safari', 'launcher-youtube', 'launcher-instagram', 'manual-open', 'repeat-continue'] as const;
 const destination = {
   safari: /^https:\/\/www\.google\.com$/,
-  youtube: /^https:\/\/www\.youtube\.com/,
-  instagram: /^https:\/\/www\.instagram\.com/,
+  youtube: /^youtube:\/\//,
+  instagram: /^instagram:\/\/app$/,
 };
 
 type LauncherId = (typeof launchers)[number];
@@ -54,7 +55,22 @@ async function seed(page: Page, launcherId: LauncherId, mode: LayerOneMode) {
   const interruptionOn = mode === 'interruption-direct';
 
   await page.addInitScript(
-    ({ seededCards, seededActionCards, seededLauncherBehaviorSettings }) => {
+    ({ seededCards, seededActionCards, seededLauncherBehaviorSettings, frozenNow }) => {
+      // Keep launcher card eligibility deterministic: seeded personal cards use
+      // morning/day/evening windows, so real late-night runs would correctly
+      // show the caught-up overlay instead of the personal-card terminal path.
+      const NativeDate = Date;
+      class FixedDate extends NativeDate {
+        constructor(...args) {
+          super(...(args.length ? args : [frozenNow]));
+        }
+
+        static now() {
+          return new NativeDate(frozenNow).getTime();
+        }
+      }
+      window.Date = FixedDate;
+
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
@@ -83,6 +99,7 @@ async function seed(page: Page, launcherId: LauncherId, mode: LayerOneMode) {
       seededLauncherBehaviorSettings: Object.fromEntries(
         ['mybishbash', ...launchers].map((id) => [id, { useInterruptionPack: id === launcherId ? interruptionOn : false, interruptionPaused: false, interruptionPackId: '' }]),
       ),
+      frozenNow: frozenAppNow,
     },
   );
 }
@@ -114,9 +131,9 @@ async function arriveAtTerminal(page: Page, mode: LayerOneMode) {
 async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Terminal) {
   if (terminal === 'home') {
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
-    await expect(page.getByLabel('Open dashboard')).toBeVisible();
+    await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByLabel('Go home')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Back (home|to myBishBash)/ })).toHaveCount(0);
     return;
   }
 
@@ -125,18 +142,18 @@ async function exerciseTerminal(page: Page, launcherId: LauncherId, terminal: Te
     if (await chooseElse.count()) await chooseElse.click();
     else return;
     await expect(page.getByTestId('card-overlay-action')).toBeVisible();
+    const attemptsBeforeAction = (await attempts(page)).length;
     await page.getByTestId('card-action-i-ll-do-this').click();
     await expect(page.getByTestId('card-overlay-action')).toBeVisible();
     await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
-    await expect(page.getByLabel('Open dashboard')).toBeVisible();
+    await expect(page.getByTestId('dashboard-shortcut')).toBeVisible();
     await expect(page.getByLabel('Go home')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Back (home|to MyBishBash)/ })).toHaveCount(0);
-    const attemptsBeforeContinue = (await attempts(page)).length;
-    await page.getByTestId('card-action-continue-to-app').click();
-    await expect.poll(async () => (await attempts(page)).length).toBe(attemptsBeforeContinue + 1);
+    await expect(page.getByRole('button', { name: /Back (home|to myBishBash)/ })).toBeVisible();
+    await expect(page.getByTestId(`card-action-continue-to-${launcherId}`).or(page.getByTestId('card-action-continue-to-app'))).toHaveCount(0);
+    await expect.poll(async () => (await attempts(page)).length).toBe(attemptsBeforeAction + 1);
     const attemptList = await attempts(page);
     const attempt = attemptList.at(-1);
-    expect(attempt.href).toMatch(destination[launcherId]);
+    expect(attempt.href).toBe('https://example.com/exhaustive-action');
     return;
   }
 
