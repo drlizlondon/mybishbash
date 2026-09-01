@@ -17,8 +17,8 @@ prerequisites unmet)
 | 4 | Domain stores & single write path (local) | **Complete** (D5 ratchet `08e776d`) | `docs/architecture/phase-04-domain-stores.md` | 3 | `85f5286`, `a4357f7`, `382379d`, `b732e8c`, `6c995f3`, `08e776d` |
 | 4b | Card & commitment handler extraction | **Complete** | `docs/architecture/phase-04b-card-handlers.md` | 4 | `95a4db8`, `e96aff7`, `5ca6563`, `f8cfa41`, `816f240` |
 | 4c | Launcher-engine extraction | **Closed — measured, not moved** (conditional) | `docs/architecture/phase-04c-launcher-engine.md` | 4b | `f3e7899`, `24ad5b5` |
-| 5 | IndexedDB persistence engine | **Blocked** (planned implementation and kill-switch replay-authority correction landed; two founder-operated manual records outstanding) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a`, correction: `8c4824d` |
-| 6 | Sync v2 — entities + mutation queue | **Blocked** (default-blob rollout control deployed and target ledger row reconciled; Phase 5 manual evidence and qualifying tester cohort absent) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: `47ef32c`; preflight 0: `def28dc` |
+| 5 | IndexedDB persistence engine | **Complete** (both manual gates founder-attested: **Packet A** staging kill-switch 2026-08-31 `result-P5-KS-20260831.md`; **Packet B** installed iPhone 15 Pro Max / iOS 26.6, real deploy+update+offline, 2026-09-01 `result-P5-PWA-20260831.md`) | `docs/architecture/phase-05-indexeddb.md` | 4, 4b | `d2401d5`, `e7cd249`, `088181e`, `54b6831`, `cf69528`, `c839c72`, `086af6b`, `64fa40a`, correction: `8c4824d` |
+| 6 | Sync v2 — entities + mutation queue | **Blocked** (Phase 5 now Complete — its manual evidence exists as of 2026-09-01; remaining blocker is a qualifying tester cohort) | `docs/architecture/phase-06-sync-v2.md` | 5 | packet: `47ef32c`; preflight 0: `def28dc` |
 | 7 | TypeScript at the boundaries | Planned | — | 6 | — |
 | 8 | Styling consolidation | Planned | — | 3 (interleaves 7+) | — |
 | 9 | Performance & scale hardening | Planned | — | 5, 6 | — |
