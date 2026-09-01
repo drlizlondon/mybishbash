@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const html = readFileSync("dist/index.html", "utf8");
+const redirects = readFileSync("dist/_redirects", "utf8");
 const manifest = JSON.parse(readFileSync("dist/manifest.webmanifest", "utf8"));
 const serviceWorker = readFileSync("dist/service-worker.js", "utf8");
 const version = JSON.parse(readFileSync("dist/version.json", "utf8"));
@@ -21,6 +22,12 @@ assert.ok(
   manifest.icons.every((icon) => typeof icon.src === "string" && icon.src.startsWith("/icons/")),
   "Cloudflare manifest icons should be rooted at /icons/",
 );
+
+// SPA fallback: without a catch-all rewrite to index.html, direct navigation to
+// runtime-resolved routes (/early-access, /invite, /about, /download, /home)
+// returns Cloudflare's 404 page instead of booting the app — the signup links
+// were dead for exactly this reason. Real static files still win over this rule.
+assert.match(redirects, /^\/\*\s+\/index\.html\s+200\s*$/m, "Cloudflare build must ship a _redirects SPA fallback (/* /index.html 200)");
 
 assert.match(serviceWorker, /const APP_BASE = new URL\("\.\/", self\.location\)\.pathname;/);
 assert.doesNotMatch(serviceWorker, /const APP_BASE = "\/mybishbash\//);
