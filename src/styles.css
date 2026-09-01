@@ -1417,6 +1417,18 @@ textarea {
   z-index: 130;
 }
 
+/* The list body (.expandable-collection-body-inner) has overflow: hidden so
+   it can animate open/closed (see the grid-template-rows trick above). The
+   default .menu opens upward from its trigger, which clips the top of the
+   popup — hiding "Edit", the first item — for the first row in the list,
+   since there's no room above it inside the clipped container. Same fix
+   already applied to .card-stack .library-card:first-of-type .menu. */
+.library-list-card .collection-preview-row:first-child .menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform-origin: top right;
+}
+
 /* Small icon tile — reduced visual weight vs the section header icon */
 .collection-preview-icon {
   width: 36px;
