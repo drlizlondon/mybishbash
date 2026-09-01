@@ -5,11 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>myBishBash</title>
     <script>
+      // GitHub Pages SPA fallback. Pages serves this file (with a 404 status) for
+      // any path that isn't a real file, so we bounce the requested route into
+      // ?route= and let index.html + the app router resolve it.
       (function () {
-        var base = "/mybishbash";
-        var current = window.location.pathname.replace(base, "") || "/";
-        var next = base + "/?route=" + encodeURIComponent(current + window.location.search + window.location.hash);
-        window.location.replace(next);
+        // Deployment base path, stamped at build time from Vite's `base`:
+        // "/" on mybishbash.app, "/mybishbash/" on the GitHub Pages project site.
+        // The literal default is production-correct, so an unstamped file still works.
+        var BASE = "/";
+        var loc = window.location;
+
+        // Loop guard (critical): index.html reads ?route=. If it's already present
+        // we have bounced once — never wrap again, or each 404 re-encodes the whole
+        // URL into a new ?route= and recurses forever. This alone stops the loop
+        // even if BASE is ever wrong for the host.
+        if (/[?&]route=/.test(loc.search)) return;
+
+        var baseNoTrail = BASE.replace(/\/$/, ""); // "" for root, "/mybishbash" otherwise
+        var path = loc.pathname;
+        if (baseNoTrail && (path === baseNoTrail || path.indexOf(baseNoTrail + "/") === 0)) {
+          path = path.slice(baseNoTrail.length) || "/";
+        }
+
+        var route = path + loc.search + loc.hash;
+        loc.replace(baseNoTrail + "/?route=" + encodeURIComponent(route));
       })();
     </script>
   </head>

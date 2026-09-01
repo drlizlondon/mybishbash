@@ -243,6 +243,31 @@ function serviceWorkerVersionPlugin() {
   };
 }
 
+// Stamp the built 404.html SPA-fallback with the deployment base so its bounce
+// target matches how the site is actually served. GitHub Pages serves 404.html
+// for unknown paths; if its base is wrong (e.g. "/mybishbash" on a root-served
+// site) every deep link redirects to a path that 404s again — an infinite
+// ?route= loop. The source default is "/" (production); staging builds with
+// VITE_BASE_PATH=/mybishbash/ get stamped to match.
+function fourOhFourBasePlugin() {
+  let base = "/";
+  return {
+    name: "mybishbash-404-base",
+    apply: "build",
+    configResolved(config) {
+      base = config.base || "/";
+    },
+    writeBundle(options) {
+      const outDir = options.dir || resolve(__dirname, "dist");
+      const htmlPath = join(outDir, "404.html");
+      if (!existsSync(htmlPath)) return;
+      const source = readFileSync(htmlPath, "utf8");
+      const stamped = source.replace(/var BASE = "[^"]*";/, `var BASE = ${JSON.stringify(base)};`);
+      if (stamped !== source) writeFileSync(htmlPath, stamped);
+    },
+  };
+}
+
 function getGitSha() {
   try {
     return execSync("git rev-parse HEAD", { cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -255,7 +280,7 @@ export default defineConfig({
   // Production (Cloudflare Pages on https://mybishbash.app) serves from root.
   // Staging (GitHub Pages) and the e2e suite set VITE_BASE_PATH=/mybishbash/.
   base: process.env.VITE_BASE_PATH || "/",
-  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },
