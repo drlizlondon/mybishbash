@@ -5,6 +5,12 @@ import { execSync } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  FREE_PRICE_AMOUNT,
+  FREE_PRICE_CURRENCY,
+  PLUS_PRICE_AMOUNT,
+  PLUS_PRICE_CURRENCY,
+} from "./src/content/pricingConfig.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appVersion = process.env.VITE_APP_VERSION || new Date().toISOString();
@@ -268,6 +274,23 @@ function fourOhFourBasePlugin() {
   };
 }
 
+// Stamps the SoftwareApplication schema's Offer prices in index.html from
+// the single pricing source in src/content/pricingConfig.js, so the visible
+// pricing grid and the schema.org price can never drift apart (Inigra MBB-3
+// / J4). Runs in both dev and build so no placeholder token is ever served.
+function pricingSchemaPlugin() {
+  return {
+    name: "mybishbash-pricing-schema",
+    transformIndexHtml(html) {
+      return html
+        .replaceAll("__MBB_FREE_PRICE_AMOUNT__", FREE_PRICE_AMOUNT)
+        .replaceAll("__MBB_FREE_PRICE_CURRENCY__", FREE_PRICE_CURRENCY)
+        .replaceAll("__MBB_PLUS_PRICE_AMOUNT__", PLUS_PRICE_AMOUNT)
+        .replaceAll("__MBB_PLUS_PRICE_CURRENCY__", PLUS_PRICE_CURRENCY);
+    },
+  };
+}
+
 function getGitSha() {
   try {
     return execSync("git rev-parse HEAD", { cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -280,7 +303,7 @@ export default defineConfig({
   // Production (Cloudflare Pages on https://mybishbash.app) serves from root.
   // Staging (GitHub Pages) and the e2e suite set VITE_BASE_PATH=/mybishbash/.
   base: process.env.VITE_BASE_PATH || "/",
-  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin(), pricingSchemaPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },

@@ -147,6 +147,11 @@ function Hero() {
                 <EditableText path="ctas.secondary" />
               </a>
             </div>
+            <p className="hero-meta reveal-up delay-3">
+              <EditableText path="hero.anchor" />
+              <span className="hero-meta-sep" aria-hidden="true">·</span>
+              <a href={CONTACT_HREF}>Questions? Get in touch</a>
+            </p>
           </div>
           <AppPreview />
         </div>

@@ -1,13 +1,9 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-509B78PVCB"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-509B78PVCB');
-    </script>
+    <!-- Analytics load only after explicit consent — see public/mbb-consent.js.
+         No GA4 request fires until a visitor accepts the banner it shows. -->
+    <script defer src="/mbb-consent.js"></script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -97,8 +93,8 @@
             "audienceType": "Professionals, students and self-improvers seeking intentional phone habits and accountability"
           },
           "offers": [
-            { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "GBP" },
-            { "@type": "Offer", "name": "Plus", "price": "3.99", "priceCurrency": "GBP" }
+            { "@type": "Offer", "name": "Free", "price": "__MBB_FREE_PRICE_AMOUNT__", "priceCurrency": "__MBB_FREE_PRICE_CURRENCY__" },
+            { "@type": "Offer", "name": "Plus", "price": "__MBB_PLUS_PRICE_AMOUNT__", "priceCurrency": "__MBB_PLUS_PRICE_CURRENCY__" }
           ],
           "publisher": { "@id": "https://mybishbash.app/#org" }
         },

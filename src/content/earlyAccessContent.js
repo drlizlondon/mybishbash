@@ -15,7 +15,7 @@ export const earlyAccessContent = {
   ],
   form: {
     title: "Join the early list",
-    intro: "Tell us a little about you and we’ll let you know when myBishBash launches in your area.",
+    intro: "Tell us a little about you and we’ll let you know when myBishBash launches in your area. Takes about 30 seconds.",
     email: "Email address",
     country: "Country",
     phone: "Phone type",
@@ -27,7 +27,7 @@ export const earlyAccessContent = {
   },
   success: {
     title: "You’re on the list.",
-    copy: "We’ll let you know when myBishBash is ready for your country and phone.",
+    copy: "We’ll email you the moment myBishBash is ready for your country and phone.",
     small: "Thank you for helping shape the rollout.",
   },
 };

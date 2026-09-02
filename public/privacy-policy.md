@@ -1,6 +1,6 @@
 # myBishBash Privacy Policy
 
-Last updated: 18/05/2026
+Last updated: 02/09/2026
 
 ## Introduction
 
@@ -28,15 +28,22 @@ Depending on how you use myBishBash, we may collect:
 - app settings and preferences
 
 ## Usage Data
-We may collect anonymous or pseudonymous analytics including:
-- app opens
-- card displays
-- interactions with reminders
-- onboarding completion
+On the myBishBash website, and only with your consent, Google Analytics 4 measures aggregate usage such as:
+- page views
 - feature usage
 - device and app performance information
 
+Analytics is off by default. It only loads after you choose "Allow analytics" in the consent banner shown on your first visit, or later via the "Privacy choices" link in the site footer. If you choose "No thanks", no analytics request is made and no analytics cookies are set. Analytics is never used for advertising, and no names, email addresses, personal cards or free-text content are sent to Google Analytics.
+
 We do not sell your personal cards or private content to advertisers or third parties.
+
+---
+
+# Cookies and Local Storage
+
+The website stores your analytics choice itself in your browser's local storage (not a cookie) for up to 13 months, after which we ask again.
+
+If you allow analytics, Google Analytics sets its own cookies (including `_ga` and `_gid`) to distinguish visits. If you decline, or later withdraw consent via "Privacy choices", these cookies are cleared and no further analytics requests are made.
 
 ---
 

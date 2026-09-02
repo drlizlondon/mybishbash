@@ -1,5 +1,7 @@
 // Local Edit Mode can save directly back to this file in development.
 // The edit panel can also copy the current JSON as a manual fallback.
+import { FREE_PRICE_DISPLAY, PLUS_PRICE_DISPLAY } from "./pricingConfig.js";
+
 export const landingContent = {
   "brand": {
     "name": "myBishBash"
@@ -25,7 +27,8 @@ export const landingContent = {
     "gold": "shape it intentionally.",
     "copy": [
       "myBishBash places helpful reminders and prompts in front of the apps that you use, directing your attention to the things you actually mean to do. Your choices, with a little more intention."
-    ]
+    ],
+    "anchor": "Free to start · your first card in under a minute"
   },
   "proof": [
     {
@@ -183,7 +186,7 @@ export const pricing = {
   plans: [
     {
       name: "Free",
-      price: "£0",
+      price: FREE_PRICE_DISPLAY,
       cadence: "forever",
       tagline: "Everything you need to start.",
       features: [
@@ -197,7 +200,7 @@ export const pricing = {
     },
     {
       name: "Plus",
-      price: "£3.99",
+      price: PLUS_PRICE_DISPLAY,
       cadence: "per month",
       tagline: "For a phone that's fully yours.",
       featured: true,
