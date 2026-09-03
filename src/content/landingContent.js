@@ -14,7 +14,8 @@ export const landingContent = {
   ],
   "ctas": {
     "primary": "Get myBishBash",
-    "secondary": "See how it works"
+    "secondary": "See how it works",
+    "waitlist": "Join the waitlist"
   },
   "hero": {
     "eyebrow": "The intentional-phone app",

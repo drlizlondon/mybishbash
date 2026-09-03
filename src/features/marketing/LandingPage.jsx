@@ -146,6 +146,9 @@ function Hero() {
                 <span className="play-dot" aria-hidden="true" />
                 <EditableText path="ctas.secondary" />
               </a>
+              <a className="button launch-list" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
+                <EditableText path="ctas.waitlist" />
+              </a>
             </div>
             <p className="hero-meta reveal-up delay-3">
               <EditableText path="hero.anchor" />

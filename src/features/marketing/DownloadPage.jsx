@@ -256,11 +256,12 @@ function DownloadAccessGate() {
             <button type="button" className="download-try-again" onClick={tryAgain}>
               <EditableText path="access.tryAgain" />
             </button>
-            <a className="download-skip-link" href={WAITLIST_HREF}><EditableText path="access.waitlist" /></a>
           </div>
-        ) : (
-          <a className="download-skip-link" href={WAITLIST_HREF}><EditableText path="access.waitlist" /></a>
-        )}
+        ) : null}
+
+        <a className="download-secondary download-waitlist-cta" href={WAITLIST_HREF}>
+          <EditableText path="access.waitlist" />
+        </a>
       </section>
     </main>
   );
