@@ -275,7 +275,7 @@ function fourOhFourBasePlugin() {
   };
 }
 
-// Emit a real <route>/index.html for every client route, so deep links answer
+// Emit a real static HTML file for every client route, so deep links answer
 // HTTP 200 instead of the 404-status SPA fallback (MBB-6).
 //
 // Cloudflare Pages (production, mybishbash.app) and GitHub Pages (staging) both
@@ -285,6 +285,13 @@ function fourOhFourBasePlugin() {
 // including the cold-traffic CTA target. public/_redirects (`/* /index.html
 // 200`) did not fix it: it is deployed on main and those paths still return 404.
 // A static file per route is the mechanism both platforms actually honour.
+//
+// Two files per route, deliberately. Cloudflare Pages resolves "/privacy" as
+// exact match, then "privacy.html", then "privacy/index.html" — and the
+// directory form answers 308 to "/privacy/" rather than 200 (verified live on
+// 2026-09-04). "privacy.html" is what makes the canonical, un-slashed URL in
+// the sitemap a direct 200; "privacy/index.html" keeps the trailing-slash form
+// a 200 too, so neither spelling of a shared link lands on the 404 page.
 //
 // 404.html is untouched and still handles unknown and dynamic paths
 // (/card/:id, /intercept/:launcher, /apps/:launcher) via its ?route= bounce.
@@ -324,6 +331,9 @@ function routePrerenderPlugin() {
           );
         }
 
+        // "/privacy" -> privacy.html (a direct 200, no redirect).
+        writeFileSync(join(outDir, `${segment}.html`), html);
+        // "/privacy/" -> privacy/index.html (the trailing-slash spelling).
         const routeDir = join(outDir, segment);
         mkdirSync(routeDir, { recursive: true });
         writeFileSync(join(routeDir, "index.html"), html);

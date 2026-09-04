@@ -35,20 +35,23 @@ assert.ok(
 assert.match(redirects, /^\/\*\s+\/index\.html\s+200\s*$/m, "Cloudflare build must ship a _redirects SPA fallback (/* /index.html 200)");
 
 // Every client route must exist as a real static file, or the platform answers
-// 404 for it and crawlers never index the page.
+// 404 for it and crawlers never index the page. Both spellings are required:
+// dist/privacy.html serves "/privacy" as a direct 200, while
+// dist/privacy/index.html alone answers 308 to "/privacy/" on Cloudflare Pages.
 for (const route of deriveClientRoutes()) {
-  const routeIndex = `dist${route.path}/index.html`;
-  assert.ok(existsSync(routeIndex), `Cloudflare build must prerender ${route.path} as ${routeIndex} so it returns 200`);
-  const routeHtml = readFileSync(routeIndex, "utf8");
-  assert.match(
-    routeHtml,
-    new RegExp(`<link rel="canonical" href="https://mybishbash\\.app${route.path}"`),
-    `${route.path} should be self-canonical, not canonical to /`,
-  );
-  if (route.indexable) {
-    assert.match(routeHtml, /<meta name="robots" content="index, follow/, `${route.path} is a public page and should stay indexable`);
-  } else {
-    assert.match(routeHtml, /<meta name="robots" content="noindex, follow"/, `${route.path} is an app route and should be noindex`);
+  for (const routeFile of [`dist${route.path}.html`, `dist${route.path}/index.html`]) {
+    assert.ok(existsSync(routeFile), `Cloudflare build must prerender ${route.path} as ${routeFile} so it returns 200`);
+    const routeHtml = readFileSync(routeFile, "utf8");
+    assert.match(
+      routeHtml,
+      new RegExp(`<link rel="canonical" href="https://mybishbash\\.app${route.path}"`),
+      `${routeFile} should be self-canonical, not canonical to /`,
+    );
+    if (route.indexable) {
+      assert.match(routeHtml, /<meta name="robots" content="index, follow/, `${route.path} is a public page and should stay indexable`);
+    } else {
+      assert.match(routeHtml, /<meta name="robots" content="noindex, follow"/, `${route.path} is an app route and should be noindex`);
+    }
   }
 }
 
