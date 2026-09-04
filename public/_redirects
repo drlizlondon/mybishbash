@@ -1,8 +1,13 @@
-# Cloudflare Pages SPA fallback.
-# Real static files (launcher pages, /assets, /icons, manifest, etc.) are served
-# directly — Pages matches an existing asset before applying this rule. Every
-# other path is an app/marketing route resolved at runtime in RootRouter
-# (e.g. /early-access, /invite, /about, /download, /home), so serve index.html
-# with a 200 and let the SPA boot and route. Without this, direct navigation to
-# those paths returns the 404 page — which is why the signup links were dead.
+# Cloudflare Pages SPA fallback (production = https://mybishbash.app).
+# Real static files (launcher pages, /assets, /icons, manifest, and the
+# per-route index.html files the build now emits) are served directly — Pages
+# matches an existing asset before applying this rule.
+#
+# Verified 2026-09-04 (MBB-6): this rule alone does NOT make deep links return
+# 200. With it live on main, https://mybishbash.app/privacy still answered
+# HTTP 404 — dist/404.html wins over the rewrite, so the body rendered but the
+# status stayed 404 and crawlers dropped the page. The fix is the prerendered
+# <route>/index.html files (vite.config.js routePrerenderPlugin). This rule is
+# kept as a belt-and-braces fallback for dynamic paths (/card/:id,
+# /intercept/:launcher) that cannot be prerendered.
 /*    /index.html    200

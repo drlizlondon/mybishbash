@@ -2,9 +2,10 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deriveClientRoutes } from "./scripts/derive-client-routes.mjs";
 import {
   FREE_PRICE_AMOUNT,
   FREE_PRICE_CURRENCY,
@@ -274,6 +275,63 @@ function fourOhFourBasePlugin() {
   };
 }
 
+// Emit a real <route>/index.html for every client route, so deep links answer
+// HTTP 200 instead of the 404-status SPA fallback (MBB-6).
+//
+// Cloudflare Pages (production, mybishbash.app) and GitHub Pages (staging) both
+// serve a matching static file first and otherwise serve 404.html *with a 404
+// status*. The page rendered, but /privacy, /invite, /early-access, /about and
+// /terms all answered 404, so search engines and non-JS crawlers dropped them —
+// including the cold-traffic CTA target. public/_redirects (`/* /index.html
+// 200`) did not fix it: it is deployed on main and those paths still return 404.
+// A static file per route is the mechanism both platforms actually honour.
+//
+// 404.html is untouched and still handles unknown and dynamic paths
+// (/card/:id, /intercept/:launcher, /apps/:launcher) via its ?route= bounce.
+// The route list is derived from the router source and the sitemap — see
+// scripts/derive-client-routes.mjs — so there is no second list to maintain.
+function routePrerenderPlugin() {
+  return {
+    name: "mybishbash-route-prerender",
+    apply: "build",
+    writeBundle(options) {
+      const outDir = options.dir || resolve(__dirname, "dist");
+      const indexPath = join(outDir, "index.html");
+      if (!existsSync(indexPath)) return;
+
+      // Read the built index.html so every copy carries the same hashed asset
+      // names and the same transformIndexHtml output (pricing schema, etc.).
+      const indexHtml = readFileSync(indexPath, "utf8");
+      const canonicalOrigin = (indexHtml.match(/<link rel="canonical" href="(https?:\/\/[^/"]+)/) || [])[1];
+
+      for (const route of deriveClientRoutes(__dirname)) {
+        const segment = route.path.slice(1);
+        // Never shadow a real static page shipped from public/ (launcher pages,
+        // /install, ...) — those are already 200s and own their own markup.
+        if (existsSync(join(__dirname, "public", segment))) continue;
+
+        let html = indexHtml;
+        if (canonicalOrigin) {
+          const url = `${canonicalOrigin}${route.path}`;
+          html = html
+            .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${url}$2`)
+            .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${url}$2`);
+        }
+        if (!route.indexable) {
+          html = html.replace(
+            /<meta name="robots" content="[^"]*"\s*\/>/,
+            '<meta name="robots" content="noindex, follow" />',
+          );
+        }
+
+        const routeDir = join(outDir, segment);
+        mkdirSync(routeDir, { recursive: true });
+        writeFileSync(join(routeDir, "index.html"), html);
+      }
+    },
+  };
+}
+
 // Stamps the SoftwareApplication schema's Offer prices in index.html from
 // the single pricing source in src/content/pricingConfig.js, so the visible
 // pricing grid and the schema.org price can never drift apart (Inigra MBB-3
@@ -303,7 +361,7 @@ export default defineConfig({
   // Production (Cloudflare Pages on https://mybishbash.app) serves from root.
   // Staging (GitHub Pages) and the e2e suite set VITE_BASE_PATH=/mybishbash/.
   base: process.env.VITE_BASE_PATH || "/",
-  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin(), pricingSchemaPlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin(), pricingSchemaPlugin(), routePrerenderPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },

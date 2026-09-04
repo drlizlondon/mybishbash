@@ -8,11 +8,32 @@ MyBishBash has real users, so production changes should move through a stable re
 feature/*  -> staging -> main
 ```
 
-`main` is production. Pushes to `main` deploy the public GitHub Pages site:
+`main` is production. Pushes to `main` deploy the public site, which is served by
+**Cloudflare Pages**:
+
+```text
+https://mybishbash.app
+```
+
+Verified 2026-09-04 (MBB-6): `gh api repos/drlizlondon/mybishbash/pages` reports
+`"cname": null`, so GitHub Pages does not serve `mybishbash.app` at all; live
+responses carry only Cloudflare headers (no `server: GitHub.com`,
+`x-github-request-id` or `via: varnish`); and the two platforms publish
+*different* builds of the same commit (live and GitHub Pages `version.json`
+share `sourceSha` but differ in `builtAt` and in the hashed main bundle).
+Cloudflare Pages builds from `main` through its own Git integration — there is
+no workflow for it in this repo.
+
+A push to `main` also runs `.github/workflows/deploy-pages.yml`, which publishes
+the GitHub Pages project site:
 
 ```text
 https://drlizlondon.github.io/mybishbash/
 ```
+
+That site is a secondary artefact, not the public product. It is built with
+base `/`, so its asset links do not resolve under the `/mybishbash/` subpath.
+Do not treat it as production.
 
 `staging` is pre-production. Pushes to `staging` deploy the separate preview site:
 
@@ -47,7 +68,9 @@ https://drlizlondon.github.io/mybishbash-preview/
 - Home button exits cleanly from cards/interruption/action cards.
 - Relaunch after Home does not show stale card state.
 - Production deploy workflow still triggers only from `main`.
-- Production manifest still points to `/mybishbash/`.
+- Production manifest still points at `https://mybishbash.app/` (asserted by
+  `scripts/validate-cloudflare-production-build.mjs`; the `/mybishbash/` base
+  belongs to the GitHub Pages preview, not production).
 - Staging manifest points to `/mybishbash-preview/`.
 
 ## Preview Install URL
