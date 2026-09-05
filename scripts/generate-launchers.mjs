@@ -70,7 +70,7 @@ function buildInstallHtml(launcher) {
               <li>Tap Add.</li>
             </ol>
           </section>
-          <section>
+${buildSafariTabsNote(launcher)}          <section>
             <strong>Android</strong>
             <ol>
               <li>Open this page in Chrome.</li>
@@ -94,6 +94,20 @@ function buildInstallHtml(launcher) {
     <script src="${BASE}install/install.js"></script>
   </body>
 </html>
+`;
+}
+
+// MBB-22 (Lizzie, 2026-09-05). Continuing from the pause hands Safari a URL, and
+// iOS opens a new Safari tab for every URL that arrives from another app; a
+// Shortcut is the only way round it and was ruled out. So the Safari setup
+// page says so plainly and points at Safari's own tidy-up setting. Rendered
+// only for the safari launcher; every other install page is unchanged.
+function buildSafariTabsNote(launcher) {
+  if (launcher.id !== "safari") return "";
+  return `          <section data-safari-tabs-note>
+            <strong>Please note</strong>
+            <p class="install-note">New Safari tabs will open when you continue to Safari from the pause screen. Consider setting Safari to tidy them for you: Settings &rarr; Safari &rarr; Close Tabs &rarr; After One Day (or After One Week if you like to keep tabs around).</p>
+          </section>
 `;
 }
 
