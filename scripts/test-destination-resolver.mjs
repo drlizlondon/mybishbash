@@ -9,14 +9,31 @@ import { FAKE_APP_LAUNCHERS } from "../src/lib/launcherRegistry.js";
 
 const byId = Object.fromEntries(FAKE_APP_LAUNCHERS.map((launcher) => [launcher.id, launcher]));
 
-// ── iOS Safari keeps its x-safari strategy ───────────────────────────────────
+// ── iOS Safari continues via the "Open Safari" shortcut (MBB-21) ─────────────
+// x-safari-… hands Safari a URL and iOS opens a NEW tab for every hand-off;
+// the shortcut (Open App → Safari) brings Safari forward on its last tab.
+
+const OPEN_SAFARI_SHORTCUT_HREF = "shortcuts://run-shortcut?name=Open%20Safari";
 
 const safariIos = resolveLauncherDestination(byId.safari, { platform: "ios" });
-assert.equal(safariIos.href, "x-safari-https://www.google.com");
+assert.equal(safariIos.href, OPEN_SAFARI_SHORTCUT_HREF);
 assert.equal(safariIos.strategy, "ios_app_url");
 assert.equal(safariIos.sourceField, "iosAppUrl");
-assert.equal(safariIos.usedXSafariPrefix, true);
+assert.equal(safariIos.usedXSafariPrefix, false);
 assert.equal(safariIos.platform, "ios");
+assert.equal(safariIos.fallbackHref, "https://www.google.com", "a missing shortcut must still have a web fallback");
+
+// The pause screen's Continue button (preferDirectAppDestination) takes the same
+// shortcut route on iOS, and the manual "App didn't open?" link keeps x-safari.
+const safariContinue = resolveLauncherDestination(byId.safari, { platform: "ios", preferDirectAppDestination: true });
+assert.equal(safariContinue.href, OPEN_SAFARI_SHORTCUT_HREF);
+assert.equal(safariContinue.sourceField, "iosAppUrl");
+assert.equal(byId.safari.manualUrl, "x-safari-https://www.google.com");
+
+// The shortcut scheme must never leak to Android or desktop.
+const safariContinueAndroid = resolveLauncherDestination(byId.safari, { platform: "android", preferDirectAppDestination: true });
+assert.notEqual(safariContinueAndroid.href, OPEN_SAFARI_SHORTCUT_HREF);
+assert.equal(shouldUseTimedWebFallback(OPEN_SAFARI_SHORTCUT_HREF), true, "shortcuts:// needs the timed web fallback");
 
 // The fast web path strips x-safari so it stays safe outside standalone Safari shells.
 const safariFast = resolveLauncherDestination(byId.safari, { platform: "desktop", preferFastDestination: true });
