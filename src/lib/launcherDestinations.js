@@ -78,15 +78,7 @@ export function resolveLauncherDestination(version, { preferFastDestination = fa
   let fallbackHref = "";
 
   if (preferDirectAppDestination) {
-    // MBB-21. The fake Safari launcher on iOS continues via the "Open Safari"
-    // shortcut (iosAppUrl), which brings real Safari forward on its last tab
-    // instead of opening a new one; manualUrl (x-safari-…) stays the explicit
-    // "App didn't open?" escape hatch. Every other launcher is unchanged.
-    if (merged.id === "safari" && resolvedPlatform === "ios") {
-      picked = pickDestination(merged, ["iosAppUrl", "appUrl", "manualUrl"]);
-    } else {
-      picked = pickDestination(merged, ["appUrl", "manualUrl"]);
-    }
+    picked = pickDestination(merged, ["appUrl", "manualUrl"]);
   }
 
   if (preferFastDestination) {

@@ -31,19 +31,9 @@ const RAW_FAKE_APP_LAUNCHERS = [
     appUrl: "",
     androidIntentUrl: "",
     androidWebFallbackUrl: "https://www.google.com",
-    // MBB-21. `x-safari-https://…` hands a URL to Safari, and iOS gives every
-    // URL arriving from another app a NEW tab, so a day of pauses became a
-    // pile of Google tabs. The only way iOS offers to bring Safari forward on
-    // its LAST tab, with no URL, is a Shortcut whose single action is
-    // "Open App: Safari". The launcher triggers that shortcut by name; the
-    // install page tells the user how to create it once. If the shortcut is
-    // missing, the "App didn't open?" manual link still opens Google in real
-    // Safari (one tab, by the user's explicit choice), so nothing is worse
-    // than before.
-    iosAppUrl: `shortcuts://run-shortcut?name=${encodeURIComponent("Open Safari")}`,
+    iosAppUrl: "x-safari-https://www.google.com",
     iosWebFallbackUrl: "https://www.google.com",
     manualUrl: "x-safari-https://www.google.com",
-    openSafariShortcutName: "Open Safari",
     defaultInterruptionPackId: "safari-interruption",
     interruptionPackId: "",
     useInterruptionPack: true,

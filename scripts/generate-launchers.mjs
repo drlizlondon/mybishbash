@@ -70,7 +70,7 @@ function buildInstallHtml(launcher) {
               <li>Tap Add.</li>
             </ol>
           </section>
-${buildSafariShortcutSteps(launcher)}          <section>
+          <section>
             <strong>Android</strong>
             <ol>
               <li>Open this page in Chrome.</li>
@@ -94,30 +94,6 @@ ${buildSafariShortcutSteps(launcher)}          <section>
     <script src="${BASE}install/install.js"></script>
   </body>
 </html>
-`;
-}
-
-// MBB-21. The fake Safari launcher continues by running a Shortcut named
-// "Open Safari" (single action: Open App → Safari), because that is the only
-// way iOS brings Safari forward on its LAST tab rather than opening a new one
-// for a hand-off URL. The user creates that shortcut once; these steps say how.
-// Rendered only for the safari launcher; every other install page is unchanged.
-function buildSafariShortcutSteps(launcher) {
-  const shortcutName = launcher.openSafariShortcutName;
-  if (launcher.id !== "safari" || !shortcutName) return "";
-  const name = escapeHtml(shortcutName);
-  const installLink = launcher.openSafariShortcutInstallUrl
-    ? `              <li>Or add it in one tap: <a href="${escapeHtml(launcher.openSafariShortcutInstallUrl)}">Get the ${name} shortcut</a>.</li>\n`
-    : "";
-  return `          <section data-safari-shortcut-steps>
-            <strong>iPhone, one more step (so Safari opens on your last tab, not a new one)</strong>
-            <ol>
-              <li>Open the Shortcuts app and tap +.</li>
-              <li>Tap Add Action, search for Open App, and choose Safari.</li>
-              <li>Tap the name at the top and call it exactly <strong>${name}</strong>, then tap Done.</li>
-${installLink}            </ol>
-            <p class="install-note">If the shortcut is missing, the pause screen still offers "App didn't open?", which opens Safari in a new tab.</p>
-          </section>
 `;
 }
 
