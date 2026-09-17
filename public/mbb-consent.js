@@ -1,11 +1,16 @@
 (function () {
   'use strict';
 
-  // Consent-gated GA4 for myBishBash — the Big Picture Planner pattern
-  // (~/Planner/planner-v1/public/clarity-consent.js), adapted: GA4 only (no
-  // Clarity), and the "Privacy choices" link attaches to the real site
-  // footer once React renders it, since this is a client-rendered SPA.
+  // Consent-gated analytics for myBishBash — the Big Picture Planner pattern
+  // (~/Planner/planner-v1/public/clarity-consent.js): Google Analytics 4 for
+  // aggregate usage plus Microsoft Clarity for interaction insight (clicks,
+  // scrolling), both behind ONE "Allow analytics" choice. Pre-consent this
+  // script makes zero network requests. On grant the app root is masked with
+  // data-clarity-mask so card content is never captured. The "Privacy choices"
+  // link attaches to the real site footer once React renders it, since this is
+  // a client-rendered SPA.
   var GA4_MEASUREMENT_ID = 'G-509B78PVCB';
+  var CLARITY_PROJECT_ID = 'yjr0aptax3';
   var CONSENT_KEY = 'mbb_analytics_consent_v1';
   var CONSENT_MAX_AGE_MS = 13 * 30 * 24 * 60 * 60 * 1000;
   var PRODUCTION_HOSTS = ['mybishbash.app', 'www.mybishbash.app'];
@@ -35,6 +40,13 @@
     catch (error) { /* The choice still applies for this page load. */ }
   }
 
+  // Mask the application root so Clarity records interaction shape only, never
+  // the visitor's card content.
+  function maskAppRoot() {
+    var root = document.getElementById('root');
+    if (root) root.setAttribute('data-clarity-mask', 'true');
+  }
+
   function loadGoogleAnalytics() {
     if (document.querySelector('script[data-mbb-ga4]')) return;
 
@@ -51,6 +63,41 @@
     script.dataset.mbbGa4 = 'true';
     script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(GA4_MEASUREMENT_ID);
     document.head.appendChild(script);
+  }
+
+  function signalClarityConsent(value) {
+    if (typeof window.clarity !== 'function') return;
+    window.clarity('consentv2', {
+      ad_Storage: 'denied',
+      analytics_Storage: value === 'granted' ? 'granted' : 'denied'
+    });
+  }
+
+  function loadClarity() {
+    if (document.querySelector('script[data-mbb-clarity]')) {
+      signalClarityConsent('granted');
+      return;
+    }
+
+    window.clarity = window.clarity || function () {
+      (window.clarity.q = window.clarity.q || []).push(arguments);
+    };
+
+    // Queue consent before the asynchronous tag executes so Clarity has the
+    // visitor's choice before it attempts to use analytics storage.
+    signalClarityConsent('granted');
+
+    var script = document.createElement('script');
+    script.async = true;
+    script.dataset.mbbClarity = 'true';
+    script.src = 'https://www.clarity.ms/tag/' + CLARITY_PROJECT_ID;
+    document.head.appendChild(script);
+  }
+
+  function loadAnalytics() {
+    maskAppRoot();
+    loadClarity();
+    loadGoogleAnalytics();
   }
 
   function removePrompt() {
@@ -96,12 +143,27 @@
   }
 
   function choose(value) {
+    var analyticsWasLoaded = Boolean(
+      document.querySelector('script[data-mbb-ga4]') ||
+      document.querySelector('script[data-mbb-clarity]')
+    );
     writeConsent(value);
     removePrompt();
     if (value === 'granted') {
-      loadGoogleAnalytics();
+      loadAnalytics();
     } else {
       clearAnalyticsCookies();
+      if (typeof window.gtag === 'function') {
+        window.gtag('consent', 'update', { analytics_storage: 'denied' });
+      }
+      signalClarityConsent('denied');
+      if (typeof window.clarity === 'function') window.clarity('consent', false);
+      // Reload without the tags so no further collection continues after a
+      // visitor withdraws consent during an active session.
+      if (analyticsWasLoaded) {
+        window.location.reload();
+        return;
+      }
     }
   }
 
@@ -116,7 +178,7 @@
     prompt.innerHTML =
       '<div>' +
         '<strong id="mbb-analytics-title">' + (isPreferences ? 'Privacy choices' : 'A quieter kind of analytics') + '</strong>' +
-        '<p>With your permission, Google Analytics helps us see how myBishBash is used, in aggregate. Nothing personal, no ads. You can change your mind any time.</p>' +
+        '<p>With your permission, Google Analytics and Microsoft Clarity help us see how myBishBash is used and where it is confusing — in aggregate, with your card content masked. Nothing personal, no ads. You can change your mind any time.</p>' +
         '<a href="/privacy">Read our privacy policy</a>' +
       '</div>' +
       '<div class="mbb-consent-actions">' +
@@ -149,7 +211,7 @@
     addStyles();
     watchForFooter();
     var consent = readConsent();
-    if (consent === 'granted') loadGoogleAnalytics();
+    if (consent === 'granted') loadAnalytics();
     if (consent !== 'granted' && consent !== 'denied') showPrompt(false);
   }
 
