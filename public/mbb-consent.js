@@ -203,7 +203,21 @@
       '.mbb-consent-actions [data-consent="granted"]{border-color:#171512;background:#171512;color:#fff}' +
       '[data-mbb-privacy-choices]{margin-left:6px}' +
       '[data-mbb-privacy-choices]:focus-visible{outline:2px solid #171512;outline-offset:3px;border-radius:3px}' +
-      '@media(max-width:620px){#mbb-analytics-consent{align-items:stretch;flex-direction:column;gap:12px}.mbb-consent-actions{justify-content:flex-end}}';
+      // Mobile-only "bottom sheet" fix (MBB marketing scorecard 2026-09-19):
+      // the previous mobile banner grew tall enough to cover the entire
+      // hero, including every CTA, on first load. This caps it as a slim
+      // edge-to-edge sheet — the disclosure text visually clamps to 2 lines
+      // (full text stays in the DOM for screen readers; nothing is removed,
+      // only visually compacted) and controls shrink — so the hero headline
+      // and the primary CTA stay visible above it without scrolling.
+      '@media(max-width:620px){' +
+        '#mbb-analytics-consent{align-items:stretch;flex-direction:column;gap:8px;left:0;right:0;bottom:0;max-width:none;margin:0;border-radius:18px 18px 0 0;border-bottom:none;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}' +
+        '#mbb-analytics-consent strong{font-size:14px;margin-bottom:2px}' +
+        '#mbb-analytics-consent p{font-size:13px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}' +
+        '#mbb-analytics-consent a{font-size:13px;margin-top:3px}' +
+        '.mbb-consent-actions{justify-content:flex-end}' +
+        '.mbb-consent-actions button{min-height:40px;padding:0 12px;font-size:13px}' +
+      '}';
     document.head.appendChild(style);
   }
 

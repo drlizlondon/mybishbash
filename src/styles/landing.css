@@ -1054,7 +1054,9 @@ body:has(.landing-page)::after {
 
   .hero-actions {
     flex-direction: column;
-    margin-top: 0;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 4px;
   }
 
   .button {
@@ -1064,6 +1066,43 @@ body:has(.landing-page)::after {
     height: auto;
     padding: 14px 18px;
     line-height: 1.2;
+  }
+
+  /* Mobile-only CTA hierarchy fix (MBB marketing scorecard 2026-09-19):
+     "Get myBishBash" stays the one filled primary action; the other two
+     hero buttons demote to plain secondary text links so a first-time
+     visitor sees a single obvious next step. Desktop keeps all three as
+     equal-weight buttons (unchanged, outside this media query). */
+  .button.secondary,
+  .button.launch-list {
+    width: auto;
+    min-height: 0;
+    height: auto;
+    padding: 2px 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    color: rgba(255,255,255,0.66);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    justify-content: flex-start;
+  }
+
+  .button.secondary:hover,
+  .button.secondary:focus-visible,
+  .button.launch-list:hover,
+  .button.launch-list:focus-visible {
+    border: none;
+    background: none;
+    box-shadow: none;
+    color: rgba(255,255,255,0.88);
+  }
+
+  .button.secondary .play-dot {
+    display: none;
   }
 
   .app-preview-wrap {
