@@ -55,7 +55,7 @@ export function buildHomeState({ cards = [], events = [], timezone, homeScreenVe
   });
   const completedPersonalCardsToday = Math.min(
     personalCardsToday.filter((card) => isCardDoneToday(card, todayKey)).length,
-    personalCardsTotal.length,
+    personalCardsToday.length,
   );
   const nextIncompletePersonalCard = personalCardsToday.find((card) => !isCardDoneToday(card, todayKey)) ?? null;
   const liveCommitments = normalized
@@ -84,7 +84,11 @@ export function buildHomeState({ cards = [], events = [], timezone, homeScreenVe
   return {
     usageDays: getUsageDays(normalized, events),
     completedPersonalCardsToday,
-    totalPersonalCardsToday: personalCardsTotal.length,
+    // Denominator must match the numerator's universe: only cards that are
+    // actionable today (done today, pending, or eligible right now). Using the
+    // all-time personal-card total made paused / out-of-window cards read as
+    // "not done" forever, so the ring could never reach "all complete today".
+    totalPersonalCardsToday: personalCardsToday.length,
     nextIncompletePersonalCard,
     liveCommitmentCount: liveCommitments.length,
     hasCompletedCommitmentToday,

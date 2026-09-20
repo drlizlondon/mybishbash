@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import RootRouter from "./app/router/RootRouter";
 import { registerServiceWorker } from "./registerServiceWorker";
 import { initDynamicLaunchersFromCache } from "./lib/dynamicLauncherCache";
+import { installKeyboardInsetTracking } from "./lib/keyboardInset";
 import { installGlobalErrorHandlers } from "./services/errors/reporter";
 import { RootErrorBoundary } from "./services/errors/RootErrorBoundary";
 import { hydrateLocalData } from "./storage";
@@ -22,6 +23,10 @@ if (import.meta.env.DEV && typeof performance !== "undefined") {
 // HQ-created launchers must be registered before App parses the initial
 // route, so direct hits on dynamic /intercept/:id shells resolve.
 initDynamicLaunchersFromCache();
+
+// Keep bottom-sheet modals visible above the iOS on-screen keyboard by exposing
+// its height to CSS as --kb-inset (see src/lib/keyboardInset.js).
+installKeyboardInsetTracking();
 
 registerServiceWorker();
 

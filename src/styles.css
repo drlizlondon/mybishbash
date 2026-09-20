@@ -49,6 +49,12 @@
   --onboarding-surface-soft: #fbf7f1;
   --onboarding-muted: rgba(74, 65, 59, 0.72);
   --onboarding-ink: #171514;
+  /* Height of the on-screen (software) keyboard, written from JS via
+     window.visualViewport (see src/lib/keyboardInset.js). 0 when no keyboard
+     is open or when visualViewport is unsupported. Used to keep bottom-sheet
+     modals fully visible above the iOS keyboard, which otherwise overlaps them
+     because vh/dvh/svh units do NOT shrink for the keyboard. */
+  --kb-inset: 0px;
 }
 
 * {
@@ -1670,14 +1676,20 @@ textarea {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 20px 14px calc(env(safe-area-inset-bottom) + 14px);
+  /* The extra --kb-inset bottom padding lifts the bottom-sheet above the
+     on-screen keyboard so a focused input can never sit behind it. */
+  padding: 20px 14px calc(env(safe-area-inset-bottom) + 14px + var(--kb-inset, 0px));
   background: rgba(47, 42, 40, 0.14);
   backdrop-filter: blur(8px);
 }
 
 .composer {
   width: min(100%, 560px);
+  /* Fallback for browsers without the visualViewport wiring below. */
   max-height: min(88vh, 720px);
+  /* Keyboard-aware: subtract the keyboard height so the sheet always fits in
+     the space visible above it. When --kb-inset is 0 this equals the fallback. */
+  max-height: min(88vh, 720px, calc(100dvh - var(--kb-inset, 0px) - 40px));
   overflow-y: auto;
   padding: 22px;
   border-radius: 30px;
