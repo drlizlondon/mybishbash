@@ -837,6 +837,21 @@ export function isPackCardAvailable(card) {
   return Boolean(card?.sourcePackId) && !card.deletedAt && !card.paused && !card.disliked && !card.hidden;
 }
 
+// Schedule gating for "is this personal card part of today's total" — the
+// same paused/disliked/deleted checks isEligible applies, but deliberately
+// WITHOUT its time-of-day window, cooldown (lastShownAt), snooze
+// (notYetUntil), or done/pending checks: a card scheduled for today (e.g. a
+// night-only card, or one currently snoozed) must count toward the
+// denominator all day, not just while it happens to be actionable. There is
+// currently no day-of-week/cadence field beyond `frequency`'s once/multi
+// daily distinction, so no additional "not scheduled today" check applies.
+export function isPersonalCardScheduledToday(card) {
+  if (card.paused) return false;
+  if (card.disliked) return false;
+  if (card.deletedAt) return false;
+  return true;
+}
+
 export function normalizeCards(cards, date = new Date(), timeZone) {
   const todayKey = getTodayKey(date, timeZone);
 

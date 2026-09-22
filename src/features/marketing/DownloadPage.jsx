@@ -256,6 +256,9 @@ function DownloadAccessGate() {
             <button type="button" className="download-try-again" onClick={tryAgain}>
               <EditableText path="access.tryAgain" />
             </button>
+            <a className="download-try-again" href={WAITLIST_HREF}>
+              <EditableText path="access.joinWaitlist" />
+            </a>
           </div>
         ) : null}
 

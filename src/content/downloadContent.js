@@ -11,6 +11,7 @@ export const downloadContent = {
     "continue": "Continue",
     "error": "That code didn’t work. Please try again or join the waitlist.",
     "tryAgain": "Try again",
+    "joinWaitlist": "Join waitlist",
     "waitlist": "No code yet? Join the waitlist →"
   },
   "install": {
