@@ -734,6 +734,29 @@ test('Home progress denominator uses total Personal Cards, not only currently el
   await expectNoConsoleErrors(consoleErrors);
 });
 
+test('Home progress denominator excludes paused Personal Cards', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  const todayKey = currentDateKey();
+  await seedE2EState(page, {
+    cards: [
+      {
+        ...smokeCard('done-card', 'Done today card'),
+        statusToday: 'doneToday',
+        doneDate: todayKey,
+      },
+      {
+        ...smokeCard('paused-card', 'Paused card'),
+        paused: true,
+      },
+    ],
+  });
+
+  await gotoApp(page, '/home');
+  await expect(page.locator('.home-progress-number')).toHaveText('1/1');
+  await expect(page.getByTestId('home-dashboard-summary')).toContainText('All 1 personal card complete today.');
+  await expectNoConsoleErrors(consoleErrors);
+});
+
 test('main app opens Home directly when no Personal Cards are due', async ({ page }) => {
   const consoleErrors = await installConsoleErrorGuard(page);
   await seedMainDemoState(page, { cards: [] });
