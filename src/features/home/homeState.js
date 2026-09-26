@@ -5,6 +5,7 @@ import {
   isCommitmentCard,
   isEligible,
   isCardDoneToday,
+  isPersonalCardScheduledToday,
 } from "../../utils";
 
 function getUsageDays(cards = [], events = []) {
@@ -49,15 +50,22 @@ export function buildHomeState({ cards = [], events = [], timezone, homeScreenVe
   const personalCardsTotal = normalized.filter((card) =>
     !card.sourcePackId && !card.deletedAt && !isCommitmentCard(card)
   );
-  const personalCardsToday = personalCardsTotal.filter((card) => {
+  // The set actionable right now (used to pick what to surface next): done
+  // today, explicitly pending, or eligible under the current time-of-day
+  // window/cooldown/snooze rules.
+  const personalCardsEligibleNow = personalCardsTotal.filter((card) => {
     if (card.sourcePackId || card.deletedAt || isCommitmentCard(card)) return false;
     return isCardDoneToday(card, todayKey) || card.statusToday === "pending" || isEligible(card, now, timezone);
   });
+  // The set scheduled for today at all, regardless of window/cooldown/snooze/
+  // done status — this is the denominator's universe. A paused card is never
+  // scheduled; a night-only card is, even at noon.
+  const personalCardsToday = personalCardsTotal.filter(isPersonalCardScheduledToday);
   const completedPersonalCardsToday = Math.min(
     personalCardsToday.filter((card) => isCardDoneToday(card, todayKey)).length,
     personalCardsToday.length,
   );
-  const nextIncompletePersonalCard = personalCardsToday.find((card) => !isCardDoneToday(card, todayKey)) ?? null;
+  const nextIncompletePersonalCard = personalCardsEligibleNow.find((card) => !isCardDoneToday(card, todayKey)) ?? null;
   const liveCommitments = normalized
     .filter((card) =>
       isCommitmentCard(card) &&
@@ -84,10 +92,12 @@ export function buildHomeState({ cards = [], events = [], timezone, homeScreenVe
   return {
     usageDays: getUsageDays(normalized, events),
     completedPersonalCardsToday,
-    // Denominator must match the numerator's universe: only cards that are
-    // actionable today (done today, pending, or eligible right now). Using the
-    // all-time personal-card total made paused / out-of-window cards read as
-    // "not done" forever, so the ring could never reach "all complete today".
+    // Denominator = every personal card scheduled for today ("the same daily
+    // unless paused"), NOT just the ones currently in-window/unsnoozed. A
+    // night-only card counts all day; a paused card never counts — that's
+    // what keeps the ring reachable at "all complete today" (the earlier bug
+    // this guards against: using the all-time total made paused cards read
+    // as "not done" forever, so the ring could never fill).
     totalPersonalCardsToday: personalCardsToday.length,
     nextIncompletePersonalCard,
     liveCommitmentCount: liveCommitments.length,

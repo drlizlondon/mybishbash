@@ -470,7 +470,7 @@ function Pricing() {
               key={plan.name}
               variants={fadeUp}
             >
-              {plan.featured ? <span className="price-flag">Most popular</span> : null}
+              {plan.featured ? <span className="price-flag">Coming soon</span> : null}
               <h3 className="price-name">{plan.name}</h3>
               <div className="price-amount">
                 <strong>{plan.price}</strong>

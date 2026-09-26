@@ -15,7 +15,7 @@ export const landingContent = {
   "ctas": {
     "primary": "Get myBishBash",
     "secondary": "See how it works",
-    "waitlist": "Join the waitlist"
+    "waitlist": "Join the Plus waitlist"
   },
   "hero": {
     "eyebrow": "The intentional-phone app",
@@ -42,7 +42,7 @@ export const landingContent = {
     },
     {
       "title": "Commitments, on the record",
-      "copy": "Set one promise for the day — we check you kept it."
+      "copy": "Set one promise for the day. We check you kept it."
     },
     {
       "title": "You stay in control",
@@ -66,7 +66,7 @@ export const landingContent = {
 export const problem = {
   eyebrow: "The problem",
   heading: "The apps are built to keep you.",
-  copy: "Most screen-time tools fight you with blockers, timers and guilt. They treat your attention as something to lock away — so the second willpower dips or the timer runs out, the pull is right there waiting.",
+  copy: "Most screen-time tools fight you with blockers, timers and guilt. They treat your attention as something to lock away. So the second willpower dips or the timer runs out, the pull is right there waiting.",
   points: [
     {
       title: "Endless loops",
@@ -86,13 +86,13 @@ export const problem = {
 export const howItWorks = {
   eyebrow: "How it works",
   heading: "Three steps to a phone that works for you.",
-  copy: "myBishBash sits between you and the apps you already open, turning automatic taps into decisions you actually make.",
+  copy: "myBishBash sits between you and the apps you choose, right on your Home Screen.",
   steps: [
     {
       key: "open",
       label: "01",
       title: "You open an app",
-      copy: "Pick the apps that tend to swallow your time. Tap to open one and myBishBash gets there first.",
+      copy: "Pick the apps that swallow your time. myBishBash gives each one its own Home Screen icon. Tap that, and you get a check-in first.",
     },
     {
       key: "pause",
@@ -104,7 +104,7 @@ export const howItWorks = {
       key: "choose",
       label: "03",
       title: "You choose, on purpose",
-      copy: "Carry on if you mean to — or let a reminder, a commitment or a pack point you somewhere better.",
+      copy: "Carry on if you mean to, or let a reminder, a commitment or a pack point you somewhere better.",
     },
   ],
 };
@@ -112,13 +112,13 @@ export const howItWorks = {
 export const mechanics = {
   eyebrow: "Examples",
   heading: "Four mechanics. One phone that's finally on your side.",
-  copy: "Each does one job well — and together they add up.",
+  copy: "Each does one job well. Together, they add up.",
   items: [
     {
       key: "pause",
       label: "Pause",
       title: "Pause before you scroll",
-      copy: "Open Instagram and myBishBash gets there first — a check-in before the apps built to keep you.",
+      copy: "Open Instagram from your myBishBash icon and you get a quick check-in first, before the app built to keep you.",
     },
     {
       key: "personal",
@@ -136,7 +136,7 @@ export const mechanics = {
       key: "packs",
       label: "Packs",
       title: "Packs that shift your mindset",
-      copy: "Ready-made sets of quotes and affirmations that show up before your chosen apps — nudging you towards who you want to be.",
+      copy: "Ready-made sets of quotes and affirmations that show up before your chosen apps, nudging you towards who you want to be.",
     },
   ],
 };
@@ -144,7 +144,7 @@ export const mechanics = {
 export const packs = {
   eyebrow: "Packs",
   heading: "Think like the person you're becoming.",
-  copy: "Packs are ready-made sets of quotes and affirmations we craft at myBishBash. Install one and its words show up before the apps you choose — pulling your head towards who you want to be, not adding chores to your day.",
+  copy: "Packs are ready-made sets of quotes and affirmations we craft at myBishBash. Install one and its words show up before the apps you choose, pulling your head towards who you want to be, not adding chores to your day.",
   themes: [
     { name: "Confidence", line: "“You've handled harder than this.”" },
     { name: "Calm", line: "“Nothing in that feed is urgent.”" },
@@ -152,7 +152,7 @@ export const packs = {
     { name: "Motivation", line: "“It always seems impossible until it's done.”" },
   ],
   goals: ["Confidence", "Focus", "Calm", "Create", "Health", "Relationships"],
-  note: "Packs are mindset nudges — quotes and affirmations, not checklists. Install once and they appear wherever you've chosen.",
+  note: "Packs are mindset nudges: quotes and affirmations, not checklists. Install once and they appear wherever you've chosen.",
 };
 
 export const comparison = {
@@ -175,7 +175,7 @@ export const trust = {
   items: [
     { title: "Private by design", copy: "Your reminders and choices stay yours. We don't sell or share them." },
     { title: "No advertising", copy: "No feeds, no ads, no dark patterns pulling at your attention." },
-    { title: "You stay in control", copy: "You choose what appears, where and when — and change it whenever." },
+    { title: "You stay in control", copy: "You choose what appears, where and when, and change it whenever." },
     { title: "Built with intent", copy: "We sweat the details, because a tool about intention should be intentional too." },
   ],
 };
@@ -219,9 +219,9 @@ export const pricing = {
       cadence: "",
       tagline: "For families, schools and workplaces.",
       features: [
-        "Shared Packs and themes",
+        "Help setting up your group",
         "Onboarding for your group",
-        "Volume pricing",
+        "Tell us what your group needs",
         "A real person to help you set up",
       ],
       cta: "Contact us",
@@ -248,7 +248,7 @@ export const faq = {
     },
     {
       q: "Does myBishBash block my apps?",
-      a: "No. There are no hard lock-outs or timers. We add a check-in and a moment of choice before the apps you pick — you can always continue.",
+      a: "No. There are no hard lock-outs or timers. We add a check-in and a moment of choice before the apps you pick. You can always continue.",
     },
     {
       q: "How is this different from screen-time settings?",
@@ -260,11 +260,11 @@ export const faq = {
     },
     {
       q: "What's in a Pack?",
-      a: "Packs are ready-made sets of quotes and affirmations — think confidence, calm or motivation — that appear before your chosen apps. They nudge how you think and who you're becoming, not a list of chores.",
+      a: "Packs are ready-made sets of quotes and affirmations (think confidence, calm or motivation) that appear before your chosen apps. They nudge how you think and who you're becoming, not a list of chores.",
     },
     {
       q: "Is my data private?",
-      a: "Yes. myBishBash is private by design. Your reminders and choices stay yours — we don't sell them, and there's no advertising.",
+      a: "Yes. myBishBash is private by design. Your reminders and choices stay yours. We don't sell them, and there's no advertising.",
     },
     {
       q: "Is there a team behind it?",
@@ -276,7 +276,7 @@ export const faq = {
 export const finalCta = {
   eyebrow: "Early access",
   heading: "Use your phone like you mean it.",
-  copy: "Join early access and be among the first to put your attention back where you want it.",
+  copy: "Start free today. Plus is coming soon: join the waitlist to hear first.",
   primary: "Get myBishBash",
-  secondary: "Join early access",
+  secondary: "Join the Plus waitlist",
 };
