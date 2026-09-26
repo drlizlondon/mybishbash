@@ -174,13 +174,11 @@
     prompt.id = 'mbb-analytics-consent';
     prompt.setAttribute('role', 'dialog');
     prompt.setAttribute('aria-modal', 'false');
-    prompt.setAttribute('aria-labelledby', 'mbb-analytics-title');
+    prompt.setAttribute('aria-label', isPreferences ? 'Privacy choices' : 'A quieter kind of analytics');
     prompt.innerHTML =
-      '<div>' +
-        '<strong id="mbb-analytics-title">' + (isPreferences ? 'Privacy choices' : 'A quieter kind of analytics') + '</strong>' +
-        '<p>With your permission, Google Analytics and Microsoft Clarity help us see how myBishBash is used and where it is confusing — in aggregate, with your card content masked. Nothing personal, no ads. You can change your mind any time.</p>' +
+      '<p id="mbb-analytics-text">A quieter kind of analytics: it helps us improve myBishBash and stays off unless you allow it. ' +
         '<a href="/privacy">Read our privacy policy</a>' +
-      '</div>' +
+      '</p>' +
       '<div class="mbb-consent-actions">' +
         '<button type="button" data-consent="denied">No thanks</button>' +
         '<button type="button" data-consent="granted">Allow analytics</button>' +
@@ -194,29 +192,29 @@
   function addStyles() {
     var style = document.createElement('style');
     style.textContent =
-      '#mbb-analytics-consent{position:fixed;z-index:2147483646;left:16px;right:16px;bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:720px;margin:0 auto;padding:16px 18px;border:1px solid #e4ded4;border-radius:16px;background:#F7F2EE;color:#171512;box-shadow:0 12px 40px rgba(20,16,10,.16);font:14px/1.45 system-ui,-apple-system,sans-serif}' +
-      '#mbb-analytics-consent strong{display:block;margin-bottom:4px;font-size:15px}' +
-      '#mbb-analytics-consent p{margin:0;color:#5c564c}' +
-      '#mbb-analytics-consent a{display:inline-block;margin-top:5px;color:#171512;font-weight:600;text-decoration:underline}' +
+      // Compact bottom bar (marketing/consent-banner-vs-cta sweep 2026-09-26,
+      // RSA pattern): one short sentence, never clamped/truncated, plus two
+      // equal-weight buttons. Replaces the earlier taller card + clamped
+      // paragraph, which still covered too much of the mobile first screen
+      // and cut its own text off with an ellipsis.
+      '#mbb-analytics-consent{position:fixed;z-index:2147483646;left:16px;right:16px;bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;max-width:720px;margin:0 auto;padding:12px 16px;border:1px solid #e4ded4;border-radius:14px;background:#F7F2EE;color:#171512;box-shadow:0 12px 40px rgba(20,16,10,.16);font:14px/1.4 system-ui,-apple-system,sans-serif}' +
+      '#mbb-analytics-consent p{margin:0;flex:1 1 auto;min-width:0;color:#302c24}' +
+      '#mbb-analytics-consent a{color:#171512;font-weight:600;text-decoration:underline;white-space:nowrap}' +
       '.mbb-consent-actions{display:flex;flex:0 0 auto;gap:8px}' +
-      '.mbb-consent-actions button{border:1px solid #d8d1c4;border-radius:10px;background:#fff;color:#302c24;cursor:pointer;font:600 13px/1 system-ui,-apple-system,sans-serif;min-height:38px;padding:0 14px}' +
-      '.mbb-consent-actions [data-consent="granted"]{border-color:#171512;background:#171512;color:#fff}' +
+      // Equal-prominence buttons (consent-gate standard): same size, shape
+      // and style for Decline and Accept, side by side, nothing pre-selected.
+      '.mbb-consent-actions button{border:1px solid #171512;border-radius:10px;background:#fff;color:#171512;cursor:pointer;font:600 13px/1 system-ui,-apple-system,sans-serif;min-height:38px;padding:0 14px;white-space:nowrap}' +
       '[data-mbb-privacy-choices]{margin-left:6px}' +
       '[data-mbb-privacy-choices]:focus-visible{outline:2px solid #171512;outline-offset:3px;border-radius:3px}' +
-      // Mobile-only "bottom sheet" fix (MBB marketing scorecard 2026-09-19):
-      // the previous mobile banner grew tall enough to cover the entire
-      // hero, including every CTA, on first load. This caps it as a slim
-      // edge-to-edge sheet — the disclosure text visually clamps to 2 lines
-      // (full text stays in the DOM for screen readers; nothing is removed,
-      // only visually compacted) and controls shrink — so the hero headline
-      // and the primary CTA stay visible above it without scrolling.
+      // Mobile-only bottom sheet: the whole sentence still shows in full,
+      // just smaller, so the hero headline and the primary CTA stay visible
+      // above it without scrolling.
       '@media(max-width:620px){' +
-        '#mbb-analytics-consent{align-items:stretch;flex-direction:column;gap:8px;left:0;right:0;bottom:0;max-width:none;margin:0;border-radius:18px 18px 0 0;border-bottom:none;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}' +
-        '#mbb-analytics-consent strong{font-size:14px;margin-bottom:2px}' +
-        '#mbb-analytics-consent p{font-size:13px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}' +
-        '#mbb-analytics-consent a{font-size:13px;margin-top:3px}' +
+        '#mbb-analytics-consent{align-items:stretch;flex-direction:column;gap:8px;left:0;right:0;bottom:0;max-width:none;margin:0;border-radius:16px 16px 0 0;border-bottom:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px))}' +
+        '#mbb-analytics-consent p{font-size:13px;line-height:1.4}' +
+        '#mbb-analytics-consent a{font-size:13px}' +
         '.mbb-consent-actions{justify-content:flex-end}' +
-        '.mbb-consent-actions button{min-height:40px;padding:0 12px;font-size:13px}' +
+        '.mbb-consent-actions button{min-height:38px;padding:0 12px;font-size:13px}' +
       '}';
     document.head.appendChild(style);
   }

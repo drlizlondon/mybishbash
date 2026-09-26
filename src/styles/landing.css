@@ -1200,9 +1200,48 @@ body:has(.landing-page)::after {
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 430px) {
+  /* Mobile-hero fold fix (marketing/consent-banner-vs-cta sweep 2026-09-26):
+     at 390x844 the H1 was wrapping to 5 lines and, combined with the hero's
+     desktop-sized top padding and spacing, pushed the primary CTA ("Get
+     myBishBash") below the fold even before any banner. Tightened font
+     size/line-height and vertical spacing only — no words changed. */
+  .hero-section {
+    padding-top: 44px;
+    padding-bottom: 28px;
+  }
+
+  .hero-eyebrow {
+    margin-bottom: 10px;
+  }
+
   .hero-title {
-    font-size: 36px;
+    font-size: 32px;
+    line-height: 1.08;
+    margin-bottom: 12px;
+  }
+
+  .hero-copy {
+    margin-bottom: 16px;
+  }
+
+  .landing-page .hero-copy p {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .hero-actions {
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .hero-actions .button {
+    min-height: 46px;
+    padding: 12px 16px;
+  }
+
+  .hero-meta {
+    margin-top: 6px;
   }
 
   .proof-grid {

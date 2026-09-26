@@ -20,6 +20,7 @@ const webkitSmokeTestMatch = [
   '**/tests/e2e/onboarding.spec.ts',
   '**/tests/e2e/launcher-flow-trace.spec.ts',
   '**/tests/e2e/storage-migration.spec.ts',
+  '**/tests/e2e/consent-banner-hero-cta.spec.ts',
 ];
 
 /**
