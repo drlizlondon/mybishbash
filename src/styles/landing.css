@@ -1207,7 +1207,11 @@ body:has(.landing-page)::after {
      myBishBash") below the fold even before any banner. Tightened font
      size/line-height and vertical spacing only — no words changed. */
   .hero-section {
-    padding-top: 44px;
+    /* padding-top must clear .site-header, which is position:absolute at
+       height:72px at this width (2026-09-26 hero-eyebrow/header overlap fix) —
+       44px sat the eyebrow under the header itself. 96px = 72px header +
+       24px breathing room before the eyebrow starts. */
+    padding-top: 96px;
     padding-bottom: 28px;
   }
 

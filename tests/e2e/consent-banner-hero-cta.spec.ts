@@ -43,8 +43,35 @@ async function serveProductionHostGatedScript(page: Page) {
 }
 
 const VIEWPORT = { width: 390, height: 844 };
+const SMALL_VIEWPORT = { width: 375, height: 667 };
 const BANNER_SELECTOR = '#mbb-analytics-consent';
 const PRIMARY_CTA_SELECTOR = '.hero-actions .button.primary';
+const HEADER_SELECTOR = '.site-header';
+const HERO_EYEBROW_SELECTOR = '.hero-eyebrow';
+
+// Hero-eyebrow/header overlap fix, 2026-09-26: commit dc03d05's tighter
+// ≤430px hero padding-top (44px) sat the eyebrow "THE INTENTIONAL-PHONE APP"
+// under the fixed-position site header (72px tall at this width) instead of
+// below it. Asserts the eyebrow's box never intersects the header's box.
+async function assertEyebrowClearsHeader(page: Page) {
+  const header = page.locator(HEADER_SELECTOR);
+  const eyebrow = page.locator(HERO_EYEBROW_SELECTOR);
+  await expect(header).toBeVisible();
+  await expect(eyebrow).toBeVisible();
+  const [headerBox, eyebrowBox] = await Promise.all([header.boundingBox(), eyebrow.boundingBox()]);
+  expect(headerBox).not.toBeNull();
+  expect(eyebrowBox).not.toBeNull();
+  // Not intersecting: the eyebrow's top edge sits at or below the header's bottom edge.
+  expect(eyebrowBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height - 1);
+}
+
+async function assertNoHorizontalOverflow(page: Page) {
+  const pageOverflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(pageOverflow.scrollWidth).toBeLessThanOrEqual(pageOverflow.clientWidth + 1);
+}
 
 test.describe('mybishbash first-visit phone: consent banner + hero CTA', () => {
   test('production-host gate: unmodified script does nothing on a non-production host', async ({ page }) => {
@@ -126,12 +153,20 @@ test.describe('mybishbash first-visit phone: consent banner + hero CTA', () => {
     // Not intersecting the banner: CTA's bottom edge sits above the banner's top edge.
     expect(ctaBox!.y + ctaBox!.height).toBeLessThanOrEqual(bannerBox!.y + 1);
 
+    // Hero eyebrow must not collide with the site header (2026-09-26 fix).
+    await assertEyebrowClearsHeader(page);
+
     // No horizontal overflow anywhere on the page.
-    const pageOverflow = await page.evaluate(() => ({
-      clientWidth: document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-    }));
-    expect(pageOverflow.scrollWidth).toBeLessThanOrEqual(pageOverflow.clientWidth + 1);
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test('hero eyebrow clears the site header, no horizontal overflow (390x844 and 375x667)', async ({ page }) => {
+    for (const viewport of [VIEWPORT, SMALL_VIEWPORT]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/mybishbash/');
+      await assertEyebrowClearsHeader(page);
+      await assertNoHorizontalOverflow(page);
+    }
   });
 
   test('decline: banner hides, no analytics requests, choice persists', async ({ page }) => {
