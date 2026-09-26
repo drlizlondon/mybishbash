@@ -193,8 +193,8 @@ export const pricing = {
       features: [
         "myBishBash core experience",
         "Pause before one connected app",
-        "Unlimited Personal Cards",
-        "One Commitment Card at a time",
+        "Up to 5 Personal Cards",
+        "Commitment Cards",
       ],
       cta: "Get started",
       kind: "free",
@@ -207,9 +207,8 @@ export const pricing = {
       featured: true,
       features: [
         "Pause before unlimited apps",
+        "Up to 20 Personal Cards",
         "Every Pack, including new releases",
-        "Unlimited Commitment Cards",
-        "Insights into the time you reclaim",
       ],
       cta: "Join early access",
       kind: "plus",

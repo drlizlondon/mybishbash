@@ -459,7 +459,9 @@ export default function Composer({ initialCard, initialKind = "personal", initia
             </div>
             {personalLimitReached ? (
               <p className="composer-hint" data-testid="personal-card-limit-notice" style={{ color: "#b91c1c" }}>
-                You’ve reached your plan’s limit of {maxPersonalCards} personal cards. Upgrade to add more.
+                {maxPersonalCards === 5
+                  ? "You’ve reached the 5 cards on the Free plan. Join early access for Plus to get up to 20."
+                  : `You’ve reached your plan’s limit of ${maxPersonalCards} personal cards.`}
               </p>
             ) : null}
             <button
