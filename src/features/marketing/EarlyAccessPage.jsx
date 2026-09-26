@@ -4,6 +4,7 @@ import "./early-access.css";
 import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
 import { ContentEditProvider, EditableText, EditPanel, useContentEdit } from "../../editing/ContentEditContext";
 import { earlyAccessContent } from "../../content/earlyAccessContent";
+import { trackWaitlistJoined } from "../../lib/analytics";
 
 const HOME_HREF = `${import.meta.env.BASE_URL || "/"}`
   .replace(/\/+/g, "/")
@@ -610,6 +611,7 @@ function EarlyAccessPageContent() {
       return;
     }
 
+    trackWaitlistJoined();
     setStatus("success");
   }
 
