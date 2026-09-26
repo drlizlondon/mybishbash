@@ -58,6 +58,7 @@ import {
 } from "./lib/mybishbashSync";
 import { isAccessActive, resolveEntitlements, isUnlimited } from "./lib/accessCapabilities";
 import { reportError } from "./services/errors/reporter";
+import { trackAccountCreated } from "./lib/analytics";
 import ExplorePanel from "./features/explore";
 import { formatPauseRemaining } from "./lib/pauseFormat";
 import {
@@ -4614,6 +4615,7 @@ function App() {
         card_source: "auth",
         action_taken: "completed",
       });
+      trackAccountCreated("email");
       if (createdSession) {
         setSession(createdSession);
         setAuthReady(true);
