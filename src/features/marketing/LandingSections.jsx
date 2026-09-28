@@ -510,7 +510,9 @@ function Partnerships() {
       >
         <motion.span className="eyebrow" variants={fadeUp}>{partnerships.eyebrow}</motion.span>
         <motion.h2 className="section-title" variants={fadeUp}>{partnerships.heading}</motion.h2>
-        <motion.p className="section-lede" variants={fadeUp}>{partnerships.copy}</motion.p>
+        <motion.p className="section-lede" variants={fadeUp}>
+          <a href={CONTACT_HREF} className="partner-lede-link">{partnerships.copy}</a>
+        </motion.p>
         <motion.ul className="partner-audiences" variants={fadeUp}>
           {partnerships.audiences.map((a) => (
             <li key={a}>{a}</li>

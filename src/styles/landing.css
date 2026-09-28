@@ -2040,6 +2040,12 @@ body:has(.landing-page)::after {
   font-weight: 700;
 }
 .partner-link:hover { gap: 12px; color: var(--gold-dark); }
+.partner-lede-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.partner-lede-link:hover { color: var(--gold-dark); }
 
 /* =======================  FAQ  ======================= */
 .faq-layout {

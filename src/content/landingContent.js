@@ -29,7 +29,7 @@ export const landingContent = {
     "copy": [
       "myBishBash places helpful reminders and prompts in front of the apps that you use, directing your attention to the things you actually mean to do. Your choices, with a little more intention."
     ],
-    "anchor": "Free to start · your first card in under a minute"
+    "anchor": "Free during early access. Join with an invite code, or ask for one."
   },
   "proof": [
     {
@@ -41,7 +41,7 @@ export const landingContent = {
       "copy": "Your own prompts come back exactly when they count."
     },
     {
-      "title": "Commitments, on the record",
+      "title": "Commitments you mark done",
       "copy": "Set one promise for the day. We check you kept it."
     },
     {
@@ -66,7 +66,7 @@ export const landingContent = {
 export const problem = {
   eyebrow: "The problem",
   heading: "The apps are built to keep you.",
-  copy: "Most screen-time tools fight you with blockers, timers and guilt. They treat your attention as something to lock away. So the second willpower dips or the timer runs out, the pull is right there waiting.",
+  copy: "Many screen-time tools rely on blockers and timers. They treat your attention as something to lock away. So the second willpower dips or the timer runs out, the pull is right there waiting.",
   points: [
     {
       title: "Endless loops",
@@ -74,7 +74,7 @@ export const problem = {
     },
     {
       title: "Blunt blockers",
-      copy: "Hard limits feel like punishment, so most people just switch them off.",
+      copy: "Hard limits can feel like punishment, and they're easy to switch off.",
     },
     {
       title: "Lost intentions",
@@ -130,7 +130,7 @@ export const mechanics = {
       key: "commitment",
       label: "Commitment Cards",
       title: "Make one promise, keep it",
-      copy: "Set a single intention for the day. We check in later, so following through is on the record.",
+      copy: "Set a single intention for the day. We check in later so you can mark it done.",
     },
     {
       key: "packs",
@@ -176,7 +176,6 @@ export const trust = {
     { title: "Private by design", copy: "Your reminders and choices stay yours. We don't sell or share them." },
     { title: "No advertising", copy: "No feeds, no ads, no dark patterns pulling at your attention." },
     { title: "You stay in control", copy: "You choose what appears, where and when, and change it whenever." },
-    { title: "Built with intent", copy: "We sweat the details, because a tool about intention should be intentional too." },
   ],
 };
 
@@ -233,7 +232,7 @@ export const pricing = {
 export const partnerships = {
   eyebrow: "For groups",
   heading: "Good for one. Better together.",
-  copy: "myBishBash works for a household, a classroom or a whole team just as well as it does for one person.",
+  copy: "Want it for a household, a classroom or a team? Talk to us.",
   audiences: ["Individuals", "Families", "Workplaces", "Schools"],
   cta: "Talk to us about partnerships",
 };
@@ -256,7 +255,7 @@ export const faq = {
     },
     {
       q: "What are Personal Cards and Commitment Cards?",
-      a: "Personal Cards are short recurring reminders you write yourself, answerable in a tap. Commitment Cards are a single daily intention that myBishBash checks in on, so following through is on the record.",
+      a: "Personal Cards are short recurring reminders you write yourself, answerable in a tap. Commitment Cards are a single daily intention that myBishBash checks in on, so you can mark it done.",
     },
     {
       q: "What's in a Pack?",
