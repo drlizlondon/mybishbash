@@ -83,6 +83,12 @@ export const problem = {
   ],
 };
 
+export const supportedApps = {
+  eyebrow: "Connected apps",
+  heading: "Works with the apps already on your phone.",
+  copy: "Pause the rabbit holes before you scroll, or turn high-frequency everyday apps like Safari into gentle nudges for real life. Tap an icon to get there.",
+};
+
 export const howItWorks = {
   eyebrow: "How it works",
   heading: "Three steps to a phone that works for you.",
@@ -91,20 +97,20 @@ export const howItWorks = {
     {
       key: "open",
       label: "01",
-      title: "You open an app",
-      copy: "Pick the apps that swallow your time. myBishBash gives each one its own Home Screen icon. Tap that, and you get a check-in first.",
+      title: "Choose your doorways",
+      copy: "Pick the apps that swallow your time (like Instagram) and the everyday apps you open all day (like Safari). myBishBash gives each one its own Home Screen icon.",
     },
     {
       key: "pause",
       label: "02",
-      title: "We step in first",
-      copy: "A quick prompt asks whether this is really how you want the next ten minutes to go. No countdowns, no lock-outs.",
+      title: "A pause or an everyday nudge",
+      copy: "Before Instagram, get a quick pause to break the scroll reflex. Before Safari, catch a 1-second reminder for the things you care about.",
     },
     {
       key: "choose",
       label: "03",
-      title: "You choose, on purpose",
-      copy: "Carry on if you mean to, or let a reminder, a commitment or a pack point you somewhere better.",
+      title: "You follow through in real life",
+      copy: "Carry on if you mean to, water the plants, or let a reminder point you somewhere better. No blockers, no guilt.",
     },
   ],
 };
@@ -122,9 +128,9 @@ export const mechanics = {
     },
     {
       key: "personal",
-      label: "Personal Cards",
+      label: "Everyday Nudges",
       title: "Reminders from future you",
-      copy: "Short prompts you write yourself, answerable in a tap, resurfaced right when they matter.",
+      copy: "Put them before everyday apps like Safari. See 'water the plants' 15 times a day so you actually do it.",
     },
     {
       key: "commitment",

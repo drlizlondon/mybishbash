@@ -4,18 +4,34 @@ import { useEventsStore } from "../../stores/eventsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { getStartOfWeek } from "../../eventLog";
 
+const MEANINGFUL_EVENT_TYPES = new Set([
+  "bash_done",
+  "bash_do_now",
+  "bash_not_done",
+  "intercept_do_something_else",
+  "intercept_continue_to_app",
+  "first_interruption_seen",
+  "action_card_completed",
+  "commitment_made",
+  "commitment_declined",
+  "commitment_check_in",
+  "commitment_check_in_response",
+  "pack_card_liked",
+]);
+
 function isRecentMomentEvent(event) {
-  return [
-    "bash_done",
-    "bash_do_now",
-    "intercept_do_something_else",
-    "intercept_continue_to_app",
-  ].includes(event.event_type);
+  return MEANINGFUL_EVENT_TYPES.has(event.event_type);
 }
 
 function getWeeklyShiftCount(events, now = new Date()) {
   const weekStart = getStartOfWeek(now).getTime();
-  const shiftTypes = new Set(["bash_done", "bash_do_now", "intercept_do_something_else"]);
+  const shiftTypes = new Set([
+    "bash_done",
+    "bash_do_now",
+    "intercept_do_something_else",
+    "action_card_completed",
+    "commitment_made",
+  ]);
   return events.filter((event) => {
     if (!shiftTypes.has(event.event_type)) return false;
     return new Date(event.created_at).getTime() >= weekStart;
@@ -36,7 +52,7 @@ export default function LogScreen(props) {
   const timezone = useSettingsStore((state) => state.profile.timezone);
 
   const recentMeaningfulEvents = useMemo(
-    () => events.filter(isRecentMomentEvent).slice(0, 5),
+    () => events.filter(isRecentMomentEvent).slice(0, 20),
     [events],
   );
   const logEventsForPanel = useMemo(() => {

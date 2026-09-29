@@ -199,19 +199,15 @@ export function buildMorningSummary(events = [], { dateKey, timezone } = {}) {
     },
   };
 
-  const interruptionEvents = dayEvents.filter((event) => {
-    if (!INTERRUPTED_TYPES.has(event.event_type)) return false;
-    if (event.event_type === "first_interruption_seen" && event.card_source === "interruption") return false;
-    return true;
-  });
+  const interruptionEvents = dayEvents.filter((event) => INTERRUPTED_TYPES.has(event.event_type));
   const interruptions = {
     interruptedCount: interruptionEvents.length,
     byApp: countByApp(interruptionEvents),
     continueToAppCount: dayEvents.filter((event) =>
-      event.event_type === "intercept_continue_to_app" && event.action_taken === "continued_to_app"
+      event.event_type === "intercept_continue_to_app"
     ).length,
     choseAlternativeCount: dayEvents.filter((event) =>
-      (event.event_type === "intercept_do_something_else" && event.action_taken === "chose_something_else") ||
+      event.event_type === "intercept_do_something_else" ||
       event.event_type === "action_card_completed"
     ).length,
   };

@@ -14,6 +14,15 @@ function describeLogEvent(event) {
   if (event.event_type === "pack_card_liked") {
     return `Really liked: ${event.card_title || event.card_text || "a pack card"}`;
   }
+  if (event.event_type === "first_interruption_seen") {
+    return `You paused before opening ${event.app_name || "the app"}.`;
+  }
+  if (event.event_type === "action_card_completed") {
+    return `You completed: ${event.card_title || event.card_text || event.bash_title || "an alternative action"}`;
+  }
+  if (event.event_type === "commitment_check_in" || event.event_type === "commitment_check_in_response") {
+    return `You checked in on: ${event.card_text || event.card_title || "today's commitment"}`;
+  }
   if (event.event_type === "intercept_do_something_else") {
     return `You chose something else instead of opening ${event.app_name || "that app"}.`;
   }
@@ -34,13 +43,21 @@ function describeLogEvent(event) {
 
 function getLogEventDisplayLabel(event) {
   const labels = {
+    first_interruption_seen: "Pause moment",
+    intercept_continue_to_app: "Continued to app",
+    intercept_do_something_else: "Chose something else",
+    action_card_completed: "Alternative completed",
     commitment_made: "Commitment made",
     commitment_declined: "Commitment declined",
+    commitment_check_in: "Commitment check-in",
     pack_card_liked: "Really liked",
     pack_card_disliked: "Hidden card",
     pack_card_restored: "Restored card",
     intercept_card_disliked: "Hidden App Prompt",
     intercept_card_restored: "Restored App Prompt",
+    bash_done: "Completed card",
+    bash_do_now: "Selected card",
+    bash_not_done: "Saved for later",
   };
   return labels[event.event_type] ?? event.event_type;
 }
