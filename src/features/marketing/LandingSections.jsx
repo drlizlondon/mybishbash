@@ -362,21 +362,6 @@ function SupportedAppsStrip() {
       ),
     },
     {
-      id: "safari",
-      name: "Safari",
-      mode: "Everyday Nudge",
-      desc: "Water plants 15× a day",
-      accent: "mode-nudge",
-      icon: (
-        <span className="app-badge-icon app-badge-safari" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
-          </svg>
-        </span>
-      ),
-    },
-    {
       id: "tiktok",
       name: "TikTok",
       mode: "The Pause",
@@ -405,49 +390,6 @@ function SupportedAppsStrip() {
       ),
     },
     {
-      id: "chrome",
-      name: "Chrome",
-      mode: "Everyday Nudge",
-      desc: "Pause on new tabs",
-      accent: "mode-nudge",
-      icon: (
-        <span className="app-badge-icon app-badge-chrome" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <circle cx="12" cy="12" r="4" fill="currentColor"></circle>
-          </svg>
-        </span>
-      ),
-    },
-    {
-      id: "reddit",
-      name: "Reddit",
-      mode: "The Pause",
-      desc: "Stop doomscrolling",
-      accent: "mode-pause",
-      icon: (
-        <span className="app-badge-icon app-badge-reddit" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.688-.562-1.249-1.25-1.249zm-4.723 4.25c-.14 0-.256.11-.256.25 0 .736 1.002 1.34 2.229 1.34 1.228 0 2.23-.604 2.23-1.34 0-.14-.116-.25-.256-.25-.14 0-.256.11-.256.25 0 .463-.787.84-1.718.84-.93 0-1.718-.377-1.718-.84 0-.14-.115-.25-.255-.25z"/>
-          </svg>
-        </span>
-      ),
-    },
-    {
-      id: "whatsapp",
-      name: "WhatsApp",
-      mode: "Everyday Nudge",
-      desc: "Intentional check-ins",
-      accent: "mode-nudge",
-      icon: (
-        <span className="app-badge-icon app-badge-wa" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.17 8.17 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.83c.01 4.54-3.68 8.23-8.22 8.23z"/>
-          </svg>
-        </span>
-      ),
-    },
-    {
       id: "x",
       name: "X",
       mode: "The Pause",
@@ -457,6 +399,21 @@ function SupportedAppsStrip() {
         <span className="app-badge-icon app-badge-x" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </span>
+      ),
+    },
+    {
+      id: "safari",
+      name: "Safari",
+      mode: "Everyday Nudge",
+      desc: "Water plants 15× a day",
+      accent: "mode-nudge",
+      icon: (
+        <span className="app-badge-icon app-badge-safari" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
           </svg>
         </span>
       ),
@@ -480,16 +437,29 @@ function SupportedAppsStrip() {
           viewport={v.viewport}
         >
           {apps.map((app) => (
-            <motion.div className="app-card" key={app.id} variants={fadeUp}>
+            <motion.a
+              key={app.id}
+              href={`${BASE}install/${app.id}/`}
+              className="app-card"
+              variants={fadeUp}
+            >
               <div className="app-card-top">
                 {app.icon}
-                <span className={`app-mode-pill ${app.accent}`}>{app.mode}</span>
+                <div className="app-card-tags">
+                  <span className="app-live-tag">Live</span>
+                  <span className={`app-mode-pill ${app.accent}`}>{app.mode}</span>
+                </div>
               </div>
               <h3 className="app-card-name">{app.name}</h3>
               <p className="app-card-desc">{app.desc}</p>
-            </motion.div>
+              <span className="app-card-install-link">Install doorway &rarr;</span>
+            </motion.a>
           ))}
         </motion.div>
+        <div className="apps-status-note">
+          <span className="apps-status-dot" aria-hidden="true" />
+          <span>5 connected doorways live now. WhatsApp, Chrome and Reddit in testing.</span>
+        </div>
       </div>
     </section>
   );

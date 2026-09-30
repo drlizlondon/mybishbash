@@ -80,9 +80,9 @@ const safariInvalidStatus = mergeLauncherConfig(safari, { availabilityStatus: "s
 assert.equal(safariInvalidStatus.availabilityStatus, "public", "invalid statuses fall back to static defaults");
 
 // Unsupported launcher IDs can never be saved or merged in.
-assert.throws(() => assertKnownLauncherId("tiktok"));
+assert.throws(() => assertKnownLauncherId("threads"));
 assert.equal(
-  mergeLauncherConfigs([{ id: "tiktok", availabilityStatus: "public", enabled: true }]).some((launcher) => launcher.id === "tiktok"),
+  mergeLauncherConfigs([{ id: "threads", availabilityStatus: "public", enabled: true }]).some((launcher) => launcher.id === "threads"),
   false,
 );
 
@@ -197,7 +197,9 @@ const allOptions = Object.values(contexts).flatMap((context) => context.launcher
 
 assert.equal(allOptions.some((option) => option.id === "instagram" && option.available), true, "Instagram stays the pause recommendation when available");
 assert.equal(allOptions.some((option) => option.id === "youtube" && option.available), true, "YouTube remains a visible option when available");
-assert.equal(allOptions.some((option) => option.id === "tiktok" && option.available), false, "TikTok must never be offered as available");
+assert.equal(allOptions.some((option) => option.id === "tiktok" && option.available), true, "TikTok is offered as available");
+assert.equal(allOptions.some((option) => option.id === "x" && option.available), true, "X is offered as available");
+assert.equal(allOptions.some((option) => option.id === "hinge" && option.available), false, "Hinge teaser must never be offered as available");
 for (const launcher of FAKE_APP_LAUNCHERS.filter((item) => item.availabilityStatus !== "public")) {
   assert.equal(
     allOptions.some((option) => option.id === launcher.id && option.available),

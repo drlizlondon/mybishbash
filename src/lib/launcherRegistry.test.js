@@ -21,7 +21,9 @@ describe("static registry invariant", () => {
       "linkedin",
       "reddit",
       "safari",
+      "tiktok",
       "whatsapp",
+      "x",
       "youtube",
     ]);
   });

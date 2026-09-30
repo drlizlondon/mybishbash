@@ -85,8 +85,8 @@ export const problem = {
 
 export const supportedApps = {
   eyebrow: "Connected apps",
-  heading: "Works with the apps already on your phone.",
-  copy: "Pause the rabbit holes before you scroll, or turn high-frequency everyday apps like Safari into gentle nudges for real life. Tap an icon to get there.",
+  heading: "Live on your phone today.",
+  copy: "Pause rabbit holes before you scroll, or turn everyday doorways like Safari into gentle nudges for real life. Tap any app below to install its doorway.",
 };
 
 export const howItWorks = {

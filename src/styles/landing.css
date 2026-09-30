@@ -2314,7 +2314,7 @@ body:has(.landing-page)::after {
 
 .apps-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-top: 40px;
 }
@@ -2324,6 +2324,10 @@ body:has(.landing-page)::after {
   border: 1px solid var(--line-dark);
   border-radius: 18px;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
   transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
@@ -2340,6 +2344,26 @@ body:has(.landing-page)::after {
   margin-bottom: 14px;
 }
 
+.app-card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-live-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+  border: 1px solid rgba(52, 199, 89, 0.3);
+}
+
 .app-badge-icon {
   display: inline-flex;
   align-items: center;
@@ -2348,6 +2372,7 @@ body:has(.landing-page)::after {
   height: 40px;
   border-radius: 11px;
   color: #fff;
+  flex-shrink: 0;
 }
 
 .app-badge-ig {
@@ -2423,7 +2448,47 @@ body:has(.landing-page)::after {
   line-height: 1.4;
 }
 
-@media (max-width: 900px) {
+.app-card-install-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c99a4a;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.app-card:hover .app-card-install-link {
+  color: #e9c97f;
+  transform: translateX(2px);
+}
+
+.apps-status-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 32px;
+  font-size: 13px;
+  color: var(--text-muted-light);
+  text-align: center;
+}
+
+.apps-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34c759;
+  box-shadow: 0 0 8px rgba(52, 199, 89, 0.6);
+  flex-shrink: 0;
+}
+
+@media (max-width: 1080px) {
+  .apps-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
   .apps-grid {
     grid-template-columns: repeat(2, 1fr);
   }

@@ -86,24 +86,24 @@ assert.equal(resolveLauncherIconSrc(safariWithBadIcon), safari.iconSrc);
 // ── New protected app validation ─────────────────────────────────────────────
 
 const validDraft = {
-  id: "tiktok",
-  displayName: "TikTok",
-  webFallbackUrl: "https://www.tiktok.com",
+  id: "threads",
+  displayName: "Threads",
+  webFallbackUrl: "https://www.threads.net",
 };
 assert.equal(validateLauncherDraft(validDraft).ok, true, "a minimal valid draft passes");
 
 assert.equal(validateLauncherDraft({ ...validDraft, id: "safari" }).ok, false, "duplicate registry IDs are rejected");
 assert.equal(
-  validateLauncherDraft(validDraft, { existingIds: ["tiktok"] }).ok,
+  validateLauncherDraft(validDraft, { existingIds: ["threads"] }).ok,
   false,
   "duplicate custom IDs are rejected",
 );
-for (const badId of ["", "Tik Tok", "tiktok!", "-tiktok", "tiktok-", "TIKTOK", "intercept", "mybishbash"]) {
+for (const badId of ["", "Threads App", "threads!", "-threads", "threads-", "THREADS", "intercept", "mybishbash"]) {
   assert.equal(validateLauncherDraft({ ...validDraft, id: badId }).ok, false, `invalid app ID "${badId}" is rejected`);
 }
 assert.equal(validateLauncherDraft({ ...validDraft, displayName: " " }).ok, false, "display name is required");
 assert.equal(
-  validateLauncherDraft({ id: "tiktok", displayName: "TikTok" }).ok,
+  validateLauncherDraft({ id: "threads", displayName: "Threads" }).ok,
   false,
   "at least one destination URL is required",
 );
@@ -116,9 +116,9 @@ assert.equal(
 // ── Go-live validation gate ──────────────────────────────────────────────────
 
 const schemeOnlyDraft = {
-  id: "tiktok",
-  displayName: "TikTok",
-  androidIntentUrl: "intent://www.tiktok.com/#Intent;scheme=https;package=com.zhiliaoapp.musically;end",
+  id: "threads",
+  displayName: "Threads",
+  androidIntentUrl: "intent://www.threads.net/#Intent;scheme=https;package=com.instagram.barcelona;end",
 };
 assert.equal(validateLauncherDraft(schemeOnlyDraft).ok, true, "a draft may exist with only an intent destination");
 for (const targetStatus of ["public", "tester_only", "experimental"]) {
@@ -128,7 +128,7 @@ for (const targetStatus of ["public", "tester_only", "experimental"]) {
     `going ${targetStatus} without an https web fallback is rejected`,
   );
   assert.equal(
-    validateLauncherDraft({ ...schemeOnlyDraft, webFallbackUrl: "https://www.tiktok.com" }, { targetStatus }).ok,
+    validateLauncherDraft({ ...schemeOnlyDraft, webFallbackUrl: "https://www.threads.net" }, { targetStatus }).ok,
     true,
     `going ${targetStatus} with an https web fallback is allowed`,
   );
@@ -137,35 +137,35 @@ for (const targetStatus of ["public", "tester_only", "experimental"]) {
 // ── New apps start safely, then deploy through statuses ─────────────────────
 
 const draftLauncher = buildCustomLauncher({
-  id: "tiktok",
-  displayName: "TikTok",
-  webFallbackUrl: "https://www.tiktok.com",
+  id: "threads",
+  displayName: "Threads",
+  webFallbackUrl: "https://www.threads.net",
   availabilityStatus: "draft",
 });
 assert.equal(draftLauncher.enabled, false, "draft launchers are not enabled for users");
 assert.equal(draftLauncher.availabilityStatus, LAUNCHER_AVAILABILITY.DRAFT);
 assert.equal(draftLauncher.isCustom, true);
 assert.equal(draftLauncher.requiresRelease, true, "home-screen install still needs release promotion");
-assert.equal(draftLauncher.launchPath, "/intercept/tiktok", "launch route is generated from the slug");
-assert.equal(draftLauncher.installPath, "/mybishbash/install/tiktok/", "install path is generated from the slug");
+assert.equal(draftLauncher.launchPath, "/intercept/threads", "launch route is generated from the slug");
+assert.equal(draftLauncher.installPath, "/mybishbash/install/threads/", "install path is generated from the slug");
 assert.equal(resolveLauncherIconSrc(draftLauncher), PLACEHOLDER_ICON_SRC, "custom apps without icons resolve safely");
 
-const bogusStatusLauncher = buildCustomLauncher({ id: "tiktok", displayName: "TikTok", availabilityStatus: "bogus" });
+const bogusStatusLauncher = buildCustomLauncher({ id: "threads", displayName: "Threads", availabilityStatus: "bogus" });
 assert.equal(bogusStatusLauncher.availabilityStatus, LAUNCHER_AVAILABILITY.DRAFT, "invalid statuses fall back to draft");
 
 const liveCustomLauncher = buildCustomLauncher({
-  id: "tiktok",
-  displayName: "TikTok",
-  webFallbackUrl: "https://www.tiktok.com",
+  id: "threads",
+  displayName: "Threads",
+  webFallbackUrl: "https://www.threads.net",
   availabilityStatus: "public",
 });
 assert.equal(liveCustomLauncher.availabilityStatus, "public", "HQ can deploy a custom app live");
 assert.equal(liveCustomLauncher.enabled, true, "live custom apps count as enabled for users");
 
 const testerCustomLauncher = buildCustomLauncher({
-  id: "tiktok",
-  displayName: "TikTok",
-  webFallbackUrl: "https://www.tiktok.com",
+  id: "threads",
+  displayName: "Threads",
+  webFallbackUrl: "https://www.threads.net",
   availabilityStatus: "tester_only",
 });
 assert.equal(testerCustomLauncher.enabled, false, "tester-only custom apps are not enabled for normal users");
@@ -177,24 +177,24 @@ assert.equal(buildCustomLauncher({ id: "Bad Slug!" }), null, "invalid slugs cann
 // ── Runtime dynamic registry ─────────────────────────────────────────────────
 
 resetDynamicLaunchersForTests();
-assert.equal(isKnownLauncher("tiktok"), false, "unregistered custom IDs are unknown");
+assert.equal(isKnownLauncher("threads"), false, "unregistered custom IDs are unknown");
 
 const registered = registerDynamicLaunchers([
-  { id: "tiktok", isCustom: true, displayName: "TikTok", webFallbackUrl: "https://www.tiktok.com", availabilityStatus: "tester_only" },
+  { id: "threads", isCustom: true, displayName: "Threads", webFallbackUrl: "https://www.threads.net", availabilityStatus: "tester_only" },
   { id: "sneaky", displayName: "Sneaky", webFallbackUrl: "https://example.com" },
   { id: "safari", isCustom: true, displayName: "Fake Safari", webFallbackUrl: "https://evil.example.com" },
   { id: "Bad Slug!", isCustom: true, displayName: "Bad" },
 ]);
 assert.equal(registered.length, 1, "only valid flagged custom rows are registered");
-assert.equal(isKnownLauncher("tiktok"), true, "registered custom launchers are known to routes and guards");
-assert.equal(isStaticLauncher("tiktok"), false, "registered custom launchers are not static");
+assert.equal(isKnownLauncher("threads"), true, "registered custom launchers are known to routes and guards");
+assert.equal(isStaticLauncher("threads"), false, "registered custom launchers are not static");
 assert.equal(isKnownLauncher("sneaky"), false, "unflagged rows never register");
 assert.equal(getLauncherConfig("safari").displayName, "Safari", "static registry entries cannot be shadowed");
-assert.equal(getLauncherConfig("tiktok").launchPath, "/intercept/tiktok");
-assert.equal(getAllLauncherIds().includes("tiktok"), true);
+assert.equal(getLauncherConfig("threads").launchPath, "/intercept/threads");
+assert.equal(getAllLauncherIds().includes("threads"), true);
 
 // Tester-only custom apps reach testers (and only testers) once registered.
-const dynamicPool = [...FAKE_APP_LAUNCHERS, getLauncherConfig("tiktok")];
+const dynamicPool = [...FAKE_APP_LAUNCHERS, getLauncherConfig("threads")];
 for (const [contextLabel, testerStatus, expected] of [
   ["normal users", { is_tester: false }, false],
   ["testers", { is_tester: true }, true],
@@ -204,12 +204,12 @@ for (const [contextLabel, testerStatus, expected] of [
     testerStatus,
     context: LAUNCHER_CONTEXTS.USER_SETUP,
   }).map((l) => l.id);
-  assert.equal(visible.includes("tiktok"), expected, `tester-only custom app visibility for ${contextLabel}`);
+  assert.equal(visible.includes("threads"), expected, `tester-only custom app visibility for ${contextLabel}`);
 }
 
 // Dynamic app destination resolution: a registered custom launcher resolves
 // a browser-safe destination on every platform (never silently missing).
-const dynamicConfig = getLauncherConfig("tiktok");
+const dynamicConfig = getLauncherConfig("threads");
 for (const platform of ["ios", "android", "desktop"]) {
   const resolution = resolveLauncherDestination(dynamicConfig, { platform });
   assert.notEqual(resolution.strategy, "missing", `dynamic launcher resolves a destination on ${platform}`);
@@ -217,7 +217,7 @@ for (const platform of ["ios", "android", "desktop"]) {
 }
 
 resetDynamicLaunchersForTests();
-assert.equal(isKnownLauncher("tiktok"), false, "reset clears the dynamic registry");
+assert.equal(isKnownLauncher("threads"), false, "reset clears the dynamic registry");
 
 // ── Source-shape guardrails (roles + install-link gating) ────────────────────
 
@@ -260,24 +260,24 @@ assert.match(
 // ── Custom rows in the merged HQ list ────────────────────────────────────────
 
 const merged = mergeLauncherConfigs([
-  { id: "tiktok", isCustom: true, displayName: "TikTok", webFallbackUrl: "https://www.tiktok.com", availabilityStatus: "draft" },
+  { id: "threads", isCustom: true, displayName: "Threads", webFallbackUrl: "https://www.threads.net", availabilityStatus: "draft" },
   { id: "sneaky", displayName: "Sneaky", webFallbackUrl: "https://example.com", availabilityStatus: "public", enabled: true },
 ]);
-const mergedTiktok = merged.find((launcher) => launcher.id === "tiktok");
-assert.notEqual(mergedTiktok, undefined, "flagged custom rows appear in the merged HQ list");
-assert.equal(mergedTiktok.enabled, false);
+const mergedThreads = merged.find((launcher) => launcher.id === "threads");
+assert.notEqual(mergedThreads, undefined, "flagged custom rows appear in the merged HQ list");
+assert.equal(mergedThreads.enabled, false);
 assert.equal(merged.some((launcher) => launcher.id === "sneaky"), false, "unflagged unknown IDs stay ignored");
 
 // HQ sees custom drafts; no user-facing context ever does.
 const hqList = getAvailableLaunchersForUser({ launchers: merged, context: LAUNCHER_CONTEXTS.HQ }).map((l) => l.id);
-assert.equal(hqList.includes("tiktok"), true, "HQ can manage custom drafts");
+assert.equal(hqList.includes("threads"), true, "HQ can manage custom drafts");
 for (const context of [LAUNCHER_CONTEXTS.USER_SETUP, LAUNCHER_CONTEXTS.FAKE_LAUNCHER_BAR, LAUNCHER_CONTEXTS.SETTINGS, LAUNCHER_CONTEXTS.ONBOARDING, LAUNCHER_CONTEXTS.TESTER]) {
   const visible = getAvailableLaunchersForUser({
     launchers: merged,
     testerStatus: { is_tester: true },
     context,
   }).map((l) => l.id);
-  assert.equal(visible.includes("tiktok"), false, `custom drafts must not appear in ${context}`);
+  assert.equal(visible.includes("threads"), false, `custom drafts must not appear in ${context}`);
 }
 
 console.log("HQ launcher admin checks passed");

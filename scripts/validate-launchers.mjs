@@ -29,14 +29,13 @@ const requiredFields = [
   "hqVisible",
 ];
 const launcherIds = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
-const liveLauncherIds = ["safari", "youtube", "instagram"];
+const liveLauncherIds = ["safari", "youtube", "instagram", "tiktok", "x"];
 const acceptedPhaseTwoLauncherIds = ["chrome", "reddit", "linkedin", "whatsapp", "bbc-news", "duolingo"];
 
 assert.equal(new Set(launcherIds).size, launcherIds.length, "Launcher IDs must be unique");
 for (const id of acceptedPhaseTwoLauncherIds) {
   assert.equal(launcherIds.includes(id), true, `${id} should be a supported code-reviewed launcher`);
 }
-assert.equal(launcherIds.includes("tiktok"), false, "TikTok should wait for a follow-up branch");
 assert.equal(launcherIds.includes("hinge"), false, "Hinge should wait for a follow-up branch");
 
 for (const id of liveLauncherIds) {
@@ -209,11 +208,11 @@ assert.match(
 
 const launchersWithUnknownCloudConfig = mergeLauncherConfigs([
   {
-    id: "tiktok",
-    displayName: "TikTok",
+    id: "threads",
+    displayName: "Threads",
     enabled: true,
     hqVisible: true,
-    webFallbackUrl: "https://www.tiktok.com",
+    webFallbackUrl: "https://www.threads.net",
   },
   {
     id: "instagram",
@@ -221,7 +220,7 @@ const launchersWithUnknownCloudConfig = mergeLauncherConfigs([
   },
 ]);
 assert.equal(
-  launchersWithUnknownCloudConfig.some((launcher) => launcher.id === "tiktok"),
+  launchersWithUnknownCloudConfig.some((launcher) => launcher.id === "threads"),
   false,
   "Unknown HQ launcher config IDs must not become live launchers",
 );
@@ -236,11 +235,13 @@ assert.equal(sanitizeLauncherUrl("https://api.whatsapp.com/send"), "https://api.
 assert.equal(sanitizeLauncherUrl("https://wa.me/"), "https://wa.me/");
 assert.equal(sanitizeLauncherUrl(whatsapp.androidIntentUrl), whatsapp.androidIntentUrl);
 assert.equal(sanitizeLauncherUrl("whatsapp://"), "");
-assert.equal(sanitizeLauncherUrl("tiktok://"), "");
+assert.equal(sanitizeLauncherUrl("tiktok://"), "tiktok://");
+assert.equal(sanitizeLauncherUrl("twitter://"), "twitter://");
+assert.equal(sanitizeLauncherUrl("threads://"), "");
 assert.equal(sanitizeLauncherUrl("hinge://"), "");
 
 assert.throws(
-  () => assertKnownLauncherId("tiktok"),
+  () => assertKnownLauncherId("threads"),
   /Only supported launcher IDs can be saved as live launcher configs/,
   "Unknown launcher IDs must be rejected before Supabase save",
 );
