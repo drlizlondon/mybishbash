@@ -2692,10 +2692,20 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
   const eventCount = (type) => events.filter((event) => event.event_type === type).length || summaryMap.get(type) || 0;
 
   const signups = users.length;
-  const onboardingStarted = eventCount("onboarding_started");
-  const onboardingCompleted = eventCount("onboarding_completed");
+  const onboardingStartedActors = new Set(events.filter((e) => e.event_type === "onboarding_started").map(getActorId).filter(Boolean));
+  const onboardingCompletedActors = new Set(events.filter((e) => e.event_type === "onboarding_completed").map(getActorId).filter(Boolean));
+  const onboardingCompletedCount = eventCount("onboarding_completed");
+  const uniqueOnboardingCompleted = onboardingCompletedActors.size || (onboardingCompletedCount > 0 ? Math.min(onboardingCompletedCount, signups || 1) : 0);
+  const uniqueOnboardingStarted = Math.max(onboardingStartedActors.size, uniqueOnboardingCompleted, signups, 1);
+  const onboardingCompletionRate = Math.min(100, Math.round((uniqueOnboardingCompleted / uniqueOnboardingStarted) * 100));
+
+  const launcherInstallViews = events.filter((event) => event.event_type === "launcher_install_viewed").length;
+  const launcherInstalled = events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type)).length;
+  const launcherInstalledActors = new Set(events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type)).map(getActorId).filter(Boolean)).size;
+  const launcherInstallRate = Math.min(100, Math.round(((launcherInstalledActors || launcherInstalled) / Math.max(launcherInstallViews, uniqueOnboardingCompleted, 1)) * 100));
   const instagramInstallViews = events.filter((event) => event.event_type === "launcher_install_viewed" && getEventLauncher(event) === "instagram").length;
   const instagramInstalled = events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && getEventLauncher(event) === "instagram").length;
+
   const firstInterruptionSeen = eventCount("first_interruption_seen");
   const totalInterruptions = events.filter((event) => ["first_interruption_seen", "intercept_card_viewed"].includes(event.event_type)).length;
   const continueToApp = eventCount("intercept_continue_to_app");
@@ -2730,8 +2740,8 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
 
   const heroMetrics = [
     metric("Total Signups", signups, 0, activeUsersSeries(events), "Accounts created", TELEMETRY_BLUE),
-    metric("Onboarding Completion Rate", `${percent(onboardingCompleted, onboardingStarted || signups)}%`, 0, interventionsOverTime.map((item) => item.interruptions), "Completed / started", TELEMETRY_GREEN),
-    metric("Instagram Launcher Install Rate", `${percent(instagramInstalled, instagramInstallViews || onboardingCompleted)}%`, 0, [instagramInstallViews, instagramInstalled], "Installs / install views", TELEMETRY_BLUE),
+    metric("Onboarding Completion Rate", `${onboardingCompletionRate}%`, 0, interventionsOverTime.map((item) => item.interruptions), "Completed / started", TELEMETRY_GREEN),
+    metric("Launcher Install Rate", `${launcherInstallRate}%`, 0, [launcherInstallViews, launcherInstalled], "Installs / install views", TELEMETRY_BLUE),
     metric("First Interruption Seen", firstInterruptionSeen, 0, interventionsOverTime.map((item) => item.interruptions), "First overlay reached", TELEMETRY_NAVY),
     metric("Do Something Else Rate", `${percent(doSomethingElse, resolved)}%`, 0, interventionsOverTime.map((item) => item.doSomethingElse), "Do Something Else / resolved", TELEMETRY_GREEN),
     metric("Repeat Users (7d)", repeatUsers7d, 0, activeUsersSeries(events), "Users active on 2+ days", TELEMETRY_BLUE),
@@ -2750,7 +2760,8 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
   const userStats = buildUserStats(events, testerReports);
   const packStats = buildPackStats(events, adminPacks, users.length, packAdoptionStats);
   const activeUsersOverTime = bucketEvents(events, (bucket, event) => {
-    if (event.user_id) bucket.usersSet.add(event.user_id);
+    const actor = getActorId(event);
+    if (actor) bucket.usersSet.add(actor);
   }, { usersSet: new Set() }).map((bucket) => ({ ...bucket, users: bucket.usersSet.size }));
 
   return {
@@ -2848,14 +2859,23 @@ function buildWaitlistSources(waitlist = []) {
 
 function buildRecruitmentFunnel({ waitlist, users, events }) {
   const count = (type) => events.filter((event) => event.event_type === type).length;
+  const countUniqueActors = (type) => new Set(events.filter((event) => event.event_type === type).map(getActorId).filter(Boolean)).size;
+
+  const signupCompletedCount = Math.max(users.length, count("signup_completed"));
+  const signupStartedCount = Math.max(count("signup_started"), signupCompletedCount);
+  const onboardingCompletedCount = Math.max(countUniqueActors("onboarding_completed"), count("onboarding_completed") > 0 ? 1 : 0);
+  const onboardingStartedCount = Math.max(countUniqueActors("onboarding_started"), onboardingCompletedCount, signupCompletedCount);
+  const launcherInstallViews = count("launcher_install_viewed");
+  const launcherInstalled = events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type)).length;
+
   const stages = [
     ["Waitlist", waitlist.length],
-    ["Signup Started", count("signup_started")],
-    ["Signup Completed", users.length || count("signup_completed")],
-    ["Onboarding Started", count("onboarding_started")],
-    ["Onboarding Completed", count("onboarding_completed")],
-    ["Instagram Install Viewed", events.filter((event) => event.event_type === "launcher_install_viewed" && getEventLauncher(event) === "instagram").length],
-    ["Instagram Installed", events.filter((event) => ["launcher_installed", "launcher_install_clicked"].includes(event.event_type) && getEventLauncher(event) === "instagram").length],
+    ["Signup Started", signupStartedCount],
+    ["Signup Completed", signupCompletedCount],
+    ["Onboarding Started", onboardingStartedCount],
+    ["Onboarding Completed", onboardingCompletedCount],
+    ["Launcher Install Viewed", launcherInstallViews],
+    ["Launcher Installed", launcherInstalled],
     ["First Interruption Seen", count("first_interruption_seen")],
     ["Do Something Else Clicked", count("intercept_do_something_else")],
     ["Action Card Completed", count("action_card_completed")],
@@ -2863,7 +2883,7 @@ function buildRecruitmentFunnel({ waitlist, users, events }) {
 
   return stages.map(([label, stageCount], index) => {
     const previous = index === 0 ? stageCount : stages[index - 1][1];
-    const conversion = index === 0 ? 100 : percent(stageCount, previous);
+    const conversion = index === 0 ? 100 : (previous > 0 ? Math.min(100, percent(stageCount, previous)) : (stageCount > 0 ? 100 : 0));
     return {
       label,
       count: stageCount,
@@ -3183,8 +3203,12 @@ function buildPackStats(events, packs, userCount, packAdoptionStats = []) {
     packAdoptionStats.map((row) => [row.pack_id, Number(row.users_enabled ?? 0)]),
   );
   packs.forEach((pack) => {
-    const packEvents = events.filter((event) => event.pack_id === pack.id || event.pack_id === pack.sourceKey);
-    const activeUsers = new Set(packEvents.map((event) => event.user_id).filter(Boolean)).size;
+    const packEvents = events.filter((event) => {
+      const eventPackId = event.pack_id || event.metadata?.packId || event.metadata?.pack_id;
+      if (!eventPackId) return false;
+      return eventPackId === pack.id || (pack.sourceKey && eventPackId === pack.sourceKey);
+    });
+    const activeUsers = new Set(packEvents.map(getActorId).filter(Boolean)).size;
     const activationCount = packEvents.filter((event) => event.event_type === "pack_activated").length;
     stats.set(pack.id, {
       activeUsers,
@@ -3227,7 +3251,8 @@ function rowsFromCounts(counts) {
 
 function activeUsersSeries(events) {
   return bucketEvents(events, (bucket, event) => {
-    if (event.user_id) bucket.users.add(event.user_id);
+    const actor = getActorId(event);
+    if (actor) bucket.users.add(actor);
     bucket.value = bucket.users.size;
   }, { users: new Set(), value: 0 }).map((item) => item.value);
 }
@@ -3246,7 +3271,7 @@ function metric(label, value, trend, series, comparison, color) {
 
 function percent(part, total) {
   if (!total) return 0;
-  return Math.round((part / total) * 100);
+  return Math.min(100, Math.max(0, Math.round((part / total) * 100)));
 }
 
 function round(value, precision = 0) {
