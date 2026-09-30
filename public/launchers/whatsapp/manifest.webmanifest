@@ -1,15 +1,15 @@
 {
   "name": "WhatsApp",
   "short_name": "WhatsApp",
-  "id": "https://mybishbash.app/intercept/whatsapp",
-  "start_url": "https://mybishbash.app/intercept/whatsapp",
-  "scope": "https://mybishbash.app/",
+  "id": "https://mybishbash.app/mybishbash/intercept/whatsapp",
+  "start_url": "https://mybishbash.app/mybishbash/intercept/whatsapp",
+  "scope": "https://mybishbash.app/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/icons/whatsapp-cover.jpeg",
+      "src": "/mybishbash/icons/whatsapp-cover.jpeg",
       "sizes": "180x180",
       "type": "image/jpeg"
     }

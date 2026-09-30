@@ -1,15 +1,15 @@
 {
   "name": "YouTube",
   "short_name": "YouTube",
-  "id": "https://mybishbash.app/intercept/youtube",
-  "start_url": "https://mybishbash.app/intercept/youtube",
-  "scope": "https://mybishbash.app/",
+  "id": "https://mybishbash.app/mybishbash/intercept/youtube",
+  "start_url": "https://mybishbash.app/mybishbash/intercept/youtube",
+  "scope": "https://mybishbash.app/mybishbash/",
   "display": "standalone",
   "background_color": "#F7F2EE",
   "theme_color": "#F7F2EE",
   "icons": [
     {
-      "src": "/icons/youtube-cover.png",
+      "src": "/mybishbash/icons/youtube-cover.png",
       "sizes": "180x180",
       "type": "image/png"
     }

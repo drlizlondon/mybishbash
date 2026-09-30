@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { LogPanel } from "../../components/LogPanel";
 import { useEventsStore } from "../../stores/eventsStore";
+import { useCardsStore } from "../../stores/cardsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { getStartOfWeek } from "../../eventLog";
 
@@ -49,6 +50,7 @@ function getWeeklyShiftCount(events, now = new Date()) {
 export default function LogScreen(props) {
   const { filter } = props;
   const events = useEventsStore((state) => state.events);
+  const cards = useCardsStore((state) => state.cards);
   const timezone = useSettingsStore((state) => state.profile.timezone);
 
   const recentMeaningfulEvents = useMemo(
@@ -68,6 +70,7 @@ export default function LogScreen(props) {
       {...props}
       events={logEventsForPanel}
       allEvents={events}
+      cards={cards}
       timezone={timezone}
       weeklyShiftCount={weeklyShiftCount}
     />
