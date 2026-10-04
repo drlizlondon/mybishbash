@@ -54,6 +54,7 @@ export const landingContent = {
     "tagline": "The intentional-phone app. Built in the UK by people who got tired of losing the day to a feed.",
     "links": [
       "Privacy",
+      "Terms of Use",
       "Contact"
     ]
   }

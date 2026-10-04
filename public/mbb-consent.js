@@ -203,7 +203,7 @@
       '.mbb-consent-actions{display:flex;flex:0 0 auto;gap:8px}' +
       // Equal-prominence buttons (consent-gate standard): same size, shape
       // and style for Decline and Accept, side by side, nothing pre-selected.
-      '.mbb-consent-actions button{border:1px solid #171512;border-radius:10px;background:#fff;color:#171512;cursor:pointer;font:600 13px/1 system-ui,-apple-system,sans-serif;min-height:38px;padding:0 14px;white-space:nowrap}' +
+      '.mbb-consent-actions button{border:1px solid #171512;border-radius:10px;background:#fff;color:#171512;cursor:pointer;font:600 13px/1 system-ui,-apple-system,sans-serif;min-height:44px;padding:0 14px;white-space:nowrap}' +
       '[data-mbb-privacy-choices]{margin-left:6px}' +
       '[data-mbb-privacy-choices]:focus-visible{outline:2px solid #171512;outline-offset:3px;border-radius:3px}' +
       // Mobile-only bottom sheet: the whole sentence still shows in full,
@@ -214,7 +214,7 @@
         '#mbb-analytics-consent p{font-size:13px;line-height:1.4}' +
         '#mbb-analytics-consent a{font-size:13px}' +
         '.mbb-consent-actions{justify-content:flex-end}' +
-        '.mbb-consent-actions button{min-height:38px;padding:0 12px;font-size:13px}' +
+        '.mbb-consent-actions button{min-height:44px;padding:0 12px;font-size:13px}' +
       '}';
     document.head.appendChild(style);
   }
