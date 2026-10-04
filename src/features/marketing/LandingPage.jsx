@@ -13,10 +13,11 @@ const HOME_HREF = BASE;
 const ABOUT_HREF = `${BASE}about`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const PRIVACY_HREF = `${BASE}privacy`;
+const TERMS_HREF = `${BASE}terms`;
 const CONTACT_HREF = "mailto:hello@mybishbash.app?subject=myBishBash%20enquiry";
 // Nav labels in landingContent.nav map 1:1 to these in-page anchors.
 const LANDING_NAV_HREFS = ["#how-it-works", "#examples", "#pricing", "#faq"];
-const FOOTER_LINK_HREFS = [PRIVACY_HREF, CONTACT_HREF];
+const FOOTER_LINK_HREFS = [PRIVACY_HREF, TERMS_HREF, CONTACT_HREF];
 const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
 function BrandMark({ dark = false }) {

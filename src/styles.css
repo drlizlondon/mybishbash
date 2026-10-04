@@ -64,6 +64,7 @@
 
 html {
   background: var(--cream);
+  overscroll-behavior-y: none;
 }
 
 body {
