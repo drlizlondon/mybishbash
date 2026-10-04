@@ -825,7 +825,10 @@ const RecruitmentPage = memo(function RecruitmentPage({ telemetry }) {
       </section>
       <FunnelPanel funnel={telemetry.funnel} />
       <section className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-        <DistributionPanel title="Waitlist by Source" rows={telemetry.waitlistSources} />
+        <div className="space-y-4">
+          <DistributionPanel title="Waitlist by Source" rows={telemetry.waitlistSources} />
+          <DistributionPanel title="Waitlist by phone" rows={telemetry.waitlistPhones} />
+        </div>
         <RetentionSnapshot telemetry={telemetry} />
       </section>
       <LiveActivityList events={telemetry.meaningfulEvents.slice(0, 8)} />
@@ -2782,6 +2785,7 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
     meaningfulEvents: events.filter(isMeaningfulEvent).map((event) => ({ ...event, displayLabel: getEventDisplayLabel(event) })),
     funnel: buildRecruitmentFunnel({ waitlist, users, events }),
     waitlistSources: buildWaitlistSources(waitlist),
+    waitlistPhones: buildWaitlistPhones(waitlist),
     retention: buildRetentionModel({ events, users }),
     instagramStats: {
       installViews: instagramInstallViews,
@@ -2855,6 +2859,16 @@ function buildWaitlistSources(waitlist = []) {
     counts.set(source, (counts.get(source) ?? 0) + 1);
   }
   return Array.from(counts, ([label, count]) => ({ label, count })).sort((left, right) => right.count - left.count);
+}
+
+export function buildWaitlistPhones(waitlist = []) {
+  const counts = { iPhone: 0, Android: 0, Other: 0 };
+  for (const signup of waitlist) {
+    const raw = (signup.phone_os ?? "").trim().toLowerCase();
+    const label = raw === "iphone" ? "iPhone" : raw === "android" ? "Android" : "Other";
+    counts[label] += 1;
+  }
+  return Object.entries(counts).map(([label, count]) => ({ label, count }));
 }
 
 function buildRecruitmentFunnel({ waitlist, users, events }) {
