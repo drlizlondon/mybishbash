@@ -1,6 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { formatTwentyFourHourTime } from "../eventLog";
 import { HeartGlyph, LogGlyph } from "./Glyphs";
+
+const PersonalCardAnalyticsPanel = lazy(() =>
+  import("../features/log").then((m) => ({
+    default: m.PersonalCardAnalyticsPanel,
+  }))
+);
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -13,6 +19,15 @@ function describeLogEvent(event) {
   }
   if (event.event_type === "pack_card_liked") {
     return `Really liked: ${event.card_title || event.card_text || "a pack card"}`;
+  }
+  if (event.event_type === "first_interruption_seen") {
+    return `You paused before opening ${event.app_name || "the app"}.`;
+  }
+  if (event.event_type === "action_card_completed") {
+    return `You completed: ${event.card_title || event.card_text || event.bash_title || "an alternative action"}`;
+  }
+  if (event.event_type === "commitment_check_in" || event.event_type === "commitment_check_in_response") {
+    return `You checked in on: ${event.card_text || event.card_title || "today's commitment"}`;
   }
   if (event.event_type === "intercept_do_something_else") {
     return `You chose something else instead of opening ${event.app_name || "that app"}.`;
@@ -34,13 +49,21 @@ function describeLogEvent(event) {
 
 function getLogEventDisplayLabel(event) {
   const labels = {
+    first_interruption_seen: "Pause moment",
+    intercept_continue_to_app: "Continued to app",
+    intercept_do_something_else: "Chose something else",
+    action_card_completed: "Alternative completed",
     commitment_made: "Commitment made",
     commitment_declined: "Commitment declined",
+    commitment_check_in: "Commitment check-in",
     pack_card_liked: "Really liked",
     pack_card_disliked: "Hidden card",
     pack_card_restored: "Restored card",
     intercept_card_disliked: "Hidden App Prompt",
     intercept_card_restored: "Restored App Prompt",
+    bash_done: "Completed card",
+    bash_do_now: "Selected card",
+    bash_not_done: "Saved for later",
   };
   return labels[event.event_type] ?? event.event_type;
 }
@@ -240,7 +263,17 @@ function EventDetailModal({ event, timezone, onClose }) {
  * @param {string}   props.filter            - "all" | "intercepts"
  * @param {Function} [props.onShowSummary]   - Opens yesterday's daily reflection overlay.
  */
-export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter, onShowSummary }) {
+export function LogPanel({
+  events,
+  allEvents,
+  cards = [],
+  timezone,
+  weeklyShiftCount,
+  filter,
+  onShowSummary,
+  onNavigateToLibrary,
+}) {
+  const [activeLogTab, setActiveLogTab] = useState("moments"); // "moments" | "trends"
   const [selectedEvent, setSelectedEvent] = useState(null);
   const filledDots = Math.min(weeklyShiftCount, 14);
 
@@ -253,78 +286,121 @@ export function LogPanel({ events, allEvents, timezone, weeklyShiftCount, filter
           <HeartGlyph />
         </span>
         <h2>myBishBash Log</h2>
-        <p>{filter === "intercepts" ? "the little pauses before the pull." : "tiny choices. real change."}</p>
+        <p>
+          {activeLogTab === "trends"
+            ? "30-day habits, honest patterns & momentum."
+            : filter === "intercepts"
+            ? "the little pauses before the pull."
+            : "tiny choices. real change."}
+        </p>
       </header>
 
-      <article className="log-hero-card">
-        {weeklyShiftCount > 0 ? (
-          <>
-            <h3>
-              You chose <span>yourself</span> {weeklyShiftCount} {weeklyShiftCount === 1 ? "time" : "times"} this week.
-            </h3>
-            <div className="growth-visual">
-              <GrowthFlower count={weeklyShiftCount} />
-            </div>
-            <div className="growth-dots" aria-hidden="true">
-              {Array.from({ length: 14 }).map((_, index) => (
-                <span key={index} className={`growth-dot ${index < filledDots ? "filled" : ""}`} />
-              ))}
-            </div>
-            <p className="growth-caption">Every little shift adds up.</p>
-          </>
-        ) : (
-          <div className="log-empty-state">
-            <h3>Your first little shift will appear here.</h3>
-            <p>Every quiet choice begins somewhere.</p>
-          </div>
-        )}
-      </article>
+      {/* View Switcher: Moments vs 30-Day Trends */}
+      <div className="log-view-switcher" role="tablist" aria-label="Log views">
+        <button
+          type="button"
+          role="tab"
+          id="tab-moments"
+          aria-selected={activeLogTab === "moments"}
+          className={`log-view-tab ${activeLogTab === "moments" ? "active" : ""}`}
+          onClick={() => setActiveLogTab("moments")}
+        >
+          Recent Moments
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-trends"
+          aria-selected={activeLogTab === "trends"}
+          className={`log-view-tab ${activeLogTab === "trends" ? "active" : ""}`}
+          onClick={() => setActiveLogTab("trends")}
+        >
+          Card Trends (30 Days)
+        </button>
+      </div>
 
-      <article className="recent-moments-card">
-        <h3>Recent moments</h3>
-        {events.length > 0 ? (
-          <div className="recent-event-list">
-            {events.map((event, index) => (
-              <button
-                key={event.id}
-                type="button"
-                className={`event-row ${index === events.length - 1 ? "last" : ""}`}
-                onClick={() => setSelectedEvent(event)}
-                aria-label={`Open details for ${describeLogEvent(event)}`}
-              >
-                <span className="event-icon-bubble" aria-hidden="true">
-                  {event.event_type.startsWith("intercept_") ? <LogGlyph /> : <HeartGlyph />}
-                </span>
-                <span className="event-copy">{describeLogEvent(event)}</span>
-                <span className="event-time">{formatTwentyFourHourTime(event.created_at, timezone)}</span>
+      {activeLogTab === "trends" ? (
+        <Suspense fallback={<div className="card-analytics-container" />}>
+          <PersonalCardAnalyticsPanel
+            cards={cards}
+            allEvents={allEvents ?? events}
+            timezone={timezone}
+            onNavigateToLibrary={onNavigateToLibrary}
+          />
+        </Suspense>
+      ) : (
+        <>
+          <article className="log-hero-card">
+            {weeklyShiftCount > 0 ? (
+              <>
+                <h3>
+                  You chose <span>yourself</span> {weeklyShiftCount} {weeklyShiftCount === 1 ? "time" : "times"} this week.
+                </h3>
+                <div className="growth-visual">
+                  <GrowthFlower count={weeklyShiftCount} />
+                </div>
+                <div className="growth-dots" aria-hidden="true">
+                  {Array.from({ length: 14 }).map((_, index) => (
+                    <span key={index} className={`growth-dot ${index < filledDots ? "filled" : ""}`} />
+                  ))}
+                </div>
+                <p className="growth-caption">Every little shift adds up.</p>
+              </>
+            ) : (
+              <div className="log-empty-state">
+                <h3>Your first little shift will appear here.</h3>
+                <p>Every quiet choice begins somewhere.</p>
+              </div>
+            )}
+          </article>
+
+          <article className="recent-moments-card">
+            <h3>Recent moments</h3>
+            {events.length > 0 ? (
+              <div className="recent-event-list">
+                {events.map((event, index) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    className={`event-row ${index === events.length - 1 ? "last" : ""}`}
+                    onClick={() => setSelectedEvent(event)}
+                    aria-label={`Open details for ${describeLogEvent(event)}`}
+                  >
+                    <span className="event-icon-bubble" aria-hidden="true">
+                      {event.event_type.startsWith("intercept_") ? <LogGlyph /> : <HeartGlyph />}
+                    </span>
+                    <span className="event-copy">{describeLogEvent(event)}</span>
+                    <span className="event-time">{formatTwentyFourHourTime(event.created_at, timezone)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
+            )}
+          </article>
+
+          {onShowSummary ? (
+            <article className="log-summary-card">
+              <h3>Daily reflection</h3>
+              <p>See how yesterday's little choices added up.</p>
+              <button type="button" className="log-summary-btn" onClick={onShowSummary}>
+                View yesterday's reflection
               </button>
-            ))}
-          </div>
-        ) : (
-          <p className="recent-empty-copy">Your recent moments will begin to gather here.</p>
-        )}
-      </article>
+            </article>
+          ) : null}
 
-      {onShowSummary ? (
-        <article className="log-summary-card">
-          <h3>Daily reflection</h3>
-          <p>See how yesterday's little choices added up.</p>
-          <button type="button" className="log-summary-btn" onClick={onShowSummary}>
-            View yesterday's reflection
-          </button>
-        </article>
-      ) : null}
+          <article className="log-chart-card">
+            <h3>Your last 14 days</h3>
+            <div className="log-chart-wrap">
+              <DailyMomentChart data={chartData} />
+            </div>
+          </article>
 
-      <article className="log-chart-card">
-        <h3>Your last 14 days</h3>
-        <div className="log-chart-wrap">
-          <DailyMomentChart data={chartData} />
-        </div>
-      </article>
-
-      {selectedEvent ? (
-        <EventDetailModal event={selectedEvent} timezone={timezone} onClose={() => setSelectedEvent(null)} />
-      ) : null}
+          {selectedEvent ? (
+            <EventDetailModal event={selectedEvent} timezone={timezone} onClose={() => setSelectedEvent(null)} />
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

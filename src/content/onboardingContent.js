@@ -10,13 +10,13 @@ export const onboardingContent = {
   "steps": {
     "learn": {
       "title": "Start with your Personal Cards",
-      "body": "You already open your favourite apps multiple times every day. myBishBash uses those moments to show Personal Cards for the things you genuinely mean to do each day.",
+      "body": "You open apps like Safari 15 times a day. myBishBash uses those natural moments to show quick reminders for the things you genuinely want to do, like watering your plants, taking a breath, or drinking water, so you actually do them.",
       "primary": "Set up my Personal Cards",
       "secondary": "I’ll do this later"
     },
     "example": {
       "title": "This is a Personal Card",
-      "body": "It is a reminder you choose for yourself. myBishBash can bring it up before the apps you already open.",
+      "body": "It is a reminder you choose for yourself. myBishBash can bring it up before everyday apps like Safari or time-sinks like Instagram: a 1-second nudge to keep your real-life intentions front-of-mind.",
       "primary": "Create my first cards",
       "secondary": "Skip setup for now"
     },
@@ -59,7 +59,7 @@ export const onboardingContent = {
     },
     "protectedApp": {
       "title": "Where should myBishBash appear first?",
-      "body": "Choose one app you open often. You can add more later.",
+      "body": "Choose an everyday app like Safari to see your reminders, or a time-sink like Instagram to add a mindful pause. You can add more later.",
       "primary": "Continue",
       "secondary": "Choose an app later",
       "ariaLabel": "Choose your first app"

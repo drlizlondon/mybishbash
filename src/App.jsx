@@ -5353,6 +5353,7 @@ function App() {
                 <MemoLogPanel
                   filter={logFilter}
                   onShowSummary={showMorningSummaryNow}
+                  onNavigateToLibrary={() => navigateTo("/library")}
                 />
               ) : null}
 

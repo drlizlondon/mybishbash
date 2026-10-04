@@ -4,7 +4,7 @@ export const downloadContent = {
   "access": {
     "eyebrow": "Invite only",
     "title": "Get myBishBash",
-    "body": "myBishBash is currently invite-only. If you have an access code, enter it here. If not, join the waitlist.",
+    "body": "myBishBash is invite-only for now. If you have an access code, enter it here. If not, join the waitlist.",
     "codeLabel": "Access code",
     "codePlaceholder": "Enter access code",
     "checking": "Checking...",

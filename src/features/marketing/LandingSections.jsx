@@ -10,12 +10,12 @@ import {
   partnerships,
   pricing,
   problem,
+  supportedApps,
   trust,
 } from "../../content/landingContent";
 
 const BASE = import.meta.env.BASE_URL;
 const MARK_SRC = `${BASE}icons/mybishbash-logo-mark.png`;
-const INVITE_HREF = `${BASE}invite`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const CONTACT_HREF = "mailto:hello@mybishbash.app?subject=myBishBash%20enquiry";
 
@@ -105,8 +105,8 @@ function PauseScreen() {
       <div className="scr-spacer" />
       <span className="scr-app-pill"><i className="pill-ig" aria-hidden="true" />Instagram</span>
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Back home</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Continue to Instagram</button>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">Back home</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">Continue to Instagram</span>
       </div>
     </div>
   );
@@ -115,16 +115,16 @@ function PauseScreen() {
 function PersonalScreen() {
   return (
     <div className="scr scr-personal">
-      <ScreenTopbar kicker="STILL AWAKE?" />
+      <ScreenTopbar kicker="SAFARI · EVERYDAY NUDGE" />
       <BrandB />
-      <p className="scr-prompt">Have you done your face routine?</p>
+      <p className="scr-prompt">Water the plants?</p>
       <span className="scr-rule" aria-hidden="true" />
-      <p className="scr-sub">A gentle nudge from the version of you that cares.</p>
+      <p className="scr-sub">Seen 15 times a day before Safari, so you actually do it.</p>
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Done</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>I'll do it now</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Not done</button>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">Done</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">I'll do it now</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">Open Safari</span>
       </div>
     </div>
   );
@@ -139,8 +139,8 @@ function CommitmentScreen() {
       <span className="scr-rule" aria-hidden="true" />
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>I will commit to this</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Not this time</button>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">I will commit to this</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">Not this time</span>
       </div>
     </div>
   );
@@ -161,8 +161,8 @@ function PacksScreen() {
       <p className="scr-sub">A mindset nudge, shown before the apps you choose.</p>
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>I really like this one</button>
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Continue</button>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">I really like this one</span>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">Continue</span>
       </div>
     </div>
   );
@@ -341,6 +341,129 @@ function Problem() {
   );
 }
 
+function SupportedAppsStrip() {
+  const v = useInViewVariants();
+  const apps = [
+    {
+      id: "instagram",
+      name: "Instagram",
+      mode: "The Pause",
+      desc: "Stop the scroll",
+      accent: "mode-pause",
+      icon: (
+        <span className="app-badge-icon app-badge-ig" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+          </svg>
+        </span>
+      ),
+    },
+    {
+      id: "tiktok",
+      name: "TikTok",
+      mode: "The Pause",
+      desc: "Catch rabbit holes",
+      accent: "mode-pause",
+      icon: (
+        <span className="app-badge-icon app-badge-tiktok" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-5.201 1.743 2.895 2.895 0 0 1 2.313-4.63c.298 0 .586.044.858.125V9.405a6.334 6.334 0 0 0-.858-.059 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.333-6.34V8.756a8.214 8.214 0 0 0 3.77.925v-2.995z"/>
+          </svg>
+        </span>
+      ),
+    },
+    {
+      id: "youtube",
+      name: "YouTube",
+      mode: "The Pause",
+      desc: "Interrupt autoplay",
+      accent: "mode-pause",
+      icon: (
+        <span className="app-badge-icon app-badge-yt" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+        </span>
+      ),
+    },
+    {
+      id: "x",
+      name: "X",
+      mode: "The Pause",
+      desc: "Break headline reflex",
+      accent: "mode-pause",
+      icon: (
+        <span className="app-badge-icon app-badge-x" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </span>
+      ),
+    },
+    {
+      id: "safari",
+      name: "Safari",
+      mode: "Everyday Nudge",
+      desc: "Water plants 15× a day",
+      accent: "mode-nudge",
+      icon: (
+        <span className="app-badge-icon app-badge-safari" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+          </svg>
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <section className="section section-dark section-supported-apps" aria-labelledby="apps-title">
+      <div className="container">
+        <SectionHeader
+          eyebrow={supportedApps.eyebrow}
+          heading={supportedApps.heading}
+          copy={supportedApps.copy}
+          tone="dark"
+        />
+        <motion.div
+          className="apps-grid"
+          variants={stagger}
+          initial={v.initial}
+          whileInView={v.whileInView}
+          viewport={v.viewport}
+        >
+          {apps.map((app) => (
+            <motion.a
+              key={app.id}
+              href={`${BASE}install/${app.id}/`}
+              className="app-card"
+              variants={fadeUp}
+            >
+              <div className="app-card-top">
+                {app.icon}
+                <div className="app-card-tags">
+                  <span className="app-live-tag">Live</span>
+                  <span className={`app-mode-pill ${app.accent}`}>{app.mode}</span>
+                </div>
+              </div>
+              <h3 className="app-card-name">{app.name}</h3>
+              <p className="app-card-desc">{app.desc}</p>
+              <span className="app-card-install-link">Install doorway &rarr;</span>
+            </motion.a>
+          ))}
+        </motion.div>
+        <div className="apps-status-note">
+          <span className="apps-status-dot" aria-hidden="true" />
+          <span>5 connected doorways live now. WhatsApp, Chrome and Reddit in testing.</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Packs() {
   const v = useInViewVariants();
   return (
@@ -448,7 +571,7 @@ function Trust() {
 function planHref(kind) {
   if (kind === "team") return CONTACT_HREF;
   if (kind === "plus") return EARLY_ACCESS_HREF;
-  return INVITE_HREF;
+  return EARLY_ACCESS_HREF;
 }
 
 function Pricing() {
@@ -603,7 +726,7 @@ function FinalCta() {
         <motion.h2 className="final-title" variants={fadeUp}>{finalCta.heading}</motion.h2>
         <motion.p className="final-copy" variants={fadeUp}>{finalCta.copy}</motion.p>
         <motion.div className="final-actions" variants={fadeUp}>
-          <a className="button primary" href={INVITE_HREF}>
+          <a className="button primary" href={EARLY_ACCESS_HREF}>
             {finalCta.primary}
             <span aria-hidden="true">→</span>
           </a>
@@ -621,6 +744,7 @@ export default function LandingSections() {
   return (
     <>
       <Problem />
+      <SupportedAppsStrip />
       <HowItWorks />
       <Mechanics />
       <Packs />

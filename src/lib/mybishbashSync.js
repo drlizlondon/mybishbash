@@ -1355,7 +1355,7 @@ export async function fetchAdminAnalytics() {
       .limit(500),
     client
       .from("launch_signups")
-      .select("id,email,country,source_code,created_at")
+      .select("id,email,country,phone_os,source_code,created_at")
       .order("created_at", { ascending: false })
       .limit(1000),
     client

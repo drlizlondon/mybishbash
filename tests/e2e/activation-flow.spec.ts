@@ -28,15 +28,18 @@ async function seedGateCode(page: Page, code = 'WELCOME') {
   }, { handoffKey: SIGNUP_HANDOFF_REFERENCE_KEY, handoffsKey: E2E_SIGNUP_HANDOFFS_KEY, accessCode: code });
 }
 
-test('landing Get myBishBash opens the invite gate, not download', async ({ page }) => {
+test('landing Join the waitlist opens the waitlist, and /invite keeps the code gate', async ({ page }) => {
   await page.goto('/mybishbash/');
 
   const primaryCta = page.locator('.hero-actions .button.primary');
-  await expect(primaryCta).toHaveAttribute('href', '/mybishbash/invite');
+  await expect(primaryCta).toHaveText(/Join the waitlist/);
+  await expect(primaryCta).toHaveAttribute('href', '/mybishbash/early-access');
   await primaryCta.click();
-  await expect(page).toHaveURL(/\/mybishbash\/invite$/);
+  await expect(page).toHaveURL(/\/mybishbash\/early-access$/);
+
+  await page.goto('/mybishbash/invite');
   await expect(page.getByTestId('download-access-gate')).toBeVisible();
-  await expect(page.getByText('myBishBash is currently invite-only.')).toBeVisible();
+  await expect(page.getByText('myBishBash is invite-only for now.')).toBeVisible();
 });
 
 test('WELCOME unlocks the existing download page', async ({ page }) => {

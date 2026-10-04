@@ -3,7 +3,7 @@
 export const aboutContent = {
   brand: "myBishBash",
   nav: ["How it works", "Features"],
-  cta: "Get myBishBash",
+  cta: "Join the waitlist",
   backCta: "Join early access",
   secondaryCta: "See how it works",
   phone: {
@@ -68,7 +68,7 @@ export const aboutContent = {
   final: {
     title: "Join the early-access release.",
     copy: "Help shape a calmer way to use technology.",
-    primary: "Get myBishBash",
+    primary: "Join the waitlist",
     secondary: "Join the waiting list",
   },
 };

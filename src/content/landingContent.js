@@ -13,7 +13,7 @@ export const landingContent = {
     "FAQ"
   ],
   "ctas": {
-    "primary": "Get myBishBash",
+    "primary": "Join the waitlist",
     "secondary": "See how it works",
     "waitlist": "Join the Plus waitlist"
   },
@@ -54,6 +54,7 @@ export const landingContent = {
     "tagline": "The intentional-phone app. Built in the UK by people who got tired of losing the day to a feed.",
     "links": [
       "Privacy",
+      "Terms of Use",
       "Contact"
     ]
   }
@@ -83,6 +84,12 @@ export const problem = {
   ],
 };
 
+export const supportedApps = {
+  eyebrow: "Connected apps",
+  heading: "Live on your phone today.",
+  copy: "Pause rabbit holes before you scroll, or turn everyday doorways like Safari into gentle nudges for real life. Tap any app below to install its doorway.",
+};
+
 export const howItWorks = {
   eyebrow: "How it works",
   heading: "Three steps to a phone that works for you.",
@@ -91,20 +98,20 @@ export const howItWorks = {
     {
       key: "open",
       label: "01",
-      title: "You open an app",
-      copy: "Pick the apps that swallow your time. myBishBash gives each one its own Home Screen icon. Tap that, and you get a check-in first.",
+      title: "Choose your doorways",
+      copy: "Pick the apps that swallow your time (like Instagram) and the everyday apps you open all day (like Safari). myBishBash gives each one its own Home Screen icon.",
     },
     {
       key: "pause",
       label: "02",
-      title: "We step in first",
-      copy: "A quick prompt asks whether this is really how you want the next ten minutes to go. No countdowns, no lock-outs.",
+      title: "A pause or an everyday nudge",
+      copy: "Before Instagram, get a quick pause to break the scroll reflex. Before Safari, catch a 1-second reminder for the things you care about.",
     },
     {
       key: "choose",
       label: "03",
-      title: "You choose, on purpose",
-      copy: "Carry on if you mean to, or let a reminder, a commitment or a pack point you somewhere better.",
+      title: "You follow through in real life",
+      copy: "Carry on if you mean to, water the plants, or let a reminder point you somewhere better. No blockers, no guilt.",
     },
   ],
 };
@@ -122,9 +129,9 @@ export const mechanics = {
     },
     {
       key: "personal",
-      label: "Personal Cards",
+      label: "Everyday Nudges",
       title: "Reminders from future you",
-      copy: "Short prompts you write yourself, answerable in a tap, resurfaced right when they matter.",
+      copy: "Put them before everyday apps like Safari. See 'water the plants' 15 times a day so you actually do it.",
     },
     {
       key: "commitment",
@@ -195,7 +202,7 @@ export const pricing = {
         "Up to 5 Personal Cards",
         "Commitment Cards",
       ],
-      cta: "Get started",
+      cta: "Join the waitlist",
       kind: "free",
     },
     {
@@ -275,7 +282,7 @@ export const faq = {
 export const finalCta = {
   eyebrow: "Early access",
   heading: "Use your phone like you mean it.",
-  copy: "Start free today. Plus is coming soon: join the waitlist to hear first.",
-  primary: "Get myBishBash",
+  copy: "Invite-only for now. Join the waitlist and we'll invite people in batches.",
+  primary: "Join the waitlist",
   secondary: "Join the Plus waitlist",
 };

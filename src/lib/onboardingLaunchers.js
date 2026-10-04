@@ -9,10 +9,8 @@ const ONBOARDING_CONTEXT_DEFS = [
     label: "Social media",
     categories: ["social"],
     // Apps we want to tease as "Later" when they are not (yet) available.
-    // A teaser is only shown if the app is absent from the available list,
-    // so TikTok never appears as a selectable launcher unless it exists in
-    // the supported registry and HQ has made it available.
-    teasers: [{ id: "tiktok", label: "TikTok" }],
+    // A teaser is only shown if the app is absent from the available list.
+    teasers: [{ id: "hinge", label: "Hinge" }],
   },
   {
     id: "videos",
@@ -22,7 +20,7 @@ const ONBOARDING_CONTEXT_DEFS = [
   },
 ];
 
-const PREFERRED_ORDER = ["instagram", "youtube"];
+const PREFERRED_ORDER = ["instagram", "tiktok", "youtube", "x"];
 
 function launcherLabel(launcher) {
   return launcher.displayName ?? launcher.name ?? launcher.realAppLabel ?? launcher.id;

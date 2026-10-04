@@ -106,6 +106,66 @@ const RAW_FAKE_APP_LAUNCHERS = [
     updatedAt: LAUNCHER_TIMESTAMP,
   },
   {
+    id: "tiktok",
+    displayName: "TikTok",
+    name: "TikTok",
+    realAppLabel: "TikTok",
+    category: "social",
+    installPath: "/mybishbash/install/tiktok/",
+    launchPath: "/intercept/tiktok",
+    manifestPath: "/mybishbash/launchers/tiktok/manifest.webmanifest",
+    iconSrc: "/mybishbash/icons/tiktok-cover.svg",
+    customIconSrc: "",
+    nativeAppUrl: "tiktok://",
+    webFallbackUrl: "https://www.tiktok.com",
+    appUrl: "tiktok://",
+    androidIntentUrl: "intent://www.tiktok.com/#Intent;scheme=https;package=com.zhiliaoapp.musically;S.browser_fallback_url=https%3A%2F%2Fwww.tiktok.com;end",
+    androidWebFallbackUrl: "https://www.tiktok.com",
+    iosAppUrl: "snssdk1233://",
+    iosWebFallbackUrl: "https://www.tiktok.com",
+    manualUrl: "https://www.tiktok.com",
+    defaultInterruptionPackId: "tiktok-interruption",
+    interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
+    availabilityStatus: "public",
+    qaNotes: "",
+    enabled: true,
+    hqVisible: true,
+    createdAt: LAUNCHER_TIMESTAMP,
+    updatedAt: LAUNCHER_TIMESTAMP,
+  },
+  {
+    id: "x",
+    displayName: "X",
+    name: "X",
+    realAppLabel: "X",
+    category: "social",
+    installPath: "/mybishbash/install/x/",
+    launchPath: "/intercept/x",
+    manifestPath: "/mybishbash/launchers/x/manifest.webmanifest",
+    iconSrc: "/mybishbash/icons/x-cover.svg",
+    customIconSrc: "",
+    nativeAppUrl: "twitter://",
+    webFallbackUrl: "https://x.com",
+    appUrl: "twitter://",
+    androidIntentUrl: "intent://twitter.com/#Intent;scheme=twitter;package=com.twitter.android;S.browser_fallback_url=https%3A%2F%2Fx.com;end",
+    androidWebFallbackUrl: "https://x.com",
+    iosAppUrl: "twitter://",
+    iosWebFallbackUrl: "https://x.com",
+    manualUrl: "https://x.com",
+    defaultInterruptionPackId: "x-interruption",
+    interruptionPackId: "",
+    useInterruptionPack: true,
+    interruptionPaused: false,
+    availabilityStatus: "public",
+    qaNotes: "",
+    enabled: true,
+    hqVisible: true,
+    createdAt: LAUNCHER_TIMESTAMP,
+    updatedAt: LAUNCHER_TIMESTAMP,
+  },
+  {
     id: "chrome",
     displayName: "Chrome",
     name: "Chrome",
@@ -312,7 +372,7 @@ export const FAKE_APP_LAUNCHERS = RAW_FAKE_APP_LAUNCHERS.map((launcher) => ({
 }));
 
 export const LAUNCHER_IDS = FAKE_APP_LAUNCHERS.map((launcher) => launcher.id);
-export const APPS_OPTION_IDS = ["whatsapp", "instagram", "youtube", "safari"];
+export const APPS_OPTION_IDS = ["instagram", "safari", "tiktok", "youtube", "x", "whatsapp"];
 export const LAUNCHER_REGISTRY = Object.fromEntries(
   FAKE_APP_LAUNCHERS.map((launcher) => [launcher.id, launcher]),
 );
@@ -362,8 +422,7 @@ export function resolveLauncherIconSrc(launcher = {}) {
 
 export function sanitizeLauncherUrl(value) {
   const trimmed = String(value ?? "").trim();
-  if (!trimmed) return "";
-  if (/^(https?:\/\/|x-safari-|instagram:\/\/|youtube:\/\/|googlechromes?:\/\/|intent:\/\/)/i.test(trimmed)) {
+  if (/^(https?:\/\/|x-safari-|instagram:\/\/|youtube:\/\/|tiktok:\/\/|snssdk[0-9]+:\/\/|twitter:\/\/|x:\/\/|googlechromes?:\/\/|intent:\/\/)/i.test(trimmed)) {
     return trimmed;
   }
   return "";
