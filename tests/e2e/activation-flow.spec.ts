@@ -36,7 +36,7 @@ test('landing Get myBishBash opens the invite gate, not download', async ({ page
   await primaryCta.click();
   await expect(page).toHaveURL(/\/mybishbash\/invite$/);
   await expect(page.getByTestId('download-access-gate')).toBeVisible();
-  await expect(page.getByText('myBishBash is currently invite-only.')).toBeVisible();
+  await expect(page.getByText('myBishBash is invite-only and iPhone-only for now.')).toBeVisible();
 });
 
 test('WELCOME unlocks the existing download page', async ({ page }) => {

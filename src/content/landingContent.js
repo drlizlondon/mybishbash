@@ -13,7 +13,7 @@ export const landingContent = {
     "FAQ"
   ],
   "ctas": {
-    "primary": "Get myBishBash",
+    "primary": "Request an invite",
     "secondary": "See how it works",
     "waitlist": "Join the Plus waitlist"
   },
@@ -201,7 +201,7 @@ export const pricing = {
         "Up to 5 Personal Cards",
         "Commitment Cards",
       ],
-      cta: "Get started",
+      cta: "Request an invite",
       kind: "free",
     },
     {
@@ -281,7 +281,7 @@ export const faq = {
 export const finalCta = {
   eyebrow: "Early access",
   heading: "Use your phone like you mean it.",
-  copy: "Start free today. Plus is coming soon: join the waitlist to hear first.",
-  primary: "Get myBishBash",
+  copy: "Invite-only on iPhone for now. Plus is coming soon: join the waitlist to hear first.",
+  primary: "Request an invite",
   secondary: "Join the Plus waitlist",
 };
