@@ -13,7 +13,7 @@ export const landingContent = {
     "FAQ"
   ],
   "ctas": {
-    "primary": "Request an invite",
+    "primary": "Join the waitlist",
     "secondary": "See how it works",
     "waitlist": "Join the Plus waitlist"
   },
@@ -201,7 +201,7 @@ export const pricing = {
         "Up to 5 Personal Cards",
         "Commitment Cards",
       ],
-      cta: "Request an invite",
+      cta: "Join the waitlist",
       kind: "free",
     },
     {
@@ -281,7 +281,7 @@ export const faq = {
 export const finalCta = {
   eyebrow: "Early access",
   heading: "Use your phone like you mean it.",
-  copy: "Invite-only on iPhone for now. Plus is coming soon: join the waitlist to hear first.",
-  primary: "Request an invite",
+  copy: "Invite-only for now. Join the waitlist and we'll invite people in batches.",
+  primary: "Join the waitlist",
   secondary: "Join the Plus waitlist",
 };

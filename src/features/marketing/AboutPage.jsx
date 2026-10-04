@@ -5,7 +5,6 @@ import { aboutContent } from "../../content/aboutContent";
 
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
-const APP_HOME_HREF = `${BASE}home`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
 
@@ -37,7 +36,7 @@ function AboutHeader() {
             </a>
           ))}
         </nav>
-        <a className="header-cta" href={APP_HOME_HREF} onClick={stopEditNavigation}>
+        <a className="header-cta" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
           <EditableText path="cta" />
         </a>
       </div>
@@ -200,7 +199,7 @@ function AboutPage() {
               <EditableText as="h2" path="final.title" />
               <EditableText as="p" path="final.copy" />
               <div className="hero-actions about-actions">
-                <a className="button primary" href={APP_HOME_HREF} onClick={stopEditNavigation}>
+                <a className="button primary" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
                   <EditableText path="final.primary" /> <span aria-hidden="true">-&gt;</span>
                 </a>
                 <a className="button launch-list" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>

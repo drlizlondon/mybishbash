@@ -10,7 +10,6 @@ import LandingSections from "./LandingSections";
 
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
-const INVITE_HREF = `${BASE}invite`;
 const ABOUT_HREF = `${BASE}about`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const PRIVACY_HREF = `${BASE}privacy`;
@@ -56,7 +55,7 @@ function Header() {
             </a>
           ))}
         </nav>
-        <a className="header-cta" href={INVITE_HREF} onClick={stopEditNavigation}>
+        <a className="header-cta" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
           <EditableText path="ctas.primary" />
         </a>
         <button
@@ -79,7 +78,7 @@ function Header() {
             </a>
           ))}
           <a href={ABOUT_HREF} onClick={closeMenu}>About</a>
-          <a className="mobile-nav-cta" href={INVITE_HREF} onClick={closeMenu}>
+          <a className="mobile-nav-cta" href={EARLY_ACCESS_HREF} onClick={closeMenu}>
             {content.ctas.primary}
           </a>
         </nav>
@@ -138,7 +137,7 @@ function Hero() {
               ))}
             </div>
             <div className="hero-actions reveal-up delay-3">
-              <a className="button primary" href={INVITE_HREF} onClick={stopEditNavigation}>
+              <a className="button primary" href={EARLY_ACCESS_HREF} onClick={stopEditNavigation}>
                 <EditableText path="ctas.primary" />
                 <span aria-hidden="true">→</span>
               </a>

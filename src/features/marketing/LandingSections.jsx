@@ -16,7 +16,6 @@ import {
 
 const BASE = import.meta.env.BASE_URL;
 const MARK_SRC = `${BASE}icons/mybishbash-logo-mark.png`;
-const INVITE_HREF = `${BASE}invite`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const CONTACT_HREF = "mailto:hello@mybishbash.app?subject=myBishBash%20enquiry";
 
@@ -572,7 +571,7 @@ function Trust() {
 function planHref(kind) {
   if (kind === "team") return CONTACT_HREF;
   if (kind === "plus") return EARLY_ACCESS_HREF;
-  return INVITE_HREF;
+  return EARLY_ACCESS_HREF;
 }
 
 function Pricing() {
@@ -727,7 +726,7 @@ function FinalCta() {
         <motion.h2 className="final-title" variants={fadeUp}>{finalCta.heading}</motion.h2>
         <motion.p className="final-copy" variants={fadeUp}>{finalCta.copy}</motion.p>
         <motion.div className="final-actions" variants={fadeUp}>
-          <a className="button primary" href={INVITE_HREF}>
+          <a className="button primary" href={EARLY_ACCESS_HREF}>
             {finalCta.primary}
             <span aria-hidden="true">→</span>
           </a>
