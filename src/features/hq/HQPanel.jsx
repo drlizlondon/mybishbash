@@ -80,6 +80,7 @@ const NAV_ITEMS = [
   "live",
   "launchers",
   "retention",
+  "psychology",
   "tester_reports",
   "users",
   "memberships",
@@ -95,6 +96,7 @@ const NAV_LABELS = {
   live: "Live Activity",
   launchers: "Launcher Performance",
   retention: "User Retention",
+  psychology: "Behavioral Psychology",
   tester_reports: "Tester Reports",
   users: "User Timelines",
   memberships: "Memberships",
@@ -615,7 +617,8 @@ const HQContent = memo(function HQContent({
             loading={loading}
           />
         ) : null}
-        {activeView === "retention" ? <RetentionPage telemetry={telemetry} /> : null}
+        {activeView === "retention" ? <RetentionPage telemetry={telemetry} onNavigate={onNavigate} /> : null}
+        {activeView === "psychology" ? <PsychologyPage telemetry={telemetry} /> : null}
         {activeView === "tester_reports" ? <TesterReportsPage /> : null}
         {activeView === "users" ? <UsersPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
         {activeView === "memberships" ? <MembershipsPage users={users} telemetry={telemetry} onUserUpdated={loadStaticData} setStatus={setStatus} canManageAccess={canEditLaunchers} /> : null}
@@ -851,14 +854,42 @@ const LiveActivityPage = memo(function LiveActivityPage({ fallbackEvents, paused
   );
 });
 
-const RetentionPage = memo(function RetentionPage({ telemetry }) {
+function formatDwellSeconds(ms) {
+  if (!ms || ms <= 0) return "No data";
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+const RetentionPage = memo(function RetentionPage({ telemetry, onNavigate }) {
   useRenderDiagnostics("RetentionPage");
+  const psych = telemetry.psychology || {};
   return (
     <div className="space-y-5">
       <SectionHeader
         title="User Retention"
         subtitle="Repeated behavioural use, return sessions, and launcher adoption gaps."
       />
+      <section className="rounded-2xl border border-blue-200/80 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base">🧠</span>
+              <h4 className="font-semibold text-slate-900">Behavioral Psychology & Nudge Telemetry</h4>
+            </div>
+            <p className="mt-1 text-xs text-slate-600">
+              Reflex bypass: <b>{psych.reflexSkipPercentage ?? 0}%</b> (&lt;1.5s autopilot) · Spiced salience recovery: <b>{psych.spicedRecoveryRate ?? 0}%</b> · Commitments made: <b>{psych.commitmentsMade ?? 0}</b>
+            </p>
+          </div>
+          {onNavigate ? (
+            <button
+              type="button"
+              onClick={() => onNavigate("psychology")}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+            >
+              Open Psychology Lab &rarr;
+            </button>
+          ) : null}
+        </div>
+      </section>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MiniStat label="Daily active users" value={telemetry.retention.dailyActiveUsers} />
         <MiniStat label="7-day return users" value={telemetry.retention.returnUsers7d} />
@@ -872,6 +903,120 @@ const RetentionPage = memo(function RetentionPage({ telemetry }) {
       <section className="grid gap-4 xl:grid-cols-2">
         <SparklineCard title="Daily Active Users" data={telemetry.activeUsersOverTime} dataKey="users" />
         <DistributionPanel title="Most Active Launchers" rows={telemetry.topLaunchers} />
+      </section>
+    </div>
+  );
+});
+
+const PsychologyPage = memo(function PsychologyPage({ telemetry }) {
+  useRenderDiagnostics("PsychologyPage");
+  const psych = telemetry.psychology || {};
+  const avgActMs = psych.avgDwellCompletedMs || 0;
+  const avgSkipMs = psych.avgDwellIgnoredMs || 0;
+
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title="Behavioral Psychology & Nudge Lab"
+        subtitle="Measuring cognitive attention, sensory habituation breaking (Spiced Cards), and non-judgmental coaching forks."
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MiniStat label="Avg Glance Before Acting" value={formatDwellSeconds(avgActMs)} />
+        <MiniStat label="Avg Glance Before Skipping" value={formatDwellSeconds(avgSkipMs)} />
+        <MiniStat label="⚡ Reflex Skip Rate (<1.5s)" value={`${psych.reflexSkipPercentage ?? 0}%`} />
+        <MiniStat label="⏱️ Considered Pause Rate" value={`${psych.consideredSkipPercentage ?? 0}%`} />
+        <MiniStat label="🌶️ Spiced Salience Triggers" value={psych.spicedTotal ?? 0} />
+        <MiniStat label="🌶️ Spiced Recovery Rate" value={`${psych.spicedRecoveryRate ?? 0}%`} />
+        <MiniStat label="🎯 Commitments Made" value={psych.commitmentsMade ?? 0} />
+        <MiniStat label="⏸️ Seasonal Pauses Chosen" value={psych.seasonPauses ?? 0} />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <GlassPanel
+          title="Cognitive Attention & Dwell Breakdown"
+          subtitle="How users process interception and reveal prompts before deciding"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm">
+              <div>
+                <p className="font-semibold text-slate-800">⚡ Reflex Skips (&lt;1.5s)</p>
+                <p className="text-xs text-slate-500">Autopilot muscle-memory swipe without conscious cognitive evaluation</p>
+              </div>
+              <span className="font-mono font-bold text-amber-600">{psych.reflexSkips ?? 0}</span>
+            </div>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm">
+              <div>
+                <p className="font-semibold text-slate-800">⏱️ Considered Skips (1.5s – 8.0s)</p>
+                <p className="text-xs text-slate-500">Conscious cognitive pause: user evaluated bandwidth and declined</p>
+              </div>
+              <span className="font-mono font-bold text-blue-600">{psych.consideredSkips ?? 0}</span>
+            </div>
+            <div className="flex items-center justify-between pb-1 text-sm">
+              <div>
+                <p className="font-semibold text-slate-800">💭 Deep Dwells (&gt;8.0s)</p>
+                <p className="text-xs text-slate-500">High friction, deep reading, or contemplation before continuing</p>
+              </div>
+              <span className="font-mono font-bold text-emerald-600">{psych.deepDwells ?? 0}</span>
+            </div>
+          </div>
+        </GlassPanel>
+
+        <GlassPanel
+          title="Sensory Salience & Habituation Test"
+          subtitle="Counteracting Reticular Activating System (RAS) sensory adaptation"
+        >
+          <div className="space-y-3 text-sm text-slate-600">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+              <p className="font-semibold text-amber-950">🌶️ The 'Spiced Card' Salience Mechanism</p>
+              <p className="mt-1 text-xs text-amber-900 leading-relaxed">
+                When a card is skipped &ge;3 consecutive times, it dynamically shifts from calm oatmeal (#F6F1EA) to a warm terracotta gradient with a 2px border and icon pop to break sensory habituation.
+              </p>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                <p className="text-xs text-slate-500">Spiced Interventions</p>
+                <p className="text-lg font-bold text-slate-900">{psych.spicedTotal ?? 0}</p>
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-2.5">
+                <p className="text-xs text-emerald-700">Converted after Salience Shift</p>
+                <p className="text-lg font-bold text-emerald-700">{psych.spicedCompleted ?? 0} ({psych.spicedRecoveryRate ?? 0}%)</p>
+              </div>
+            </div>
+          </div>
+        </GlassPanel>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <DistributionPanel
+          title="Autopilot Habit Strength by Trigger App"
+          rows={(psych.launcherReflexBreakdown || []).map((row) => ({
+            label: `${row.launcher} (${row.reflexRate}% reflex bypass)`,
+            count: row.reflex,
+          }))}
+        />
+
+        <GlassPanel
+          title="The Honest Mirror: Coaching Choices"
+          subtitle="Non-judgmental forks for chronically bypassed intentions"
+        >
+          <div className="space-y-3">
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-blue-950">🎯 Commitment Chosen</span>
+                <span className="font-mono text-base font-bold text-blue-900">{psych.commitmentsMade ?? 0}</span>
+              </div>
+              <p className="mt-1 text-xs text-blue-800">User leaned into the friction and anchored it as a non-negotiable target.</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-900">⏸️ Seasonal Pause Chosen</span>
+                <span className="font-mono text-base font-bold text-slate-800">{psych.seasonPauses ?? 0}</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-600">User gracefully shelved the intention, eliminating guilt and preventing churn.</p>
+            </div>
+          </div>
+        </GlassPanel>
       </section>
     </div>
   );
@@ -2787,6 +2932,7 @@ function buildTelemetryModel({ summary, recent, launcherEvents: rawLauncherEvent
     waitlistSources: buildWaitlistSources(waitlist),
     waitlistPhones: buildWaitlistPhones(waitlist),
     retention: buildRetentionModel({ events, users }),
+    psychology: buildPsychologyModel(events),
     instagramStats: {
       installViews: instagramInstallViews,
       installs: instagramInstalled,
@@ -2928,6 +3074,115 @@ function buildRetentionModel({ events, users }) {
     mostActiveLauncher: topLauncher,
     installedNoInterruption: Array.from(installedActors).filter((actor) => !interruptedActors.has(actor)).length,
     interruptionNoAction: Array.from(interruptedActors).filter((actor) => !doSomethingElseActors.has(actor)).length,
+  };
+}
+
+export function buildPsychologyModel(events = []) {
+  const safeEvents = Array.isArray(events) ? events : [];
+  const dwellEvents = safeEvents.filter((e) => {
+    const ms = Number(e.dwell_ms ?? e.metadata?.dwell_ms);
+    return !Number.isNaN(ms) && ms > 0;
+  });
+
+  const dwellCompleted = dwellEvents.filter((e) =>
+    e.is_completed === true ||
+    e.action_taken === "completed" ||
+    ["action_card_completed", "bash_done", "intercept_do_something_else"].includes(e.event_type)
+  );
+
+  const dwellIgnored = dwellEvents.filter((e) =>
+    e.action_taken === "ignored" ||
+    e.action_taken === "dismissed" ||
+    e.action_taken === "continued_to_app" ||
+    ["bash_not_done", "card_ignored", "action_card_skipped", "intercept_continue_to_app"].includes(e.event_type)
+  );
+
+  const avgDwellCompletedMs = dwellCompleted.length
+    ? Math.round(dwellCompleted.reduce((sum, e) => sum + Number(e.dwell_ms ?? e.metadata?.dwell_ms), 0) / dwellCompleted.length)
+    : 0;
+
+  const avgDwellIgnoredMs = dwellIgnored.length
+    ? Math.round(dwellIgnored.reduce((sum, e) => sum + Number(e.dwell_ms ?? e.metadata?.dwell_ms), 0) / dwellIgnored.length)
+    : 0;
+
+  const reflexSkips = dwellIgnored.filter((e) => {
+    const ms = Number(e.dwell_ms ?? e.metadata?.dwell_ms);
+    return ms < 1500 || e.dwell_bucket === "reflex_skip" || e.metadata?.dwell_bucket === "reflex_skip";
+  }).length;
+
+  const consideredSkips = dwellIgnored.filter((e) => {
+    const ms = Number(e.dwell_ms ?? e.metadata?.dwell_ms);
+    return (ms >= 1500 && ms <= 8000) || e.dwell_bucket === "considered_skip" || e.metadata?.dwell_bucket === "considered_skip";
+  }).length;
+
+  const deepDwells = dwellIgnored.filter((e) => {
+    const ms = Number(e.dwell_ms ?? e.metadata?.dwell_ms);
+    return ms > 8000 || e.dwell_bucket === "deep_dwell" || e.metadata?.dwell_bucket === "deep_dwell";
+  }).length;
+
+  const totalDwellSkips = dwellIgnored.length;
+  const reflexSkipPercentage = percent(reflexSkips, totalDwellSkips);
+  const consideredSkipPercentage = percent(consideredSkips, totalDwellSkips);
+
+  // Spiced cards (sensory salience)
+  const spicedEvents = safeEvents.filter((e) =>
+    e.is_spiced === true || e.metadata?.is_spiced === true || e.metadata?.spiced === true
+  );
+  const spicedCompleted = spicedEvents.filter((e) =>
+    e.action_taken === "completed" || ["action_card_completed", "bash_done", "intercept_do_something_else"].includes(e.event_type)
+  ).length;
+  const spicedTotal = spicedEvents.length;
+  const spicedRecoveryRate = percent(spicedCompleted, spicedTotal);
+
+  // Coaching forks
+  const commitmentsMade = safeEvents.filter((e) =>
+    e.event_type === "card_commitment_made" || e.metadata?.commitmentMade === true
+  ).length;
+
+  const seasonPauses = safeEvents.filter((e) =>
+    e.event_type === "card_season_paused" || e.metadata?.seasonPaused === true
+  ).length;
+
+  // Breakdown by trigger launcher
+  const launcherMap = new Map();
+  dwellIgnored.forEach((e) => {
+    const launcher = getEventLauncher(e) || "unknown";
+    if (!launcherMap.has(launcher)) {
+      launcherMap.set(launcher, { total: 0, reflex: 0, considered: 0 });
+    }
+    const stat = launcherMap.get(launcher);
+    stat.total += 1;
+    const ms = Number(e.dwell_ms ?? e.metadata?.dwell_ms);
+    if (ms < 1500 || e.dwell_bucket === "reflex_skip" || e.metadata?.dwell_bucket === "reflex_skip") {
+      stat.reflex += 1;
+    } else {
+      stat.considered += 1;
+    }
+  });
+
+  const launcherReflexBreakdown = Array.from(launcherMap.entries()).map(([launcher, stat]) => ({
+    launcher,
+    total: stat.total,
+    reflex: stat.reflex,
+    considered: stat.considered,
+    reflexRate: percent(stat.reflex, stat.total),
+  })).sort((a, b) => b.total - a.total);
+
+  return {
+    totalDwellEvents: dwellEvents.length,
+    avgDwellCompletedMs,
+    avgDwellIgnoredMs,
+    reflexSkips,
+    consideredSkips,
+    deepDwells,
+    reflexSkipPercentage,
+    consideredSkipPercentage,
+    spicedTotal,
+    spicedCompleted,
+    spicedRecoveryRate,
+    commitmentsMade,
+    seasonPauses,
+    launcherReflexBreakdown,
   };
 }
 
