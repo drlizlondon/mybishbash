@@ -204,7 +204,9 @@
             "day",
             "evening",
             "night"
-          ]
+          ],
+          "dwell_ms": "<dwell_ms>",
+          "dwell_bucket": "quick_complete"
         }
       },
       {
@@ -240,7 +242,9 @@
           ],
           "origin": "home",
           "launchSource": null,
-          "activationKey": null
+          "activationKey": null,
+          "dwell_ms": "<dwell_ms>",
+          "dwell_bucket": "quick_complete"
         }
       }
     ],
@@ -326,7 +330,9 @@
             "day",
             "evening",
             "night"
-          ]
+          ],
+          "dwell_ms": "<dwell_ms>",
+          "dwell_bucket": "quick_complete"
         }
       },
       {
@@ -362,7 +368,9 @@
           ],
           "origin": "home",
           "launchSource": null,
-          "activationKey": null
+          "activationKey": null,
+          "dwell_ms": "<dwell_ms>",
+          "dwell_bucket": "quick_complete"
         }
       }
     ],
