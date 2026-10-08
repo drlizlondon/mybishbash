@@ -1,5 +1,6 @@
 import { applyCardAction, createId, isCommitmentCard } from "../../utils";
 import { CARD_EVENT_TYPES } from "../../lib/cardSelection";
+import { buildDwellMetadata } from "../../lib/spicedCards";
 import { getCardSelectionSurfaceForOverlay, logCommitmentDebug } from "../launcher";
 
 /**
@@ -34,7 +35,7 @@ export function useCardActions({
   composerReturnPathRef,
   navigateTo,
 }) {
-  function handleAction(action) {
+  function handleAction(action, extraMeta = {}) {
     if (!overlay || overlay.type !== "reveal") return;
 
     const activeCard = cards.find((card) => card.id === overlay.cardId);
@@ -52,6 +53,9 @@ export function useCardActions({
         : action === "now"
           ? "bash_do_now"
           : "bash_not_done";
+
+    const dwellMetadata = buildDwellMetadata(extraMeta?.dwell_ms, action === "done");
+
     void logEvent({
       event_type: eventType,
       source_type: activeCard.sourcePackId ? "library" : "personal",
@@ -63,9 +67,11 @@ export function useCardActions({
       card_text: activeCard.promptText,
       pack_id: activeCard.sourcePackId ?? null,
       action_taken: action === "done" ? "completed" : action === "now" ? "liked" : "dismissed",
+      ...dwellMetadata,
       metadata: {
         frequency: activeCard.frequency,
         timingWindows: activeCard.timingWindows,
+        ...dwellMetadata,
       },
     });
     if (!activeCard.sourcePackId) {
@@ -79,6 +85,7 @@ export function useCardActions({
         card_title: activeCard.dashboardTitle ?? activeCard.promptText,
         card_text: activeCard.promptText,
         action_taken: action === "done" ? "completed" : "ignored",
+        ...dwellMetadata,
         metadata: {
           legacyEventType: eventType,
           cardKind: activeCard.cardKind ?? "personal",
@@ -89,6 +96,7 @@ export function useCardActions({
           origin: overlay.origin ?? null,
           launchSource: overlay.launchSource ?? null,
           activationKey: overlay?.activationKey ?? null,
+          ...dwellMetadata,
         },
       });
     }

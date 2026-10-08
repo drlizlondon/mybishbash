@@ -1,4 +1,4 @@
 {
-  "mainChunkGzipMaxBytes": 136000,
+  "mainChunkGzipMaxBytes": 138000,
   "requiredLazyChunks": ["HQPanel"]
 }

@@ -1349,6 +1349,226 @@ textarea {
   margin-bottom: 4px;
 }
 
+.card-analytics-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.timeframe-toggle-pill {
+  display: inline-flex;
+  background: rgba(240, 230, 222, 0.7);
+  border-radius: 999px;
+  padding: 3px;
+  border: 1px solid rgba(220, 205, 195, 0.6);
+}
+
+.timeframe-toggle-btn {
+  border: none;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #7a6e67;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.timeframe-toggle-btn.active {
+  background: #ffffff;
+  color: #2e2a28;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.retention-dwell-panel {
+  margin: 18px 0 16px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(230, 218, 208, 0.8);
+  border-radius: 20px;
+  padding: 16px 18px;
+}
+
+.retention-dwell-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.retention-badge-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: #3d342f;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.retention-subtag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c85a43;
+  background: #fdf0ec;
+  border: 1px solid rgba(200, 90, 67, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.retention-stat-columns {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.dwell-stat-card {
+  background: #ffffff;
+  border: 1px solid rgba(240, 230, 222, 0.9);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dwell-stat-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: #2e2a28;
+  letter-spacing: -0.02em;
+}
+
+.dwell-stat-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #554a43;
+}
+
+.dwell-stat-desc {
+  font-size: 10.5px;
+  color: #8c7e75;
+  line-height: 1.35;
+}
+
+.retention-spiced-callout {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #82422c;
+  background: #fff5ee;
+  border: 1px solid rgba(217, 101, 76, 0.25);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.avoided-card-item.is-spiced-card {
+  border: 2px solid #e27d60;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(253, 243, 235, 0.9));
+  box-shadow: 0 4px 16px rgba(226, 125, 96, 0.12);
+}
+
+.avoided-card-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.spiced-pill-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b3391b;
+  background: #fde8e1;
+  border: 1px solid rgba(179, 57, 27, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.spiced-mini-badge {
+  font-size: 12px;
+  display: inline-block;
+  margin-left: 4px;
+}
+
+.avoided-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.avoided-card-chips span {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.avoided-card-chips .chip-warn {
+  background: #fdf2e9;
+  color: #a05e26;
+  border: 1px solid rgba(160, 94, 38, 0.25);
+}
+
+.avoided-card-chips .chip-dwell {
+  background: #f4f1ea;
+  color: #594f47;
+  border: 1px solid rgba(89, 79, 71, 0.15);
+}
+
+.avoided-card-chips .chip-app {
+  background: #eef2f5;
+  color: #3b5368;
+  border: 1px solid rgba(59, 83, 104, 0.15);
+}
+
+.honest-mirror-fork-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.fork-btn {
+  flex: 1;
+  min-width: 140px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+  border: none;
+  transition: all 180ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fork-btn-commitment {
+  background: #2e2a28;
+  color: #ffffff;
+}
+
+.fork-btn-commitment:hover {
+  background: #171514;
+}
+
+.fork-btn-pause {
+  background: #efe9e3;
+  color: #5c524c;
+}
+
+.fork-btn-pause:hover {
+  background: #e2dbd3;
+}
+
 /* ── Superstars ── */
 .superstar-card {
   border-left: 4px solid #8f9277;
@@ -6887,6 +7107,30 @@ body {
     radial-gradient(rgba(21, 21, 21, 0.38) 0.45px, transparent 0.45px);
   background-size: 15px 15px;
 }
+
+/* ── Sociology Test 1: Spiced Card Salience (Break Habituation Loop) ── */
+.premium-card-screen.card-salience-spiced {
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.58), transparent 52%),
+    linear-gradient(180deg, #FDF3E7 0%, #FCE7D8 50%, #F8D8C5 100%) !important;
+  color: #261E1A;
+  box-shadow: inset 0 0 0 2px rgba(217, 101, 76, 0.35), 0 16px 48px rgba(217, 101, 76, 0.15);
+}
+
+.premium-card-screen.card-salience-spiced .premium-card-icon {
+  transform: scale(1.08);
+  filter: drop-shadow(0 6px 16px rgba(217, 101, 76, 0.35));
+}
+
+.premium-card-screen.card-salience-spiced .premium-headline {
+  color: #2A1F1B;
+}
+
+.premium-card-screen.card-salience-spiced .premium-subtitle {
+  color: #B24E35;
+  font-weight: 600;
+}
+
 
 .premium-card-main {
   position: relative;

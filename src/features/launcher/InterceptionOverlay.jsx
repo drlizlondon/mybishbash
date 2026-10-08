@@ -90,15 +90,28 @@ export default function InterceptionOverlay({ overlay, version, onChooseElse, on
     });
   }
 
+  const mountTimeRef = useRef(null);
+  useEffect(() => {
+    mountTimeRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+  }, [activeIndex, overlay?.packId]);
+
+  const getDwellMs = () => {
+    if (!mountTimeRef.current) return 0;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    return Math.max(0, Math.round(now - mountTimeRef.current));
+  };
+
   const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true }));
 
   function handleContinueToApp(event) {
     if (!version) return;
+    const dwell_ms = getDwellMs();
     const handled = onContinueToApp?.(version.id, {
       source: "interruption_card",
       reason: "user_pressed_continue",
       allowDefaultNavigation: Boolean(continueHref),
       preferDirectAppDestination: true,
+      dwell_ms,
     });
     if (handled !== false) event?.preventDefault?.();
   }
@@ -142,7 +155,8 @@ export default function InterceptionOverlay({ overlay, version, onChooseElse, on
             variant: "secondary",
             onClick: (event) => {
               event?.stopPropagation?.();
-              onChooseElse();
+              const dwell_ms = getDwellMs();
+              onChooseElse?.({ dwell_ms });
             },
           },
         ]}

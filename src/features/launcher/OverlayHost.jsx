@@ -63,6 +63,18 @@ export default function Overlay({
     : null;
   const [showLauncherPreparingFallback, setShowLauncherPreparingFallback] = useState(false);
   const launcherPreparingPaintedRef = useRef(false);
+  const cardMountedAtRef = useRef(null);
+
+  useEffect(() => {
+    cardMountedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+  }, [overlay?.cardId, overlay?.activationKey, overlay?.type, card?.id]);
+
+  const getDwellDurationMs = () => {
+    if (!cardMountedAtRef.current) return 0;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    return Math.max(0, Math.round(now - cardMountedAtRef.current));
+  };
+
   const launcherInterceptionClass = overlay?.launchSource === "fake_launcher" || overlay?.versionId
     ? "launcher-interception-card"
     : "";
@@ -81,6 +93,7 @@ export default function Overlay({
       reason: "user_pressed_real_app_button",
       allowDefaultNavigation: true,
       preferDirectAppDestination: true,
+      dwell_ms: getDwellDurationMs(),
     });
     if (handled !== false) event?.preventDefault?.();
   };
@@ -512,15 +525,41 @@ export default function Overlay({
 
   const cardActionConfig = getLauncherCardActions({ launchSession, cardType });
   const resolvedActions = cardActionConfig.actions.map((action) => {
-    if (action.id === "really_like_pack_card") return { ...action, onClick: onPackLike };
-    if (action.id === LAUNCH_PRIMARY_ACTIONS.CONTINUE_TO_APP || action.id === LAUNCH_PRIMARY_ACTIONS.BACK_TO_HOME) {
-      return { ...action, onClick: onPackContinue };
+    if (action.id === "really_like_pack_card") {
+      return {
+        ...action,
+        onClick: (event) => onPackLike?.(event, { dwell_ms: getDwellDurationMs() }),
+      };
     }
-    if (action.id === "not_done") return { ...action, onClick: () => onAction("later") };
-    if (action.id === "do_now") return { ...action, onClick: () => onAction("now") };
-    if (action.id === "done") return { ...action, onClick: () => onAction("done") };
+    if (action.id === LAUNCH_PRIMARY_ACTIONS.CONTINUE_TO_APP || action.id === LAUNCH_PRIMARY_ACTIONS.BACK_TO_HOME) {
+      return {
+        ...action,
+        onClick: (event) => onPackContinue?.(event, { dwell_ms: getDwellDurationMs() }),
+      };
+    }
+    if (action.id === "not_done") {
+      return {
+        ...action,
+        onClick: () => onAction("later", { dwell_ms: getDwellDurationMs() }),
+      };
+    }
+    if (action.id === "do_now") {
+      return {
+        ...action,
+        onClick: () => onAction("now", { dwell_ms: getDwellDurationMs() }),
+      };
+    }
+    if (action.id === "done") {
+      return {
+        ...action,
+        onClick: () => onAction("done", { dwell_ms: getDwellDurationMs() }),
+      };
+    }
     return action;
   });
+
+  const isSpiced = Boolean(card?.isSpiced);
+  const spicedCardClass = isSpiced ? "card-salience-spiced" : "";
 
   return (
     <PremiumCardScreen
@@ -531,7 +570,9 @@ export default function Overlay({
       subtitle={
         card.sourcePackId
           ? card.attribution || card.sourceTitle || "A card from your pack."
-          : "A gentle nudge from the version of you that cares."
+          : isSpiced
+            ? "🌶️ Spicing this one up for you — a fresh look to catch your eye."
+            : "A gentle nudge from the version of you that cares."
       }
       actions={resolvedActions}
       launcherVersions={directLauncherVersions}
@@ -539,7 +580,11 @@ export default function Overlay({
       onDashboard={onDashboard}
       onCreateCard={onCreateCard}
       cardOverlayKey={cardOverlayKey}
-      className={[launcherInterceptionClass, overlay.phase === "dissolving" ? "is-dissolving" : ""].filter(Boolean).join(" ")}
+      className={[
+        launcherInterceptionClass,
+        overlay.phase === "dissolving" ? "is-dissolving" : "",
+        spicedCardClass,
+      ].filter(Boolean).join(" ")}
       launcherAppId={launcherAppId}
       launcherAppName={launcherAppName}
       onPauseApp={onPauseCurrentApp}
