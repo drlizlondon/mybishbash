@@ -105,8 +105,8 @@ function PauseScreen() {
       <div className="scr-spacer" />
       <span className="scr-app-pill"><i className="pill-ig" aria-hidden="true" />Instagram</span>
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Back home</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Continue to Instagram</button>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">Back home</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">Continue to Instagram</span>
       </div>
     </div>
   );
@@ -122,9 +122,9 @@ function PersonalScreen() {
       <p className="scr-sub">Seen 15 times a day before Safari, so you actually do it.</p>
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Done</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>I'll do it now</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Open Safari</button>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">Done</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">I'll do it now</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">Open Safari</span>
       </div>
     </div>
   );
@@ -139,8 +139,8 @@ function CommitmentScreen() {
       <span className="scr-rule" aria-hidden="true" />
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>I will commit to this</button>
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>Not this time</button>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">I will commit to this</span>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">Not this time</span>
       </div>
     </div>
   );
@@ -161,8 +161,8 @@ function PacksScreen() {
       <p className="scr-sub">A mindset nudge, shown before the apps you choose.</p>
       <div className="scr-spacer" />
       <div className="scr-actions">
-        <button type="button" className="scr-btn scr-btn-ghost" tabIndex={-1}>I really like this one</button>
-        <button type="button" className="scr-btn scr-btn-primary" tabIndex={-1}>Continue</button>
+        <span className="scr-btn scr-btn-ghost" aria-hidden="true">I really like this one</span>
+        <span className="scr-btn scr-btn-primary" aria-hidden="true">Continue</span>
       </div>
     </div>
   );
