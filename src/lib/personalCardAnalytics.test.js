@@ -105,4 +105,36 @@ describe("computePersonalCardAnalytics", () => {
     expect(result.cards[0].totalCompleted).toBe(1);
     expect(result.cards[0].completionRate).toBe(100);
   });
+
+  it("calculates retention dwell time, reflex vs considered skips, and consecutive skips", () => {
+    const cards = [
+      { id: "c-dwell", promptText: "Deep breathing 2 mins" },
+    ];
+    const events = [
+      // Latest: reflex skip (800ms)
+      { card_id: "c-dwell", event_type: "bash_not_done", action_taken: "ignored", dwell_ms: 800, created_at: "2026-09-30T10:00:00Z" },
+      // 2nd latest: reflex skip (1200ms)
+      { card_id: "c-dwell", event_type: "bash_not_done", action_taken: "ignored", dwell_ms: 1200, created_at: "2026-09-29T10:00:00Z" },
+      // 3rd latest: considered skip (3400ms)
+      { card_id: "c-dwell", event_type: "bash_not_done", action_taken: "ignored", dwell_ms: 3400, created_at: "2026-09-28T10:00:00Z" },
+      // 4th: completed with 4500ms dwell
+      { card_id: "c-dwell", event_type: "bash_done", action_taken: "completed", dwell_ms: 4500, created_at: "2026-09-27T10:00:00Z" },
+    ];
+
+    const result = computePersonalCardAnalytics(cards, events, "Europe/London", { referenceDate: refDate });
+    const card = result.cards[0];
+
+    expect(card.consecutiveSkips).toBe(3);
+    expect(card.isSpiced).toBe(true);
+    expect(card.reflexSkips).toBe(2); // 800ms and 1200ms
+    expect(card.consideredSkips).toBe(1); // 3400ms
+    expect(card.avgDwellCompletedMs).toBe(4500);
+    expect(card.avgDwellIgnoredMs).toBe(Math.round((800 + 1200 + 3400) / 3)); // 1800ms
+
+    expect(result.totalReflexSkips).toBe(2);
+    expect(result.totalConsideredSkips).toBe(1);
+    expect(result.reflexSkipPercentage).toBe(67); // 2/3 = 66.67% -> 67%
+    expect(result.spicedCardsCount).toBe(1);
+  });
 });
+

@@ -6,6 +6,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeF
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveClientRoutes } from "./scripts/derive-client-routes.mjs";
+import { ROUTE_META } from "./src/content/routeMeta.js";
 import {
   FREE_PRICE_AMOUNT,
   FREE_PRICE_CURRENCY,
@@ -324,6 +325,8 @@ function routePrerenderPlugin() {
             .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${url}$2`)
             .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${url}$2`);
         }
+        const meta = route.indexable ? ROUTE_META[route.path] : undefined;
+        if (meta) html = applyRouteMeta(html, meta);
         if (!route.indexable) {
           html = html.replace(
             /<meta name="robots" content="[^"]*"\s*\/>/,
@@ -340,6 +343,24 @@ function routePrerenderPlugin() {
       }
     },
   };
+}
+
+// Swaps the homepage title and descriptions for a public route's own
+// (src/content/routeMeta.js), so each page has a distinct search listing.
+function applyRouteMeta(html, meta) {
+  const title = escapeAttribute(meta.title);
+  const description = escapeAttribute(meta.description);
+  return html
+    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
+    .replace(/(<meta\s+name="description"\s+content=")[^"]*(")/, `$1${description}$2`)
+    .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${title}$2`)
+    .replace(/(<meta\s+property="og:description"\s+content=")[^"]*(")/, `$1${description}$2`)
+    .replace(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${title}$2`)
+    .replace(/(<meta\s+name="twitter:description"\s+content=")[^"]*(")/, `$1${description}$2`);
+}
+
+function escapeAttribute(value) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
 // Stamps the SoftwareApplication schema's Offer prices in index.html from
@@ -391,6 +412,9 @@ export default defineConfig({
           }
           if (id.includes("/node_modules/@supabase/")) {
             return "supabase";
+          }
+          if (id.includes("/node_modules/zustand/")) {
+            return "zustand";
           }
         },
       },

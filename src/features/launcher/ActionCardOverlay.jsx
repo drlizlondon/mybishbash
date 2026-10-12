@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PremiumCardScreen } from "./CardRevealTemplate";
 
 function debugLog(...args) {
@@ -33,8 +33,20 @@ export default function ActionCardOverlay({
 
   const [recentlyShown, setRecentlyShown] = useState([]);
   const [currentCard, setCurrentCard] = useState(null);
+  const cardMountedAtRef = useRef(null);
+
   const maxCardsPerSession = Math.min(3, available.length);
   const canShowAnotherIdea = maxCardsPerSession > 1 && recentlyShown.length < maxCardsPerSession;
+
+  useEffect(() => {
+    cardMountedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+  }, [currentCard?.id]);
+
+  const getDwellMs = () => {
+    if (!cardMountedAtRef.current) return 0;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    return Math.max(0, Math.round(now - cardMountedAtRef.current));
+  };
 
   useEffect(() => {
     if (currentCard || available.length === 0) return;
@@ -68,6 +80,7 @@ export default function ActionCardOverlay({
     if (!canShowAnotherIdea) return;
 
     if (currentCard) {
+      const dwell_ms = getDwellMs();
       void onLogEvent({
         event_type: "action_card_skipped",
         source_type: "action_card",
@@ -75,6 +88,11 @@ export default function ActionCardOverlay({
         card_id: currentCard.id,
         card_title: currentCard.title,
         action_taken: "skipped",
+        dwell_ms,
+        metadata: {
+          dwell_ms,
+          dwell_bucket: dwell_ms < 1500 ? "reflex_skip" : dwell_ms <= 8000 ? "considered_skip" : "pondered_skip",
+        },
       });
     }
 
@@ -107,6 +125,7 @@ export default function ActionCardOverlay({
 
   function handleAccept() {
     if (currentCard) {
+      const dwell_ms = getDwellMs();
       void onLogEvent({
         event_type: "action_card_completed",
         source_type: "action_card",
@@ -114,6 +133,11 @@ export default function ActionCardOverlay({
         card_id: currentCard.id,
         card_title: currentCard.title,
         action_taken: "completed",
+        dwell_ms,
+        metadata: {
+          dwell_ms,
+          dwell_bucket: dwell_ms < 2000 ? "quick_complete" : dwell_ms <= 8000 ? "considered_complete" : "deep_complete",
+        },
       });
       onAccept(currentCard);
     }

@@ -154,11 +154,15 @@ function normalise(dump: Record<string, string | null>) {
   };
   const uuid = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
   const fallbackId = /\bmybishbash-\d+-[a-z0-9]{8}\b/gi;
+  const dwellMs = /"dwell_ms":\s*\d+/gi;
   const out: Record<string, unknown> = {};
   for (const key of TRACKED_KEYS) {
     const raw = dump[key];
     if (raw == null) { out[key] = null; continue; }
-    const masked = raw.replace(uuid, stableId).replace(fallbackId, stableId);
+    const masked = raw
+      .replace(uuid, stableId)
+      .replace(fallbackId, stableId)
+      .replace(dwellMs, '"dwell_ms": "<dwell_ms>"');
     try {
       out[key] = JSON.parse(masked);
     } catch {

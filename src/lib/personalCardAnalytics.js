@@ -121,6 +121,25 @@ function calculateStreaks(dailyEntries) {
 }
 
 /**
+ * Checks if a card has 3+ consecutive skips, qualifying for the "Spiced" visual salience test.
+ */
+export function checkCardIsSpiced(card, events = []) {
+  if (!card) return false;
+  const cardEvents = (Array.isArray(events) ? events : []).filter((e) => eventMatchesCard(e, card));
+  const sorted = [...cardEvents].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  let consecutiveSkips = 0;
+  for (const ev of sorted) {
+    const isCompleted = COMPLETED_EVENT_TYPES.has(ev.event_type) || ev.action_taken === "completed";
+    const isIgnored = IGNORED_EVENT_TYPES.has(ev.event_type) || ev.action_taken === "ignored" || ev.action_taken === "dismissed";
+    if (isCompleted) break;
+    if (isIgnored) consecutiveSkips += 1;
+  }
+  return consecutiveSkips >= 3;
+}
+
+/**
  * Main analytics computation function.
  */
 export function computePersonalCardAnalytics(
@@ -152,6 +171,14 @@ export function computePersonalCardAnalytics(
   let totalIgnored30d = 0;
   let doorwaySwitchesCount = 0;
 
+  // Dwell time aggregates
+  let totalDwellCompletedSum = 0;
+  let totalDwellCompletedCount = 0;
+  let totalDwellIgnoredSum = 0;
+  let totalDwellIgnoredCount = 0;
+  let totalReflexSkips = 0;
+  let totalConsideredSkips = 0;
+
   // 2. Process each card
   const cardAnalytics = personalCards.map((card) => {
     // Initialize day buckets
@@ -170,6 +197,12 @@ export function computePersonalCardAnalytics(
 
     let totalCompleted = 0;
     let totalIgnored = 0;
+    let cardDwellCompletedSum = 0;
+    let cardDwellCompletedCount = 0;
+    let cardDwellIgnoredSum = 0;
+    let cardDwellIgnoredCount = 0;
+    let cardReflexSkips = 0;
+    let cardConsideredSkips = 0;
 
     for (const event of cardEvents) {
       const dateKey = getDateKey(event.created_at, timezone);
@@ -184,6 +217,9 @@ export function computePersonalCardAnalytics(
         event.action_taken === "ignored" ||
         event.action_taken === "dismissed";
 
+      const dwellMs = Number(event.dwell_ms ?? event.metadata?.dwell_ms);
+      const hasValidDwell = Number.isFinite(dwellMs) && dwellMs >= 0;
+
       if (isCompleted) {
         totalCompleted += 1;
         totalCompletions30d += 1;
@@ -193,11 +229,31 @@ export function computePersonalCardAnalytics(
         if (event.app_name || event.target_app) {
           doorwaySwitchesCount += 1;
         }
+        if (hasValidDwell) {
+          cardDwellCompletedSum += dwellMs;
+          cardDwellCompletedCount += 1;
+          totalDwellCompletedSum += dwellMs;
+          totalDwellCompletedCount += 1;
+        }
       } else if (isIgnored) {
         totalIgnored += 1;
         totalIgnored30d += 1;
         if (dayIndex !== undefined) {
           dailyEntries[dayIndex].ignoredCount += 1;
+        }
+        if (hasValidDwell) {
+          cardDwellIgnoredSum += dwellMs;
+          cardDwellIgnoredCount += 1;
+          totalDwellIgnoredSum += dwellMs;
+          totalDwellIgnoredCount += 1;
+
+          if (dwellMs < 1500) {
+            cardReflexSkips += 1;
+            totalReflexSkips += 1;
+          } else {
+            cardConsideredSkips += 1;
+            totalConsideredSkips += 1;
+          }
         }
       }
 
@@ -226,6 +282,28 @@ export function computePersonalCardAnalytics(
       totalSurfaced > 0 ? Math.round((totalIgnored / totalSurfaced) * 100) : 0;
 
     const { currentStreak, bestStreak } = calculateStreaks(dailyEntries);
+
+    // Consecutive skips calculation (ordered latest to oldest)
+    const sortedCardEventsDesc = [...cardEvents].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    let consecutiveSkips = 0;
+    for (const ev of sortedCardEventsDesc) {
+      const isComp = COMPLETED_EVENT_TYPES.has(ev.event_type) || ev.action_taken === "completed";
+      const isIgn = IGNORED_EVENT_TYPES.has(ev.event_type) || ev.action_taken === "ignored" || ev.action_taken === "dismissed";
+      if (isComp) break;
+      if (isIgn) consecutiveSkips += 1;
+    }
+
+    // Card qualifies for spiced visual salience if bypassed 3+ times consecutively or high skip rate
+    const isSpiced = consecutiveSkips >= 3 || (totalIgnored >= 3 && ignoreRate >= 60);
+
+    // Dwell metrics per card
+    const avgDwellCompletedMs = cardDwellCompletedCount > 0 ? Math.round(cardDwellCompletedSum / cardDwellCompletedCount) : null;
+    const avgDwellIgnoredMs = cardDwellIgnoredCount > 0 ? Math.round(cardDwellIgnoredSum / cardDwellIgnoredCount) : null;
+    const avgDwellMs = (cardDwellCompletedCount + cardDwellIgnoredCount) > 0
+      ? Math.round((cardDwellCompletedSum + cardDwellIgnoredSum) / (cardDwellCompletedCount + cardDwellIgnoredCount))
+      : null;
 
     // Find top doorway app
     let topDoorway = null;
@@ -270,6 +348,13 @@ export function computePersonalCardAnalytics(
       currentStreak,
       bestStreak,
       activeDaysCount,
+      consecutiveSkips,
+      isSpiced,
+      avgDwellCompletedMs,
+      avgDwellIgnoredMs,
+      avgDwellMs,
+      reflexSkips: cardReflexSkips,
+      consideredSkips: cardConsideredSkips,
       topDoorway,
       statusTag,
       statusLabel,
@@ -291,6 +376,13 @@ export function computePersonalCardAnalytics(
       ? Math.round((totalCompletions30d / totalSurfacedAll) * 100)
       : null;
 
+  // Dwell aggregates
+  const overallAvgDwellCompletedMs = totalDwellCompletedCount > 0 ? Math.round(totalDwellCompletedSum / totalDwellCompletedCount) : null;
+  const overallAvgDwellIgnoredMs = totalDwellIgnoredCount > 0 ? Math.round(totalDwellIgnoredSum / totalDwellIgnoredCount) : null;
+  const totalSkipsWithDwell = totalReflexSkips + totalConsideredSkips;
+  const reflexSkipPercentage = totalSkipsWithDwell > 0 ? Math.round((totalReflexSkips / totalSkipsWithDwell) * 100) : null;
+  const spicedCardsCount = cardAnalytics.filter((c) => c.isSpiced).length;
+
   return {
     cards: cardAnalytics,
     windowDays,
@@ -303,5 +395,12 @@ export function computePersonalCardAnalytics(
     doorwaySwitchesCount,
     // Roughly 5 minutes of saved screen time per doorway completion
     estimatedMinutesSaved: doorwaySwitchesCount * 5,
+    // Retention & dwell metrics
+    overallAvgDwellCompletedMs,
+    overallAvgDwellIgnoredMs,
+    totalReflexSkips,
+    totalConsideredSkips,
+    reflexSkipPercentage,
+    spicedCardsCount,
   };
 }

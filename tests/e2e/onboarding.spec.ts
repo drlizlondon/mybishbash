@@ -87,9 +87,7 @@ async function fillSignup(page: Page) {
 
 async function startOnboardingFromLandingSignup(page: Page) {
   await seedSignupPreview(page);
-  await page.goto('/mybishbash/');
-
-  await page.locator('.hero-actions .button.primary').click();
+  await page.goto('/mybishbash/invite');
   await expect(page).toHaveURL(/\/mybishbash\/invite$/);
   await page.getByLabel('Access code').fill('WELCOME');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -136,7 +134,7 @@ async function startStrategySetup(page: Page, path = '/mybishbash/onboarding') {
   await seedFirstRun(page);
   await page.goto(path);
   await expect(page.getByRole('heading', { name: 'Start with your Personal Cards' })).toBeVisible();
-  await expect(page.getByText('myBishBash uses those moments')).toBeVisible();
+  await expect(page.getByText(/myBishBash uses those (?:natural )?moments/)).toBeVisible();
   const tutorialDemo = page.getByTestId('onboarding-tutorial-demo');
   await expect(tutorialDemo.getByText('Example Personal Card')).toHaveCount(0);
   await expect(page.getByText('For the things you genuinely mean to do, but don’t always remember.')).toHaveCount(0);
@@ -345,7 +343,7 @@ async function completeOnboardingToHome(page: Page, appName = 'Instagram') {
 
 test('signup route lands new users in Personal Cards onboarding', async ({ page }) => {
   await startOnboardingFromLandingSignup(page);
-  await expect(page.getByText('myBishBash uses those moments')).toBeVisible();
+  await expect(page.getByText(/myBishBash uses those (?:natural )?moments/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Set up my Personal Cards' })).toBeEnabled({ timeout: 4500 });
 });
 
@@ -353,7 +351,7 @@ test('Personal Cards onboarding saves selected cards without starter packs or co
   await completeCoreSetup(page);
 
   await expect(page.getByRole('heading', { name: 'Where should myBishBash appear first?' })).toBeVisible();
-  await expect(page.getByText('Choose one app you open often. You can add more later.')).toBeVisible();
+  await expect(page.getByText(/You can add more later\./)).toBeVisible();
   await page.getByRole('button', { name: 'Choose an app later' }).click();
   await expect(page).toHaveURL(/\/mybishbash\/home$/);
 

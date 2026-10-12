@@ -236,6 +236,7 @@ import { getPacksActions, usePacksStore } from "./stores/packsStore";
 import { getCardsActions, useCardsStore } from "./stores/cardsStore";
 import { getEventsActions, getEventsStore, useEventsStore } from "./stores/eventsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
+import { checkCardIsSpiced, buildDwellMetadata } from "./lib/spicedCards";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
 
@@ -3162,7 +3163,7 @@ function App() {
     return nextOverlay;
   }
 
-  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false } = {}) {
+  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false, dwell_ms = null } = {}) {
     // Only supported launcher IDs may ever be launched.
     if (!isKnownLauncher(versionId)) {
       console.warn("[LAUNCHER] Blocking unsupported launcher destination", { versionId, source, reason });
@@ -3220,17 +3221,21 @@ function App() {
       return false;
     }
 
+    const dwellMetadata = buildDwellMetadata(dwell_ms);
+
     void logLauncherEvent("intercept_continue_to_app", versionId, {
       launched_from: source,
       reason,
       href,
       ...destinationMetadata,
+      ...dwellMetadata,
     });
     void logLauncherEvent("fake_launcher_real_app_opened", versionId, {
       launched_from: source,
       reason,
       href,
       ...destinationMetadata,
+      ...dwellMetadata,
     });
     void logEvent({
       event_type: "intercept_continue_to_app",
@@ -3240,6 +3245,7 @@ function App() {
       app_name: version?.name,
       launcher_context: version?.id,
       action_taken: "continued_to_app",
+      ...dwellMetadata,
       metadata: {
         href,
         reason,
@@ -3247,6 +3253,7 @@ function App() {
         activationKey: interceptActivationRef.current?.activationKey ?? null,
         destinationOpened: Boolean(href),
         ...destinationMetadata,
+        ...dwellMetadata,
       },
     });
 
@@ -4829,10 +4836,32 @@ function App() {
     [cardPacks, editingCustomPackId],
   );
 
+  const cardOverlayMountedAtRef = useRef(null);
+  useEffect(() => {
+    if (overlay) {
+      cardOverlayMountedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+    } else {
+      cardOverlayMountedAtRef.current = null;
+    }
+  }, [overlay?.cardId, overlay?.activationKey, overlay?.type]);
+
+  const getOverlayDwellMs = useCallback(() => {
+    if (!cardOverlayMountedAtRef.current) return null;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    return Math.max(0, Math.round(now - cardOverlayMountedAtRef.current));
+  }, []);
+
   const activeRevealCard = overlay?.cardId
     ? resolveRevealCard(cards, overlay.cardId, profile.timezone)
     : null;
-  const recordActiveRevealCardIgnored = useCallback((reason) => {
+
+  const activeRevealCardWithSalience = useMemo(() => {
+    if (!activeRevealCard) return null;
+    const isSpiced = checkCardIsSpiced(activeRevealCard, events);
+    return { ...activeRevealCard, isSpiced };
+  }, [activeRevealCard, events]);
+
+  const recordActiveRevealCardIgnored = useCallback((reason, extraMeta = {}) => {
     if (!overlay || overlay.type !== "reveal" || !activeRevealCard || activeRevealCard.sourcePackId) return;
     const now = new Date();
     const surface = getCardSelectionSurfaceForOverlay(overlay);
@@ -4843,6 +4872,9 @@ function App() {
           : card,
       ),
     );
+
+    const dwellMetadata = buildDwellMetadata(extraMeta?.dwell_ms ?? getOverlayDwellMs());
+
     void logEvent({
       event_type: CARD_EVENT_TYPES.IGNORED,
       source_type: "personal",
@@ -4853,6 +4885,7 @@ function App() {
       card_title: activeRevealCard.dashboardTitle ?? activeRevealCard.promptText,
       card_text: activeRevealCard.promptText,
       action_taken: "ignored",
+      ...dwellMetadata,
       metadata: {
         cardKind: activeRevealCard.cardKind ?? "personal",
         surface,
@@ -4860,9 +4893,10 @@ function App() {
         origin: overlay.origin ?? null,
         launchSource: overlay.launchSource ?? null,
         activationKey: overlay?.activationKey ?? null,
+        ...dwellMetadata,
       },
     });
-  }, [activeRevealCard, logEvent, overlay, updateCards]);
+  }, [activeRevealCard, getOverlayDwellMs, logEvent, overlay, updateCards]);
   const activeOverlayVersion = useMemo(
     () =>
       overlay?.versionId
@@ -5603,7 +5637,7 @@ function App() {
         <MemoOverlay
           key={`${overlay.type}:${overlay.versionId ?? ""}:${overlay.cardId ?? ""}:${overlay.packId ?? ""}:${overlay?.activationKey ?? ""}`}
           overlay={overlay}
-          card={activeRevealCard}
+          card={activeRevealCardWithSalience}
           route={route}
           launchSession={effectiveLaunchSession}
           version={activeOverlayVersion}
@@ -5617,7 +5651,7 @@ function App() {
               setOverlay(null);
               return;
             }
-            recordActiveRevealCardIgnored("overlay_closed");
+            recordActiveRevealCardIgnored("overlay_closed", { dwell_ms: getOverlayDwellMs() });
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             setShouldLaunchOverlay(false);
@@ -5626,7 +5660,7 @@ function App() {
             setOverlay(null);
           }}
           onDashboard={() => {
-            recordActiveRevealCardIgnored("dashboard_opened");
+            recordActiveRevealCardIgnored("dashboard_opened", { dwell_ms: getOverlayDwellMs() });
             suppressNextHomeAutoLaunchRef.current = true;
             suppressStandaloneLauncherRecoveryOnce();
             setShouldLaunchOverlay(false);

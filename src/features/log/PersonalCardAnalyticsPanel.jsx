@@ -1,13 +1,21 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { computePersonalCardAnalytics } from "../../lib/personalCardAnalytics";
 import { HeartGlyph } from "../../components/Glyphs";
 
-export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezone = "Europe/London", onNavigateToLibrary }) {
+export function PersonalCardAnalyticsPanel({
+  cards = [],
+  allEvents = [],
+  timezone = "Europe/London",
+  onNavigateToLibrary,
+  onMakeCommitment,
+  onPauseCard,
+}) {
+  const [timeframeDays, setTimeframeDays] = useState(30);
   const [activeTooltip, setActiveTooltip] = useState(null);
 
   const analytics = useMemo(() => {
-    return computePersonalCardAnalytics(cards, allEvents, timezone, { days: 30 });
-  }, [cards, allEvents, timezone]);
+    return computePersonalCardAnalytics(cards, allEvents, timezone, { days: timeframeDays });
+  }, [cards, allEvents, timezone, timeframeDays]);
 
   const {
     cards: cardTrends,
@@ -15,25 +23,47 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
     superstarCards,
     totalPersonalCards,
     totalCompletions30d,
-    totalIgnored30d,
     overallCompletionRate,
     doorwaySwitchesCount,
     estimatedMinutesSaved,
+    overallAvgDwellCompletedMs,
+    overallAvgDwellIgnoredMs,
+    totalReflexSkips,
+    reflexSkipPercentage,
+    spicedCardsCount,
   } = analytics;
 
   return (
     <div className="card-analytics-container">
-      {/* 30-Day Executive Scorecard */}
+      {/* Executive Scorecard with 14d / 30d Toggle */}
       <article className="card-analytics-hero">
         <header className="card-analytics-hero-header">
-          <p className="card-analytics-eyebrow">30-day personal overview</p>
+          <div className="card-analytics-header-row">
+            <p className="card-analytics-eyebrow">{timeframeDays}-day personal overview</p>
+            <div className="timeframe-toggle-pill" role="group" aria-label="Timeline window">
+              <button
+                type="button"
+                className={`timeframe-toggle-btn ${timeframeDays === 14 ? "active" : ""}`}
+                onClick={() => setTimeframeDays(14)}
+              >
+                14 Days
+              </button>
+              <button
+                type="button"
+                className={`timeframe-toggle-btn ${timeframeDays === 30 ? "active" : ""}`}
+                onClick={() => setTimeframeDays(30)}
+              >
+                30 Days
+              </button>
+            </div>
+          </div>
           <h3>
             {totalCompletions30d > 0 ? (
               <>
                 You turned <span>{totalCompletions30d}</span> moments into real life.
               </>
             ) : (
-              "Your 30-day card journey begins here."
+              `Your ${timeframeDays}-day card journey begins here.`
             )}
           </h3>
         </header>
@@ -57,6 +87,41 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
           </div>
         </div>
 
+        {/* Card Retention & Attention Dwell Time (Psychology & Behavioral Change Data) */}
+        {(overallAvgDwellCompletedMs !== null || overallAvgDwellIgnoredMs !== null || totalReflexSkips > 0) && (
+          <div className="retention-dwell-panel">
+            <div className="retention-dwell-heading">
+              <span className="retention-badge-tag">Attention & Dwell Retention ⏱️</span>
+              <span className="retention-subtag">Sociology Experiment: Active</span>
+            </div>
+            <div className="retention-stat-columns">
+              <div className="dwell-stat-card">
+                <span className="dwell-stat-num">
+                  {overallAvgDwellCompletedMs !== null ? `${(overallAvgDwellCompletedMs / 1000).toFixed(1)}s` : "—"}
+                </span>
+                <span className="dwell-stat-title">Glance before completing</span>
+                <span className="dwell-stat-desc">Time spent absorbing card before saying yes</span>
+              </div>
+              <div className="dwell-stat-card">
+                <span className="dwell-stat-num">
+                  {overallAvgDwellIgnoredMs !== null ? `${(overallAvgDwellIgnoredMs / 1000).toFixed(1)}s` : "—"}
+                </span>
+                <span className="dwell-stat-title">Glance before skipping</span>
+                <span className="dwell-stat-desc">
+                  {reflexSkipPercentage !== null
+                    ? `${reflexSkipPercentage}% reflex skips (<1.5s muscle memory)`
+                    : "Passes vs thoughtful skips"}
+                </span>
+              </div>
+            </div>
+            {spicedCardsCount > 0 && (
+              <p className="retention-spiced-callout">
+                🌶️ <strong>{spicedCardsCount} {spicedCardsCount === 1 ? "card is" : "cards are"} spiced:</strong> Dynamic warm terracotta salience is active on cards with $\ge 3$ consecutive skips to break sensory habituation and interrupt automatic bypass.
+              </p>
+            )}
+          </div>
+        )}
+
         <p className="card-analytics-hero-caption">
           {doorwaySwitchesCount > 0
             ? `Every pause before Instagram or Safari gave you a choice. You chose yourself ${doorwaySwitchesCount} times.`
@@ -64,7 +129,7 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
         </p>
       </article>
 
-      {/* The Honest Mirror (Avoided / Skipped Cards) */}
+      {/* The Honest Mirror (Avoided / Skipped Cards with Salience & Coaching Forks) */}
       {avoidedCards.length > 0 && (
         <article className="honest-mirror-card">
           <div className="honest-mirror-header">
@@ -77,19 +142,35 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
 
           <div className="avoided-cards-list">
             {avoidedCards.map((card) => (
-              <div key={card.cardId} className="avoided-card-item">
+              <div key={card.cardId} className={`avoided-card-item ${card.isSpiced ? "is-spiced-card" : ""}`}>
                 <div className="avoided-card-top">
-                  <span className="avoided-card-title">{card.promptText}</span>
+                  <div className="avoided-card-title-line">
+                    <span className="avoided-card-title">{card.promptText}</span>
+                    {card.isSpiced && (
+                      <span className="spiced-pill-badge" title="Dynamic salience to interrupt autopilot">
+                        🌶️ Spiced for Attention
+                      </span>
+                    )}
+                  </div>
                   <span className="avoided-card-skip-pill">
                     Skipped {card.totalIgnored} of {card.totalSurfaced} times ({card.ignoreRate}%)
                   </span>
                 </div>
 
-                {card.topDoorway && (
-                  <p className="avoided-card-doorway">
-                    Often bypassed before opening <strong>{card.topDoorway}</strong>
-                  </p>
-                )}
+                {/* Behavioral Metadata Chips */}
+                <div className="avoided-card-chips">
+                  {card.consecutiveSkips >= 2 && (
+                    <span className="chip-warn">⚠️ {card.consecutiveSkips} skips in a row</span>
+                  )}
+                  {card.avgDwellIgnoredMs !== null && (
+                    <span className="chip-dwell">
+                      ⏱️ {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s glance {card.avgDwellIgnoredMs < 1500 ? "(Reflex bypass)" : "(Considered pass)"}
+                    </span>
+                  )}
+                  {card.topDoorway && (
+                    <span className="chip-app">📱 Bypassed before {card.topDoorway}</span>
+                  )}
+                </div>
 
                 <div className="honest-mirror-nudges">
                   <span className="nudge-title">Empathetic tweak suggestions:</span>
@@ -101,9 +182,39 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
                       <strong>Check your timing:</strong> Are you seeing this during your busiest hours? Try moving it to evening.
                     </li>
                     <li>
-                      <strong>Take a breather:</strong> Habits should serve you. If this one isn't right for this season, feel free to snooze or archive it.
+                      <strong>Take a breather:</strong> Habits should serve you. If this one isn't right for this season, feel free to pause or archive it.
                     </li>
                   </ul>
+                </div>
+
+                {/* The Two-Fork Behavioral Action Choice */}
+                <div className="honest-mirror-fork-actions">
+                  <button
+                    type="button"
+                    className="fork-btn fork-btn-commitment"
+                    onClick={() => {
+                      if (onMakeCommitment) {
+                        onMakeCommitment(card);
+                      } else if (onNavigateToLibrary) {
+                        onNavigateToLibrary();
+                      }
+                    }}
+                  >
+                    🎯 Make it a Commitment
+                  </button>
+                  <button
+                    type="button"
+                    className="fork-btn fork-btn-pause"
+                    onClick={() => {
+                      if (onPauseCard) {
+                        onPauseCard(card);
+                      } else if (onNavigateToLibrary) {
+                        onNavigateToLibrary();
+                      }
+                    }}
+                  >
+                    ⏸️ Pause for this Season
+                  </button>
                 </div>
               </div>
             ))}
@@ -128,6 +239,9 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
                   {card.currentStreak > 1 && (
                     <span className="superstar-streak">🔥 {card.currentStreak}-day streak</span>
                   )}
+                  {card.avgDwellCompletedMs !== null && (
+                    <span className="superstar-dwell">⏱️ {(card.avgDwellCompletedMs / 1000).toFixed(1)}s glance</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -135,11 +249,11 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
         </article>
       )}
 
-      {/* 30-Day Trend Grid for Every Personal Card */}
+      {/* Activity Trail Grid for Every Personal Card (14d or 30d) */}
       <article className="all-cards-trends-card">
         <div className="trends-card-header">
-          <h4>30-Day Activity Trail</h4>
-          <p>Every personal card you've created and how you've handled it over the past month.</p>
+          <h4>{timeframeDays}-Day Activity Trail</h4>
+          <p>Every personal card you've created and how you've handled it over the past {timeframeDays} days.</p>
           
           <div className="legend-strip">
             <span className="legend-item"><span className="legend-dot completed" /> Completed</span>
@@ -168,6 +282,7 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
                     <div className="card-trend-title-line">
                       <span className="card-trend-title">{card.promptText}</span>
                       <span className={`card-status-badge ${card.statusTag}`}>{card.statusLabel}</span>
+                      {card.isSpiced && <span className="spiced-mini-badge" title="Spiced card">🌶️</span>}
                     </div>
 
                     <div className="card-trend-submetrics">
@@ -188,11 +303,11 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
                     </div>
                   </div>
 
-                  {/* 30-Day Dot Matrix */}
+                  {/* Dot Matrix */}
                   <div
                     className="timeline-dots-wrapper"
                     role="group"
-                    aria-label={`30-day activity for ${card.promptText}`}
+                    aria-label={`${timeframeDays}-day activity for ${card.promptText}`}
                   >
                     <div className="timeline-dots-track">
                       {card.dailyEntries.map((day, idx) => {
@@ -203,9 +318,6 @@ export function PersonalCardAnalyticsPanel({ cards = [], allEvents = [], timezon
                             ? `Skipped ${day.ignoredCount}x`
                             : "No activity"
                         }`;
-
-                        const isFocused =
-                          activeTooltip?.cardId === card.cardId && activeTooltip?.index === idx;
 
                         return (
                           <div
