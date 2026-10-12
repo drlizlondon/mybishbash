@@ -11,6 +11,9 @@ import LandingSections from "./LandingSections";
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
 const ABOUT_HREF = `${BASE}about`;
+// Sibling product on the same domain (mybishbash.app/people/), served by its
+// own Pages project; linked here so it has an inbound link, not just a sitemap entry.
+const PEOPLE_HREF = `${BASE}people/`;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
 const PRIVACY_HREF = `${BASE}privacy`;
 const TERMS_HREF = `${BASE}terms`;
@@ -210,6 +213,7 @@ function Footer() {
           <a href="#how-it-works">How it works</a>
           <a href="#pricing">Pricing</a>
           <a href={ABOUT_HREF} onClick={stopEditNavigation}>About</a>
+          <a href={PEOPLE_HREF} onClick={stopEditNavigation}>myBishBash People</a>
           {content.footer.links.map((link, index) => (
             <a href={FOOTER_LINK_HREFS[index] ?? HOME_HREF} key={link} onClick={stopEditNavigation}>
               <EditableText path={`footer.links.${index}`} />

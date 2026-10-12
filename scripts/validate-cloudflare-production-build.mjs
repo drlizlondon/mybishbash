@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { deriveClientRoutes } from "./derive-client-routes.mjs";
+import { ROUTE_META } from "../src/content/routeMeta.js";
 
 const html = readFileSync("dist/index.html", "utf8");
 const redirects = readFileSync("dist/_redirects", "utf8");
@@ -49,10 +50,32 @@ for (const route of deriveClientRoutes()) {
     );
     if (route.indexable) {
       assert.match(routeHtml, /<meta name="robots" content="index, follow/, `${route.path} is a public page and should stay indexable`);
+      // Each public page is served with its own title and description, so
+      // search results stop showing six copies of the homepage listing.
+      const meta = ROUTE_META[route.path];
+      assert.ok(meta, `${route.path} is a public page and needs an entry in src/content/routeMeta.js`);
+      assert.equal(servedTag(routeHtml, /<title>([^<]*)<\/title>/), meta.title, `${routeFile} should serve its own <title>`);
+      for (const pattern of [
+        /<meta\s+name="description"\s+content="([^"]*)"/,
+        /<meta\s+property="og:description"\s+content="([^"]*)"/,
+        /<meta\s+name="twitter:description"\s+content="([^"]*)"/,
+      ]) {
+        assert.equal(servedTag(routeHtml, pattern), meta.description, `${routeFile} should serve its own description (${pattern})`);
+      }
+      for (const pattern of [/<meta property="og:title" content="([^"]*)"/, /<meta name="twitter:title" content="([^"]*)"/]) {
+        assert.equal(servedTag(routeHtml, pattern), meta.title, `${routeFile} should serve its own social title (${pattern})`);
+      }
     } else {
       assert.match(routeHtml, /<meta name="robots" content="noindex, follow"/, `${route.path} is an app route and should be noindex`);
     }
   }
+}
+
+// No two public pages (or a page and the homepage) may share a title.
+const publicTitles = [servedTag(html, /<title>([^<]*)<\/title>/), ...deriveClientRoutes().filter((r) => r.indexable).map((r) => ROUTE_META[r.path].title)];
+assert.equal(new Set(publicTitles).size, publicTitles.length, `public page titles must be unique: ${publicTitles.join(" / ")}`);
+for (const text of [...publicTitles, ...Object.values(ROUTE_META).map((m) => m.description)]) {
+  assert.doesNotMatch(text, /\u2014/, `route meta must not contain an em dash: ${text}`);
 }
 
 assert.match(serviceWorker, /const APP_BASE = new URL\("\.\/", self\.location\)\.pathname;/);
@@ -60,3 +83,8 @@ assert.doesNotMatch(serviceWorker, /const APP_BASE = "\/mybishbash\//);
 assert.ok(version.sourceSha, "Cloudflare version.json should include sourceSha for deployment verification");
 
 console.log("Cloudflare production build validated for /");
+
+function servedTag(source, pattern) {
+  const match = source.match(pattern);
+  return match ? match[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"') : undefined;
+}
