@@ -1,4 +1,10 @@
-# GitHub Pages Branch Preview
+# GitHub Pages Branch Preview (RETIRED 2026-10-13)
+
+> Retired. `deploy-pages-preview.yml` was removed on 2026-10-13: its deploy had
+> failed on every run since 2026-09-26 (expired token for `mybishbash-preview`),
+> so the preview site only serves a stale build. The staging preview is now the
+> Cloudflare Pages branch preview; see `docs/release-workflow.md` for it and its
+> installed-PWA limit. Kept below as history.
 
 The permanent `staging` branch uses a separate GitHub Pages project for installed-PWA testing before merging to `main`.
 

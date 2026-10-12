@@ -35,11 +35,25 @@ That site is a secondary artefact, not the public product. It is built with
 base `/`, so its asset links do not resolve under the `/mybishbash/` subpath.
 Do not treat it as production.
 
-`staging` is pre-production. Pushes to `staging` deploy the separate preview site:
+`staging` is pre-production. Cloudflare Pages builds every branch it sees, so
+pushes to `staging` publish the staging preview at:
 
 ```text
-https://drlizlondon.github.io/mybishbash-preview/
+https://staging.mybishbashlive.pages.dev/
 ```
+
+Every PR branch gets its own preview too (the "Cloudflare Pages" check on the PR
+links it, e.g. `https://<branch>.mybishbashlive.pages.dev/`).
+
+Limit: the Cloudflare build is the production build, so its web manifest pins
+`id`, `start_url` and `scope` to `https://mybishbash.app/`. Branch previews are
+right for page, route, copy and metadata checks, but **not** for installed-PWA
+tests: Add to Home Screen from a preview does not give you a staging app. The
+old GitHub Pages preview (`drlizlondon.github.io/mybishbash-preview/`) that
+served installed-PWA tests was retired on 2026-10-13: its deploy had failed on
+every run since 2026-09-26 (the token for the preview repository expired), so
+that site only serves a stale build. There is no staging PWA until branch
+previews get an origin-relative manifest (open follow-up).
 
 `feature/*` branches are for individual experiments and fixes. They should not deploy to production.
 
@@ -49,7 +63,7 @@ https://drlizlondon.github.io/mybishbash-preview/
 2. Make the focused change.
 3. Run local checks.
 4. Merge or fast-forward the feature into `staging`.
-5. Let the staging preview deploy.
+5. Let the Cloudflare staging preview deploy and check it (pages, routes, copy).
 6. Test on real iPhone Safari and installed PWA.
 7. Open a PR from `staging` to `main`.
 8. Merge to `main` only after the checklist passes.
@@ -59,9 +73,8 @@ https://drlizlondon.github.io/mybishbash-preview/
 - `npm run build` passes.
 - `npm run test:before-push` passes.
 - GitHub Actions checks are green.
-- iPhone Safari can open the staging install page.
-- Add to Home Screen installs the staging/test PWA.
-- Installed fake Safari launcher opens the staging preview path.
+- iPhone Safari can open the staging preview's install page.
+- (Installed-PWA checks: see the limit above; there is no staging PWA today.)
 - Fake Safari launcher shows the expected card flow.
 - Interruption ON works.
 - Continue opens the intended destination.
@@ -70,16 +83,13 @@ https://drlizlondon.github.io/mybishbash-preview/
 - Production deploy workflow still triggers only from `main`.
 - Production manifest still points at `https://mybishbash.app/` (asserted by
   `scripts/validate-cloudflare-production-build.mjs`; the `/mybishbash/` base
-  belongs to the GitHub Pages preview, not production).
-- Staging manifest points to `/mybishbash-preview/`.
+  belongs to the GitHub Pages project site, not production).
 
 ## Preview Install URL
 
-Use this for real iPhone staging tests:
-
-```text
-https://drlizlondon.github.io/mybishbash-preview/install/safari/
-```
+Retired 2026-10-13 with the GitHub Pages preview (see the limit under
+Branches). The old URL, `https://drlizlondon.github.io/mybishbash-preview/install/safari/`,
+serves a stale build and must not be used for release evidence.
 
 For ordinary manifest/install testing, delete and reinstall the test PWA after
 a staging redeploy because iOS may cache Home Screen manifest metadata. Do
