@@ -57,7 +57,7 @@ silently bypassed.
 - `.github/workflows/staging-checks.yml`: single `checks` job on Node 20 —
   `npm ci` → Build → Playwright install → `npm run test:before-push` → smoke
   Playwright specs. This is the workflow Phase 0 modifies. Do **not** touch
-  `playwright.yml`, `deploy-pages.yml`, `deploy-pages-preview.yml`.
+  `playwright.yml`, `deploy-pages.yml`, `deploy-pages-preview.yml` (the last retired 2026-10-13, see `docs/release-workflow.md`).
 - CI Node is **20** (`node-version: 20`); local dev is Node 25. All chosen
   tool versions must support Node 20.
 - `scripts/test-release-guardrails.mjs` imports `src/lib/cardSelection.js`,
