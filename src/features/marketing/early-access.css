@@ -133,7 +133,7 @@ body:has(.early-page)::after {
   font-family: "Inter Tight", Inter, sans-serif;
   font-size: clamp(48px, 5vw, 86px);
   line-height: 0.94;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.03em;
   font-weight: 800;
   animation: earlyHeadlineIn 520ms ease-out 80ms both;
 }
