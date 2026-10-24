@@ -103,6 +103,13 @@
   function removePrompt() {
     var prompt = document.getElementById('mbb-analytics-consent');
     if (prompt) prompt.remove();
+    document.documentElement.style.removeProperty('--mbb-consent-h');
+  }
+
+  function syncPromptHeight() {
+    var prompt = document.getElementById('mbb-analytics-consent');
+    if (!prompt) return;
+    document.documentElement.style.setProperty('--mbb-consent-h', prompt.offsetHeight + 'px');
   }
 
   function clearAnalyticsCookies() {
@@ -187,6 +194,8 @@
     prompt.querySelector('[data-consent="denied"]').addEventListener('click', function () { choose('denied'); });
     prompt.querySelector('[data-consent="granted"]').addEventListener('click', function () { choose('granted'); });
     document.body.appendChild(prompt);
+    syncPromptHeight();
+    window.addEventListener('resize', syncPromptHeight);
   }
 
   function addStyles() {
@@ -210,6 +219,7 @@
       // just smaller, so the hero headline and the primary CTA stay visible
       // above it without scrolling.
       '@media(max-width:620px){' +
+        'body{padding-bottom:var(--mbb-consent-h,0)}' +
         '#mbb-analytics-consent{align-items:stretch;flex-direction:column;gap:8px;left:0;right:0;bottom:0;max-width:none;margin:0;border-radius:16px 16px 0 0;border-bottom:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px))}' +
         '#mbb-analytics-consent p{font-size:13px;line-height:1.4}' +
         '#mbb-analytics-consent a{font-size:13px}' +

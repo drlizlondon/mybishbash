@@ -4714,13 +4714,11 @@ function App() {
       setSession(currentSession);
       if (!currentSession) {
         setSyncStatus("needs-connection");
-        alert("No active session found. Please log in again.");
-      } else {
-        alert("Session refreshed successfully.");
+        setSyncError("No active session found. Please log in again.");
       }
     } catch (e) {
       console.error("Session refresh failed", e);
-      alert("Failed to refresh session.");
+      setSyncError("Failed to refresh session.");
     }
   }
 

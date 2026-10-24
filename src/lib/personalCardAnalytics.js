@@ -317,17 +317,17 @@ export function computePersonalCardAnalytics(
 
     // Categorization
     let statusTag = "steady";
-    let statusLabel = "Building momentum 🌱";
+    let statusLabel = "Building momentum";
 
     if (totalSurfaced === 0) {
       statusTag = "unseen";
       statusLabel = "Not surfaced yet";
     } else if (totalSurfaced >= 2 && ignoreRate >= 50) {
       statusTag = "avoided";
-      statusLabel = "Frequently bypassed 🙈";
+      statusLabel = "Frequently bypassed";
     } else if (totalSurfaced >= 3 && (completionRate ?? 0) >= 70) {
       statusTag = "superstar";
-      statusLabel = "Second nature ⭐";
+      statusLabel = "Second nature";
     }
 
     const activeDaysCount = dailyEntries.filter((d) => d.completedCount > 0).length;
