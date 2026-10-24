@@ -571,7 +571,7 @@ export default function Overlay({
         card.sourcePackId
           ? card.attribution || card.sourceTitle || "A card from your pack."
           : isSpiced
-            ? "🌶️ Spicing this one up for you — a fresh look to catch your eye."
+            ? "Spicing this one up for you. A fresh look to catch your eye."
             : "A gentle nudge from the version of you that cares."
       }
       actions={resolvedActions}

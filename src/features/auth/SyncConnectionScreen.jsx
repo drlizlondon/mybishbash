@@ -38,6 +38,7 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     return new URLSearchParams(window.location.search).get("signup") !== "1";
   });
   const [agreedToLegal, setAgreedToLegal] = useState(false);
+  const [legalError, setLegalError] = useState("");
   const hasSignupHandoff = useMemo(() => Boolean(getSignupHandoffReference()), [handoffRevision]);
   const isDemoMode = isDemoModeEnabled();
 
@@ -105,7 +106,7 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
     event.preventDefault();
     if (!email.trim() || !password.trim()) return;
     if (!isLogin && !agreedToLegal) {
-      alert(content.status.legalRequired);
+      setLegalError(content.status.legalRequired);
       return;
     }
     if (isLogin) {
@@ -250,13 +251,14 @@ function SyncConnectionScreenContent({ mode, error, onSignUp, onLogIn, onPasswor
                         <input
                           type="checkbox"
                           checked={agreedToLegal}
-                          onChange={(e) => setAgreedToLegal(e.target.checked)}
+                          onChange={(e) => { setAgreedToLegal(e.target.checked); setLegalError(""); }}
                           style={{ width: "auto", margin: 0 }}
                         />
                         <span style={{ lineHeight: "1.4" }}>
                           <EditableText path="form.legalPrefix" /> <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("terms"); }} style={{ textDecoration: "underline" }}><EditableText path="form.terms" /></a> <EditableText path="form.legalMiddle" /> <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLegalModal?.("privacy"); }} style={{ textDecoration: "underline" }}><EditableText path="form.privacy" /></a><EditableText path="form.legalSuffix" />
                         </span>
                       </label>
+                      {legalError ? <p className="sync-error" role="alert">{legalError}</p> : null}
                     </>
                   ) : null}
                   <button type="submit" className="save-button">

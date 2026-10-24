@@ -91,7 +91,7 @@ export function PersonalCardAnalyticsPanel({
         {(overallAvgDwellCompletedMs !== null || overallAvgDwellIgnoredMs !== null || totalReflexSkips > 0) && (
           <div className="retention-dwell-panel">
             <div className="retention-dwell-heading">
-              <span className="retention-badge-tag">Attention & Dwell Retention ⏱️</span>
+              <span className="retention-badge-tag">Attention & Dwell Retention</span>
               <span className="retention-subtag">Sociology Experiment: Active</span>
             </div>
             <div className="retention-stat-columns">
@@ -116,7 +116,7 @@ export function PersonalCardAnalyticsPanel({
             </div>
             {spicedCardsCount > 0 && (
               <p className="retention-spiced-callout">
-                🌶️ <strong>{spicedCardsCount} {spicedCardsCount === 1 ? "card is" : "cards are"} spiced:</strong> Dynamic warm terracotta salience is active on cards with $\ge 3$ consecutive skips to break sensory habituation and interrupt automatic bypass.
+                <strong>{spicedCardsCount} {spicedCardsCount === 1 ? "card is" : "cards are"} spiced:</strong> Dynamic warm terracotta salience is active on cards with $\ge 3$ consecutive skips to break sensory habituation and interrupt automatic bypass.
               </p>
             )}
           </div>
@@ -133,7 +133,7 @@ export function PersonalCardAnalyticsPanel({
       {avoidedCards.length > 0 && (
         <article className="honest-mirror-card">
           <div className="honest-mirror-header">
-            <div className="honest-mirror-badge">The Honest Mirror 🙈</div>
+            <div className="honest-mirror-badge">The Honest Mirror</div>
             <h4>Cards you might be secretly dodging</h4>
             <p className="honest-mirror-subtitle">
               No guilt here. Noticing what you bypass is how you adapt habits to real life instead of fighting yourself.
@@ -148,7 +148,7 @@ export function PersonalCardAnalyticsPanel({
                     <span className="avoided-card-title">{card.promptText}</span>
                     {card.isSpiced && (
                       <span className="spiced-pill-badge" title="Dynamic salience to interrupt autopilot">
-                        🌶️ Spiced for Attention
+                        Spiced for Attention
                       </span>
                     )}
                   </div>
@@ -160,15 +160,15 @@ export function PersonalCardAnalyticsPanel({
                 {/* Behavioral Metadata Chips */}
                 <div className="avoided-card-chips">
                   {card.consecutiveSkips >= 2 && (
-                    <span className="chip-warn">⚠️ {card.consecutiveSkips} skips in a row</span>
+                    <span className="chip-warn">{card.consecutiveSkips} skips in a row</span>
                   )}
                   {card.avgDwellIgnoredMs !== null && (
                     <span className="chip-dwell">
-                      ⏱️ {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s glance {card.avgDwellIgnoredMs < 1500 ? "(Reflex bypass)" : "(Considered pass)"}
+                      {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s glance {card.avgDwellIgnoredMs < 1500 ? "(Reflex bypass)" : "(Considered pass)"}
                     </span>
                   )}
                   {card.topDoorway && (
-                    <span className="chip-app">📱 Bypassed before {card.topDoorway}</span>
+                    <span className="chip-app">Bypassed before {card.topDoorway}</span>
                   )}
                 </div>
 
@@ -200,7 +200,7 @@ export function PersonalCardAnalyticsPanel({
                       }
                     }}
                   >
-                    🎯 Make it a Commitment
+                    Make it a Commitment
                   </button>
                   <button
                     type="button"
@@ -213,7 +213,7 @@ export function PersonalCardAnalyticsPanel({
                       }
                     }}
                   >
-                    ⏸️ Pause for this Season
+                    Pause for this Season
                   </button>
                 </div>
               </div>
@@ -226,7 +226,7 @@ export function PersonalCardAnalyticsPanel({
       {superstarCards.length > 0 && (
         <article className="superstar-card">
           <div className="superstar-header">
-            <span className="superstar-badge">Second Nature ⭐</span>
+            <span className="superstar-badge">Second Nature</span>
             <h4>Your highest momentum cards</h4>
             <p>You follow through on these almost every single time they pop up.</p>
           </div>
@@ -237,10 +237,10 @@ export function PersonalCardAnalyticsPanel({
                 <div className="superstar-stats">
                   <span className="superstar-winrate">{card.completionRate}% win rate</span>
                   {card.currentStreak > 1 && (
-                    <span className="superstar-streak">🔥 {card.currentStreak}-day streak</span>
+                    <span className="superstar-streak">{card.currentStreak}-day streak</span>
                   )}
                   {card.avgDwellCompletedMs !== null && (
-                    <span className="superstar-dwell">⏱️ {(card.avgDwellCompletedMs / 1000).toFixed(1)}s glance</span>
+                    <span className="superstar-dwell">{(card.avgDwellCompletedMs / 1000).toFixed(1)}s glance</span>
                   )}
                 </div>
               </div>
@@ -282,7 +282,6 @@ export function PersonalCardAnalyticsPanel({
                     <div className="card-trend-title-line">
                       <span className="card-trend-title">{card.promptText}</span>
                       <span className={`card-status-badge ${card.statusTag}`}>{card.statusLabel}</span>
-                      {card.isSpiced && <span className="spiced-mini-badge" title="Spiced card">🌶️</span>}
                     </div>
 
                     <div className="card-trend-submetrics">
@@ -295,10 +294,10 @@ export function PersonalCardAnalyticsPanel({
                         <strong>{card.totalCompleted}</strong> done · <strong>{card.totalIgnored}</strong> skipped
                       </span>
                       {card.currentStreak > 0 && (
-                        <span className="metric-tag streak">🔥 {card.currentStreak}d streak</span>
+                        <span className="metric-tag streak">{card.currentStreak}d streak</span>
                       )}
                       {card.topDoorway && (
-                        <span className="metric-tag doorway">📱 Intercepts {card.topDoorway}</span>
+                        <span className="metric-tag doorway">Intercepts {card.topDoorway}</span>
                       )}
                     </div>
                   </div>
@@ -313,7 +312,7 @@ export function PersonalCardAnalyticsPanel({
                       {card.dailyEntries.map((day, idx) => {
                         const tooltipText = `${day.dayLabel}, ${day.shortLabel}: ${
                           day.status === "completed"
-                            ? `Done ${day.completedCount}x 🎉`
+                            ? `Done ${day.completedCount}x`
                             : day.status === "ignored"
                             ? `Skipped ${day.ignoredCount}x`
                             : "No activity"
