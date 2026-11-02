@@ -1,6 +1,7 @@
 import { createId } from "./utils";
 import { supabase } from "./lib/supabaseClient";
 import { getStorageItem, setStorageItem } from "./storage";
+import { EVENT_LOG_MAX } from "./lib/eventLogLimits";
 
 const EVENT_LOG_KEY = "mybishbash.event-log.v1";
 const USER_ID_KEY = "mybishbash.user-id.v1";
@@ -66,7 +67,7 @@ export function mergeEventsById(localEvents = [], incomingEvents = []) {
 
   return Array.from(mergedMap.values())
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-    .slice(0, 500);
+    .slice(0, EVENT_LOG_MAX);
 }
 
 export function getUserId() {

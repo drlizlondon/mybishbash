@@ -1,6 +1,67 @@
 import { useState, useMemo } from "react";
-import { computePersonalCardAnalytics } from "../../lib/personalCardAnalytics";
+import { ALL_TIME, computePersonalCardAnalytics, formatSinceDate } from "../../lib/personalCardAnalytics";
 import { HeartGlyph } from "../../components/Glyphs";
+
+function describeDay(day) {
+  const parts = [];
+  if (day.completedCount > 0) parts.push(`Done ${day.completedCount}x`);
+  if (day.onTrackCount > 0) parts.push("On track");
+  if (day.partialCount > 0) parts.push("Partly on track");
+  if (day.closedCount > 0) parts.push("Left for another day");
+  if (day.ignoredCount > 0) parts.push(`Skipped ${day.ignoredCount}x`);
+  return parts.length > 0 ? parts.join(", ") : "No activity";
+}
+
+function describeWeek(week) {
+  const parts = [];
+  if (week.completedCount > 0) parts.push(`Done ${week.completedCount}x`);
+  if (week.onTrackCount > 0) parts.push(`On track ${week.onTrackCount}x`);
+  if (week.partialCount > 0) parts.push(`Partly ${week.partialCount}x`);
+  if (week.closedCount > 0) parts.push(`Left for another day ${week.closedCount}x`);
+  if (week.ignoredCount > 0) parts.push(`Skipped ${week.ignoredCount}x`);
+  return `Week of ${week.label}: ${parts.length > 0 ? parts.join(", ") : "No activity"}`;
+}
+
+// One column per week: done (green) at the bottom, then partly on track, then
+// left for another day, then skipped on top. Column height is the week's total
+// relative to the busiest week for this card. An empty week is a thin baseline.
+function WeeklyTrack({ card, onSelect, onClear }) {
+  const weeks = card.weeklyEntries;
+  if (weeks.length === 0) {
+    return <p className="weekly-track-empty">No activity yet</p>;
+  }
+  const maxTotal = Math.max(1, ...weeks.map((week) => week.total));
+  return (
+    <div className="weekly-track">
+      {weeks.map((week, idx) => {
+        const text = describeWeek(week);
+        const segment = (count, className) =>
+          count > 0 ? (
+            <span className={`weekly-seg ${className}`} style={{ flexGrow: count }} />
+          ) : null;
+        return (
+          <div
+            key={week.weekStartKey}
+            className={`weekly-col ${week.isCurrent ? "is-current" : ""} ${week.total === 0 ? "is-empty" : ""}`}
+            onMouseEnter={() => onSelect(idx, text)}
+            onMouseLeave={onClear}
+            onClick={() => onSelect(idx, text)}
+            tabIndex={0}
+            role="button"
+            aria-label={text}
+          >
+            <span className="weekly-bar" style={{ height: week.total === 0 ? undefined : `${Math.max(12, Math.round((week.total / maxTotal) * 100))}%` }}>
+              {segment(week.ignoredCount, "ignored")}
+              {segment(week.closedCount, "closed")}
+              {segment(week.partialCount, "partial")}
+              {segment(week.completedCount + week.onTrackCount, "completed")}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function PersonalCardAnalyticsPanel({
   cards = [],
@@ -17,6 +78,20 @@ export function PersonalCardAnalyticsPanel({
     return computePersonalCardAnalytics(cards, allEvents, timezone, { days: timeframeDays });
   }, [cards, allEvents, timezone, timeframeDays]);
 
+  // The local log keeps only the newest events, so when it is full "All time"
+  // really means "since the oldest event we still have".
+  const sinceLabel = analytics.eventLogCapped && analytics.oldestEventAt
+    ? `Since ${formatSinceDate(analytics.oldestEventAt, timezone)}`
+    : null;
+  const allTimeLabel = sinceLabel ?? "All time";
+  const isAllTime = timeframeDays === ALL_TIME;
+  const isWeekly = analytics.granularity === "weekly";
+  const timeframeNoun = isAllTime ? null : `${timeframeDays}-day`;
+  const overviewEyebrow = isAllTime
+    ? (sinceLabel ? `Personal overview, ${sinceLabel.toLowerCase()}` : "All-time personal overview")
+    : `${timeframeNoun} personal overview`;
+  const journeyName = isAllTime ? "card" : `${timeframeNoun} card`;
+
   const {
     cards: cardTrends,
     avoidedCards,
@@ -28,7 +103,8 @@ export function PersonalCardAnalyticsPanel({
     estimatedMinutesSaved,
     readProperlyThisWeek,
   } = analytics;
-  const skippedThreeInARowCount = cardTrends.filter((card) => card.consecutiveSkips >= 3).length;
+  const skippedThreeInARowCount = cardTrends.filter((card) => !card.isCommitment && card.consecutiveSkips >= 3).length;
+  const hasCommitments = cardTrends.some((card) => card.isCommitment);
 
   return (
     <div className="card-analytics-container">
@@ -36,22 +112,27 @@ export function PersonalCardAnalyticsPanel({
       <article className="card-analytics-hero">
         <header className="card-analytics-hero-header">
           <div className="card-analytics-header-row">
-            <p className="card-analytics-eyebrow">{timeframeDays}-day personal overview</p>
+            <p className="card-analytics-eyebrow">{overviewEyebrow}</p>
             <div className="timeframe-toggle-pill" role="group" aria-label="Timeline window">
-              <button
-                type="button"
-                className={`timeframe-toggle-btn ${timeframeDays === 14 ? "active" : ""}`}
-                onClick={() => setTimeframeDays(14)}
-              >
-                14 Days
-              </button>
-              <button
-                type="button"
-                className={`timeframe-toggle-btn ${timeframeDays === 30 ? "active" : ""}`}
-                onClick={() => setTimeframeDays(30)}
-              >
-                30 Days
-              </button>
+              {[
+                { value: 14, label: "14 days" },
+                { value: 30, label: "30 days" },
+                { value: 90, label: "90 days" },
+                { value: ALL_TIME, label: allTimeLabel },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`timeframe-toggle-btn ${timeframeDays === option.value ? "active" : ""}`}
+                  aria-pressed={timeframeDays === option.value}
+                  onClick={() => {
+                    setActiveTooltip(null);
+                    setTimeframeDays(option.value);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
           <h3>
@@ -60,7 +141,7 @@ export function PersonalCardAnalyticsPanel({
                 You turned <span>{totalCompletions30d}</span> moments into real life.
               </>
             ) : (
-              `Your ${timeframeDays}-day card journey begins here.`
+              `Your ${journeyName} journey begins here.`
             )}
           </h3>
         </header>
@@ -235,13 +316,23 @@ export function PersonalCardAnalyticsPanel({
       {/* Activity Trail Grid for Every Personal Card (14d or 30d) */}
       <article className="all-cards-trends-card">
         <div className="trends-card-header">
-          <h4>{timeframeDays}-Day Activity Trail</h4>
-          <p>Every personal card you've created and how you've handled it over the past {timeframeDays} days.</p>
-          
+          <h4>{isWeekly ? "Week-by-week activity" : `${timeframeDays}-Day Activity Trail`}</h4>
+          <p>
+            {isWeekly
+              ? `Every personal card and commitment, week by week (weeks start on Monday)${isAllTime && sinceLabel ? `, ${sinceLabel.toLowerCase()}` : ""}.`
+              : `Every personal card and commitment you've created and how you've handled it over the past ${timeframeDays} days.`}
+          </p>
+
           <div className="legend-strip">
-            <span className="legend-item"><span className="legend-dot completed" /> Completed</span>
+            <span className="legend-item"><span className="legend-dot completed" /> {hasCommitments ? "Done or on track" : "Completed"}</span>
+            {hasCommitments && (
+              <span className="legend-item"><span className="legend-dot partial" /> Partly on track</span>
+            )}
+            {hasCommitments && (
+              <span className="legend-item"><span className="legend-dot closed" /> Left for another day</span>
+            )}
             <span className="legend-item"><span className="legend-dot ignored" /> Bypassed / Skipped</span>
-            <span className="legend-item"><span className="legend-dot idle" /> Quiet day</span>
+            <span className="legend-item"><span className="legend-dot idle" /> {isWeekly ? "Empty week" : "Quiet day"}</span>
           </div>
         </div>
 
@@ -268,14 +359,25 @@ export function PersonalCardAnalyticsPanel({
                     </div>
 
                     <div className="card-trend-submetrics">
-                      {card.completionRate !== null ? (
-                        <span className="metric-tag winrate"><strong>{card.completionRate}%</strong> completed</span>
-                      ) : (
-                        <span className="metric-tag unseen">Never surfaced</span>
+                      {card.isCommitment && (
+                        card.checkIns.total > 0 ? (
+                          <span className="metric-tag winrate">{card.checkInSummary}</span>
+                        ) : (
+                          <span className="metric-tag unseen">No check-ins yet</span>
+                        )
                       )}
-                      <span className="metric-tag">
-                        <strong>{card.totalCompleted}</strong> done · <strong>{card.totalIgnored}</strong> skipped
-                      </span>
+                      {!card.isCommitment && (
+                        card.completionRate !== null ? (
+                          <span className="metric-tag winrate"><strong>{card.completionRate}%</strong> completed</span>
+                        ) : (
+                          <span className="metric-tag unseen">Never surfaced</span>
+                        )
+                      )}
+                      {(!card.isCommitment || card.totalSurfaced > 0) && (
+                        <span className="metric-tag">
+                          <strong>{card.totalCompleted}</strong> done · <strong>{card.totalIgnored}</strong> skipped
+                        </span>
+                      )}
                       {card.currentStreak > 0 && (
                         <span className="metric-tag streak">{card.currentStreak}d streak</span>
                       )}
@@ -283,23 +385,28 @@ export function PersonalCardAnalyticsPanel({
                         <span className="metric-tag doorway">Intercepts {card.topDoorway}</span>
                       )}
                     </div>
+                    <p className={`card-trend-insight trend-${card.trend.state}`}>{card.trend.label}</p>
+                    {card.usuallyDoneOn && (
+                      <p className="card-trend-insight">Usually done on {card.usuallyDoneOn}</p>
+                    )}
                   </div>
 
-                  {/* Dot Matrix */}
+                  {/* Daily dots (14/30 days) or weekly columns (90 days / all time) */}
                   <div
                     className="timeline-dots-wrapper"
                     role="group"
-                    aria-label={`${timeframeDays}-day activity for ${card.promptText}`}
+                    aria-label={`${isWeekly ? "Weekly" : `${timeframeDays}-day`} activity for ${card.promptText}`}
                   >
+                    {isWeekly ? (
+                      <WeeklyTrack
+                        card={card}
+                        onSelect={(index, text) => setActiveTooltip({ cardId: card.cardId, index, text })}
+                        onClear={() => setActiveTooltip(null)}
+                      />
+                    ) : (
                     <div className="timeline-dots-track">
                       {card.dailyEntries.map((day, idx) => {
-                        const tooltipText = `${day.dayLabel}, ${day.shortLabel}: ${
-                          day.status === "completed"
-                            ? `Done ${day.completedCount}x`
-                            : day.status === "ignored"
-                            ? `Skipped ${day.ignoredCount}x`
-                            : "No activity"
-                        }`;
+                        const tooltipText = `${day.dayLabel}, ${day.shortLabel}: ${describeDay(day)}`;
 
                         return (
                           <div
@@ -322,6 +429,7 @@ export function PersonalCardAnalyticsPanel({
                         );
                       })}
                     </div>
+                    )}
 
                     {activeTooltip?.cardId === card.cardId && (
                       <div className="active-dot-tooltip">
