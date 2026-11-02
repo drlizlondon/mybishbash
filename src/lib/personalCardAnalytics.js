@@ -121,25 +121,6 @@ function calculateStreaks(dailyEntries) {
 }
 
 /**
- * Checks if a card has 3+ consecutive skips, qualifying for the "Spiced" visual salience test.
- */
-export function checkCardIsSpiced(card, events = []) {
-  if (!card) return false;
-  const cardEvents = (Array.isArray(events) ? events : []).filter((e) => eventMatchesCard(e, card));
-  const sorted = [...cardEvents].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
-  let consecutiveSkips = 0;
-  for (const ev of sorted) {
-    const isCompleted = COMPLETED_EVENT_TYPES.has(ev.event_type) || ev.action_taken === "completed";
-    const isIgnored = IGNORED_EVENT_TYPES.has(ev.event_type) || ev.action_taken === "ignored" || ev.action_taken === "dismissed";
-    if (isCompleted) break;
-    if (isIgnored) consecutiveSkips += 1;
-  }
-  return consecutiveSkips >= 3;
-}
-
-/**
  * Main analytics computation function.
  */
 export function computePersonalCardAnalytics(
@@ -178,6 +159,12 @@ export function computePersonalCardAnalytics(
   let totalDwellIgnoredCount = 0;
   let totalReflexSkips = 0;
   let totalConsideredSkips = 0;
+  // "Read properly" this week: canonical card events only (the legacy bash_*
+  // twin carries the same dwell and would count each view twice).
+  const READ_WEEK_DAYS = 7;
+  const readWeekStartIndex = Math.max(0, windowDays.length - READ_WEEK_DAYS);
+  let weekViewsWithVerdict = 0;
+  let weekViewsRead = 0;
 
   // 2. Process each card
   const cardAnalytics = personalCards.map((card) => {
@@ -217,8 +204,20 @@ export function computePersonalCardAnalytics(
         event.action_taken === "ignored" ||
         event.action_taken === "dismissed";
 
-      const dwellMs = Number(event.dwell_ms ?? event.metadata?.dwell_ms);
+      const rawDwell = event.dwell_ms ?? event.metadata?.dwell_ms;
+      const dwellMs = rawDwell === null || rawDwell === undefined ? NaN : Number(rawDwell);
       const hasValidDwell = Number.isFinite(dwellMs) && dwellMs >= 0;
+
+      const verdict = event.metadata?.read_verdict;
+      if (
+        dayIndex !== undefined &&
+        dayIndex >= readWeekStartIndex &&
+        (event.event_type === "card_completed" || event.event_type === "card_ignored") &&
+        (verdict === "read" || verdict === "skimmed")
+      ) {
+        weekViewsWithVerdict += 1;
+        if (verdict === "read") weekViewsRead += 1;
+      }
 
       if (isCompleted) {
         totalCompleted += 1;
@@ -402,5 +401,6 @@ export function computePersonalCardAnalytics(
     totalConsideredSkips,
     reflexSkipPercentage,
     spicedCardsCount,
+    readProperlyThisWeek: { read: weekViewsRead, total: weekViewsWithVerdict },
   };
 }

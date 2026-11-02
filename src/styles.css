@@ -1423,7 +1423,7 @@ textarea {
 
 .retention-stat-columns {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -7132,6 +7132,18 @@ body {
   font-weight: 600;
 }
 
+
+/* MBB-23: commitment offer pop-up reuses the app pause sheet; only the close target is larger. */
+.app-pause-close-btn.commitment-offer-close {
+  width: 44px;
+  height: 44px;
+  top: 8px;
+  right: 10px;
+}
+
+.commitment-offer-title {
+  padding-right: 40px;
+}
 
 .premium-card-main {
   position: relative;

@@ -206,7 +206,10 @@
             "night"
           ],
           "dwell_ms": "<dwell_ms>",
-          "dwell_bucket": "quick_complete"
+          "dwell_bucket": "quick_complete",
+          "words": 4,
+          "expected_ms": 1500,
+          "read_verdict": "skimmed"
         }
       },
       {
@@ -244,7 +247,10 @@
           "launchSource": null,
           "activationKey": null,
           "dwell_ms": "<dwell_ms>",
-          "dwell_bucket": "quick_complete"
+          "dwell_bucket": "quick_complete",
+          "words": 4,
+          "expected_ms": 1500,
+          "read_verdict": "skimmed"
         }
       }
     ],
@@ -332,7 +338,10 @@
             "night"
           ],
           "dwell_ms": "<dwell_ms>",
-          "dwell_bucket": "quick_complete"
+          "dwell_bucket": "quick_complete",
+          "words": 4,
+          "expected_ms": 1500,
+          "read_verdict": "skimmed"
         }
       },
       {
@@ -370,7 +379,10 @@
           "launchSource": null,
           "activationKey": null,
           "dwell_ms": "<dwell_ms>",
-          "dwell_bucket": "quick_complete"
+          "dwell_bucket": "quick_complete",
+          "words": 4,
+          "expected_ms": 1500,
+          "read_verdict": "skimmed"
         }
       }
     ],

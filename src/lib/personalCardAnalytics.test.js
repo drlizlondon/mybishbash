@@ -136,5 +136,25 @@ describe("computePersonalCardAnalytics", () => {
     expect(result.reflexSkipPercentage).toBe(67); // 2/3 = 66.67% -> 67%
     expect(result.spicedCardsCount).toBe(1);
   });
+
+  it("counts read-properly views from the last 7 days using canonical card events only", () => {
+    const cards = [{ id: "p1", promptText: "Water the plant" }];
+    const ev = (type, day, verdict) => ({
+      event_type: type,
+      card_id: "p1",
+      created_at: `2026-09-${day}T10:00:00Z`,
+      metadata: verdict ? { read_verdict: verdict } : {},
+    });
+    const events = [
+      ev("card_ignored", "29", "skimmed"),
+      ev("card_ignored", "28", "read"),
+      ev("card_completed", "27", "read"),
+      ev("bash_not_done", "29", "skimmed"), // legacy twin: must not double count
+      ev("card_ignored", "20", "read"), // older than 7 days
+      ev("card_ignored", "26", null), // no verdict recorded
+    ];
+    const result = computePersonalCardAnalytics(cards, events, "Europe/London", { referenceDate: refDate });
+    expect(result.readProperlyThisWeek).toEqual({ read: 2, total: 3 });
+  });
 });
 

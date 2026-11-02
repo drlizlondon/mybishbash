@@ -272,6 +272,8 @@ export function LogPanel({
   filter,
   onShowSummary,
   onNavigateToLibrary,
+  onMakeCommitment,
+  onPauseCard,
 }) {
   const [activeLogTab, setActiveLogTab] = useState("moments"); // "moments" | "trends"
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -326,6 +328,8 @@ export function LogPanel({
             allEvents={allEvents ?? events}
             timezone={timezone}
             onNavigateToLibrary={onNavigateToLibrary}
+            onMakeCommitment={onMakeCommitment}
+            onPauseCard={onPauseCard}
           />
         </Suspense>
       ) : (

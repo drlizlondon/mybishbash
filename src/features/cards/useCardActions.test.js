@@ -1,6 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { useCardActions } from "./useCardActions";
 import { logCommitmentDebug } from "../launcher";
+import { buildCommitmentDraftFromCard } from "../../lib/commitmentOffer";
+import { eventMatchesCard } from "../../lib/spicedCards";
 
 vi.mock("../launcher", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -562,5 +564,73 @@ describe("handleSaveCard persistence timing (real cardsStore)", () => {
     vi.advanceTimersByTime(200);
     expect(writes).toHaveLength(before);
     resetCardsStoreForTests();
+  });
+});
+
+describe("commitment offer conversion (MBB-23 B5, M1)", () => {
+  function convertDeps(card, overrides = {}) {
+    return makeDeps({
+      cards: [card],
+      setupComplete: true,
+      setSetupComplete: vi.fn(),
+      editingId: null,
+      setEditingId: vi.fn(),
+      setComposerInitialDraft: vi.fn(),
+      commitmentConversionCardId: card.id,
+      setCommitmentConversionCardId: vi.fn(),
+      setIsComposerOpen: vi.fn(),
+      setHomeSaveConfirmation: vi.fn(),
+      composerReturnPathRef: { current: "/home" },
+      navigateTo: vi.fn(),
+      ...overrides,
+    });
+  }
+
+  const draftForm = (draft, overrides = {}) => ({
+    ...draft,
+    commitmentTimingMode: "anytime",
+    commitmentCustomStartTime: "",
+    commitmentCustomEndTime: "",
+    commitmentCheckInEnabled: false,
+    commitmentCheckInTime: "",
+    timingWindows: ["morning", "day", "evening", "night"],
+    frequency: "once_daily",
+    ...overrides,
+  });
+
+  it("converts in place: same id, kind commitment, reason empty, history still matches", () => {
+    const own = personalCard({ id: "own-1", promptText: "stretch for five minutes" });
+    const events = [
+      { event_type: "card_ignored", card_id: "own-1", created_at: "2026-05-30T08:00:00Z" },
+      { event_type: "card_ignored", card_id: "own-1", created_at: "2026-05-31T08:00:00Z" },
+      { event_type: "card_ignored", card_id: "own-1", created_at: "2026-06-01T08:00:00Z" },
+    ];
+    const draft = buildCommitmentDraftFromCard(own);
+    const deps = convertDeps(own);
+    useCardActions(deps).handleSaveCard(draftForm(draft));
+
+    const next = deps.updateCards.mock.calls[0][0]([own]);
+    expect(next).toHaveLength(1);
+    expect(next[0].id).toBe("own-1");
+    expect(next[0].cardKind).toBe("commitment");
+    expect(next[0].commitmentReason).toBe("");
+    expect(next[0].promptText).toBe("stretch for five minutes");
+    expect(events.every((event) => eventMatchesCard(event, next[0]))).toBe(true);
+    expect(deps.setCommitmentConversionCardId).toHaveBeenCalledWith(null);
+  });
+
+  it("M1/G1: the draft never prefills commitmentReason, even for a blank card", () => {
+    expect(buildCommitmentDraftFromCard(personalCard()).commitmentReason).toBe("");
+    expect(buildCommitmentDraftFromCard({ promptText: "" })).toMatchObject({ promptText: "", commitmentReason: "" });
+    expect(buildCommitmentDraftFromCard(null)).toMatchObject({ promptText: "", commitmentReason: "" });
+  });
+
+  it("without a conversion id a commitment save still creates a new card", () => {
+    const own = personalCard({ id: "own-1" });
+    const deps = convertDeps(own, { commitmentConversionCardId: null });
+    useCardActions(deps).handleSaveCard(draftForm(buildCommitmentDraftFromCard(own)));
+    const next = deps.updateCards.mock.calls[0][0]([own]);
+    expect(next).toHaveLength(2);
+    expect(next[0].id).not.toBe("own-1");
   });
 });
