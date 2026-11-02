@@ -590,6 +590,7 @@ export default function Overlay({
     >
       {commitmentOffer ? (
         <div className="commitment-offer" data-testid="commitment-offer" role="group" aria-label="Commitment offer">
+          <button type="button" className="commitment-offer-close" aria-label="Not now" onClick={() => onCommitmentOfferDecline?.()}>×</button>
           <p className="commitment-offer-line">{getCommitmentOfferLine(commitmentOffer.skipCount)}</p>
           <p className="commitment-offer-why">Pause it for now, or make it a commitment to help you follow through.</p>
           <div className="commitment-offer-actions">
@@ -598,9 +599,6 @@ export default function Overlay({
             </button>
             <button type="button" className="commitment-offer-secondary" onClick={() => onCommitmentOfferPause?.()}>
               Pause it
-            </button>
-            <button type="button" className="commitment-offer-secondary" onClick={() => onCommitmentOfferDecline?.()}>
-              Not now
             </button>
           </div>
         </div>
