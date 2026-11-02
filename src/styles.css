@@ -1423,7 +1423,7 @@ textarea {
 
 .retention-stat-columns {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -7141,6 +7141,14 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+.commitment-offer-why {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: center;
+  color: #6B5F57;
 }
 
 .commitment-offer-line {

@@ -26,7 +26,7 @@ describe("commitment offer trigger (B4)", () => {
   it("shows for your own card after 3 ignores, with the real count", () => {
     expect(getCommitmentOffer(ownCard(), ignores("own", 3), NOW)).toEqual({ skipCount: 3 });
     expect(getCommitmentOffer(ownCard(), ignores("own", 5), NOW)).toEqual({ skipCount: 5 });
-    expect(getCommitmentOfferLine(5)).toBe("You wrote this one. You've skipped it 5 times.");
+    expect(getCommitmentOfferLine(5)).toBe("You've skipped this card 5 times.");
   });
 
   it("does not show for 2 ignores, or after a completion resets the run", () => {

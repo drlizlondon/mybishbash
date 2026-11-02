@@ -40,7 +40,7 @@ export function getCommitmentOffer(card, events = [], now = new Date()) {
 
 /** The line shown above the offer buttons, with the real count. */
 export function getCommitmentOfferLine(skipCount) {
-  return `You wrote this one. You've skipped it ${skipCount} times.`;
+  return `You've skipped this card ${skipCount} times.`;
 }
 
 /**

@@ -4934,11 +4934,15 @@ function App() {
     if (!commitmentOfferCard) return;
     logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.ACCEPTED, commitmentOfferCard, commitmentOfferSkipCount);
     closeRevealWithoutRecordingSkip();
+    convertToCommitment(commitmentOfferCard, "/home");
+  }
+
+  function convertToCommitment(card, returnPath) {
     setEditingId(null);
-    setCommitmentConversionCardId(commitmentOfferCard.id);
+    setCommitmentConversionCardId(card.id);
     setComposerInitialKind("commitment");
-    setComposerInitialDraft(buildCommitmentDraftFromCard(commitmentOfferCard));
-    composerReturnPathRef.current = "/home";
+    setComposerInitialDraft(buildCommitmentDraftFromCard(card));
+    composerReturnPathRef.current = returnPath;
     setIsComposerOpen(true);
   }
 
@@ -4946,12 +4950,20 @@ function App() {
     if (!commitmentOfferCard) return;
     const cardId = commitmentOfferCard.id;
     logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.PAUSED, commitmentOfferCard, commitmentOfferSkipCount);
-    updateCards((current) =>
-      current.map((card) =>
-        card.id === cardId ? { ...card, paused: true, updatedAt: new Date().toISOString() } : card,
-      ),
-    );
+    handleLogPauseCard({ id: cardId });
     closeRevealWithoutRecordingSkip();
+  }
+
+  function handleLogMakeCommitment(card) {
+    const own = cards.find((c) => c.id === card?.id);
+    if (!own || own.sourcePackId) return navigateTo("/library");
+    convertToCommitment(own, "/log");
+  }
+
+  function handleLogPauseCard(card) {
+    updateCards((current) =>
+      current.map((c) => (c.id === card?.id ? { ...c, paused: true, updatedAt: new Date().toISOString() } : c)),
+    );
   }
 
   function handleCommitmentOfferDecline() {
@@ -5450,6 +5462,8 @@ function App() {
                   filter={logFilter}
                   onShowSummary={showMorningSummaryNow}
                   onNavigateToLibrary={() => navigateTo("/library")}
+                  onMakeCommitment={handleLogMakeCommitment}
+                  onPauseCard={handleLogPauseCard}
                 />
               ) : null}
 

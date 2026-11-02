@@ -591,6 +591,7 @@ export default function Overlay({
       {commitmentOffer ? (
         <div className="commitment-offer" data-testid="commitment-offer" role="group" aria-label="Commitment offer">
           <p className="commitment-offer-line">{getCommitmentOfferLine(commitmentOffer.skipCount)}</p>
+          <p className="commitment-offer-why">Pause it for now, or make it a commitment to help you follow through.</p>
           <div className="commitment-offer-actions">
             <button type="button" className="commitment-offer-primary" onClick={() => onCommitmentOfferAccept?.()}>
               Make it a commitment
