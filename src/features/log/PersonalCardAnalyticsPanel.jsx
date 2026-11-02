@@ -100,8 +100,7 @@ export function PersonalCardAnalyticsPanel({
             )}
             {skippedThreeInARowCount > 0 && (
               <p className="retention-spiced-callout">
-                <strong>{skippedThreeInARowCount} {skippedThreeInARowCount === 1 ? "card" : "cards"} skipped 3 times in a row.</strong> Next time {skippedThreeInARowCount === 1 ? "it shows" : "they show"}, you can make {skippedThreeInARowCount === 1 ? "it" : "them"} a commitment or pause {skippedThreeInARowCount === 1 ? "it" : "them"}.
-              </p>
+                <strong>{skippedThreeInARowCount} {skippedThreeInARowCount === 1 ? "card" : "cards"} skipped 3 times in a row.</strong> The next skip will offer to make {skippedThreeInARowCount === 1 ? "it" : "them"} a commitment or pause {skippedThreeInARowCount === 1 ? "it" : "them"}.</p>
             )}
           </div>
         )}

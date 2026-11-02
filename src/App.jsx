@@ -238,6 +238,7 @@ import { getEventsActions, getEventsStore, useEventsStore } from "./stores/event
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 import { checkCardIsSpiced, buildDwellMetadata } from "./lib/spicedCards";
 import { useDwellTimer } from "./lib/dwellTimer";
+import CommitmentOfferSheet from "./components/CommitmentOfferSheet";
 import { getCommitmentOffer, COMMITMENT_OFFER_EVENTS, buildCommitmentDraftFromCard } from "./lib/commitmentOffer";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
@@ -3166,7 +3167,14 @@ function App() {
     return nextOverlay;
   }
 
-  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false, dwell_ms = null, shown_text = null } = {}) {
+  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false, dwell_ms = null, shown_text = null, offerChecked = false } = {}) {
+    // Tapping an app on your own card is a skip too: log it, hold the launch, show the pop-up.
+    if (!offerChecked && source === "in_card_app_button" && overlay?.type === "reveal"
+      && holdForOffer(activeRevealCard, () => openDestinationApp(versionId, { source, reason, preferDirectAppDestination, dwell_ms, shown_text, offerChecked: true }))) {
+      recordActiveRevealCardIgnored("continue_to_app", { dwell_ms });
+      return true;
+    }
+
     // Only supported launcher IDs may ever be launched.
     if (!isKnownLauncher(versionId)) {
       console.warn("[LAUNCHER] Blocking unsupported launcher destination", { versionId, source, reason });
@@ -3714,7 +3722,9 @@ function App() {
     setMenuOpenId,
     profile,
     logEvent,
-    handleRevealCompletion,
+    handleRevealCompletion: (options) => {
+      if (!(skipHeldRef.current && holdForOffer(activeRevealCard, () => handleRevealCompletion(options)))) handleRevealCompletion(options);
+    },
     setupComplete,
     setSetupComplete,
     editingId,
@@ -4847,13 +4857,11 @@ function App() {
     ? resolveRevealCard(cards, overlay.cardId, profile.timezone)
     : null;
 
-  // Your own cards skipped 3 times get a commitment offer instead of the
-  // colour shift; library cards keep the colour shift.
+  // Only library cards get the colour shift; your own cards get the commitment offer pop-up instead.
   const activeRevealCardWithSalience = useMemo(() => {
     if (!activeRevealCard) return null;
-    const commitmentOffer = getCommitmentOffer(activeRevealCard, events);
     const isSpiced = activeRevealCard.sourcePackId ? checkCardIsSpiced(activeRevealCard, events) : false;
-    return { ...activeRevealCard, isSpiced, commitmentOffer };
+    return { ...activeRevealCard, isSpiced };
   }, [activeRevealCard, events]);
 
   const recordActiveRevealCardIgnored = useCallback((reason, extraMeta = {}) => {
@@ -4896,31 +4904,41 @@ function App() {
     });
   }, [activeRevealCard, getOverlayDwellMs, logEvent, overlay, updateCards]);
 
-  const loggedCommitmentOfferShownRef = useRef(new Set());
-  const commitmentOfferCard = activeRevealCardWithSalience?.commitmentOffer ? activeRevealCard : null;
-  const commitmentOfferSkipCount = activeRevealCardWithSalience?.commitmentOffer?.skipCount ?? null;
+  // Commitment offer pop-up: shown at the moment of the skip that makes 3 in a row on your own card.
+  const [offerSheet, setOfferSheet] = useState(null);
+  const skipHeldRef = useRef(false);
 
   const logCommitmentOfferEvent = useCallback((eventType, card, skipCount) => {
     void logEvent({
       event_type: eventType,
-      source_type: "personal",
-      card_source: "personal",
       card_id: card.id,
-      card_title: card.dashboardTitle ?? card.promptText,
-      card_text: card.promptText,
-      metadata: { card_id: card.id, skip_count: skipCount },
+      metadata: { skip_count: skipCount },
     });
   }, [logEvent]);
 
-  useEffect(() => {
-    if (!overlay || overlay.type !== "reveal" || !commitmentOfferCard) return;
-    const key = [overlay.activationKey ?? overlay.origin ?? route.path, commitmentOfferCard.id].join(":");
-    if (loggedCommitmentOfferShownRef.current.has(key)) return;
-    loggedCommitmentOfferShownRef.current.add(key);
-    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.SHOWN, commitmentOfferCard, commitmentOfferSkipCount);
-  }, [commitmentOfferCard, commitmentOfferSkipCount, logCommitmentOfferEvent, overlay, route.path]);
+  // Call as a skip happens: if it makes 3 in a row on your own card, show the pop-up and hold `resume`.
+  function holdForOffer(card, resume) {
+    const offer = card && getCommitmentOffer(card, [...events, { event_type: CARD_EVENT_TYPES.IGNORED, card_id: card.id, created_at: new Date().toISOString() }]);
+    if (!offer) return false;
+    setOfferSheet({ card, skipCount: offer.skipCount, resume });
+    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.SHOWN, card, offer.skipCount);
+    return true;
+  }
 
-  // The offer buttons answer the card, so they close it without logging another skip.
+  // Reveal "Not done": the skip is logged as today, then the completion is held for the pop-up.
+  function handleRevealAction(action, meta) {
+    skipHeldRef.current = action === "later" && overlay?.type === "reveal";
+    handleAction(action, meta);
+    skipHeldRef.current = false;
+  }
+
+  function finishOffer(eventType, afterLog) {
+    logCommitmentOfferEvent(eventType, offerSheet.card, offerSheet.skipCount);
+    setOfferSheet(null);
+    afterLog?.(offerSheet);
+  }
+
+  // Leave the reveal for home (also used when an offer button answers the card, so no extra skip is logged).
   function closeRevealWithoutRecordingSkip() {
     suppressNextHomeAutoLaunchRef.current = true;
     suppressStandaloneLauncherRecoveryOnce();
@@ -4931,10 +4949,10 @@ function App() {
   }
 
   function handleCommitmentOfferAccept() {
-    if (!commitmentOfferCard) return;
-    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.ACCEPTED, commitmentOfferCard, commitmentOfferSkipCount);
-    closeRevealWithoutRecordingSkip();
-    convertToCommitment(commitmentOfferCard, "/home");
+    finishOffer(COMMITMENT_OFFER_EVENTS.ACCEPTED, (sheet) => {
+      closeRevealWithoutRecordingSkip();
+      convertToCommitment(sheet.card, "/home");
+    });
   }
 
   function convertToCommitment(card, returnPath) {
@@ -4947,11 +4965,10 @@ function App() {
   }
 
   function handleCommitmentOfferPause() {
-    if (!commitmentOfferCard) return;
-    const cardId = commitmentOfferCard.id;
-    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.PAUSED, commitmentOfferCard, commitmentOfferSkipCount);
-    handleLogPauseCard({ id: cardId });
-    closeRevealWithoutRecordingSkip();
+    finishOffer(COMMITMENT_OFFER_EVENTS.PAUSED, (sheet) => {
+      handleLogPauseCard({ id: sheet.card.id });
+      sheet.resume();
+    });
   }
 
   function handleLogMakeCommitment(card) {
@@ -4967,8 +4984,7 @@ function App() {
   }
 
   function handleCommitmentOfferDecline() {
-    if (!commitmentOfferCard) return;
-    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.DECLINED, commitmentOfferCard, commitmentOfferSkipCount);
+    finishOffer(COMMITMENT_OFFER_EVENTS.DECLINED, (sheet) => sheet.resume());
   }
 
   const activeOverlayVersion = useMemo(
@@ -5640,6 +5656,15 @@ function App() {
         />
       ) : null}
 
+      {offerSheet ? (
+        <CommitmentOfferSheet
+          skipCount={offerSheet.skipCount}
+          onAccept={handleCommitmentOfferAccept}
+          onPause={handleCommitmentOfferPause}
+          onClose={handleCommitmentOfferDecline}
+        />
+      ) : null}
+
       {isComposerOpen ? (
         <Composer
           key={editingId ?? `new-${composerInitialKind}-${composerInitialDraft?.promptText ?? ""}`}
@@ -5729,26 +5754,13 @@ function App() {
               return;
             }
             recordActiveRevealCardIgnored("overlay_closed", { dwell_ms: getOverlayDwellMs() });
-            suppressNextHomeAutoLaunchRef.current = true;
-            suppressStandaloneLauncherRecoveryOnce();
-            setShouldLaunchOverlay(false);
-            setScreen("library");
-            navigateTo("/home", { replace: true });
-            setOverlay(null);
+            closeRevealWithoutRecordingSkip();
           }}
           onDashboard={() => {
             recordActiveRevealCardIgnored("dashboard_opened", { dwell_ms: getOverlayDwellMs() });
-            suppressNextHomeAutoLaunchRef.current = true;
-            suppressStandaloneLauncherRecoveryOnce();
-            setShouldLaunchOverlay(false);
-            setScreen("library");
-            navigateTo("/home", { replace: true });
-            setOverlay(null);
+            closeRevealWithoutRecordingSkip();
           }}
-          onAction={handleAction}
-          onCommitmentOfferAccept={handleCommitmentOfferAccept}
-          onCommitmentOfferPause={handleCommitmentOfferPause}
-          onCommitmentOfferDecline={handleCommitmentOfferDecline}
+          onAction={handleRevealAction}
           onCommitmentAction={handleCommitmentAction}
           onCommitmentCheckInAction={handleCommitmentCheckInAction}
           onCommitmentEncouragementAction={handleCommitmentEncouragementAction}

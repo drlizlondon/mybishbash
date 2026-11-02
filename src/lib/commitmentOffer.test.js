@@ -75,4 +75,13 @@ describe("commitment offer trigger (B4)", () => {
     const shown = { event_type: COMMITMENT_OFFER_EVENTS.SHOWN, card_id: "own", created_at: daysAgo(1) };
     expect(getCommitmentOffer(ownCard(), [...ignores("own", 3), shown], NOW)).toEqual({ skipCount: 3 });
   });
+
+  it("counts one Not done as one skip, not two (bash_not_done twin of card_ignored)", () => {
+    const pair = (n) => [
+      { event_type: "bash_not_done", card_id: "own", action_taken: "dismissed", created_at: daysAgo(n) },
+      { event_type: "card_ignored", card_id: "own", action_taken: "ignored", created_at: daysAgo(n), metadata: { legacyEventType: "bash_not_done" } },
+    ];
+    expect(getCommitmentOffer(ownCard(), [...pair(3), ...pair(2)], NOW)).toBeNull();
+    expect(getCommitmentOffer(ownCard(), [...pair(3), ...pair(2), ...pair(1)], NOW)).toEqual({ skipCount: 3 });
+  });
 });

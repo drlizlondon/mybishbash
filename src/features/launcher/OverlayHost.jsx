@@ -9,7 +9,6 @@ import { debugLaunch, getCardOverlayRenderKey } from "./launchDebug";
 import { BASE_PATH } from "../../app/router/routes";
 import { PremiumCardScreen } from "./CardRevealTemplate";
 import { useDwellTimer } from "../../lib/dwellTimer";
-import { getCommitmentOfferLine } from "../../lib/commitmentOffer";
 import { getShownText } from "../../lib/readTime";
 import CommitmentCardOverlay from "./CommitmentCardOverlay";
 import CommitmentMotivationOverlay from "./CommitmentMotivationOverlay";
@@ -36,9 +35,6 @@ export default function Overlay({
   onClose,
   onDashboard,
   onAction,
-  onCommitmentOfferAccept,
-  onCommitmentOfferPause,
-  onCommitmentOfferDecline,
   onCommitmentAction,
   onCommitmentCheckInAction,
   onCommitmentEncouragementAction,
@@ -559,7 +555,6 @@ export default function Overlay({
 
   const isSpiced = Boolean(card?.isSpiced);
   const spicedCardClass = isSpiced ? "card-salience-spiced" : "";
-  const commitmentOffer = !card.sourcePackId ? card.commitmentOffer : null;
 
   return (
     <PremiumCardScreen
@@ -587,22 +582,6 @@ export default function Overlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseCurrentApp}
       onManageApp={onManageApp}
-    >
-      {commitmentOffer ? (
-        <div className="commitment-offer" data-testid="commitment-offer" role="group" aria-label="Commitment offer">
-          <button type="button" className="commitment-offer-close" aria-label="Not now" onClick={() => onCommitmentOfferDecline?.()}>×</button>
-          <p className="commitment-offer-line">{getCommitmentOfferLine(commitmentOffer.skipCount)}</p>
-          <p className="commitment-offer-why">Pause it for now, or make it a commitment to help you follow through.</p>
-          <div className="commitment-offer-actions">
-            <button type="button" className="commitment-offer-primary" onClick={() => onCommitmentOfferAccept?.()}>
-              Make it a commitment
-            </button>
-            <button type="button" className="commitment-offer-secondary" onClick={() => onCommitmentOfferPause?.()}>
-              Pause it
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </PremiumCardScreen>
+    />
   );
 }

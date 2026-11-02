@@ -7,7 +7,6 @@ const COMPLETED_EVENT_TYPES = new Set([
 ]);
 
 const IGNORED_EVENT_TYPES = new Set([
-  "bash_not_done",
   "card_ignored",
   "intercept_continue_to_app",
 ]);
@@ -29,12 +28,13 @@ export function eventMatchesCard(event, card) {
 }
 
 /**
- * Skips in a row since the last completion, newest first. Only ignore events
- * count; shown, offer and other events neither add to the run nor break it.
+ * Skips in a row since the last completion, newest first. "Not done" logs a
+ * bash_not_done and a card_ignored twin for one skip; the twin is not counted.
+ * Only ignore events count; shown, offer and other events neither add to the run nor break it.
  */
 export function countConsecutiveSkips(card, events = []) {
   if (!card) return 0;
-  const cardEvents = (Array.isArray(events) ? events : []).filter((e) => eventMatchesCard(e, card));
+  const cardEvents = (Array.isArray(events) ? events : []).filter((e) => e.event_type !== "bash_not_done" && eventMatchesCard(e, card));
   const sorted = [...cardEvents].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );

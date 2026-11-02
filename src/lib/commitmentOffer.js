@@ -27,7 +27,7 @@ export function getCommitmentOffer(card, events = [], now = new Date()) {
   if (skipCount < OFFER_SKIP_THRESHOLD) return null;
 
   const nowMs = new Date(now).getTime();
-  const declinedRecently = (Array.isArray(events) ? events : []).some(
+  const declinedRecently = (events ?? []).some(
     (event) =>
       event?.event_type === COMMITMENT_OFFER_EVENTS.DECLINED &&
       event.card_id === card.id &&
