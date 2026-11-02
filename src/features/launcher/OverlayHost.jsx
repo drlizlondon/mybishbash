@@ -8,6 +8,9 @@ import { normalizeLaunchSession, LAUNCH_PRIMARY_ACTIONS } from "../../domain/lau
 import { debugLaunch, getCardOverlayRenderKey } from "./launchDebug";
 import { BASE_PATH } from "../../app/router/routes";
 import { PremiumCardScreen } from "./CardRevealTemplate";
+import { useDwellTimer } from "../../lib/dwellTimer";
+import { getCommitmentOfferLine } from "../../lib/commitmentOffer";
+import { getShownText } from "../../lib/readTime";
 import CommitmentCardOverlay from "./CommitmentCardOverlay";
 import CommitmentMotivationOverlay from "./CommitmentMotivationOverlay";
 import CommitmentCheckInOverlay from "./CommitmentCheckInOverlay";
@@ -33,6 +36,9 @@ export default function Overlay({
   onClose,
   onDashboard,
   onAction,
+  onCommitmentOfferAccept,
+  onCommitmentOfferPause,
+  onCommitmentOfferDecline,
   onCommitmentAction,
   onCommitmentCheckInAction,
   onCommitmentEncouragementAction,
@@ -63,17 +69,9 @@ export default function Overlay({
     : null;
   const [showLauncherPreparingFallback, setShowLauncherPreparingFallback] = useState(false);
   const launcherPreparingPaintedRef = useRef(false);
-  const cardMountedAtRef = useRef(null);
-
-  useEffect(() => {
-    cardMountedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
-  }, [overlay?.cardId, overlay?.activationKey, overlay?.type, card?.id]);
-
-  const getDwellDurationMs = () => {
-    if (!cardMountedAtRef.current) return 0;
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    return Math.max(0, Math.round(now - cardMountedAtRef.current));
-  };
+  const getDwellDurationMs = useDwellTimer(
+    [overlay?.cardId, overlay?.activationKey, overlay?.type, card?.id].join(":"),
+  );
 
   const launcherInterceptionClass = overlay?.launchSource === "fake_launcher" || overlay?.versionId
     ? "launcher-interception-card"
@@ -94,6 +92,7 @@ export default function Overlay({
       allowDefaultNavigation: true,
       preferDirectAppDestination: true,
       dwell_ms: getDwellDurationMs(),
+      shown_text: getShownText(card),
     });
     if (handled !== false) event?.preventDefault?.();
   };
@@ -560,6 +559,7 @@ export default function Overlay({
 
   const isSpiced = Boolean(card?.isSpiced);
   const spicedCardClass = isSpiced ? "card-salience-spiced" : "";
+  const commitmentOffer = !card.sourcePackId ? card.commitmentOffer : null;
 
   return (
     <PremiumCardScreen
@@ -570,9 +570,7 @@ export default function Overlay({
       subtitle={
         card.sourcePackId
           ? card.attribution || card.sourceTitle || "A card from your pack."
-          : isSpiced
-            ? "Spicing this one up for you. A fresh look to catch your eye."
-            : "A gentle nudge from the version of you that cares."
+          : "A gentle nudge from the version of you that cares."
       }
       actions={resolvedActions}
       launcherVersions={directLauncherVersions}
@@ -589,6 +587,23 @@ export default function Overlay({
       launcherAppName={launcherAppName}
       onPauseApp={onPauseCurrentApp}
       onManageApp={onManageApp}
-    />
+    >
+      {commitmentOffer ? (
+        <div className="commitment-offer" data-testid="commitment-offer" role="group" aria-label="Commitment offer">
+          <p className="commitment-offer-line">{getCommitmentOfferLine(commitmentOffer.skipCount)}</p>
+          <div className="commitment-offer-actions">
+            <button type="button" className="commitment-offer-primary" onClick={() => onCommitmentOfferAccept?.()}>
+              Make it a commitment
+            </button>
+            <button type="button" className="commitment-offer-secondary" onClick={() => onCommitmentOfferPause?.()}>
+              Pause it
+            </button>
+            <button type="button" className="commitment-offer-secondary" onClick={() => onCommitmentOfferDecline?.()}>
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </PremiumCardScreen>
   );
 }

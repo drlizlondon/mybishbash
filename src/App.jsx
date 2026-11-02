@@ -237,6 +237,8 @@ import { getCardsActions, useCardsStore } from "./stores/cardsStore";
 import { getEventsActions, getEventsStore, useEventsStore } from "./stores/eventsStore";
 import { getUiStore, useUiStore, getUiActions, selectTopOverlay } from "./stores/uiStore";
 import { checkCardIsSpiced, buildDwellMetadata } from "./lib/spicedCards";
+import { useDwellTimer } from "./lib/dwellTimer";
+import { getCommitmentOffer, COMMITMENT_OFFER_EVENTS, buildCommitmentDraftFromCard } from "./lib/commitmentOffer";
 
 const HQPanel = lazy(() => import("./features/hq/HQPanel"));
 
@@ -1127,6 +1129,7 @@ function App() {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [composerInitialKind, setComposerInitialKind] = useState("personal");
   const [composerInitialDraft, setComposerInitialDraft] = useState(null);
+  const [commitmentConversionCardId, setCommitmentConversionCardId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [homeSaveConfirmation, setHomeSaveConfirmation] = useState("");
   const composerReturnPathRef = useRef("/home");
@@ -3163,7 +3166,7 @@ function App() {
     return nextOverlay;
   }
 
-  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false, dwell_ms = null } = {}) {
+  function openDestinationApp(versionId, { source = "continue_card", reason = "user_pressed_continue", allowDefaultNavigation = false, preferDirectAppDestination = false, dwell_ms = null, shown_text = null } = {}) {
     // Only supported launcher IDs may ever be launched.
     if (!isKnownLauncher(versionId)) {
       console.warn("[LAUNCHER] Blocking unsupported launcher destination", { versionId, source, reason });
@@ -3221,7 +3224,7 @@ function App() {
       return false;
     }
 
-    const dwellMetadata = buildDwellMetadata(dwell_ms);
+    const dwellMetadata = buildDwellMetadata(dwell_ms, false, shown_text);
 
     void logLauncherEvent("intercept_continue_to_app", versionId, {
       launched_from: source,
@@ -3717,6 +3720,8 @@ function App() {
     editingId,
     setEditingId,
     setComposerInitialDraft,
+    commitmentConversionCardId,
+    setCommitmentConversionCardId,
     setIsComposerOpen,
     setHomeSaveConfirmation,
     composerReturnPathRef,
@@ -4834,44 +4839,39 @@ function App() {
     [cardPacks, editingCustomPackId],
   );
 
-  const cardOverlayMountedAtRef = useRef(null);
-  useEffect(() => {
-    if (overlay) {
-      cardOverlayMountedAtRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
-    } else {
-      cardOverlayMountedAtRef.current = null;
-    }
-  }, [overlay?.cardId, overlay?.activationKey, overlay?.type]);
-
-  const getOverlayDwellMs = useCallback(() => {
-    if (!cardOverlayMountedAtRef.current) return null;
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    return Math.max(0, Math.round(now - cardOverlayMountedAtRef.current));
-  }, []);
+  const getOverlayDwellMs = useDwellTimer(
+    overlay ? [overlay.cardId, overlay.activationKey, overlay.type].join(":") : "",
+  );
 
   const activeRevealCard = overlay?.cardId
     ? resolveRevealCard(cards, overlay.cardId, profile.timezone)
     : null;
 
+  // Your own cards skipped 3 times get a commitment offer instead of the
+  // colour shift; library cards keep the colour shift.
   const activeRevealCardWithSalience = useMemo(() => {
     if (!activeRevealCard) return null;
-    const isSpiced = checkCardIsSpiced(activeRevealCard, events);
-    return { ...activeRevealCard, isSpiced };
+    const commitmentOffer = getCommitmentOffer(activeRevealCard, events);
+    const isSpiced = activeRevealCard.sourcePackId ? checkCardIsSpiced(activeRevealCard, events) : false;
+    return { ...activeRevealCard, isSpiced, commitmentOffer };
   }, [activeRevealCard, events]);
 
   const recordActiveRevealCardIgnored = useCallback((reason, extraMeta = {}) => {
     if (!overlay || overlay.type !== "reveal" || !activeRevealCard || activeRevealCard.sourcePackId) return;
     const now = new Date();
     const surface = getCardSelectionSurfaceForOverlay(overlay);
-    updateCards((current) =>
-      current.map((card) =>
-        card.id === activeRevealCard.id
-          ? { ...card, lastShownAt: now.toISOString(), updatedAt: now.toISOString() }
-          : card,
-      ),
-    );
+    const dwellMetadata = buildDwellMetadata(extraMeta?.dwell_ms ?? getOverlayDwellMs(), false, activeRevealCard);
 
-    const dwellMetadata = buildDwellMetadata(extraMeta?.dwell_ms ?? getOverlayDwellMs());
+    // A skimmed view is not an exposure: leave lastShownAt alone so the card can come back sooner.
+    if (dwellMetadata.read_verdict !== "skimmed") {
+      updateCards((current) =>
+        current.map((card) =>
+          card.id === activeRevealCard.id
+            ? { ...card, lastShownAt: now.toISOString(), updatedAt: now.toISOString() }
+            : card,
+        ),
+      );
+    }
 
     void logEvent({
       event_type: CARD_EVENT_TYPES.IGNORED,
@@ -4895,6 +4895,70 @@ function App() {
       },
     });
   }, [activeRevealCard, getOverlayDwellMs, logEvent, overlay, updateCards]);
+
+  const loggedCommitmentOfferShownRef = useRef(new Set());
+  const commitmentOfferCard = activeRevealCardWithSalience?.commitmentOffer ? activeRevealCard : null;
+  const commitmentOfferSkipCount = activeRevealCardWithSalience?.commitmentOffer?.skipCount ?? null;
+
+  const logCommitmentOfferEvent = useCallback((eventType, card, skipCount) => {
+    void logEvent({
+      event_type: eventType,
+      source_type: "personal",
+      card_source: "personal",
+      card_id: card.id,
+      card_title: card.dashboardTitle ?? card.promptText,
+      card_text: card.promptText,
+      metadata: { card_id: card.id, skip_count: skipCount },
+    });
+  }, [logEvent]);
+
+  useEffect(() => {
+    if (!overlay || overlay.type !== "reveal" || !commitmentOfferCard) return;
+    const key = [overlay.activationKey ?? overlay.origin ?? route.path, commitmentOfferCard.id].join(":");
+    if (loggedCommitmentOfferShownRef.current.has(key)) return;
+    loggedCommitmentOfferShownRef.current.add(key);
+    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.SHOWN, commitmentOfferCard, commitmentOfferSkipCount);
+  }, [commitmentOfferCard, commitmentOfferSkipCount, logCommitmentOfferEvent, overlay, route.path]);
+
+  // The offer buttons answer the card, so they close it without logging another skip.
+  function closeRevealWithoutRecordingSkip() {
+    suppressNextHomeAutoLaunchRef.current = true;
+    suppressStandaloneLauncherRecoveryOnce();
+    setShouldLaunchOverlay(false);
+    setScreen("library");
+    navigateTo("/home", { replace: true });
+    setOverlay(null);
+  }
+
+  function handleCommitmentOfferAccept() {
+    if (!commitmentOfferCard) return;
+    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.ACCEPTED, commitmentOfferCard, commitmentOfferSkipCount);
+    closeRevealWithoutRecordingSkip();
+    setEditingId(null);
+    setCommitmentConversionCardId(commitmentOfferCard.id);
+    setComposerInitialKind("commitment");
+    setComposerInitialDraft(buildCommitmentDraftFromCard(commitmentOfferCard));
+    composerReturnPathRef.current = "/home";
+    setIsComposerOpen(true);
+  }
+
+  function handleCommitmentOfferPause() {
+    if (!commitmentOfferCard) return;
+    const cardId = commitmentOfferCard.id;
+    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.PAUSED, commitmentOfferCard, commitmentOfferSkipCount);
+    updateCards((current) =>
+      current.map((card) =>
+        card.id === cardId ? { ...card, paused: true, updatedAt: new Date().toISOString() } : card,
+      ),
+    );
+    closeRevealWithoutRecordingSkip();
+  }
+
+  function handleCommitmentOfferDecline() {
+    if (!commitmentOfferCard) return;
+    logCommitmentOfferEvent(COMMITMENT_OFFER_EVENTS.DECLINED, commitmentOfferCard, commitmentOfferSkipCount);
+  }
+
   const activeOverlayVersion = useMemo(
     () =>
       overlay?.versionId
@@ -5570,6 +5634,7 @@ function App() {
           initialDraft={composerInitialDraft}
           onClose={() => {
             setEditingId(null);
+            setCommitmentConversionCardId(null);
             setComposerInitialKind("personal");
             setComposerInitialDraft(null);
             composerReturnPathRef.current = "/home";
@@ -5667,6 +5732,9 @@ function App() {
             setOverlay(null);
           }}
           onAction={handleAction}
+          onCommitmentOfferAccept={handleCommitmentOfferAccept}
+          onCommitmentOfferPause={handleCommitmentOfferPause}
+          onCommitmentOfferDecline={handleCommitmentOfferDecline}
           onCommitmentAction={handleCommitmentAction}
           onCommitmentCheckInAction={handleCommitmentCheckInAction}
           onCommitmentEncouragementAction={handleCommitmentEncouragementAction}

@@ -26,12 +26,9 @@ export function PersonalCardAnalyticsPanel({
     overallCompletionRate,
     doorwaySwitchesCount,
     estimatedMinutesSaved,
-    overallAvgDwellCompletedMs,
-    overallAvgDwellIgnoredMs,
-    totalReflexSkips,
-    reflexSkipPercentage,
-    spicedCardsCount,
+    readProperlyThisWeek,
   } = analytics;
+  const skippedThreeInARowCount = cardTrends.filter((card) => card.consecutiveSkips >= 3).length;
 
   return (
     <div className="card-analytics-container">
@@ -87,36 +84,23 @@ export function PersonalCardAnalyticsPanel({
           </div>
         </div>
 
-        {/* Card Retention & Attention Dwell Time (Psychology & Behavioral Change Data) */}
-        {(overallAvgDwellCompletedMs !== null || overallAvgDwellIgnoredMs !== null || totalReflexSkips > 0) && (
+        {/* How much of each card was actually read (reading time counts the words on the card) */}
+        {(readProperlyThisWeek.total > 0 || skippedThreeInARowCount > 0) && (
           <div className="retention-dwell-panel">
             <div className="retention-dwell-heading">
-              <span className="retention-badge-tag">Attention & Dwell Retention</span>
-              <span className="retention-subtag">Sociology Experiment: Active</span>
+              <span className="retention-badge-tag">How you read your cards</span>
             </div>
-            <div className="retention-stat-columns">
-              <div className="dwell-stat-card">
-                <span className="dwell-stat-num">
-                  {overallAvgDwellCompletedMs !== null ? `${(overallAvgDwellCompletedMs / 1000).toFixed(1)}s` : "—"}
-                </span>
-                <span className="dwell-stat-title">Glance before completing</span>
-                <span className="dwell-stat-desc">Time spent absorbing card before saying yes</span>
+            {readProperlyThisWeek.total > 0 && (
+              <div className="retention-stat-columns">
+                <div className="dwell-stat-card">
+                  <span className="dwell-stat-title">Read properly: {readProperlyThisWeek.read} of {readProperlyThisWeek.total} cards this week</span>
+                  <span className="dwell-stat-desc">A card counts as read when you stayed on it for at least half the time its words take to read.</span>
+                </div>
               </div>
-              <div className="dwell-stat-card">
-                <span className="dwell-stat-num">
-                  {overallAvgDwellIgnoredMs !== null ? `${(overallAvgDwellIgnoredMs / 1000).toFixed(1)}s` : "—"}
-                </span>
-                <span className="dwell-stat-title">Glance before skipping</span>
-                <span className="dwell-stat-desc">
-                  {reflexSkipPercentage !== null
-                    ? `${reflexSkipPercentage}% reflex skips (<1.5s muscle memory)`
-                    : "Passes vs thoughtful skips"}
-                </span>
-              </div>
-            </div>
-            {spicedCardsCount > 0 && (
+            )}
+            {skippedThreeInARowCount > 0 && (
               <p className="retention-spiced-callout">
-                <strong>{spicedCardsCount} {spicedCardsCount === 1 ? "card is" : "cards are"} spiced:</strong> Dynamic warm terracotta salience is active on cards with $\ge 3$ consecutive skips to break sensory habituation and interrupt automatic bypass.
+                <strong>{skippedThreeInARowCount} {skippedThreeInARowCount === 1 ? "card" : "cards"} skipped 3 times in a row.</strong> Next time {skippedThreeInARowCount === 1 ? "it shows" : "they show"}, you can make {skippedThreeInARowCount === 1 ? "it" : "them"} a commitment or pause {skippedThreeInARowCount === 1 ? "it" : "them"}.
               </p>
             )}
           </div>
@@ -147,8 +131,8 @@ export function PersonalCardAnalyticsPanel({
                   <div className="avoided-card-title-line">
                     <span className="avoided-card-title">{card.promptText}</span>
                     {card.isSpiced && (
-                      <span className="spiced-pill-badge" title="Dynamic salience to interrupt autopilot">
-                        Spiced for Attention
+                      <span className="spiced-pill-badge" title="Skipped a lot">
+                        Skipped a lot
                       </span>
                     )}
                   </div>

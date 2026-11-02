@@ -30,6 +30,8 @@ export function useCardActions({
   editingId,
   setEditingId,
   setComposerInitialDraft,
+  commitmentConversionCardId = null,
+  setCommitmentConversionCardId = () => {},
   setIsComposerOpen,
   setHomeSaveConfirmation,
   composerReturnPathRef,
@@ -54,7 +56,7 @@ export function useCardActions({
           ? "bash_do_now"
           : "bash_not_done";
 
-    const dwellMetadata = buildDwellMetadata(extraMeta?.dwell_ms, action === "done");
+    const dwellMetadata = buildDwellMetadata(extraMeta?.dwell_ms, action === "done", activeCard);
 
     void logEvent({
       event_type: eventType,
@@ -197,12 +199,15 @@ export function useCardActions({
         deletedAt: null,
       };
 
-      const isFirstCard = !setupComplete && !editingId;
+      // A card being turned into a commitment is updated in place, so its
+      // history and streaks carry over.
+      const targetId = editingId ?? commitmentConversionCardId;
+      const isFirstCard = !setupComplete && !targetId;
 
-      if (editingId) {
+      if (targetId) {
         updateCards((current) =>
           current.map((card) =>
-            card.id === editingId
+            card.id === targetId
               ? {
                   ...card,
                   ...newCard,
@@ -250,6 +255,7 @@ export function useCardActions({
       });
 
       setEditingId(null);
+      setCommitmentConversionCardId(null);
       setComposerInitialDraft(null);
       setIsComposerOpen(false);
       setHomeSaveConfirmation(commitmentText);
