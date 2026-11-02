@@ -24,6 +24,7 @@ type SeedOptions = {
   homeScreenVersions?: Record<string, Record<string, unknown>>;
   setupComplete?: boolean;
   testerMode?: boolean;
+  events?: Array<Record<string, unknown>>;
 };
 
 function smokeCard(id: string, promptText: string) {
@@ -148,9 +149,10 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
     launcherBehaviorSettings = launcherSettings(false),
     setupComplete = true,
     testerMode = false,
+    events = [],
   } = options;
   await page.addInitScript(
-    ({ seededActionCards, seededCards, seededDislikedPackCardIds, seededHomeScreenVersions, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
+    ({ seededActionCards, seededEvents, seededCards, seededDislikedPackCardIds, seededHomeScreenVersions, seededLauncherBehaviorSettings, seededSetupComplete, seededTesterMode }) => {
       window.localStorage.setItem('MYBISHBASH_E2E_MODE', 'true');
       window.localStorage.setItem('MYBISHBASH_E2E_TESTER_MODE', String(seededTesterMode));
       window.localStorage.setItem('MYBISHBASH_DEMO_MODE', 'true');
@@ -158,7 +160,7 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
       window.localStorage.setItem('mybishbash.profile.v1', JSON.stringify({ name: 'E2E', timezone: 'Europe/London' }));
       window.localStorage.setItem('mybishbash.cards.v1', JSON.stringify(seededCards));
       window.localStorage.setItem('mybishbash.home-screen-versions.v1', JSON.stringify(seededHomeScreenVersions));
-      window.localStorage.setItem('mybishbash.event-log.v1', '[]');
+      window.localStorage.setItem('mybishbash.event-log.v1', JSON.stringify(seededEvents));
       window.localStorage.setItem('mybishbash.offline-event-queue.v1', '[]');
       window.localStorage.setItem('mybishbash.disliked-pack-card-ids.v1', JSON.stringify(seededDislikedPackCardIds));
       window.localStorage.setItem('mybishbash.action-cards.v1', JSON.stringify(seededActionCards));
@@ -171,6 +173,7 @@ async function seedE2EState(page: Page, options: SeedOptions = {}) {
     },
     {
       seededActionCards: actionCards,
+      seededEvents: events,
       seededCards: cards,
       seededDislikedPackCardIds: dislikedPackCardIds,
       seededHomeScreenVersions: homeScreenVersions,
@@ -917,6 +920,88 @@ test('warm launch after app settings keeps fake launcher return target', async (
   await expect(page.getByTestId('card-overlay-pack')).toBeVisible();
   await expect(page.getByTestId('card-action-continue')).toBeVisible();
   await expect(page.getByTestId('card-action-back-to-home')).toHaveCount(0);
+
+  await expectNoConsoleErrors(consoleErrors);
+});
+
+
+test('Log card trends show commitments, 90 days and all time as weekly columns at 390px without overflow', async ({ page }) => {
+  const consoleErrors = await installConsoleErrorGuard(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86400000).toISOString();
+  const cardEvent = (id: string, cardId: string, eventType: string, action: string, days: number) => ({
+    id,
+    event_type: eventType,
+    card_id: cardId,
+    bash_id: cardId,
+    action_taken: action,
+    created_at: daysAgo(days),
+    source_type: 'personal',
+    metadata: null,
+  });
+  const checkIn = (id: string, response: string, days: number) => ({
+    id,
+    event_type: 'commitment_check_in',
+    card_id: 'e2e-checkin-card',
+    bash_id: 'e2e-commitment',
+    action_taken: response,
+    created_at: daysAgo(days),
+    source_type: 'personal',
+    metadata: { cardKind: 'commitment_check_in', parentCommitmentCardId: 'e2e-commitment', response },
+  });
+  const events = [
+    cardEvent('e1', 'e2e-personal', 'card_completed', 'completed', 1),
+    cardEvent('e2', 'e2e-personal', 'card_completed', 'completed', 3),
+    cardEvent('e3', 'e2e-personal', 'card_ignored', 'ignored', 5),
+    cardEvent('e4', 'e2e-personal', 'card_completed', 'completed', 40),
+    cardEvent('e5', 'e2e-personal', 'card_ignored', 'ignored', 70),
+    checkIn('e6', 'on_track', 1),
+    checkIn('e7', 'on_track', 2),
+    checkIn('e8', 'somewhat_on_track', 4),
+    checkIn('e9', 'closed_early', 50),
+  ];
+
+  await seedE2EState(page, {
+    cards: [
+      smokeCard('e2e-personal', 'Stretch for two minutes'),
+      commitmentCard('e2e-commitment', 'no Instagram before lunch', { commitmentStatusToday: 'made' }),
+      packSmokeCard('e2e-library', 'Library card that must not appear'),
+    ],
+    events,
+  });
+  await gotoApp(page, '/log');
+  await page.getByRole('tab', { name: 'Card Trends' }).click();
+
+  const rows = page.locator('.card-trend-row');
+  await expect(rows).toHaveCount(2);
+  await expect(page.locator('.card-trends-list')).not.toContainText('Library card that must not appear');
+  await expect(page.locator('.card-trends-list')).toContainText('Commitment');
+  await expect(page.locator('.card-trends-list')).toContainText('On track 2 · Partly 1');
+
+  const expectNoOverflow = async () => {
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(390);
+  };
+  await expectNoOverflow();
+
+  await page.getByRole('button', { name: '90 days' }).click();
+  await expect(page.locator('.weekly-track').first()).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  expect(await page.locator('.weekly-track').first().locator('.weekly-col').count()).toBeGreaterThanOrEqual(13);
+  await expectNoOverflow();
+  await page.screenshot({ path: `${process.env.HOME}/mbb24-shots/mbb24-90-days-390.png`, fullPage: true });
+
+  await page.getByRole('button', { name: /^(All time|Since .+)$/ }).click();
+  await expect(page.locator('.weekly-track').first()).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  await expectNoOverflow();
+  await page.screenshot({ path: `${process.env.HOME}/mbb24-shots/mbb24-all-time-390.png`, fullPage: true });
+
+  await page.getByRole('button', { name: '30 days' }).click();
+  await expect(page.locator('.timeline-dots-track').first()).toBeVisible();
+  await expectNoOverflow();
+  await page.screenshot({ path: `${process.env.HOME}/mbb24-shots/mbb24-30-days-390.png`, fullPage: true });
 
   await expectNoConsoleErrors(consoleErrors);
 });

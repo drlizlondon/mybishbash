@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computePersonalCardAnalytics } from "./personalCardAnalytics.js";
+import {
+  computePersonalCardAnalytics,
+  formatCheckInSummary,
+  formatSinceDate,
+} from "./personalCardAnalytics.js";
+import { EVENT_LOG_MAX } from "./eventLogLimits.js";
 
 describe("computePersonalCardAnalytics", () => {
   const refDate = new Date("2026-09-30T12:00:00Z");
@@ -16,16 +21,17 @@ describe("computePersonalCardAnalytics", () => {
     expect(result.superstarCards).toHaveLength(0);
   });
 
-  it("filters out pack cards, deleted cards, and commitments", () => {
+  it("filters out library cards and deleted cards, keeps own cards and commitments, drops lifecycle cards", () => {
     const cards = [
       { id: "personal-1", promptText: "Water the plant" },
       { id: "pack-card-1", promptText: "Pack card", sourcePackId: "growth-pack" },
       { id: "deleted-1", promptText: "Deleted card", deletedAt: "2026-09-20T00:00:00Z" },
       { id: "commit-1", promptText: "Commitment card", cardKind: "commitment" },
+      { id: "checkin-1", promptText: "Check-in", cardKind: "commitment_check_in", parentCommitmentCardId: "commit-1" },
     ];
     const result = computePersonalCardAnalytics(cards, [], "Europe/London", { referenceDate: refDate });
-    expect(result.totalPersonalCards).toBe(1);
-    expect(result.cards[0].cardId).toBe("personal-1");
+    expect(result.totalPersonalCards).toBe(2);
+    expect(result.cards.map((c) => c.cardId)).toEqual(["personal-1", "commit-1"]);
   });
 
   it("calculates completions, ignores, win rate, and doorway metrics correctly", () => {
@@ -158,3 +164,288 @@ describe("computePersonalCardAnalytics", () => {
   });
 });
 
+// ---- MBB-24: commitments, longer history, trends ----
+
+const LONDON = "Europe/London";
+
+// Mirrors useCommitmentActions.handleCommitmentCheckInAction: each check-in
+// logs a commitment_check_in event and a card_completed twin.
+function checkInPair(parentId, response, createdAt, n = 1) {
+  return [
+    {
+      id: `ci-${parentId}-${n}`,
+      event_type: "commitment_check_in",
+      bash_id: parentId,
+      card_id: `checkin-card-${parentId}`,
+      action_taken: response,
+      created_at: createdAt,
+      metadata: { cardKind: "commitment_check_in", parentCommitmentCardId: parentId, response },
+    },
+    {
+      id: `ci-twin-${parentId}-${n}`,
+      event_type: "card_completed",
+      bash_id: parentId,
+      card_id: `checkin-card-${parentId}`,
+      action_taken: response,
+      created_at: createdAt,
+      metadata: {
+        legacyEventType: "commitment_check_in",
+        cardKind: "commitment_check_in",
+        parentCommitmentCardId: parentId,
+        response,
+      },
+    },
+  ];
+}
+
+describe("MBB-24 commitments", () => {
+  const refDate = new Date("2026-10-30T12:00:00Z");
+  const commitment = { id: "commit-1", promptText: "No Instagram before lunch", cardKind: "commitment" };
+
+  it("C1: a commitment with 3 check-ins (2 on track, 1 partly) is one row and each pair counts once", () => {
+    const events = [
+      ...checkInPair("commit-1", "on_track", "2026-10-28T09:00:00Z", 1),
+      ...checkInPair("commit-1", "on_track", "2026-10-29T09:00:00Z", 2),
+      ...checkInPair("commit-1", "somewhat_on_track", "2026-10-30T09:00:00Z", 3),
+    ];
+    const result = computePersonalCardAnalytics([commitment], events, LONDON, { referenceDate: refDate });
+    expect(result.cards).toHaveLength(1);
+    const row = result.cards[0];
+    expect(row.isCommitment).toBe(true);
+    expect(row.checkIns).toMatchObject({ onTrack: 2, partial: 1, closed: 0, total: 3 });
+    expect(row.checkInSummary).toBe("On track 2 · Partly 1");
+    // the card_completed twins are not done moments
+    expect(row.totalCompleted).toBe(0);
+    expect(result.totalCompletions30d).toBe(0);
+    expect(row.dailyEntries.find((d) => d.dateKey === "2026-10-28").status).toBe("completed");
+    expect(row.dailyEntries.find((d) => d.dateKey === "2026-10-30").status).toBe("partial");
+  });
+
+  it("maps closed_early and unknown responses to 'Left for another day'", () => {
+    const events = [
+      ...checkInPair("commit-1", "closed_early", "2026-10-28T09:00:00Z", 1),
+      ...checkInPair("commit-1", "something_new", "2026-10-29T09:00:00Z", 2),
+    ];
+    const row = computePersonalCardAnalytics([commitment], events, LONDON, { referenceDate: refDate }).cards[0];
+    expect(row.checkInSummary).toBe("Left for another day 2");
+    expect(row.dailyEntries.find((d) => d.dateKey === "2026-10-28").status).toBe("closed");
+  });
+
+  it("formatCheckInSummary leaves out zero counts and is empty with no check-ins", () => {
+    expect(formatCheckInSummary({ onTrack: 0, partial: 0, closed: 0 })).toBe("");
+    expect(formatCheckInSummary({ onTrack: 1, partial: 0, closed: 0 })).toBe("On track 1");
+  });
+
+  it("C2/M1: a library card with events never appears", () => {
+    const cards = [
+      { id: "lib-1", promptText: "Library card", sourcePackId: "growth-pack" },
+      { id: "mine-1", promptText: "Mine" },
+    ];
+    const events = [
+      { card_id: "lib-1", event_type: "card_completed", action_taken: "completed", created_at: "2026-10-30T09:00:00Z" },
+      { card_id: "mine-1", event_type: "card_completed", action_taken: "completed", created_at: "2026-10-30T09:00:00Z" },
+    ];
+    const result = computePersonalCardAnalytics(cards, events, LONDON, { referenceDate: refDate });
+    expect(result.cards.map((c) => c.cardId)).toEqual(["mine-1"]);
+    expect(result.totalCompletions30d).toBe(1);
+  });
+
+  it("C3: a card converted to a commitment keeps its pre-conversion events in its one row", () => {
+    const converted = { id: "walk-1", promptText: "Go for a walk", cardKind: "commitment" };
+    const events = [
+      { card_id: "walk-1", event_type: "card_completed", action_taken: "completed", created_at: "2026-10-20T09:00:00Z" },
+      { card_id: "walk-1", event_type: "card_ignored", action_taken: "ignored", created_at: "2026-10-21T09:00:00Z" },
+      // after conversion: the decision pair is not a done moment
+      {
+        card_id: "walk-1",
+        bash_id: "walk-1",
+        event_type: "commitment_made",
+        action_taken: "committed",
+        created_at: "2026-10-22T09:00:00Z",
+        metadata: { cardKind: "commitment" },
+      },
+      {
+        card_id: "walk-1",
+        bash_id: "walk-1",
+        event_type: "card_completed",
+        action_taken: "committed",
+        created_at: "2026-10-22T09:00:00Z",
+        metadata: { legacyEventType: "commitment_made", cardKind: "commitment" },
+      },
+      ...checkInPair("walk-1", "on_track", "2026-10-23T09:00:00Z"),
+    ];
+    const result = computePersonalCardAnalytics([converted], events, LONDON, { referenceDate: refDate });
+    expect(result.cards).toHaveLength(1);
+    const row = result.cards[0];
+    expect(row.totalCompleted).toBe(1);
+    expect(row.totalIgnored).toBe(1);
+    expect(row.checkIns.onTrack).toBe(1);
+  });
+
+  it("commitments are not offered in the Honest Mirror or Superstars", () => {
+    const events = [
+      { card_id: "commit-1", event_type: "card_ignored", action_taken: "ignored", created_at: "2026-10-29T09:00:00Z" },
+      { card_id: "commit-1", event_type: "card_ignored", action_taken: "ignored", created_at: "2026-10-30T09:00:00Z" },
+    ];
+    const result = computePersonalCardAnalytics([commitment], events, LONDON, { referenceDate: refDate });
+    expect(result.avoidedCards).toHaveLength(0);
+    expect(result.superstarCards).toHaveLength(0);
+  });
+
+  it("G1: no cards and no events gives empty text fields", () => {
+    const result = computePersonalCardAnalytics([commitment], [], LONDON, { referenceDate: refDate });
+    const row = result.cards[0];
+    expect(row.checkInSummary).toBe("");
+    expect(row.usuallyDoneOn).toBeNull();
+    expect(formatSinceDate(null)).toBe("");
+    expect(result.oldestEventAt).toBeNull();
+  });
+});
+
+describe("MBB-24 longer history", () => {
+  it("C4: 90 days gives weekly columns, Monday start, empty weeks present, London time across the BST end", () => {
+    // BST ended 2026-10-25 01:00 UTC. Reference: Sunday 25 Oct 2026.
+    const refDate = new Date("2026-10-25T12:00:00Z");
+    const cards = [{ id: "c1", promptText: "Stretch" }];
+    const events = [
+      // 23:30 UTC Sunday 18 Oct is 00:30 BST Monday 19 Oct in London: week of 19 Oct
+      { card_id: "c1", event_type: "card_completed", action_taken: "completed", created_at: "2026-10-18T23:30:00Z" },
+      // 23:30 UTC Sunday 25 Oct is still Sunday in London (GMT): week of 19 Oct
+      { card_id: "c1", event_type: "card_completed", action_taken: "completed", created_at: "2026-10-25T23:30:00Z" },
+      { card_id: "c1", event_type: "card_ignored", action_taken: "ignored", created_at: "2026-09-02T09:00:00Z" },
+    ];
+    const result = computePersonalCardAnalytics(cards, events, LONDON, { referenceDate: refDate, days: 90 });
+    expect(result.granularity).toBe("weekly");
+    const weeks = result.cards[0].weeklyEntries;
+    expect(weeks.length === 13 || weeks.length === 14).toBe(true);
+    expect(weeks).toHaveLength(13);
+    // Monday start, 7 days apart, nothing omitted
+    weeks.forEach((w, i) => {
+      expect(new Date(`${w.weekStartKey}T00:00:00Z`).getUTCDay()).toBe(1);
+      if (i > 0) {
+        const gap = (Date.parse(w.weekStartKey) - Date.parse(weeks[i - 1].weekStartKey)) / 86400000;
+        expect(gap).toBe(7);
+      }
+    });
+    expect(weeks[weeks.length - 1].weekStartKey).toBe("2026-10-19");
+    expect(weeks[weeks.length - 1].isCurrent).toBe(true);
+    const lastWeek = weeks[weeks.length - 1];
+    // the 18 Oct 23:30Z event is Monday 19 Oct in London, so both land in the last week
+    expect(lastWeek.completedCount).toBe(2);
+    expect(weeks.find((w) => w.weekStartKey === "2026-10-12").total).toBe(0);
+    expect(weeks.find((w) => w.weekStartKey === "2026-08-31").ignoredCount).toBe(1);
+    expect(weeks.filter((w) => w.total === 0).length).toBeGreaterThan(5);
+  });
+
+  it("14 and 30 days keep the daily track", () => {
+    const refDate = new Date("2026-10-25T12:00:00Z");
+    const r14 = computePersonalCardAnalytics([{ id: "c1", promptText: "x" }], [], LONDON, { referenceDate: refDate, days: 14 });
+    expect(r14.granularity).toBe("daily");
+    expect(r14.cards[0].dailyEntries).toHaveLength(14);
+    expect(r14.cards[0].weeklyEntries).toHaveLength(0);
+  });
+
+  it("all time starts at the card's earliest event and includes events older than 90 days", () => {
+    const refDate = new Date("2026-10-25T12:00:00Z");
+    const events = [
+      { card_id: "c1", event_type: "card_completed", action_taken: "completed", created_at: "2026-03-02T09:00:00Z" },
+      { card_id: "c1", event_type: "card_completed", action_taken: "completed", created_at: "2026-10-20T09:00:00Z" },
+    ];
+    const cards = [{ id: "c1", promptText: "x" }, { id: "c2", promptText: "never surfaced" }];
+    const result = computePersonalCardAnalytics(cards, events, LONDON, { referenceDate: refDate, days: "all" });
+    const row = result.cards[0];
+    expect(row.weeklyEntries[0].weekStartKey).toBe("2026-03-02");
+    expect(row.weeklyEntries[row.weeklyEntries.length - 1].weekStartKey).toBe("2026-10-19");
+    expect(row.totalCompleted).toBe(2);
+    expect(result.cards[1].weeklyEntries).toHaveLength(0);
+    expect(result.oldestEventAt).toBe("2026-03-02T09:00:00Z");
+    expect(result.eventLogCapped).toBe(false);
+    expect(formatSinceDate(result.oldestEventAt, LONDON)).toBe("2 Mar 2026");
+  });
+
+  it("reports a capped event log when the log is full", () => {
+    const refDate = new Date("2026-10-25T12:00:00Z");
+    const events = Array.from({ length: EVENT_LOG_MAX }, (_, i) => ({
+      id: `e${i}`,
+      card_id: "c1",
+      event_type: "card_completed",
+      action_taken: "completed",
+      created_at: "2026-10-20T09:00:00Z",
+    }));
+    const result = computePersonalCardAnalytics([{ id: "c1", promptText: "x" }], events, LONDON, { referenceDate: refDate, days: "all" });
+    expect(result.eventLogCapped).toBe(true);
+  });
+});
+
+describe("MBB-24 trends", () => {
+  const refDate = new Date("2026-10-30T12:00:00Z");
+  const cards = [{ id: "c1", promptText: "Stretch" }];
+  const done = (iso) => ({ card_id: "c1", event_type: "card_completed", action_taken: "completed", created_at: iso });
+  const skip = (iso) => ({ card_id: "c1", event_type: "card_ignored", action_taken: "ignored", created_at: iso });
+
+  it("C5: 2/5 then 4/5 gives 'Up from 40% to 80%'", () => {
+    const events = [
+      // previous window (17-30 Oct is recent; 3-16 Oct is previous): 2 of 5
+      done("2026-10-05T09:00:00Z"), done("2026-10-06T09:00:00Z"),
+      skip("2026-10-07T09:00:00Z"), skip("2026-10-08T09:00:00Z"), skip("2026-10-09T09:00:00Z"),
+      // recent window: 4 of 5
+      done("2026-10-20T09:00:00Z"), done("2026-10-21T09:00:00Z"), done("2026-10-22T09:00:00Z"), done("2026-10-23T09:00:00Z"),
+      skip("2026-10-24T09:00:00Z"),
+    ];
+    const row = computePersonalCardAnalytics(cards, events, LONDON, { referenceDate: refDate }).cards[0];
+    expect(row.trend.label).toBe("Up from 40% to 80%");
+  });
+
+  it("C5: Down and About the same", () => {
+    const down = [
+      done("2026-10-05T09:00:00Z"), done("2026-10-06T09:00:00Z"), done("2026-10-07T09:00:00Z"), done("2026-10-08T09:00:00Z"), skip("2026-10-09T09:00:00Z"),
+      done("2026-10-20T09:00:00Z"), done("2026-10-21T09:00:00Z"), skip("2026-10-22T09:00:00Z"), skip("2026-10-23T09:00:00Z"), skip("2026-10-24T09:00:00Z"),
+    ];
+    expect(computePersonalCardAnalytics(cards, down, LONDON, { referenceDate: refDate }).cards[0].trend.label).toBe("Down from 80% to 40%");
+    const same = [
+      done("2026-10-05T09:00:00Z"), done("2026-10-06T09:00:00Z"), skip("2026-10-07T09:00:00Z"), skip("2026-10-08T09:00:00Z"),
+      done("2026-10-20T09:00:00Z"), done("2026-10-21T09:00:00Z"), skip("2026-10-22T09:00:00Z"), skip("2026-10-23T09:00:00Z"),
+    ];
+    expect(computePersonalCardAnalytics(cards, same, LONDON, { referenceDate: refDate }).cards[0].trend.label).toBe("About the same (50%)");
+  });
+
+  it("C5: only 2 surfaced in a window gives 'Not enough yet'", () => {
+    const events = [
+      done("2026-10-05T09:00:00Z"), skip("2026-10-06T09:00:00Z"),
+      done("2026-10-20T09:00:00Z"), done("2026-10-21T09:00:00Z"), done("2026-10-22T09:00:00Z"), done("2026-10-23T09:00:00Z"), done("2026-10-24T09:00:00Z"),
+    ];
+    const row = computePersonalCardAnalytics(cards, events, LONDON, { referenceDate: refDate }).cards[0];
+    expect(row.trend.state).toBe("not_enough");
+    expect(row.trend.label).toBe("Not enough yet to show a trend");
+  });
+
+  it("commitment trend uses on-track check-ins over all check-ins", () => {
+    const commitment = { id: "commit-1", promptText: "x", cardKind: "commitment" };
+    const events = [
+      ...checkInPair("commit-1", "somewhat_on_track", "2026-10-05T09:00:00Z", 1),
+      ...checkInPair("commit-1", "somewhat_on_track", "2026-10-06T09:00:00Z", 2),
+      ...checkInPair("commit-1", "on_track", "2026-10-07T09:00:00Z", 3),
+      ...checkInPair("commit-1", "on_track", "2026-10-20T09:00:00Z", 4),
+      ...checkInPair("commit-1", "on_track", "2026-10-21T09:00:00Z", 5),
+      ...checkInPair("commit-1", "on_track", "2026-10-22T09:00:00Z", 6),
+    ];
+    const row = computePersonalCardAnalytics([commitment], events, LONDON, { referenceDate: refDate }).cards[0];
+    expect(row.trend.label).toBe("Up from 33% to 100%");
+  });
+
+  it("C6: 'Usually done on' needs 5+ completions and a 40%+ weekday", () => {
+    // 2026-10-26, 10-19, 10-12 are Mondays; 10-27 Tuesday; 10-28 Wednesday
+    const monday3 = [done("2026-10-26T09:00:00Z"), done("2026-10-19T09:00:00Z"), done("2026-10-12T09:00:00Z")];
+    const fiveWith3Mondays = [...monday3, done("2026-10-27T09:00:00Z"), done("2026-10-28T09:00:00Z")];
+    const r = (events) => computePersonalCardAnalytics(cards, events, LONDON, { referenceDate: refDate }).cards[0].usuallyDoneOn;
+    expect(r(fiveWith3Mondays)).toBe("Monday");
+    // only 4 completions: nothing
+    expect(r([...monday3, done("2026-10-27T09:00:00Z")])).toBeNull();
+    // 5 completions spread over 5 weekdays: 20% each, nothing
+    expect(r([done("2026-10-26T09:00:00Z"), done("2026-10-27T09:00:00Z"), done("2026-10-28T09:00:00Z"), done("2026-10-29T09:00:00Z"), done("2026-10-30T09:00:00Z")])).toBeNull();
+    // 5 completions, top weekday holds 2 of 5 (exactly 40%), unique top: shown
+    expect(r([done("2026-10-26T09:00:00Z"), done("2026-10-19T09:00:00Z"), done("2026-10-27T09:00:00Z"), done("2026-10-28T09:00:00Z"), done("2026-10-29T09:00:00Z")])).toBe("Monday");
+    // skipped events never count as completions
+    expect(r([skip("2026-10-26T09:00:00Z"), skip("2026-10-19T09:00:00Z"), skip("2026-10-12T09:00:00Z"), skip("2026-10-05T09:00:00Z"), skip("2026-10-27T09:00:00Z")])).toBeNull();
+  });
+});

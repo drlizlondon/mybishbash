@@ -290,14 +290,14 @@ export function LogPanel({
         <h2>myBishBash Log</h2>
         <p>
           {activeLogTab === "trends"
-            ? "30-day habits, honest patterns & momentum."
+            ? "your habits, honest patterns & momentum."
             : filter === "intercepts"
             ? "the little pauses before the pull."
             : "tiny choices. real change."}
         </p>
       </header>
 
-      {/* View Switcher: Moments vs 30-Day Trends */}
+      {/* View Switcher: Moments vs Card Trends */}
       <div className="log-view-switcher" role="tablist" aria-label="Log views">
         <button
           type="button"
@@ -317,7 +317,7 @@ export function LogPanel({
           className={`log-view-tab ${activeLogTab === "trends" ? "active" : ""}`}
           onClick={() => setActiveLogTab("trends")}
         >
-          Card Trends (30 Days)
+          Card Trends
         </button>
       </div>
 
