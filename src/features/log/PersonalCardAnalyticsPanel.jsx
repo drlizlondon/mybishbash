@@ -148,7 +148,7 @@ export function PersonalCardAnalyticsPanel({
                   )}
                   {card.avgDwellIgnoredMs !== null && (
                     <span className="chip-dwell">
-                      {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s glance {card.avgDwellIgnoredMs < 1500 ? "(Reflex bypass)" : "(Considered pass)"}
+                      {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s on the card
                     </span>
                   )}
                   {card.topDoorway && (
