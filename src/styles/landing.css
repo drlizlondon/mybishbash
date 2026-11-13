@@ -806,9 +806,9 @@ body:has(.landing-page)::after {
 }
 
 .reveal-up {
-  opacity: 0;
-  transform: translateY(18px);
-  animation: revealUp 760ms cubic-bezier(0.16,1,0.3,1) forwards;
+  opacity: 1;
+  transform: none;
+  animation: none;
 }
 
 .delay-1 {
@@ -1248,6 +1248,12 @@ body:has(.landing-page)::after {
     margin-top: 6px;
   }
 
+  /* Slop fix 2026-10-24: product above the fold on phones. */
+  .hero-grid {
+    gap: 24px;
+    padding-bottom: 20px;
+  }
+
   .proof-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1448,9 +1454,10 @@ body:has(.landing-page)::after {
 }
 .tri-item-dark {
   padding: 30px 28px;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 22px;
-  background: rgba(255,255,255,0.03);
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0;
+  background: none;
 }
 .tri-item-dark h3 {
   margin: 0 0 10px;
@@ -1913,9 +1920,10 @@ body:has(.landing-page)::after {
 }
 .trust-item {
   padding: 28px 26px;
-  border: 1px solid rgba(20,17,13,0.08);
-  border-radius: 20px;
-  background: var(--surface);
+  border: 0;
+  border-top: 1px solid rgba(20,17,13,0.1);
+  border-radius: 0;
+  background: none;
 }
 .trust-check {
   display: inline-grid;
@@ -2512,4 +2520,11 @@ body:has(.landing-page)::after {
   .hero-title { font-size: 28px !important; margin-bottom: 12px !important; }
   .hero-copy-block p { font-size: 14px !important; line-height: 1.4 !important; }
   .hero-copy { margin-bottom: 10px !important; }
+}
+
+/* Slop fix 2026-10-24: on short phones the product card, not the paragraph, takes the first screen. */
+@media (max-width: 430px) and (max-height: 700px) {
+  .landing-page .hero-copy { display: none; }
+  .landing-page .hero-title { font-size: 28px; margin-bottom: 10px; }
+  .hero-grid { gap: 16px; }
 }

@@ -1,3 +1,5 @@
+import { MAX_DWELL_MS, countWords, expectedReadMs, readVerdict } from "./readTime";
+
 const COMPLETED_EVENT_TYPES = new Set([
   "bash_done",
   "card_completed",
@@ -5,7 +7,6 @@ const COMPLETED_EVENT_TYPES = new Set([
 ]);
 
 const IGNORED_EVENT_TYPES = new Set([
-  "bash_not_done",
   "card_ignored",
   "intercept_continue_to_app",
 ]);
@@ -27,11 +28,13 @@ export function eventMatchesCard(event, card) {
 }
 
 /**
- * Checks if a card has 3+ consecutive skips, qualifying for the "Spiced" visual salience test.
+ * Skips in a row since the last completion, newest first. "Not done" logs a
+ * bash_not_done and a card_ignored twin for one skip; the twin is not counted.
+ * Only ignore events count; shown, offer and other events neither add to the run nor break it.
  */
-export function checkCardIsSpiced(card, events = []) {
-  if (!card) return false;
-  const cardEvents = (Array.isArray(events) ? events : []).filter((e) => eventMatchesCard(e, card));
+export function countConsecutiveSkips(card, events = []) {
+  if (!card) return 0;
+  const cardEvents = (Array.isArray(events) ? events : []).filter((e) => e.event_type !== "bash_not_done" && eventMatchesCard(e, card));
   const sorted = [...cardEvents].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
@@ -42,7 +45,14 @@ export function checkCardIsSpiced(card, events = []) {
     if (isCompleted) break;
     if (isIgnored) consecutiveSkips += 1;
   }
-  return consecutiveSkips >= 3;
+  return consecutiveSkips;
+}
+
+/**
+ * Checks if a card has 3+ consecutive skips, qualifying for the "Spiced" visual salience test.
+ */
+export function checkCardIsSpiced(card, events = []) {
+  return countConsecutiveSkips(card, events) >= 3;
 }
 
 export function getDwellBucket(dwellMs, isCompleted = false) {
@@ -53,12 +63,27 @@ export function getDwellBucket(dwellMs, isCompleted = false) {
   return dwellMs < 1500 ? "reflex_skip" : dwellMs <= 8000 ? "considered_skip" : "pondered_skip";
 }
 
-export function buildDwellMetadata(dwellMs, isCompleted = false) {
+/**
+ * Dwell fields for an event's metadata. Pass the card (or the text shown) as
+ * `shown` to also record words, expected_ms and read_verdict. A null or
+ * idle (over MAX_DWELL_MS) dwell records nothing.
+ */
+export function buildDwellMetadata(dwellMs, isCompleted = false, shown = null) {
+  if (dwellMs === null || dwellMs === undefined) return {};
   const numeric = Number(dwellMs);
-  if (!Number.isFinite(numeric) || numeric < 0) return {};
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > MAX_DWELL_MS) return {};
   const rounded = Math.round(numeric);
-  return {
+  const metadata = {
     dwell_ms: rounded,
     dwell_bucket: getDwellBucket(rounded, isCompleted),
   };
+  if (shown !== null && shown !== undefined) {
+    const words = countWords(shown);
+    if (words > 0) {
+      metadata.words = words;
+      metadata.expected_ms = expectedReadMs(words);
+      metadata.read_verdict = readVerdict(rounded, words);
+    }
+  }
+  return metadata;
 }

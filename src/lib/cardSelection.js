@@ -85,12 +85,33 @@ function getEventTimestamp(event) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function getActivationKey(event) {
+  return event?.metadata?.activationKey ?? null;
+}
+
+/**
+ * A skimmed view (shorter than half the time the words need) is not an
+ * exposure, so the card can come back sooner. Skimmed events are skipped, and
+ * so is the "shown" event from the same activation, which has no verdict of
+ * its own.
+ */
 export function buildCardExposureLookup(cards = [], events = []) {
   const exposureByCardId = new Map();
+
+  const skimmedActivations = new Set();
+  for (const event of events ?? []) {
+    if (event?.metadata?.read_verdict !== "skimmed") continue;
+    const cardId = getEventCardId(event);
+    const activationKey = getActivationKey(event);
+    if (cardId && activationKey) skimmedActivations.add(`${cardId}:${activationKey}`);
+  }
 
   for (const event of events ?? []) {
     const cardId = getEventCardId(event);
     if (!cardId) continue;
+    if (event?.metadata?.read_verdict === "skimmed") continue;
+    const activationKey = getActivationKey(event);
+    if (activationKey && skimmedActivations.has(`${cardId}:${activationKey}`)) continue;
     const timestamp = getEventTimestamp(event);
     if (timestamp <= 0) continue;
     const previous = exposureByCardId.get(cardId) ?? 0;

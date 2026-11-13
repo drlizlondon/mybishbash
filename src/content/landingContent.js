@@ -22,10 +22,9 @@ export const landingContent = {
     "headline": [
       "Your phone",
       "shapes your",
-      "attention.",
-      "myBishBash helps"
+      "attention."
     ],
-    "gold": "shape it intentionally.",
+    "gold": "Shape it intentionally.",
     "copy": [
       "myBishBash places helpful reminders and prompts in front of the apps that you use, directing your attention to the things you actually mean to do. Your choices, with a little more intention."
     ],

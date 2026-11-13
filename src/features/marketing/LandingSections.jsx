@@ -22,9 +22,9 @@ const CONTACT_HREF = "mailto:hello@mybishbash.app?subject=myBishBash%20enquiry";
 const ease = [0.16, 1, 0.3, 1];
 
 function useInViewVariants() {
-  const reduce = useReducedMotion();
+  // Slop fix 2026-10-24: sections no longer fade in on every load.
   return {
-    initial: reduce ? "visible" : "hidden",
+    initial: "visible",
     whileInView: "visible",
     viewport: { once: true, margin: "-80px" },
   };

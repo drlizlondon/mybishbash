@@ -66,6 +66,32 @@ describe("exposure and completion lookups", () => {
     expect(lookup.get("b")).toBe(new Date("2026-07-10T06:00:00Z").getTime());
   });
 
+  it("ignores skimmed events for exposure but counts read events (B3)", () => {
+    const skimmed = buildCardExposureLookup(
+      [],
+      [{ card_id: "a", created_at: "2026-07-10T07:00:00Z", metadata: { read_verdict: "skimmed" } }],
+    );
+    expect(skimmed.has("a")).toBe(false);
+
+    const read = buildCardExposureLookup(
+      [],
+      [{ card_id: "a", created_at: "2026-07-10T07:00:00Z", metadata: { read_verdict: "read" } }],
+    );
+    expect(read.get("a")).toBe(new Date("2026-07-10T07:00:00Z").getTime());
+  });
+
+  it("also drops the shown event from a skimmed activation, but not from a read one", () => {
+    const events = [
+      { card_id: "a", event_type: "card_shown", created_at: "2026-07-10T07:00:00Z", metadata: { activationKey: "k1" } },
+      { card_id: "a", event_type: "card_ignored", created_at: "2026-07-10T07:00:01Z", metadata: { activationKey: "k1", read_verdict: "skimmed" } },
+      { card_id: "b", event_type: "card_shown", created_at: "2026-07-10T06:00:00Z", metadata: { activationKey: "k2" } },
+      { card_id: "b", event_type: "card_ignored", created_at: "2026-07-10T06:00:05Z", metadata: { activationKey: "k2", read_verdict: "read" } },
+    ];
+    const lookup = buildCardExposureLookup([], events);
+    expect(lookup.has("a")).toBe(false);
+    expect(lookup.get("b")).toBe(new Date("2026-07-10T06:00:05Z").getTime());
+  });
+
   it("collects card ids completed today (including legacy bash_done), scoped to today", () => {
     const completed = buildCompletedTodayCardIds(
       [

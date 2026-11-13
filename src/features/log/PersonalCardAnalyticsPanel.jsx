@@ -1,6 +1,67 @@
 import { useState, useMemo } from "react";
-import { computePersonalCardAnalytics } from "../../lib/personalCardAnalytics";
+import { ALL_TIME, computePersonalCardAnalytics, formatSinceDate } from "../../lib/personalCardAnalytics";
 import { HeartGlyph } from "../../components/Glyphs";
+
+function describeDay(day) {
+  const parts = [];
+  if (day.completedCount > 0) parts.push(`Done ${day.completedCount}x`);
+  if (day.onTrackCount > 0) parts.push("On track");
+  if (day.partialCount > 0) parts.push("Partly on track");
+  if (day.closedCount > 0) parts.push("Left for another day");
+  if (day.ignoredCount > 0) parts.push(`Skipped ${day.ignoredCount}x`);
+  return parts.length > 0 ? parts.join(", ") : "No activity";
+}
+
+function describeWeek(week) {
+  const parts = [];
+  if (week.completedCount > 0) parts.push(`Done ${week.completedCount}x`);
+  if (week.onTrackCount > 0) parts.push(`On track ${week.onTrackCount}x`);
+  if (week.partialCount > 0) parts.push(`Partly ${week.partialCount}x`);
+  if (week.closedCount > 0) parts.push(`Left for another day ${week.closedCount}x`);
+  if (week.ignoredCount > 0) parts.push(`Skipped ${week.ignoredCount}x`);
+  return `Week of ${week.label}: ${parts.length > 0 ? parts.join(", ") : "No activity"}`;
+}
+
+// One column per week: done (green) at the bottom, then partly on track, then
+// left for another day, then skipped on top. Column height is the week's total
+// relative to the busiest week for this card. An empty week is a thin baseline.
+function WeeklyTrack({ card, onSelect, onClear }) {
+  const weeks = card.weeklyEntries;
+  if (weeks.length === 0) {
+    return <p className="weekly-track-empty">No activity yet</p>;
+  }
+  const maxTotal = Math.max(1, ...weeks.map((week) => week.total));
+  return (
+    <div className="weekly-track">
+      {weeks.map((week, idx) => {
+        const text = describeWeek(week);
+        const segment = (count, className) =>
+          count > 0 ? (
+            <span className={`weekly-seg ${className}`} style={{ flexGrow: count }} />
+          ) : null;
+        return (
+          <div
+            key={week.weekStartKey}
+            className={`weekly-col ${week.isCurrent ? "is-current" : ""} ${week.total === 0 ? "is-empty" : ""}`}
+            onMouseEnter={() => onSelect(idx, text)}
+            onMouseLeave={onClear}
+            onClick={() => onSelect(idx, text)}
+            tabIndex={0}
+            role="button"
+            aria-label={text}
+          >
+            <span className="weekly-bar" style={{ height: week.total === 0 ? undefined : `${Math.max(12, Math.round((week.total / maxTotal) * 100))}%` }}>
+              {segment(week.ignoredCount, "ignored")}
+              {segment(week.closedCount, "closed")}
+              {segment(week.partialCount, "partial")}
+              {segment(week.completedCount + week.onTrackCount, "completed")}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function PersonalCardAnalyticsPanel({
   cards = [],
@@ -17,6 +78,20 @@ export function PersonalCardAnalyticsPanel({
     return computePersonalCardAnalytics(cards, allEvents, timezone, { days: timeframeDays });
   }, [cards, allEvents, timezone, timeframeDays]);
 
+  // The local log keeps only the newest events, so when it is full "All time"
+  // really means "since the oldest event we still have".
+  const sinceLabel = analytics.eventLogCapped && analytics.oldestEventAt
+    ? `Since ${formatSinceDate(analytics.oldestEventAt, timezone)}`
+    : null;
+  const allTimeLabel = sinceLabel ?? "All time";
+  const isAllTime = timeframeDays === ALL_TIME;
+  const isWeekly = analytics.granularity === "weekly";
+  const timeframeNoun = isAllTime ? null : `${timeframeDays}-day`;
+  const overviewEyebrow = isAllTime
+    ? (sinceLabel ? `Personal overview, ${sinceLabel.toLowerCase()}` : "All-time personal overview")
+    : `${timeframeNoun} personal overview`;
+  const journeyName = isAllTime ? "card" : `${timeframeNoun} card`;
+
   const {
     cards: cardTrends,
     avoidedCards,
@@ -26,12 +101,10 @@ export function PersonalCardAnalyticsPanel({
     overallCompletionRate,
     doorwaySwitchesCount,
     estimatedMinutesSaved,
-    overallAvgDwellCompletedMs,
-    overallAvgDwellIgnoredMs,
-    totalReflexSkips,
-    reflexSkipPercentage,
-    spicedCardsCount,
+    readProperlyThisWeek,
   } = analytics;
+  const skippedThreeInARowCount = cardTrends.filter((card) => !card.isCommitment && card.consecutiveSkips >= 3).length;
+  const hasCommitments = cardTrends.some((card) => card.isCommitment);
 
   return (
     <div className="card-analytics-container">
@@ -39,22 +112,27 @@ export function PersonalCardAnalyticsPanel({
       <article className="card-analytics-hero">
         <header className="card-analytics-hero-header">
           <div className="card-analytics-header-row">
-            <p className="card-analytics-eyebrow">{timeframeDays}-day personal overview</p>
+            <p className="card-analytics-eyebrow">{overviewEyebrow}</p>
             <div className="timeframe-toggle-pill" role="group" aria-label="Timeline window">
-              <button
-                type="button"
-                className={`timeframe-toggle-btn ${timeframeDays === 14 ? "active" : ""}`}
-                onClick={() => setTimeframeDays(14)}
-              >
-                14 Days
-              </button>
-              <button
-                type="button"
-                className={`timeframe-toggle-btn ${timeframeDays === 30 ? "active" : ""}`}
-                onClick={() => setTimeframeDays(30)}
-              >
-                30 Days
-              </button>
+              {[
+                { value: 14, label: "14 days" },
+                { value: 30, label: "30 days" },
+                { value: 90, label: "90 days" },
+                { value: ALL_TIME, label: allTimeLabel },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`timeframe-toggle-btn ${timeframeDays === option.value ? "active" : ""}`}
+                  aria-pressed={timeframeDays === option.value}
+                  onClick={() => {
+                    setActiveTooltip(null);
+                    setTimeframeDays(option.value);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
           <h3>
@@ -63,7 +141,7 @@ export function PersonalCardAnalyticsPanel({
                 You turned <span>{totalCompletions30d}</span> moments into real life.
               </>
             ) : (
-              `Your ${timeframeDays}-day card journey begins here.`
+              `Your ${journeyName} journey begins here.`
             )}
           </h3>
         </header>
@@ -87,37 +165,23 @@ export function PersonalCardAnalyticsPanel({
           </div>
         </div>
 
-        {/* Card Retention & Attention Dwell Time (Psychology & Behavioral Change Data) */}
-        {(overallAvgDwellCompletedMs !== null || overallAvgDwellIgnoredMs !== null || totalReflexSkips > 0) && (
+        {/* How much of each card was actually read (reading time counts the words on the card) */}
+        {(readProperlyThisWeek.total > 0 || skippedThreeInARowCount > 0) && (
           <div className="retention-dwell-panel">
             <div className="retention-dwell-heading">
-              <span className="retention-badge-tag">Attention & Dwell Retention ⏱️</span>
-              <span className="retention-subtag">Sociology Experiment: Active</span>
+              <span className="retention-badge-tag">How you read your cards</span>
             </div>
-            <div className="retention-stat-columns">
-              <div className="dwell-stat-card">
-                <span className="dwell-stat-num">
-                  {overallAvgDwellCompletedMs !== null ? `${(overallAvgDwellCompletedMs / 1000).toFixed(1)}s` : "—"}
-                </span>
-                <span className="dwell-stat-title">Glance before completing</span>
-                <span className="dwell-stat-desc">Time spent absorbing card before saying yes</span>
+            {readProperlyThisWeek.total > 0 && (
+              <div className="retention-stat-columns">
+                <div className="dwell-stat-card">
+                  <span className="dwell-stat-title">Read properly: {readProperlyThisWeek.read} of {readProperlyThisWeek.total} cards this week</span>
+                  <span className="dwell-stat-desc">A card counts as read when you stayed on it for at least half the time its words take to read.</span>
+                </div>
               </div>
-              <div className="dwell-stat-card">
-                <span className="dwell-stat-num">
-                  {overallAvgDwellIgnoredMs !== null ? `${(overallAvgDwellIgnoredMs / 1000).toFixed(1)}s` : "—"}
-                </span>
-                <span className="dwell-stat-title">Glance before skipping</span>
-                <span className="dwell-stat-desc">
-                  {reflexSkipPercentage !== null
-                    ? `${reflexSkipPercentage}% reflex skips (<1.5s muscle memory)`
-                    : "Passes vs thoughtful skips"}
-                </span>
-              </div>
-            </div>
-            {spicedCardsCount > 0 && (
+            )}
+            {skippedThreeInARowCount > 0 && (
               <p className="retention-spiced-callout">
-                🌶️ <strong>{spicedCardsCount} {spicedCardsCount === 1 ? "card is" : "cards are"} spiced:</strong> Dynamic warm terracotta salience is active on cards with $\ge 3$ consecutive skips to break sensory habituation and interrupt automatic bypass.
-              </p>
+                <strong>{skippedThreeInARowCount} {skippedThreeInARowCount === 1 ? "card" : "cards"} skipped 3 times in a row.</strong> The next skip will offer to make {skippedThreeInARowCount === 1 ? "it" : "them"} a commitment or pause {skippedThreeInARowCount === 1 ? "it" : "them"}.</p>
             )}
           </div>
         )}
@@ -133,7 +197,7 @@ export function PersonalCardAnalyticsPanel({
       {avoidedCards.length > 0 && (
         <article className="honest-mirror-card">
           <div className="honest-mirror-header">
-            <div className="honest-mirror-badge">The Honest Mirror 🙈</div>
+            <div className="honest-mirror-badge">The Honest Mirror</div>
             <h4>Cards you might be secretly dodging</h4>
             <p className="honest-mirror-subtitle">
               No guilt here. Noticing what you bypass is how you adapt habits to real life instead of fighting yourself.
@@ -147,8 +211,8 @@ export function PersonalCardAnalyticsPanel({
                   <div className="avoided-card-title-line">
                     <span className="avoided-card-title">{card.promptText}</span>
                     {card.isSpiced && (
-                      <span className="spiced-pill-badge" title="Dynamic salience to interrupt autopilot">
-                        🌶️ Spiced for Attention
+                      <span className="spiced-pill-badge" title="Skipped a lot">
+                        Skipped a lot
                       </span>
                     )}
                   </div>
@@ -160,15 +224,15 @@ export function PersonalCardAnalyticsPanel({
                 {/* Behavioral Metadata Chips */}
                 <div className="avoided-card-chips">
                   {card.consecutiveSkips >= 2 && (
-                    <span className="chip-warn">⚠️ {card.consecutiveSkips} skips in a row</span>
+                    <span className="chip-warn">{card.consecutiveSkips} skips in a row</span>
                   )}
                   {card.avgDwellIgnoredMs !== null && (
                     <span className="chip-dwell">
-                      ⏱️ {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s glance {card.avgDwellIgnoredMs < 1500 ? "(Reflex bypass)" : "(Considered pass)"}
+                      {(card.avgDwellIgnoredMs / 1000).toFixed(1)}s on the card
                     </span>
                   )}
                   {card.topDoorway && (
-                    <span className="chip-app">📱 Bypassed before {card.topDoorway}</span>
+                    <span className="chip-app">Bypassed before {card.topDoorway}</span>
                   )}
                 </div>
 
@@ -200,7 +264,7 @@ export function PersonalCardAnalyticsPanel({
                       }
                     }}
                   >
-                    🎯 Make it a Commitment
+                    Make it a Commitment
                   </button>
                   <button
                     type="button"
@@ -213,7 +277,7 @@ export function PersonalCardAnalyticsPanel({
                       }
                     }}
                   >
-                    ⏸️ Pause for this Season
+                    Pause for this Season
                   </button>
                 </div>
               </div>
@@ -226,7 +290,7 @@ export function PersonalCardAnalyticsPanel({
       {superstarCards.length > 0 && (
         <article className="superstar-card">
           <div className="superstar-header">
-            <span className="superstar-badge">Second Nature ⭐</span>
+            <span className="superstar-badge">Second Nature</span>
             <h4>Your highest momentum cards</h4>
             <p>You follow through on these almost every single time they pop up.</p>
           </div>
@@ -237,10 +301,10 @@ export function PersonalCardAnalyticsPanel({
                 <div className="superstar-stats">
                   <span className="superstar-winrate">{card.completionRate}% win rate</span>
                   {card.currentStreak > 1 && (
-                    <span className="superstar-streak">🔥 {card.currentStreak}-day streak</span>
+                    <span className="superstar-streak">{card.currentStreak}-day streak</span>
                   )}
                   {card.avgDwellCompletedMs !== null && (
-                    <span className="superstar-dwell">⏱️ {(card.avgDwellCompletedMs / 1000).toFixed(1)}s glance</span>
+                    <span className="superstar-dwell">{(card.avgDwellCompletedMs / 1000).toFixed(1)}s glance</span>
                   )}
                 </div>
               </div>
@@ -252,13 +316,23 @@ export function PersonalCardAnalyticsPanel({
       {/* Activity Trail Grid for Every Personal Card (14d or 30d) */}
       <article className="all-cards-trends-card">
         <div className="trends-card-header">
-          <h4>{timeframeDays}-Day Activity Trail</h4>
-          <p>Every personal card you've created and how you've handled it over the past {timeframeDays} days.</p>
-          
+          <h4>{isWeekly ? "Week-by-week activity" : `${timeframeDays}-Day Activity Trail`}</h4>
+          <p>
+            {isWeekly
+              ? `Every personal card and commitment, week by week (weeks start on Monday)${isAllTime && sinceLabel ? `, ${sinceLabel.toLowerCase()}` : ""}.`
+              : `Every personal card and commitment you've created and how you've handled it over the past ${timeframeDays} days.`}
+          </p>
+
           <div className="legend-strip">
-            <span className="legend-item"><span className="legend-dot completed" /> Completed</span>
+            <span className="legend-item"><span className="legend-dot completed" /> {hasCommitments ? "Done or on track" : "Completed"}</span>
+            {hasCommitments && (
+              <span className="legend-item"><span className="legend-dot partial" /> Partly on track</span>
+            )}
+            {hasCommitments && (
+              <span className="legend-item"><span className="legend-dot closed" /> Left for another day</span>
+            )}
             <span className="legend-item"><span className="legend-dot ignored" /> Bypassed / Skipped</span>
-            <span className="legend-item"><span className="legend-dot idle" /> Quiet day</span>
+            <span className="legend-item"><span className="legend-dot idle" /> {isWeekly ? "Empty week" : "Quiet day"}</span>
           </div>
         </div>
 
@@ -282,42 +356,57 @@ export function PersonalCardAnalyticsPanel({
                     <div className="card-trend-title-line">
                       <span className="card-trend-title">{card.promptText}</span>
                       <span className={`card-status-badge ${card.statusTag}`}>{card.statusLabel}</span>
-                      {card.isSpiced && <span className="spiced-mini-badge" title="Spiced card">🌶️</span>}
                     </div>
 
                     <div className="card-trend-submetrics">
-                      {card.completionRate !== null ? (
-                        <span className="metric-tag winrate"><strong>{card.completionRate}%</strong> completed</span>
-                      ) : (
-                        <span className="metric-tag unseen">Never surfaced</span>
+                      {card.isCommitment && (
+                        card.checkIns.total > 0 ? (
+                          <span className="metric-tag winrate">{card.checkInSummary}</span>
+                        ) : (
+                          <span className="metric-tag unseen">No check-ins yet</span>
+                        )
                       )}
-                      <span className="metric-tag">
-                        <strong>{card.totalCompleted}</strong> done · <strong>{card.totalIgnored}</strong> skipped
-                      </span>
+                      {!card.isCommitment && (
+                        card.completionRate !== null ? (
+                          <span className="metric-tag winrate"><strong>{card.completionRate}%</strong> completed</span>
+                        ) : (
+                          <span className="metric-tag unseen">Never surfaced</span>
+                        )
+                      )}
+                      {(!card.isCommitment || card.totalSurfaced > 0) && (
+                        <span className="metric-tag">
+                          <strong>{card.totalCompleted}</strong> done · <strong>{card.totalIgnored}</strong> skipped
+                        </span>
+                      )}
                       {card.currentStreak > 0 && (
-                        <span className="metric-tag streak">🔥 {card.currentStreak}d streak</span>
+                        <span className="metric-tag streak">{card.currentStreak}d streak</span>
                       )}
                       {card.topDoorway && (
-                        <span className="metric-tag doorway">📱 Intercepts {card.topDoorway}</span>
+                        <span className="metric-tag doorway">Intercepts {card.topDoorway}</span>
                       )}
                     </div>
+                    <p className={`card-trend-insight trend-${card.trend.state}`}>{card.trend.label}</p>
+                    {card.usuallyDoneOn && (
+                      <p className="card-trend-insight">Usually done on {card.usuallyDoneOn}</p>
+                    )}
                   </div>
 
-                  {/* Dot Matrix */}
+                  {/* Daily dots (14/30 days) or weekly columns (90 days / all time) */}
                   <div
                     className="timeline-dots-wrapper"
                     role="group"
-                    aria-label={`${timeframeDays}-day activity for ${card.promptText}`}
+                    aria-label={`${isWeekly ? "Weekly" : `${timeframeDays}-day`} activity for ${card.promptText}`}
                   >
+                    {isWeekly ? (
+                      <WeeklyTrack
+                        card={card}
+                        onSelect={(index, text) => setActiveTooltip({ cardId: card.cardId, index, text })}
+                        onClear={() => setActiveTooltip(null)}
+                      />
+                    ) : (
                     <div className="timeline-dots-track">
                       {card.dailyEntries.map((day, idx) => {
-                        const tooltipText = `${day.dayLabel}, ${day.shortLabel}: ${
-                          day.status === "completed"
-                            ? `Done ${day.completedCount}x 🎉`
-                            : day.status === "ignored"
-                            ? `Skipped ${day.ignoredCount}x`
-                            : "No activity"
-                        }`;
+                        const tooltipText = `${day.dayLabel}, ${day.shortLabel}: ${describeDay(day)}`;
 
                         return (
                           <div
@@ -340,6 +429,7 @@ export function PersonalCardAnalyticsPanel({
                         );
                       })}
                     </div>
+                    )}
 
                     {activeTooltip?.cardId === card.cardId && (
                       <div className="active-dot-tooltip">

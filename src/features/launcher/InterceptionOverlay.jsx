@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getVersionOpenHref } from "../../lib/launcherState";
 import { getBrowserSafeDestinationHref } from "../../lib/launcherSetupUrl";
 import { PremiumCardScreen } from "./CardRevealTemplate";
+import { useDwellTimer } from "../../lib/dwellTimer";
 
 function debugLog(...args) {
   if (import.meta.env.DEV) {
@@ -90,16 +91,7 @@ export default function InterceptionOverlay({ overlay, version, onChooseElse, on
     });
   }
 
-  const mountTimeRef = useRef(null);
-  useEffect(() => {
-    mountTimeRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
-  }, [activeIndex, overlay?.packId]);
-
-  const getDwellMs = () => {
-    if (!mountTimeRef.current) return 0;
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    return Math.max(0, Math.round(now - mountTimeRef.current));
-  };
+  const getDwellMs = useDwellTimer([overlay?.packId, activeIndex].join(":"));
 
   const continueHref = getBrowserSafeDestinationHref(getVersionOpenHref(version, { preferDirectAppDestination: true }));
 
@@ -112,6 +104,7 @@ export default function InterceptionOverlay({ overlay, version, onChooseElse, on
       allowDefaultNavigation: Boolean(continueHref),
       preferDirectAppDestination: true,
       dwell_ms,
+      shown_text: messages[activeIndex] ?? null,
     });
     if (handled !== false) event?.preventDefault?.();
   }
