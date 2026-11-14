@@ -466,8 +466,6 @@ const HQContent = memo(function HQContent({
         event.launcher_context,
         event.target_app,
         event.pack_id,
-        event.card_title,
-        event.card_text,
       ]
         .filter(Boolean)
         .join(" ")

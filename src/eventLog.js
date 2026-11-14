@@ -2,6 +2,7 @@ import { createId } from "./utils";
 import { supabase } from "./lib/supabaseClient";
 import { getStorageItem, setStorageItem } from "./storage";
 import { EVENT_LOG_MAX } from "./lib/eventLogLimits";
+import { hasBehaviourConsent } from "./lib/behaviourConsent";
 
 const EVENT_LOG_KEY = "mybishbash.event-log.v1";
 const USER_ID_KEY = "mybishbash.user-id.v1";
@@ -96,11 +97,89 @@ export function saveOfflineEventQueue(queue) {
   setStorageItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
 }
 
+// What may leave the device. Allowlist, not blocklist: a field nobody has
+// reviewed is not uploaded. Only structured, non-identifying values. No card
+// wording, titles, reasons, messages, URLs or card/message ids (some card ids
+// are derived from the card's text). user_id is the signed-in account id the
+// server needs for row-level security; it is added in processEventQueue.
+const UPLOAD_FIELDS = [
+  "id",
+  "event_type",
+  "created_at",
+  "source_type",
+  "card_source",
+  "launcher_context",
+  "target_app",
+  "app_id",
+  "pack_id",
+  "action_taken",
+];
+
+const UPLOAD_METADATA_KEYS = [
+  "cardKind",
+  "legacyEventType",
+  "surface",
+  "decisionSource",
+  "selectedAction",
+  "frequency",
+  "timingWindows",
+  "phase",
+  "response",
+  "finalOutcome",
+  "origin",
+  "launchSource",
+  "selectedPath",
+  "selectionModel",
+  "selectedPriority",
+  "selectedSource",
+  "dwell_ms",
+  "dwell_bucket",
+  "read_verdict",
+  "skip_count",
+  "is_spiced",
+  "spiced",
+  "commitmentMade",
+  "seasonPaused",
+  "deviceType",
+  "platform",
+];
+
+const MAX_META_STRING = 40;
+
+function safeMetaValue(value) {
+  if (typeof value === "boolean" || value === null) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string") return value.length <= MAX_META_STRING ? value : undefined;
+  if (Array.isArray(value)) {
+    const items = value.map(safeMetaValue).filter((item) => item !== undefined && typeof item !== "object");
+    return items.length === value.length ? items : undefined;
+  }
+  return undefined;
+}
+
+export function toUploadRow(event) {
+  const row = {};
+  for (const key of UPLOAD_FIELDS) {
+    if (event[key] !== undefined) row[key] = event[key];
+  }
+  const metadata = {};
+  for (const key of UPLOAD_METADATA_KEYS) {
+    const value = safeMetaValue(event.metadata?.[key]);
+    if (value !== undefined) metadata[key] = value;
+  }
+  row.metadata = metadata;
+  return row;
+}
+
 let isProcessingQueue = false;
 
 export async function processEventQueue() {
   if (isProcessingQueue) return;
   if (typeof window !== "undefined" && !window.navigator.onLine) return;
+
+  // No recorded consent: events stay on this device (queue is kept, so a
+  // later opt-in uploads only what is shaped by toUploadRow below).
+  if (!hasBehaviourConsent()) return;
 
   let queue = loadOfflineEventQueue();
   if (queue.length === 0) return;
@@ -114,7 +193,7 @@ export async function processEventQueue() {
     const successfulIds = new Set();
 
     for (const event of queue) {
-      const dbEvent = { ...event, user_id: sessionData.session.user.id };
+      const dbEvent = { ...toUploadRow(event), user_id: sessionData.session.user.id };
       const { error } = await insertEventWithFallback(dbEvent);
 
       if (!error || error.code === "23505") {

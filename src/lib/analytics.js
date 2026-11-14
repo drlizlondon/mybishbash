@@ -29,8 +29,8 @@
 // e2e mock, a dev tool) must never turn into a real hit. Keep this list in
 // sync with PRODUCTION_HOSTS in public/mbb-consent.js; the two can't share
 // code because that file is a plain static script, never bundled with src/.
+import { CONSENT_KEY, hasBehaviourConsent } from "./behaviourConsent.js";
 const ANALYTICS_HOSTS = ["mybishbash.app", "www.mybishbash.app"];
-const CONSENT_KEY = "mbb_analytics_consent_v1";
 
 function isAnalyticsHost() {
   if (typeof window === "undefined" || !window.location) return false;
@@ -50,17 +50,7 @@ function isProdBuild() {
   return Boolean(import.meta.env && import.meta.env.PROD);
 }
 
-function hasAnalyticsConsent() {
-  if (typeof window === "undefined") return false;
-  try {
-    const stored = window.localStorage.getItem(CONSENT_KEY);
-    if (!stored) return false;
-    const choice = JSON.parse(stored);
-    return Boolean(choice && choice.value === "granted");
-  } catch {
-    return false;
-  }
-}
+const hasAnalyticsConsent = hasBehaviourConsent;
 
 function trackEvent(name, params = {}) {
   if (!isProdBuild()) return;
