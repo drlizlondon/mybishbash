@@ -27,21 +27,29 @@ describe("x-safari- gating", () => {
     expect(getLauncherBrowserSetupUrl("safari")).not.toMatch(/^x-safari-/);
   });
 
-  it("only the safari launcher ever resolves to x-safari- on iOS (other launches add 0 tabs)", () => {
+  it("no launcher, including safari, resolves to x-safari- on iOS in any mode", () => {
     for (const launcher of FAKE_APP_LAUNCHERS) {
       for (const opts of [{}, { preferFastDestination: true }, { preferDirectAppDestination: true }]) {
         const r = resolveLauncherDestination(launcher, { platform: "ios", ...opts });
-        if (launcher.id !== "safari") expect(r.href.startsWith("x-safari-"), `${launcher.id} ${JSON.stringify(opts)}`).toBe(false);
+        expect(r.href.startsWith("x-safari-"), `${launcher.id} ${JSON.stringify(opts)}`).toBe(false);
+        expect(r.usedXSafariPrefix).toBe(false);
       }
     }
   });
 
-  it("icon-tap fast path never uses x-safari- for any launcher, incl. safari", () => {
-    for (const launcher of FAKE_APP_LAUNCHERS) {
-      const r = resolveLauncherDestination(launcher, { platform: "ios", preferFastDestination: true });
-      if (launcher.id === "safari") continue; // iOS safari fast path deliberately keeps iosAppUrl
-      expect(r.usedXSafariPrefix).toBe(false);
-    }
+  it("safari: repeated PWA launches resolve to the same plain https href (no new-tab scheme)", () => {
+    stubBrowser({ standalone: true });
+    const safari = FAKE_APP_LAUNCHERS.find((l) => l.id === "safari");
+    const hrefs = Array.from({ length: 50 }, () =>
+      getBrowserSafeDestinationHref(resolveLauncherDestination(safari, { platform: "ios" }).href));
+    expect(new Set(hrefs)).toEqual(new Set(["https://www.google.com"]));
+  });
+
+  it("safari: a stale persisted x-safari- config is still neutralised", () => {
+    stubBrowser({ standalone: true });
+    const safari = FAKE_APP_LAUNCHERS.find((l) => l.id === "safari");
+    const r = resolveLauncherDestination({ ...safari, iosAppUrl: "x-safari-https://a.example", manualUrl: "x-safari-https://a.example" }, { platform: "ios" });
+    expect(getBrowserSafeDestinationHref(r.href)).toBe("https://a.example");
   });
 
   it("webview/PWA escape: installed PWA on iOS keeps the x-safari- hand-off for the setup page", () => {

@@ -9,13 +9,20 @@ import { FAKE_APP_LAUNCHERS } from "../src/lib/launcherRegistry.js";
 
 const byId = Object.fromEntries(FAKE_APP_LAUNCHERS.map((launcher) => [launcher.id, launcher]));
 
-// ── iOS Safari keeps its x-safari strategy ───────────────────────────────────
+// ── iOS Safari reuses the open tab: never x-safari- (new tab per launch) ─────
 
 const safariIos = resolveLauncherDestination(byId.safari, { platform: "ios" });
-assert.equal(safariIos.href, "x-safari-https://www.google.com");
+assert.equal(safariIos.href, "https://www.google.com");
 assert.equal(safariIos.strategy, "ios_app_url");
 assert.equal(safariIos.sourceField, "iosAppUrl");
-assert.equal(safariIos.usedXSafariPrefix, true);
+assert.equal(safariIos.usedXSafariPrefix, false);
+// A stale persisted config still carrying x-safari- is neutralised.
+const safariStale = resolveLauncherDestination(
+  { ...byId.safari, iosAppUrl: "x-safari-https://www.google.com", manualUrl: "x-safari-https://www.google.com" },
+  { platform: "ios" },
+);
+assert.equal(safariStale.href, "https://www.google.com");
+assert.equal(safariStale.usedXSafariPrefix, false);
 assert.equal(safariIos.platform, "ios");
 
 // The fast web path strips x-safari so it stays safe outside standalone Safari shells.

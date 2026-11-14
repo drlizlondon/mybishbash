@@ -36,7 +36,11 @@ const DESTINATION_STRATEGIES = {
   manualUrl: "manual_url",
 };
 
+// The Safari launcher must reuse the already-open tab. iOS opens every
+// x-safari- URL in a NEW tab, so it is never used for Safari, even when a
+// persisted/HQ config still carries the old x-safari- value.
 function pickDestination(merged, fields, { stripXSafari = false } = {}) {
+  if (merged.id === "safari") stripXSafari = true;
   for (const field of fields) {
     const value = merged[field];
     if (typeof value !== "string" || !value.trim()) continue;
