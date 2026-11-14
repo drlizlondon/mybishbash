@@ -1345,7 +1345,7 @@ export async function fetchAdminAnalytics() {
     client.from("analytics_summary").select("*").order("event_count", { ascending: false }),
     client
       .from(SHARED_EVENTS_TABLE)
-      .select("id,user_id,event_type,created_at,source_type,bash_id,card_id,card_title,card_text,target_app,launcher_context,pack_id,message_id,app_id,app_name,action_taken,metadata")
+      .select("id,user_id,event_type,created_at,source_type,target_app,launcher_context,pack_id,app_id,app_name,action_taken,metadata")
       .order("created_at", { ascending: false })
       .limit(100),
     client
@@ -1380,7 +1380,7 @@ export async function fetchAdminLiveActivity() {
   ] = await Promise.all([
     client
       .from(SHARED_EVENTS_TABLE)
-      .select("id,user_id,event_type,created_at,source_type,bash_id,card_id,card_title,card_text,target_app,launcher_context,pack_id,message_id,app_id,app_name,action_taken,metadata")
+      .select("id,user_id,event_type,created_at,source_type,target_app,launcher_context,pack_id,app_id,app_name,action_taken,metadata")
       .order("created_at", { ascending: false })
       .limit(80),
     client
