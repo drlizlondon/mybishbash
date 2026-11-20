@@ -12,7 +12,7 @@ declare global {
 
 const now = '2026-06-01T12:00:00.000Z';
 const safariDesktopDestination = /^https:\/\/www\.google\.com$/;
-const safariIOSDestination = /^x-safari-https:\/\/www\.google\.com$/;
+const safariIOSDestination = /^https:\/\/www\.google\.com$/;
 const safariDestination = /^(https:\/\/www\.google\.com|x-safari-https:\/\/www\.google\.com)$/;
 const safariMarketingDestination = /apple\.com\/safari/i;
 

@@ -30,7 +30,7 @@ const report = {
   qaEditedCardName: '',
 };
 const safariDesktopDestination = /^https:\/\/www\.google\.com$/i;
-const safariIOSDestination = /^x-safari-https:\/\/www\.google\.com$/i;
+const safariIOSDestination = /^https:\/\/www\.google\.com$/i;
 const safariDestination = /^(https:\/\/www\.google\.com|x-safari-https:\/\/www\.google\.com)$/i;
 const safariMarketingDestination = /apple\.com\/safari/i;
 const directAppSmokeTargets = {

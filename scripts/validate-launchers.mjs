@@ -126,8 +126,8 @@ assert.equal(
 );
 assert.equal(
   safari.iosAppUrl,
-  "x-safari-https://www.google.com",
-  "Safari uses x-safari for the iOS app URL default",
+  "https://www.google.com",
+  "Safari iOS app URL is plain https so launches reuse the open tab (x-safari- opens a new tab each time)",
 );
 assert.doesNotMatch(
   [safari.webFallbackUrl, safari.androidWebFallbackUrl, safari.iosWebFallbackUrl, safari.iosAppUrl, safari.manualUrl].join("\n"),
