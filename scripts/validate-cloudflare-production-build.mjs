@@ -12,7 +12,13 @@ const version = JSON.parse(readFileSync("dist/version.json", "utf8"));
 assert.match(html, /src="\/assets\/index-[^"]+\.js"/, "Cloudflare build should load JS from /assets/");
 assert.match(html, /href="\/assets\/index-[^"]+\.css"/, "Cloudflare build should load CSS from /assets/");
 assert.match(html, /href="\/manifest\.webmanifest"/, "Cloudflare build should link the root manifest");
-assert.match(html, /href="\/icons\/mybishbash-cover\.png"/, "Cloudflare build should link the root touch icon");
+// The touch icon and favicon must be root-relative and actually ship in dist,
+// or iOS home-screen installs and browser tabs show a blank icon.
+for (const [rel, label] of [["apple-touch-icon", "touch icon"], ["icon", "favicon"]]) {
+  const links = [...html.matchAll(new RegExp(`<link rel="${rel}"[^>]*href="(/icons/[^"]+)"`, "g"))].map((m) => m[1]);
+  assert.ok(links.length > 0, `Cloudflare build should link a root ${label} (<link rel="${rel}" href="/icons/...">)`);
+  for (const href of links) assert.ok(existsSync(`dist${href}`), `Cloudflare build links ${href} as the ${label} but dist${href} is missing`);
+}
 
 assert.doesNotMatch(html, /\/mybishbash(?:\/|-preview\/)/, "Cloudflare index.html must not contain preview or GitHub Pages base paths");
 assert.doesNotMatch(html, /drlizlondon\.github\.io/, "Cloudflare index.html must not point canonical metadata at GitHub Pages");
