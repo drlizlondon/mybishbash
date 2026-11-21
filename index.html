@@ -1,6 +1,31 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- MBB-28: dist/index.html carries a pre-rendered landing inside
+         a data-prerender wrapper. Hide it for visitors the router sends to the app
+         at "/" (same conditions as RootRouter + isStandaloneDisplayMode:
+         ?route=, display-mode standalone, navigator.standalone, window.Capacitor),
+         and for any path that is not the site root. Runs before first paint. -->
+    <script>
+      (function () {
+        try {
+          var p = location.pathname;
+          var root = "%BASE_URL%";
+          if (
+            new URLSearchParams(location.search).has("route") ||
+            (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+            window.navigator.standalone === true ||
+            window.Capacitor ||
+            (p !== root && p !== root + "index.html")
+          ) {
+            document.documentElement.setAttribute("data-app", "");
+          }
+        } catch (e) {
+          document.documentElement.setAttribute("data-app", "");
+        }
+      })();
+    </script>
+    <style>html[data-app] [data-prerender]{display:none}</style>
     <!-- Analytics load only after explicit consent — see public/mbb-consent.js.
          No GA4 request fires until a visitor accepts the banner it shows. -->
     <script defer src="/mbb-consent.js"></script>

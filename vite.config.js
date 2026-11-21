@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { deriveClientRoutes } from "./scripts/derive-client-routes.mjs";
 import { ROUTE_META } from "./src/content/routeMeta.js";
 import {
@@ -345,6 +345,34 @@ function routePrerenderPlugin() {
   };
 }
 
+// MBB-28: put the pre-rendered landing into dist/index.html's #root. Runs after
+// routePrerenderPlugin on purpose: that plugin copies index.html per route, and
+// only "/" may carry the landing. The markup comes from the SSR bundle built by
+// `vite build --ssr src/entry-prerender.jsx --outDir dist-prerender` (see the
+// "build" script); it never enters dist.
+function landingPrerenderInjectPlugin() {
+  return {
+    name: "mybishbash-landing-prerender-inject",
+    apply: "build",
+    async writeBundle(options) {
+      const outDir = options.dir || resolve(__dirname, "dist");
+      const indexPath = join(outDir, "index.html");
+      if (!existsSync(indexPath)) return;
+      const entry = resolve(__dirname, "dist-prerender", "entry-prerender.js");
+      if (!existsSync(entry)) {
+        throw new Error("MBB-28: dist-prerender/entry-prerender.js is missing; run `npm run build`, not bare `vite build`.");
+      }
+      const { render } = await import(`${pathToFileURL(entry).href}?t=${Date.now()}`);
+      const markup = render("/");
+      const html = readFileSync(indexPath, "utf8");
+      if (!html.includes('<div id="root"></div>')) {
+        throw new Error('MBB-28: expected <div id="root"></div> in dist/index.html');
+      }
+      writeFileSync(indexPath, html.replace('<div id="root"></div>', `<div id="root"><div data-prerender>${markup}</div></div>`));
+    },
+  };
+}
+
 // Swaps the homepage title and descriptions for a public route's own
 // (src/content/routeMeta.js), so each page has a distinct search listing.
 function applyRouteMeta(html, meta) {
@@ -392,7 +420,7 @@ export default defineConfig({
   // Production (Cloudflare Pages on https://mybishbash.app) serves from root.
   // Staging (GitHub Pages) and the e2e suite set VITE_BASE_PATH=/mybishbash/.
   base: process.env.VITE_BASE_PATH || "/",
-  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin(), pricingSchemaPlugin(), routePrerenderPlugin()],
+  plugins: [legacyBishbashBaseAliasPlugin(), devBasePublicFilesPlugin(), react(), tailwindcss(), localContentEditorPlugin(), appVersionPlugin(), serviceWorkerVersionPlugin(), fourOhFourBasePlugin(), pricingSchemaPlugin(), routePrerenderPlugin(), landingPrerenderInjectPlugin()],
   define: {
     __MYBISHBASH_VERSION__: JSON.stringify(appVersion),
   },
