@@ -6,11 +6,12 @@ import { aboutContent } from "../../content/aboutContent";
 const BASE = import.meta.env.BASE_URL;
 const HOME_HREF = BASE;
 const EARLY_ACCESS_HREF = `${BASE}early-access`;
-const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
+// 76x76 WebP (2x of the 38px display size), made from icons/mybishbash-cover.png with sharp (lossless).
+const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover-76.webp`;
 
 function BrandMark({ dark = false }) {
   return (
-    <img className={`brand-mark${dark ? " is-dark" : ""}`} src={BRAND_LOGO_SRC} alt="" aria-hidden="true" />
+    <img className={`brand-mark${dark ? " is-dark" : ""}`} src={BRAND_LOGO_SRC} alt="" aria-hidden="true" width="38" height="38" />
   );
 }
 

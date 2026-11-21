@@ -21,11 +21,20 @@ const CONTACT_HREF = "mailto:hello@mybishbash.app?subject=myBishBash%20enquiry";
 // Nav labels in landingContent.nav map 1:1 to these in-page anchors.
 const LANDING_NAV_HREFS = ["#how-it-works", "#examples", "#pricing", "#faq"];
 const FOOTER_LINK_HREFS = [PRIVACY_HREF, TERMS_HREF, CONTACT_HREF];
-const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover.png`;
+// 76x76 WebP (2x of the 38px display size), made from icons/mybishbash-cover.png with sharp (lossless).
+const BRAND_LOGO_SRC = `${BASE}icons/mybishbash-cover-76.webp`;
 
 function BrandMark({ dark = false }) {
   return (
-    <img className={`brand-mark${dark ? " is-dark" : ""}`} src={BRAND_LOGO_SRC} alt="" aria-hidden="true" />
+    <img
+      className={`brand-mark${dark ? " is-dark" : ""}`}
+      src={BRAND_LOGO_SRC}
+      alt=""
+      aria-hidden="true"
+      width="38"
+      height="38"
+      loading={dark ? "lazy" : undefined}
+    />
   );
 }
 
@@ -93,12 +102,18 @@ function Header() {
 
 // Real app Home screen, captured by scripts/capture-landing-screenshots.mjs into
 // public/screenshots/. Shown in the existing tilted phone frame.
+// hero-home-{320,480,600}.{avif,webp} made from hero-home.png with sharp (avif q75, webp q90); PNG is the fallback.
 const HERO_SCREENSHOT_SRC = `${BASE}screenshots/hero-home.png`;
+const heroSrcSet = (ext) => [320, 480, 600].map((w) => `${BASE}screenshots/hero-home-${w}.${ext} ${w}w`).join(", ");
+const HERO_SIZES = "(max-width: 480px) 318px, 377px";
 
 function AppPreview() {
   return (
     <div className="app-preview-wrap" aria-label="myBishBash app showing a reminder card">
       <div className="app-screen app-screen-photo">
+        <picture>
+          <source type="image/avif" srcSet={heroSrcSet("avif")} sizes={HERO_SIZES} />
+          <source type="image/webp" srcSet={heroSrcSet("webp")} sizes={HERO_SIZES} />
         <img
           className="app-screenshot"
           src={HERO_SCREENSHOT_SRC}
@@ -108,6 +123,7 @@ function AppPreview() {
           loading="eager"
           fetchpriority="high"
         />
+        </picture>
       </div>
     </div>
   );
